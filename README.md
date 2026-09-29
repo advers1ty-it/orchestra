@@ -29,6 +29,29 @@ python3 tests/run_all.py                           # suite completa
 
 Configurazione in `orchestra/.env` (copia da `.env.example`, mai committato).
 
+## L'interfaccia web
+
+`orchestra web` è una chat con l'agente: stream degli eventi in tempo
+reale, tool richiudibili, contatori, annulla e nuova conversazione.
+
+**Selettore modello** in alto a destra. Cambia il modello senza riavviare
+il server e senza perdere la conversazione: è un cambio di "chi risponde",
+non di "di cosa si parla". Il server rifiuta il cambio a metà turno (409)
+perché lascerebbe una chat scritta per metà da un modello e per metà da
+un altro. Un id inesistente è respinto con 400: `build_provider`
+accetterebbe qualsiasi stringa e fallirebbe solo alla prima chiamata, con
+un errore che sembra di rete.
+
+**Pannello benchmark** (pulsante "Benchmark"): lancia la misura in
+background e mostra l'avanzamento. Non blocca il server — un benchmark dura
+minuti e un server che aspetta è un server morto. Un secondo avvio è
+rifiutato con 409, altrimenti due benchmark girerebbero insieme e
+spenderebbero il doppio dei token.
+
+La tabella che arriva è la stessa che stampa la CLI, testo monospaziato
+incluso. Riutilizzarla è più onesto che rifare la formattazione in JS e
+rischiare due versioni che divergono.
+
 ## Il benchmark
 
 `bench` misura cosa sa fare ogni modello, **per categoria di compito**.
@@ -243,6 +266,7 @@ python3 tests/run_all.py
 | `test_security.py` | Escape dal root via shell, blocco dei segreti | no |
 | `test_session.py` | EventBridge, concorrenza, cancel, reset, stress 40 turni | no |
 | `test_webapp.py` | Server HTTP vero: endpoint, SSE, 409, input malformati | no |
+| `test_webapp_models.py` | Endpoint modelli e benchmark, rifiuti, attributi dell'app | no |
 | `test_ui.py` | Sintassi JS via Node, id del markup, logica handler con DOM finto | no |
 | `test_e2e.py` | Task reali col provider vero | sì |
 

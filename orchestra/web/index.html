@@ -40,12 +40,6 @@
   }
   .logo { font-weight: 650; letter-spacing: .2px; }
   .logo span { color: var(--accent); }
-  .model {
-    font: 12px var(--mono); color: var(--muted);
-    padding: 3px 8px; background: var(--panel-2);
-    border: 1px solid var(--border); border-radius: 5px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px;
-  }
   .grow { flex: 1; }
   .stat { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
   .stat b { color: var(--fg); font-weight: 500; }
@@ -87,6 +81,14 @@
   .msg.error .body {
     background: #2a1618; border: 1px solid #4a2024; color: #ffb4b4;
     padding: 9px 13px; border-radius: 6px; font: 13px var(--mono);
+  }
+  /* annotazione di sistema (es. cambio modello): non e' un messaggio
+     dell'utente ne' dell'agente, quindi non va in nessuna delle due
+     classi. Senza questo finiva con lo stile dell'utente. */
+  .msg.system .role { color: var(--warn); }
+  .msg.system .body {
+    color: var(--muted); font: 12px var(--mono);
+    padding: 4px 0; text-align: center;
   }
 
   /* tool call */
@@ -154,19 +156,107 @@
     background: #2a1e16; border: 1px solid #4a3524; color: #ffcf9b;
     padding: 9px 13px; border-radius: 6px; margin-bottom: 14px; font: 13px var(--mono);
   }
+
+  /* ---------- selettore modello ---------- */
+  select {
+    font: 12px var(--mono); color: var(--fg);
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 5px 8px; border-radius: 6px; outline: none; max-width: 260px;
+  }
+  select:focus { border-color: var(--accent-dim); }
+  select:disabled { opacity: .5; cursor: not-allowed; }
+  button.ghost { background: transparent; }
+  .dim { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* ---------- pannello benchmark ---------- */
+  .panel {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 60px 20px; z-index: 50; overflow-y: auto;
+  }
+  .panel.hidden { display: none; }
+  .panel-box {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px;
+    max-width: 900px; width: 100%;
+  }
+  .panel-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; margin-bottom: 14px;
+  }
+  .panel-head .dim { display: block; margin-top: 3px; font-size: 12.5px; }
+  .bench-controls {
+    display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .bench-controls label {
+    font: 11px var(--mono); text-transform: uppercase; letter-spacing: .6px;
+    color: var(--muted); display: flex; flex-direction: column; gap: 5px;
+  }
+  .benchlog {
+    font: 12px var(--mono); color: var(--muted);
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px; margin: 10px 0 0;
+    max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+  }
+  .benchlog:empty { display: none; }
+  .code { color: var(--muted); }
 </style>
 </head>
 <body>
 
 <header>
   <div class="logo">Orches<span>tra</span></div>
-  <div class="model" id="model">…</div>
   <div class="grow"></div>
+  <button id="btn-bench" class="ghost">Benchmark</button>
+  <select id="model-pick" title="Modello in uso" disabled>
+    <option value="">modello…</option>
+  </select>
   <div class="dot" id="dot"></div>
   <div class="stat" id="stats">—</div>
   <button id="btn-cancel" disabled>Annulla</button>
   <button id="btn-reset">Nuova</button>
 </header>
+
+<!-- pannello benchmark: overlay, non una pagina a se' */
+<div id="bench" class="panel hidden">
+  <div class="panel-box">
+    <div class="panel-head">
+      <div>
+        <b>Benchmark</b>
+        <span class="dim">misura cosa sa fare ogni modello, per categoria</span>
+      </div>
+      <button id="bench-close" class="ghost">Chiudi</button>
+    </div>
+    <div class="bench-controls">
+      <label>Modelli
+        <select id="bench-sample">
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="6">6</option>
+        </select>
+      </label>
+      <label>Categoria
+        <select id="bench-cat">
+          <option value="all">tutte</option>
+          <option value="code">codice</option>
+          <option value="reasoning">ragionamento</option>
+          <option value="instruction">istruzioni</option>
+          <option value="tool_use">uso tool</option>
+        </select>
+      </label>
+      <button id="bench-run" class="primary">Avvia</button>
+    </div>
+    <div id="bench-note" class="dim small">
+      Costa token reali. I modelli <code>:free</code> non costano nulla.
+      n=1 per task: indicazione, non statistica.
+    </div>
+    <pre id="bench-log" class="benchlog"></pre>
+    <div id="bench-out"></div>
+  </div>
+</div>
 
 <main id="main">
   <div class="wrap" id="log"></div>
@@ -192,7 +282,8 @@
 const $ = (id) => document.getElementById(id);
 const log = $("log"), main = $("main"), input = $("input");
 const btnSend = $("btn-send"), btnCancel = $("btn-cancel"), btnReset = $("btn-reset");
-const dot = $("dot"), stats = $("stats"), model = $("model"), conn = $("conn");
+const dot = $("dot"), stats = $("stats"), conn = $("conn");
+const modelPick = $("model-pick");
 
 let busy = false;
 let ready = false;
@@ -327,8 +418,8 @@ function handle(kind, d) {
         ready = false; setBusy(false); return;
       }
       ready = true;
-      model.textContent = `${d.model} · ${d.provider}`;
       renderStats(d);
+      loadModels();
       // ricostruisci la conversazione
       log.innerHTML = "";
       (d.messages || []).forEach((m) => {
@@ -410,6 +501,143 @@ function showBanner(msg) {
   log.appendChild(b);
 }
 
+// ------------------------------------------------------- selettore modello
+// Il modello si cambia SENZA riavviare il server. Il contesto della
+// conversazione resta: è un cambio di "chi risponde", non di "di cosa si
+// parla". Cambiarlo a metà turno è vietato dal server (409) perché
+// lascerebbe una conversazione con due modelli diversi e nessun senso.
+
+async function loadModels() {
+  try {
+    const r = await fetch("/api/models");
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    modelPick.textContent = "";
+    // i gratuiti per primi: sono quelli che si possono provare senza
+    // pensarci, e sono la maggior parte di quello che c'è
+    const sorted = (d.models || []).slice().sort((a, b) =>
+      (a.free === b.free) ? a.id.localeCompare(b.id) : (a.free ? -1 : 1));
+    for (const m of sorted) {
+      const o = el("option", null);
+      o.value = m.id;
+      const ctx = m.context ? ` ${Math.round(m.context / 1000)}k` : "";
+      const price = m.free ? "free" : `$${m.prompt_price.toFixed(2)}/1M`;
+      o.textContent = `${m.short}${ctx} · ${price}`;
+      if (m.current) o.selected = true;
+      modelPick.appendChild(o);
+    }
+    modelPick.disabled = false;
+  } catch (e) {
+    modelPick.textContent = "modelli non disponibili";
+    modelPick.disabled = true;
+  }
+}
+
+modelPick.addEventListener("change", async () => {
+  const id = modelPick.value;
+  if (!id || busy) return;
+  modelPick.disabled = true;
+  try {
+    const r = await fetch("/api/model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: id }),
+    });
+    const d = await r.json();
+    if (!r.ok) { addText("error", d.error || `errore ${r.status}`); return; }
+    // la conversazione continua, ma annotiamo il cambio: senza, domani non
+    // si sa che metà della chat l'ha scritta un modello diverso
+    addText("system", `modello → ${id}`);
+  } catch (e) {
+    addText("error", String(e));
+  } finally {
+    modelPick.disabled = false;
+  }
+});
+
+// -------------------------------------------------------------- benchmark
+
+const benchPanel = $("bench");
+const benchLog = $("bench-log");
+const benchOut = $("bench-out");
+let benchTimer = null;
+
+function openBench() {
+  benchPanel.classList.remove("hidden");
+  pollBench();
+}
+function closeBench() {
+  benchPanel.classList.add("hidden");
+  if (benchTimer) { clearInterval(benchTimer); benchTimer = null; }
+}
+$("btn-bench").onclick = openBench;
+$("bench-close").onclick = closeBench;
+benchPanel.addEventListener("click", (e) => { if (e.target === benchPanel) closeBench(); });
+
+$("bench-run").onclick = async () => {
+  $("bench-run").disabled = true;
+  benchOut.textContent = "";
+  benchLog.textContent = "avvio…";
+  try {
+    const r = await fetch("/api/bench", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sample: Number($("bench-sample").value),
+        category: $("bench-cat").value,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) { benchLog.textContent = ""; addText("error", d.error || `errore ${r.status}`); }
+  } catch (e) {
+    benchLog.textContent = "";
+    addText("error", String(e));
+  } finally {
+    $("bench-run").disabled = false;
+    if (!benchTimer) pollBench();
+  }
+};
+
+function pollBench() {
+  if (benchTimer) return;
+  benchTimer = setInterval(async () => {
+    try {
+      const r = await fetch("/api/bench/status");
+      const d = await r.json();
+      benchLog.textContent = (d.log || []).join("\n");
+      benchLog.scrollTop = benchLog.scrollHeight;
+      if (!d.running) {
+        clearInterval(benchTimer);
+        benchTimer = null;
+        renderBenchResult(d.result);
+      }
+    } catch (e) {
+      clearInterval(benchTimer);
+      benchTimer = null;
+    }
+  }, 1500);
+}
+
+// La tabella arriva come testo monospaziato dal backend, che l'ha
+// costruita per il terminale. Riutilizzarla è più onesto che rifare la
+// formattazione in JS e rischiare due versioni che divergono.
+function renderBenchResult(res) {
+  benchOut.textContent = "";
+  if (!res) return;
+  const pre = el("pre", "benchlog");
+  pre.textContent = res.table || "";
+  benchOut.appendChild(pre);
+
+  if (res.unusable && res.unusable.length) {
+    const n = el("div", "small dim");
+    n.textContent = "Non misurati (il provider li riserva ad altri client): "
+      + res.unusable.join(", ");
+    benchOut.appendChild(n);
+  }
+  // i punteggi appena misurati finiscono nel selettore
+  loadModels();
+}
+
 // ------------------------------------------------------------- azioni
 async function send() {
   const text = input.value.trim();
@@ -466,7 +694,6 @@ connect();
 fetch("/api/state").then(r => r.json()).then(s => {
   if (s.ready === false) { showBanner(s.error); return; }
   ready = true;
-  model.textContent = `${s.model} · ${s.provider}`;
   if (!log.children.length) handle("snapshot", s);
 }).catch(() => { conn.textContent = "server non raggiungibile"; });
 </script>

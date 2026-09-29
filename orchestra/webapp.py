@@ -51,12 +51,157 @@ class OrchestraApp:
     i propri lock; questo oggetto contiene solo la sessione.
     """
 
-    def __init__(self, env: dict[str, str]) -> None:
+    def __init__(self, env: dict[str, str], session: Session | None = None) -> None:
         self.env = env
-        self.session = self._make_session(env.get("ORCHESTRA_PROVIDER", "openrouter"),
-                                         env.get("ORCHESTRA_MODEL", ""))
+        # la sessione può arrivare già costruita (dal create, che deve poter
+        # catturare l'errore del provider) o essere costruita qui. Il punto
+        # è che TUTTE le istanze passano da qui: prima `create()` usava
+        # __new__ e saltava __init__, e gli attributi mancavano a runtime
+        # con un AttributeError che emergeva solo al primo /api/models.
+        self.session = session if session is not None else self._make_session(
+            env.get("ORCHESTRA_PROVIDER", "openrouter"),
+            env.get("ORCHESTRA_MODEL", ""),
+        )
         self.ready = True
-        self.error: str = ""
+        self.error = ""
+        # il catalogo viene caricato pigramente: `/models` lo chiede, la
+        # chat no. Caricarlo all'avvio aggiungerebbe una chiamata di rete a
+        # ogni start, anche quando l'utente vuole solo chattare.
+        self._catalog: Any = None
+        self._catalog_tried = False
+        self._catalog_error: str = ""
+        # stato del benchmark lanciato dalla UI
+        self._bench: dict[str, Any] = {"running": False, "log": [], "result": None}
+
+    @property
+    def catalog(self) -> Any:
+        """Catalogo dei modelli, caricato alla prima richiesta."""
+        if not self._catalog_tried:
+            self._catalog_tried = True
+            try:
+                from .catalog import Catalog
+
+                self._catalog = Catalog.fetch(self.env.get("ORCHESTRA_PROVIDER", "openrouter"))
+            except Exception as e:  # noqa: BLE001 - l'UI mostra l'errore
+                self._catalog = None
+                self._catalog_error = str(e)
+        return self._catalog
+
+    def switch_model(self, model_id: str) -> None:
+        """Cambia il modello dell'agent in uso.
+
+        Solleva RuntimeError se l'agente sta lavorando: cambiarlo a metà
+        turno lascerebbe la conversazione con messaggi di due modelli
+        diversi e un contesto che non ha senso.
+
+        Valida contro il catalogo. `build_provider` accetterebbe QUALSIASI
+        stringa — costruisce un client valido che fallisce solo alla
+        prima chiamata, con un errore che sembra un problema di rete. Un
+        id sbagliato in una select non è un errore plausibile da accettare
+        in silenzio.
+        """
+        if self.session.busy:
+            raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
+
+        cat = self.catalog
+        if cat is not None and cat.models and model_id not in cat.models:
+            raise ValueError(
+                f"modello sconosciuto: {model_id}. "
+                f"Disponibili: {', '.join(sorted(cat.models)[:5])}…"
+            )
+
+        from .providers import build_provider
+
+        provider_name = self.env.get("ORCHESTRA_PROVIDER", "openrouter")
+        env = dict(os.environ)
+        env.update(load_env(ENV_PATH))
+        prov = build_provider(provider_name, model=model_id, env=env)
+        self.session.agent.provider = prov
+        self.env["ORCHESTRA_MODEL"] = model_id
+
+    def start_benchmark(self, *, sample: int = 3, category: str | None = None,
+                        throttle: float = 3.0) -> dict[str, Any]:
+        """Lancia il benchmark in background e restituisce subito.
+
+        Non blocca: l'UI mostra l'avanzamento via /api/bench/status. Un
+        benchmark dura minuti e un server che aspetta è un server morto.
+        """
+        if self._bench["running"]:
+            raise RuntimeError("un benchmark è già in corso")
+
+        cat = self.catalog
+        if cat is None or not cat.models:
+            raise RuntimeError("catalogo non disponibile")
+
+        # il campione viene dai modelli gratuiti con tool-calling, sparsi
+        # sulla finestra di contesto: primo, uno medio, uno con contesto
+        # grande. Non e' casuale perche' il confronto deve essere leggibile.
+        free = sorted(cat.free(), key=lambda p: p.info.id)
+        if not free:
+            raise RuntimeError("nessun modello gratuito con tool-calling")
+        free.sort(key=lambda p: -(p.info.context_length or 0))
+        step = max(1, len(free) // max(1, sample))
+        ids = [m.info.id for m in free[::step]][:sample]
+
+        self._bench = {"running": True, "log": [], "result": None,
+                       "started": time.time(), "models": ids}
+
+        def worker() -> None:
+            from .benchmark import render_table, run_task, summarize, tasks_for
+
+            tasks = tasks_for(category)
+            if not tasks:
+                self._bench["log"].append(f"categoria sconosciuta: {category}")
+                self._bench["running"] = False
+                return
+            results = []
+            stop = False
+            try:
+                for mid in ids:
+                    if stop:
+                        break
+                    name = cat.models[mid].info.short if mid in cat.models else mid
+                    self._bench["log"].append(f"== {name} ==")
+                    for t in tasks:
+                        r = run_task(t, provider_name=self.env.get("ORCHESTRA_PROVIDER", "openrouter"),
+                                     model=mid, env=dict(os.environ, **self.env),
+                                     max_iterations=10)
+                        results.append(r)
+                        if r.unusable:
+                            # il provider lo riserva ad altri client: inutile
+                            # continuare e tenerlo nel confronto
+                            self._bench["log"].append(f"  {t.id}: non raggiungibile")
+                            stop = True
+                            break
+                        state = "ok" if r.passed else ("errore" if r.error else "fail")
+                        self._bench["log"].append(
+                            f"  {t.id}: {state}"
+                            + (f" — {(r.detail or r.error)[:80]}" if not r.passed else "")
+                        )
+                        if throttle:
+                            time.sleep(throttle)
+                summary = summarize(results)
+                for mid, data in summary["per_model"].items():
+                    prof = cat.models.get(mid)
+                    if prof:
+                        prof.scores = {c: v for c, v in data["by_category"].items() if v > 0}
+                        prof.last_measured = time.time()
+                try:
+                    cat.save()
+                except Exception:
+                    pass
+                self._bench["result"] = {
+                    "table": render_table(summary, cat),
+                    "per_model": summary["per_model"],
+                    "unusable": summary.get("unusable_models", []),
+                }
+            except Exception as e:  # noqa: BLE001
+                self._bench["log"].append(f"ERRORE: {type(e).__name__}: {e}")
+            finally:
+                self._bench["running"] = False
+
+        threading.Thread(target=worker, daemon=True, name="orchestra-bench").start()
+        return {"ok": True, "models": ids, "tasks": len(tasks_for(category))}
 
     @staticmethod
     def _make_session(provider_name: str, model: str) -> Session:
@@ -81,18 +226,20 @@ class OrchestraApp:
         env = dict(os.environ)
         env.update(load_env(ENV_PATH))
         try:
-            app = cls.__new__(cls)
-            app.env = env
-            app.ready = True
-            app.error = ""
-            app.session = cls._make_session(
-                env.get("ORCHESTRA_PROVIDER", "openrouter"),
-                env.get("ORCHESTRA_MODEL", ""),
+            return cls(
+                env,
+                session=cls._make_session(
+                    env.get("ORCHESTRA_PROVIDER", "openrouter"),
+                    env.get("ORCHESTRA_MODEL", ""),
+                ),
             )
-            return app
         except (ProviderError, KeyError) as e:
-            app = cls.__new__(cls)
-            app.env = env
+            # l'app esiste anche senza sessione: /api/state deve poter
+            # rispondere con l'errore, e la UI lo mostra
+            app = cls(env, session=None)
+            app.ready = False
+            app.error = str(e)
+            return app
             app.ready = False
             app.error = str(e)
             app.session = None  # type: ignore[assignment]
@@ -169,8 +316,46 @@ class Handler(BaseHTTPRequestHandler):
             self._json(snap)
         elif path == "/api/stream":
             self._sse()
+        elif path == "/api/models":
+            self._models()
+        elif path == "/api/bench/status":
+            self._json({
+                "running": self.app._bench["running"],
+                "log": self.app._bench["log"][-60:],
+                "result": self.app._bench["result"],
+                "models": self.app._bench.get("models", []),
+            })
+        elif path == "/api/capabilities":
+            cat = self.app.catalog
+            if cat is None:
+                self._json({"error": getattr(self.app, "_catalog_error", "catalogo non disponibile")}, 503)
+                return
+            # solo i punteggi misurati: "non lo so" non si trasforma in uno
+            # zero, altrimenti la UI mostrerebbe una tabella piena di
+            # modelli con 0.00 che non sono misurati ma sconosciuti
+            self._json({"measured": {mid: p.scores for mid, p in cat.models.items() if p.scores}})
         else:
             self._json({"error": "non trovato"}, 404)
+
+    def _models(self) -> None:
+        """Elenco modelli con i punteggi misurati, per il selettore."""
+        cat = self.app.catalog
+        if cat is None:
+            self._json({"error": getattr(self.app, "_catalog_error", "catalogo non disponibile")}, 503)
+            return
+        current = self.app.env.get("ORCHESTRA_MODEL", "")
+        out = []
+        for p in sorted(cat.with_tools(), key=lambda x: x.info.id):
+            out.append({
+                "id": p.info.id,
+                "short": p.info.short,
+                "free": p.info.is_free,
+                "context": p.info.context_length,
+                "prompt_price": p.info.prompt_price,
+                "scores": p.scores,
+                "current": p.info.id == current,
+            })
+        self._json({"models": out, "current": current, "provider": self.app.env.get("ORCHESTRA_PROVIDER")})
 
     def _sse(self) -> None:
         """Stream degli eventi, formato SSE.
@@ -255,6 +440,38 @@ class Handler(BaseHTTPRequestHandler):
                 return
             s.set_system_prompt(prompt)
             self._json({"ok": True})
+        elif path == "/api/model":
+            model_id = (body.get("model") or "").strip()
+            if not model_id:
+                self._json({"error": "modello vuoto"}, 400)
+                return
+            try:
+                self.app.switch_model(model_id)
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            except Exception as e:  # noqa: BLE001 - chiave o provider
+                self._json({"error": f"{type(e).__name__}: {e}"}, 400)
+                return
+            self._json({"ok": True, "model": model_id})
+        elif path == "/api/bench":
+            sample = body.get("sample", 3)
+            try:
+                sample = max(1, min(8, int(sample)))
+            except (TypeError, ValueError):
+                sample = 3
+            category = body.get("category") or None
+            if category == "all":
+                category = None
+            try:
+                res = self.app.start_benchmark(sample=sample, category=category)
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return
+            self._json(res)
         else:
             self._json({"error": "non trovato"}, 404)
 
