@@ -6,3 +6,4 @@ venv/
 .env
 *.log
 _probe/
+tests/_probe3/
