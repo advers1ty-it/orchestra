@@ -190,7 +190,13 @@ class Agent:
                 "assistant",
                 iteration=self.state.iterations,
                 content=resp.content,
-                tool_calls=[{"name": tc.name, "args": tc.parsed_args()} for tc in resp.tool_calls],
+                # `id` per ogni tool call: e' la chiave con cui la UI
+                # abbina `tool_end` al tool giusto. Senza, due tool con lo
+                # stesso nome nello stesso turno finivano sulla stessa riga.
+                tool_calls=[
+                    {"id": tc.id, "name": tc.name, "args": tc.parsed_args()}
+                    for tc in resp.tool_calls
+                ],
                 tokens=resp.total_tokens,
             )
 
@@ -199,7 +205,10 @@ class Agent:
                 for tc in resp.tool_calls:
                     args = tc.parsed_args()
                     self.state.tool_calls_made += 1
-                    self._emit("tool_start", name=tc.name, args=args)
+                    # `id` va nei due eventi: e' il modo perche' la UI
+                    # abbini il risultato al tool giusto quando in un turno
+                    # ce n'e' piu' di uno con lo stesso nome.
+                    self._emit("tool_start", name=tc.name, args=args, id=tc.id)
 
                     result, ok = self._execute_tool(tc.name, args)
 
@@ -228,6 +237,7 @@ class Agent:
                         name=tc.name,
                         result=result[:500],
                         ok=ok,
+                        id=tc.id,
                         consecutive_errors=self.state.consecutive_errors,
                     )
 

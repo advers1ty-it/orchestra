@@ -275,6 +275,9 @@ function addNote(text) {
 const openTools = new Set();
 function addTool(name, args, key) {
   const t = el("div", "tool");
+  // data-key: serve a `tool_end` per trovare il tool giusto quando ce n'e'
+  // piu' di uno identico nello stesso turno
+  t.setAttribute("data-key", key);
   if (openTools.has(key)) t.classList.add("open");
   const head = el("div", "tool-head");
   head.appendChild(el("span", "caret", "▶"));
@@ -330,8 +333,12 @@ function handle(kind, d) {
       // ricostruisci la conversazione
       log.innerHTML = "";
       (d.messages || []).forEach((m) => {
-        if (m.role === "user") addText("user", m.content);
-        else if (m.role === "assistant" && m.content.trim()) addText("assistant", m.content);
+        // `m.content` puo' essere null o mancante: `.trim()` su undefined
+        // solleva e blocca TUTTO il rendering della snapshot, lasciando la
+        // chat vuota senza alcun errore in console. Difesa esplicita.
+        const text = (m && m.content != null) ? String(m.content) : "";
+        if (m.role === "user") addText("user", text);
+        else if (m.role === "assistant" && text.trim()) addText("assistant", text);
       });
       setBusy(!!d.busy);
       if (d.busy) { turnEl = newTurn(); }
@@ -354,19 +361,27 @@ function handle(kind, d) {
       }
       (d.tool_calls || []).forEach((tc) => {
         if (!turnEl) turnEl = newTurn();
-        addTool(tc.name, JSON.stringify(tc.args), tc.name + Object.keys(tc.args).join(","));
+        // chiave basata sull'id del tool call: `tool_end` lo cerca cosi' e
+        // abbinano anche due tool identici emessi nello stesso turno.
+        addTool(tc.name, JSON.stringify(tc.args), tc.id || (tc.name + "|" + JSON.stringify(tc.args)));
       });
       break;
     }
     case "tool_end": {
-      // il tool e' gia' stato creato da 'assistant'; aggiorniamo lo stato
-      const nodes = turnEl ? turnEl.querySelectorAll(".tool") : [];
-      const last = nodes[nodes.length - 1];
-      if (last) {
-        const st = last.querySelector(".tool-status");
+      // abbiniamo per id, non "l'ultimo tool". Con due tool nello stesso
+      // turno il risultato finiva sempre sulla stessa riga e l'altro
+      // restava appeso su "..." per sempre.
+      if (!turnEl) break;
+      let node = d.id ? turnEl.querySelector('[data-key="' + CSS.escape(d.id) + '"]') : null;
+      if (!node) {
+        const nodes = turnEl.querySelectorAll(".tool");
+        node = nodes[nodes.length - 1];
+      }
+      if (node) {
+        const st = node.querySelector(".tool-status");
         st.className = "tool-status " + (d.ok ? "ok" : "err");
         st.textContent = d.ok ? "ok" : "errore";
-        last.querySelector(".tool-out").textContent = d.result || "";
+        node.querySelector(".tool-out").textContent = d.result || "";
       }
       break;
     }

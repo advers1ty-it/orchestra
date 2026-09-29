@@ -169,6 +169,22 @@ try:
     check("tool_start emesso", kinds.count("tool_start") >= 2, str(kinds.count("tool_start")))
     check("tool_end emesso", kinds.count("tool_end") >= 2, str(kinds.count("tool_end")))
     check("turn_end emesso", kinds.count("turn_end") >= 2, str(kinds.count("turn_end")))
+
+    # L'id deve viaggiare in tutti e tre gli eventi che riguardano un tool.
+    # Senza, la UI non può abbinare `tool_end` al tool giusto: prendeva
+    # l'ultimo della lista e due tool identici finivano sulla stessa riga.
+    a_events = [e for e in events if e.get("kind") == "assistant" and e["data"].get("tool_calls")]
+    ids_assistant = [tc.get("id") for e in a_events for tc in e["data"]["tool_calls"]]
+    ids_start = [e["data"].get("id") for e in events if e.get("kind") == "tool_start"]
+    ids_end = [e["data"].get("id") for e in events if e.get("kind") == "tool_end"]
+    check("assistant porta l'id dei tool", all(ids_assistant) and len(ids_assistant) >= 2,
+          str(ids_assistant))
+    check("tool_start porta l'id", all(ids_start) and len(ids_start) >= 2, str(ids_start))
+    check("tool_end porta l'id", all(ids_end) and len(ids_end) >= 2, str(ids_end))
+    check("gli id combaciano fra i tre eventi",
+          set(ids_assistant) == set(ids_start) == set(ids_end),
+          f"a={set(ids_assistant)} s={set(ids_start)} e={set(ids_end)}")
+
     check("idle emesso", kinds.count("idle") >= 2, str(kinds.count("idle")))
     check("nessun errore nello stream",
           not [e for e in events if e.get("kind") == "_errore"],
