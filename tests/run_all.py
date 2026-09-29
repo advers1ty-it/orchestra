@@ -15,6 +15,9 @@ SUITES = [
     ("resilienza", "test_resilience.py", True),
     ("shell", "test_shell.py", True),
     ("sicurezza", "test_security.py", True),
+    ("sessione", "test_session.py", True),
+    ("webapp", "test_webapp.py", True),
+    ("ui", "test_ui.py", True),
     ("e2e", "test_e2e.py", False),
 ]
 

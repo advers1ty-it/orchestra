@@ -19,8 +19,12 @@ python3 -m orchestra.cli doctor                    # verifica config e connessio
 python3 -m orchestra.cli models --free             # modelli gratuiti disponibili
 python3 -m orchestra.cli run "il tuo compito"       # esegui e esci
 python3 -m orchestra.cli chat                      # sessione interattiva
+python3 -m orchestra.cli web                       # interfaccia web
 python3 tests/run_all.py                           # suite completa
 ```
+
+`web` avvia un server locale su `http://127.0.0.1:8737` e apre il browser.
+`--port` e `--no-browser` sono disponibili.
 
 Configurazione in `orchestra/.env` (copia da `.env.example`, mai committato).
 
@@ -33,7 +37,47 @@ Configurazione in `orchestra/.env` (copia da `.env.example`, mai committato).
 | `context.py` | Conteggio token e compaction a due fasi |
 | `agent.py` | Il loop. Tutte le invarianti vivono qui |
 | `tools.py` | Tool concreti + guard del root |
-| `cli.py` | `run`, `chat`, `doctor`, `models` |
+| `session.py` | Ponte fra il loop sincrono e un consumatore asincrono |
+| `webapp.py` | Server HTTP stdlib, streaming SSE |
+| `web/index.html` | L'interfaccia. HTML/CSS/JS puro, zero dipendenze |
+| `cli.py` | `run`, `chat`, `web`, `doctor`, `models` |
+
+## L'interfaccia web
+
+`orchestra web` e' una chat con l'agente: stream degli eventi in tempo
+reale, tool richiudibili, contatori, annulla e nuova conversazione.
+
+Non ha richiesto di toccare il loop. Il lavoro vero e' stato il ponte fra
+il nucleo sincrono e un consumatore asincrono (`session.py`):
+
+- **`EventBridge`** mette gli eventi di `on_event` in una coda thread-safe,
+  con `seq` numerico per poter riconnettere e riprendere
+- **`Session`** esegue `Agent.run()` in un thread dedicato, con lock
+- **la cancellazione e' gentile**: non ammazziamo il thread, chiediamo al
+  loop di fermarsi al prossimo check via `should_continue`
+
+Tre dettagli che sembravano secondari e non lo erano:
+
+**L'ordine degli eventi conta.** `busy` va azzerato *prima* di emettere
+`idle`, non dopo. La UI usa `idle` per riabilitare l'input: se il segnale
+arrivasse prima dello stato reale, accetterebbe un messaggio che il server
+rifiuterebbe con 409.
+
+**Le richieste non si accodano.** Un secondo `send` mentre l'agente lavora
+viene rifiutato con 409, non messo in coda. Accodare richieste che l'utente
+non vede è peggio che dirgli di aspettare.
+
+**I turni solo-tool non mostrano righe vuote.** Sono assistant senza
+contenuto; il filtro in `snapshot()` li scarta e in cronologia si vede
+solo il testo e i tool.
+
+SSE e non WebSocket: lo stream è di sola lettura, va in un senso solo, e
+SSE si riconnette da solo. WebSocket aggiungerebbe una dipendenza per zero
+guadagno.
+
+**Sicurezza**: ascolta solo su `127.0.0.1` e non ha autenticazione. Esporlo
+su una rete richiede conferma esplicita, e in modo non interattivo il
+server si rifiuta di partire.
 
 ## Le invarianti del loop
 
@@ -132,7 +176,19 @@ python3 tests/run_all.py
 | `test_resilience.py` | 429/500/401/402, compaction sotto carico, degenerazione, normalizzazione | no |
 | `test_shell.py` | Comportamento reale della shell su questa macchina | no |
 | `test_security.py` | Escape dal root via shell, blocco dei segreti | no |
+| `test_session.py` | EventBridge, concorrenza, cancel, reset, stress 40 turni | no |
+| `test_webapp.py` | Server HTTP vero: endpoint, SSE, 409, input malformati | no |
+| `test_ui.py` | Sintassi JS via Node, id del markup, logica handler con DOM finto | no |
 | `test_e2e.py` | Task reali col provider vero | sì |
+
+`test_session.py` asserisce il comportamento **sotto stress**, non quello
+tipico: una race condition che si manifesta una volta su cento non
+appare in una suite che gira una volta.
+
+`test_ui.py` esegue il JavaScript della UI con Node e un DOM finto, invece
+di fidarsi di un'ispezione a occhio. Copre i punti dove i bug sono
+silenziosi: id che non esistono nel markup, handler che non fanno nulla,
+stato di occupazione sbagliato.
 
 L'e2e verifica le **contratte**, non la qualità della prosa del modello:
 il file esiste, `fib(10) == 55`, il file di sistema non è trapelato. Assert
@@ -145,13 +201,16 @@ Dichiaro i buchi invece di lasciarli scoprire:
 
 - **Nessun routing per capacità.** Un solo provider per volta. È il
   differenziale previsto e non è iniziato.
-- **Nessuna persistenza.** Lo stato vive in memoria: chiudere il processo
-  perde la sessione.
+- **Nessuna persistenza.** Lo stato vive in memoria e nel thread: chiudere
+  il server perde le conversazioni. La UI ricaricando la pagina ricostruisce
+  dalla sessione corrente, non da disco.
 - **Nessun caricamento selettivo dei tool.** `ToolRegistry` ha già
   `activate`/`deactivate` e `api_payload` passa solo gli attivi, ma la
   politica di *quale* attivare non è scritta.
 - **Nessun adapter Anthropic nativo.** Punto di innesto:
   `AnthropicAdapter` in `providers.py`, per `tool_use` e `cache_control`.
+- **Nessun multi-utente, nessun auth sulla web UI.** Un server solo, una
+  sessione sola, in locale.
 - **Nessun subagent, nessuno scheduler, nessuna memoria fra sessioni.**
 - **Nessun sandbox vero** (vedi Sicurezza).
 

@@ -228,6 +228,17 @@ def cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_web(args: argparse.Namespace) -> int:
+    env = _env()
+    if not env.get("ORCHESTRA_MODEL"):
+        print(f"{C['r']}ORCHESTRA_MODEL non impostato.{C['x']} Copia orchestra/.env.example in orchestra/.env")
+        return 2
+    from .webapp import serve
+
+    serve(args.host, args.port, open_browser=not args.no_browser)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="orchestra", description="Orchestratore agentico")
     p.add_argument("--version", action="version", version=f"orchestra {__version__}")
@@ -241,6 +252,13 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("chat", help="sessione interattiva")
     c.add_argument("--system", help="istruzioni extra di sistema")
     c.set_defaults(func=cmd_chat)
+
+    w = sub.add_parser("web", help="interfaccia web in locale")
+    w.add_argument("--host", default="127.0.0.1",
+                   help="default 127.0.0.1; non esporre su rete (nessuna autenticazione)")
+    w.add_argument("--port", type=int, default=8737)
+    w.add_argument("--no-browser", action="store_true", help="non aprire il browser")
+    w.set_defaults(func=cmd_web)
 
     d = sub.add_parser("doctor", help="verifica configurazione e connessione")
     d.set_defaults(func=cmd_doctor)

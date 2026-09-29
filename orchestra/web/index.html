@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestra</title>
+<style>
+  /* Tutto in CSS custom property, niente framework. */
+  :root {
+    --bg: #0f1115;
+    --panel: #161a21;
+    --panel-2: #1c212a;
+    --border: #262c37;
+    --fg: #e4e7ec;
+    --muted: #8b93a3;
+    --accent: #5b8cff;
+    --accent-dim: #3a5bbf;
+    --ok: #3ecf8e;
+    --warn: #f5a623;
+    --err: #ff6b6b;
+    --tool: #b78bff;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+  }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo { font-weight: 650; letter-spacing: .2px; }
+  .logo span { color: var(--accent); }
+  .model {
+    font: 12px var(--mono); color: var(--muted);
+    padding: 3px 8px; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px;
+  }
+  .grow { flex: 1; }
+  .stat { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+  .stat b { color: var(--fg); font-weight: 500; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.busy { background: var(--warn); animation: pulse 1.1s infinite; }
+  .dot.ok { background: var(--ok); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+
+  button {
+    font: 13px inherit; color: var(--fg);
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #232936; border-color: #333c4a; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--accent-dim); border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent); }
+
+  /* ---------- main ---------- */
+  main { flex: 1; overflow-y: auto; padding: 20px 0 16px; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+
+  .msg { margin-bottom: 18px; }
+  .role {
+    font: 11px var(--mono); text-transform: uppercase; letter-spacing: .8px;
+    color: var(--muted); margin-bottom: 5px;
+  }
+  .msg.user .role { color: var(--accent); }
+  .msg.assistant .role { color: var(--ok); }
+  .msg.system .role { color: var(--warn); }
+  .msg.error .role { color: var(--err); }
+  .body { white-space: pre-wrap; word-break: break-word; }
+  .msg.user .body {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 9px 13px; border-radius: 6px;
+  }
+  .msg.assistant .body { padding-left: 2px; }
+  .msg.error .body {
+    background: #2a1618; border: 1px solid #4a2024; color: #ffb4b4;
+    padding: 9px 13px; border-radius: 6px; font: 13px var(--mono);
+  }
+
+  /* tool call */
+  .tool {
+    font: 13px var(--mono); margin: 8px 0;
+    background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--tool);
+    border-radius: 6px; overflow: hidden;
+  }
+  .tool-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 11px; cursor: pointer; user-select: none;
+  }
+  .tool-head:hover { background: var(--panel-2); }
+  .tool-name { color: var(--tool); font-weight: 600; }
+  .tool-args {
+    color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; flex: 1; min-width: 0;
+  }
+  .tool-status { font-size: 11px; padding: 1px 7px; border-radius: 4px; flex-shrink: 0; }
+  .tool-status.ok { background: #14322a; color: var(--ok); }
+  .tool-status.err { background: #3a1e20; color: var(--err); }
+  .tool-status.run { background: #3a3320; color: var(--warn); }
+  .caret { color: var(--muted); font-size: 10px; transition: transform .15s; flex-shrink: 0; }
+  .tool.open .caret { transform: rotate(90deg); }
+  .tool-out {
+    display: none; padding: 9px 12px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12.5px; white-space: pre-wrap;
+    word-break: break-word; max-height: 320px; overflow-y: auto;
+  }
+  .tool.open .tool-out { display: block; }
+
+  .sysnote {
+    font: 12px var(--mono); color: var(--warn);
+    padding: 6px 11px; margin: 8px 0;
+    background: #241f14; border: 1px solid #3d3320; border-radius: 6px;
+  }
+
+  /* ---------- composer ---------- */
+  footer {
+    border-top: 1px solid var(--border); background: var(--panel);
+    padding: 12px 20px; flex-shrink: 0;
+  }
+  .cwrap { max-width: 900px; margin: 0 auto; }
+  .row { display: flex; gap: 10px; align-items: flex-end; }
+  textarea {
+    flex: 1; resize: none; background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font: 14px/1.5 inherit;
+    min-height: 46px; max-height: 200px;
+    outline: none;
+  }
+  textarea:focus { border-color: var(--accent-dim); }
+  textarea:disabled { opacity: .5; }
+  .hint {
+    font: 11.5px var(--mono); color: var(--muted);
+    margin-top: 7px; display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  kbd {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 5px; font: 11px var(--mono);
+  }
+
+  .banner {
+    background: #2a1e16; border: 1px solid #4a3524; color: #ffcf9b;
+    padding: 9px 13px; border-radius: 6px; margin-bottom: 14px; font: 13px var(--mono);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Orches<span>tra</span></div>
+  <div class="model" id="model">…</div>
+  <div class="grow"></div>
+  <div class="dot" id="dot"></div>
+  <div class="stat" id="stats">—</div>
+  <button id="btn-cancel" disabled>Annulla</button>
+  <button id="btn-reset">Nuova</button>
+</header>
+
+<main id="main">
+  <div class="wrap" id="log"></div>
+</main>
+
+<footer>
+  <div class="cwrap">
+    <div class="row">
+      <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio per a capo)" disabled></textarea>
+      <button class="primary" id="btn-send" disabled>Invia</button>
+    </div>
+    <div class="hint">
+      <span><kbd>Invio</kbd> invia</span>
+      <span><kbd>Shift</kbd>+<kbd>Invio</kbd> a capo</span>
+      <span id="conn">connessione…</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const log = $("log"), main = $("main"), input = $("input");
+const btnSend = $("btn-send"), btnCancel = $("btn-cancel"), btnReset = $("btn-reset");
+const dot = $("dot"), stats = $("stats"), model = $("model"), conn = $("conn");
+
+let busy = false;
+let ready = false;
+
+// Un blocco "turno" raccoglie tutto ciò che accade fra un invio e il
+// prossimo, così il log si ricompone da solo invece di dipendere dall'ordine
+// esatto in cui arrivano gli eventi.
+let turnEl = null;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function scrollDown() {
+  // solo se l'utente è già in fondo: scrollare mentre legge sopra è irritante
+  const near = main.scrollHeight - main.scrollTop - main.clientHeight < 140;
+  if (near) main.scrollTop = main.scrollHeight;
+}
+
+function setBusy(v) {
+  busy = v;
+  dot.className = "dot" + (v ? " busy" : " ok");
+  input.disabled = !ready || v;
+  btnSend.disabled = !ready || v;
+  btnCancel.disabled = !v;
+  $("btn-reset").disabled = v;
+}
+
+function renderStats(s) {
+  // Costruito col DOM, non con innerHTML: i valori vengono dal nostro
+  // server ma restare strutturalmente immuni evita di doverlo ricordare
+  // ogni volta che qui compare un numero.
+  const parts = [];
+  if (s.iterations) parts.push([s.iterations, "iter"]);
+  if (s.tool_calls) parts.push([s.tool_calls, "tool"]);
+  if (s.tool_errors) parts.push([s.tool_errors, "err", true]);
+  if (s.total_tokens) parts.push([s.total_tokens.toLocaleString(), "tok"]);
+  if (s.compactions) parts.push([s.compactions, "comp"]);
+
+  stats.textContent = "";
+  if (!parts.length) { stats.textContent = "—"; return; }
+  // `sep`, non `dot`: `dot` e' il nome della variabile globale che setBusy
+  // usa per lo stato di occupazione. Ombreggiarla qui funzionerebbe per
+  // caso, ma renderebbe ogni lettura futura di setBusy un bug.
+  const sep = document.createTextNode(" · ");
+  parts.forEach(([v, label, isErr], i) => {
+    if (i) stats.appendChild(sep.cloneNode());
+    const b = el("b", null, String(v));
+    if (isErr) b.style.color = "var(--err)";
+    stats.appendChild(b);
+    stats.appendChild(document.createTextNode(" " + label));
+  });
+}
+
+function newTurn() {
+  turnEl = el("div", "msg");
+  log.appendChild(turnEl);
+  scrollDown();
+  return turnEl;
+}
+
+function addText(role, text) {
+  const m = el("div", "msg " + role);
+  m.appendChild(el("div", "role", role));
+  m.appendChild(el("div", "body", text));
+  log.appendChild(m);
+  scrollDown();
+  return m;
+}
+
+function addNote(text) {
+  turnEl.appendChild(el("div", "sysnote", text));
+  scrollDown();
+}
+
+// Tool: intestazione cliccabile + output richiudibile.
+const openTools = new Set();
+function addTool(name, args, key) {
+  const t = el("div", "tool");
+  if (openTools.has(key)) t.classList.add("open");
+  const head = el("div", "tool-head");
+  head.appendChild(el("span", "caret", "▶"));
+  head.appendChild(el("span", "tool-name", name));
+  const a = el("span", "tool-args", args);
+  head.appendChild(a);
+  const st = el("span", "tool-status run", "…");
+  head.appendChild(st);
+  const out = el("div", "tool-out");
+  head.onclick = () => {
+    t.classList.toggle("open");
+    if (t.classList.contains("open")) openTools.add(key); else openTools.delete(key);
+  };
+  t.appendChild(head);
+  t.appendChild(out);
+  turnEl.appendChild(t);
+  scrollDown();
+  return { root: t, status: st, out };
+}
+
+// ---------------------------------------------------------------- SSE
+let es = null;
+
+function connect() {
+  if (es) es.close();
+  es = new EventSource("/api/stream");
+
+  es.onopen = () => { conn.textContent = "connesso"; conn.style.color = "var(--ok)"; };
+
+  es.onerror = () => {
+    conn.textContent = "riconnessione…";
+    conn.style.color = "var(--warn)";
+    // EventSource riconnette da solo; non lo chiudiamo
+  };
+
+  es.onmessage = (e) => {
+    let item;
+    try { item = JSON.parse(e.data); } catch { return; }
+    handle(item.kind, item.data || {});
+  };
+}
+
+function handle(kind, d) {
+  switch (kind) {
+    case "snapshot": {
+      if (d.ready === false) {
+        showBanner(d.error || "server non pronto");
+        ready = false; setBusy(false); return;
+      }
+      ready = true;
+      model.textContent = `${d.model} · ${d.provider}`;
+      renderStats(d);
+      // ricostruisci la conversazione
+      log.innerHTML = "";
+      (d.messages || []).forEach((m) => {
+        if (m.role === "user") addText("user", m.content);
+        else if (m.role === "assistant" && m.content.trim()) addText("assistant", m.content);
+      });
+      setBusy(!!d.busy);
+      if (d.busy) { turnEl = newTurn(); }
+      scrollDown();
+      break;
+    }
+    case "turn_start":
+      turnEl = newTurn();
+      break;
+    case "user_message":
+      addText("user", d.text);
+      break;
+    case "assistant": {
+      if (d.content) {
+        const m = el("div", "msg assistant");
+        m.appendChild(el("div", "role", "assistant"));
+        m.appendChild(el("div", "body", d.content));
+        turnEl.appendChild(m);
+        scrollDown();
+      }
+      (d.tool_calls || []).forEach((tc) => {
+        if (!turnEl) turnEl = newTurn();
+        addTool(tc.name, JSON.stringify(tc.args), tc.name + Object.keys(tc.args).join(","));
+      });
+      break;
+    }
+    case "tool_end": {
+      // il tool e' gia' stato creato da 'assistant'; aggiorniamo lo stato
+      const nodes = turnEl ? turnEl.querySelectorAll(".tool") : [];
+      const last = nodes[nodes.length - 1];
+      if (last) {
+        const st = last.querySelector(".tool-status");
+        st.className = "tool-status " + (d.ok ? "ok" : "err");
+        st.textContent = d.ok ? "ok" : "errore";
+        last.querySelector(".tool-out").textContent = d.result || "";
+      }
+      break;
+    }
+    case "tool_error":
+      addNote(`errore tool ${d.tool}: ${d.error}`);
+      break;
+    case "compaction":
+      addNote(`contesto compattato: ${d.tokens_before} → ${d.tokens_after} token ` +
+              `(potati ${d.tools_pruned} tool, fusi ${d.history_merged} turni)`);
+      break;
+    case "retry":
+      addNote(`retry ${d.attempt}: ${d.error}`);
+      break;
+    case "turn_end":
+      renderStats({ ...d, compactions: 0 });
+      break;
+    case "error":
+      addText("error", d.message);
+      break;
+    case "cancel_requested":
+      addNote("annullamento richiesto, il turno in corso finirà");
+      break;
+    case "reset":
+      log.innerHTML = "";
+      turnEl = null;
+      stats.textContent = "—";
+      break;
+    case "idle":
+      setBusy(false);
+      break;
+  }
+}
+
+function showBanner(msg) {
+  const b = el("div", "banner", msg);
+  log.innerHTML = "";
+  log.appendChild(b);
+}
+
+// ------------------------------------------------------------- azioni
+async function send() {
+  const text = input.value.trim();
+  if (!text || busy || !ready) return;
+  input.value = "";
+  autoGrow();
+  setBusy(true);
+  if (!turnEl) turnEl = newTurn();
+  try {
+    const r = await fetch("/api/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      addText("error", err.error || `errore ${r.status}`);
+      setBusy(false);
+    }
+  } catch (e) {
+    addText("error", String(e));
+    setBusy(false);
+  }
+}
+
+async function cancel() {
+  btnCancel.disabled = true;
+  try { await fetch("/api/cancel", { method: "POST" }); } catch {}
+}
+
+async function reset() {
+  try {
+    const r = await fetch("/api/reset", { method: "POST" });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      addText("error", err.error || `errore ${r.status}`);
+    }
+  } catch (e) { addText("error", String(e)); }
+}
+
+function autoGrow() {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 200) + "px";
+}
+
+input.addEventListener("input", autoGrow);
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+btnSend.onclick = send;
+btnCancel.onclick = cancel;
+btnReset.onclick = reset;
+
+connect();
+fetch("/api/state").then(r => r.json()).then(s => {
+  if (s.ready === false) { showBanner(s.error); return; }
+  ready = true;
+  model.textContent = `${s.model} · ${s.provider}`;
+  if (!log.children.length) handle("snapshot", s);
+}).catch(() => { conn.textContent = "server non raggiungibile"; });
+</script>
+</body>
+</html>
