@@ -197,11 +197,12 @@ const dot = $("dot"), stats = $("stats"), model = $("model"), conn = $("conn");
 let busy = false;
 let ready = false;
 
-// Un blocco "turno" raccoglie tutto ciò che accade fra un invio e il
-// prossimo, così il log si ricompone da solo invece di dipendere dall'ordine
-// esatto in cui arrivano gli eventi.
-let turnEl = null;
-
+// Non esiste un "blocco turno": ogni elemento appende direttamente a
+// `log`, in ordine di arrivo. Il blocco esisteva e veniva creato da
+// `turn_start`, che arriva PRIMA di `user_message`: finiva un contenitore
+// vuoto SOPRA il messaggio dell'utente, con la risposta dentro — e la
+// chat sembrava aver l'agente che rispondeva "sopra". In una chat
+// l'ordine di arrivo e' tutto, quindi basta appendere e basta.
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -250,13 +251,11 @@ function renderStats(s) {
   });
 }
 
-function newTurn() {
-  turnEl = el("div", "msg");
-  log.appendChild(turnEl);
-  scrollDown();
-  return turnEl;
-}
-
+// Non esiste un "blocco turno": tutto appende direttamente a `log`, in
+// ordine di arrivo. Il blocco esisteva e veniva creato da `turn_start`,
+// che arriva PRIMA di `user_message`: finiva cosi' un contenitore vuoto
+// sopra il messaggio dell'utente, con la risposta dentro. Sembrava che
+// l'agente rispondesse "sopra". In una chat l'ordine e' tutto.
 function addText(role, text) {
   const m = el("div", "msg " + role);
   m.appendChild(el("div", "role", role));
@@ -267,7 +266,7 @@ function addText(role, text) {
 }
 
 function addNote(text) {
-  turnEl.appendChild(el("div", "sysnote", text));
+  log.appendChild(el("div", "sysnote", text));
   scrollDown();
 }
 
@@ -293,7 +292,7 @@ function addTool(name, args, key) {
   };
   t.appendChild(head);
   t.appendChild(out);
-  turnEl.appendChild(t);
+  log.appendChild(t);
   scrollDown();
   return { root: t, status: st, out };
 }
@@ -341,26 +340,21 @@ function handle(kind, d) {
         else if (m.role === "assistant" && text.trim()) addText("assistant", text);
       });
       setBusy(!!d.busy);
-      if (d.busy) { turnEl = newTurn(); }
       scrollDown();
       break;
     }
     case "turn_start":
-      turnEl = newTurn();
+      // segnalava l'inizio del turno. Non crea piu' nulla: il blocco
+      // finiva sopra il messaggio dell'utente e la risposta finiva dentro.
       break;
     case "user_message":
       addText("user", d.text);
       break;
     case "assistant": {
       if (d.content) {
-        const m = el("div", "msg assistant");
-        m.appendChild(el("div", "role", "assistant"));
-        m.appendChild(el("div", "body", d.content));
-        turnEl.appendChild(m);
-        scrollDown();
+        addText("assistant", d.content);
       }
       (d.tool_calls || []).forEach((tc) => {
-        if (!turnEl) turnEl = newTurn();
         // chiave basata sull'id del tool call: `tool_end` lo cerca cosi' e
         // abbinano anche due tool identici emessi nello stesso turno.
         addTool(tc.name, JSON.stringify(tc.args), tc.id || (tc.name + "|" + JSON.stringify(tc.args)));
@@ -370,13 +364,9 @@ function handle(kind, d) {
     case "tool_end": {
       // abbiniamo per id, non "l'ultimo tool". Con due tool nello stesso
       // turno il risultato finiva sempre sulla stessa riga e l'altro
-      // restava appeso su "..." per sempre.
-      if (!turnEl) break;
-      let node = d.id ? turnEl.querySelector('[data-key="' + CSS.escape(d.id) + '"]') : null;
-      if (!node) {
-        const nodes = turnEl.querySelectorAll(".tool");
-        node = nodes[nodes.length - 1];
-      }
+      // restava appeso su "..." per sempre. I tool vivono in `log`, non in
+      // un blocco: per questo si cercano li'.
+      const node = d.id ? log.querySelector('[data-key="' + CSS.escape(d.id) + '"]') : null;
       if (node) {
         const st = node.querySelector(".tool-status");
         st.className = "tool-status " + (d.ok ? "ok" : "err");
@@ -406,7 +396,6 @@ function handle(kind, d) {
       break;
     case "reset":
       log.innerHTML = "";
-      turnEl = null;
       stats.textContent = "—";
       break;
     case "idle":
@@ -428,7 +417,6 @@ async function send() {
   input.value = "";
   autoGrow();
   setBusy(true);
-  if (!turnEl) turnEl = newTurn();
   try {
     const r = await fetch("/api/send", {
       method: "POST",

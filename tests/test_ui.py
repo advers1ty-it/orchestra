@@ -130,7 +130,7 @@ class El {
   // e i test misuravano il mock invece del codice.
   set innerHTML(v){ this._text=""; this.children=[]; }
   get innerHTML(){ return this._text; }
-  // conteggio ricorsivo: i nodi vivono sia in `log` che dentro `turnEl`
+  // conteggio ricorsivo: i tool sono figli diretti di `log`
   all(){ let n=1; for(const c of this.children) n+=c.all?c.all():1; return n; }
   addEventListener(k,f){ this._on[k]=f; }
   set onclick(f){ this._on["click"]=f; }
@@ -191,17 +191,22 @@ try {
   ready = true;
 
   // testi e tool
-  log.children = []; turnEl = null;
-  newTurn();
+  log.children = [];
   handle("turn_start", {});
-  handle("user_message", {text: "ciao"});
+  handle("user_message", {text:"ciao"});
   addText("assistant", "risposta");
   out.roles = log.children.map(c=>c.className);
 
+  // ORDINE: la risposta deve venire DOPO il messaggio dell'utente.
+  // Prima c'era un blocco creato da turn_start, che arriva prima di
+  // user_message: finiva sopra e sembrava che l'agente rispondesse "sopra".
+  out.ordine = log.children.map(c=>String(c.className).includes("user") ? "user" : "assistant").join(" -> ");
+  out.primoEUtente = String(log.children[0].className).includes("user");
+
   // un tool con ok
-  handle("assistant", {content:"", tool_calls:[{name:"read_file", args:{path:"a.txt"}}]});
-  out.toolAdded = turnEl.querySelectorAll ? true : false;
-  handle("tool_end", {name:"read_file", ok:true, result:"ok"});
+  handle("assistant", {content:"", tool_calls:[{id:"tc_a", name:"read_file", args:{path:"a.txt"}}]});
+  out.toolAdded = log.querySelectorAll(".tool").length;
+  handle("tool_end", {name:"read_file", ok:true, result:"ok", id:"tc_a"});
   handle("turn_end", {iterations:2, tool_calls:1, tool_errors:0, total_tokens:500});
   out.turnEndStats = mk("stats").textContent;
 
@@ -257,9 +262,7 @@ try {
   // --- REGRESSIONE 2: due tool identici vanno abbinati per id.
   // Prima `tool_end` prendeva l'ultimo tool: il primo restava su "..."
   // per sempre, e i due risultati finivano sulla stessa riga.
-  // `turnEl = null` E OBBLIGATORIO: punta ancora al turno precedente,
-  // quindi i tool finivano fuori da `log` e i check non trovavano nulla.
-  log.children = []; turnEl = null;
+  log.children = [];
   handle("turn_start", {});
   handle("assistant", {content:"", tool_calls:[
     {id:"call_1", name:"list_dir", args:{path:"a"}},
@@ -268,10 +271,19 @@ try {
   handle("tool_end", {name:"list_dir", ok:true, result:"RISULTATO_UNO", id:"call_1"});
   handle("tool_end", {name:"list_dir", ok:true, result:"RISULTATO_DUE", id:"call_2"});
   out.abbinati = (function(){
-    const tools = turnEl.querySelectorAll(".tool");
+    const tools = log.querySelectorAll(".tool");
     const testi = tools.map(t => { const o = t.querySelector(".tool-out"); return o ? o.textContent : "?"; });
     return testi.join("|") + " #" + tools.length;
   })();
+
+  // ORDINE REALE di un turno completo: utente, tool, tool, risposta.
+  out.ordineCompleto = log.children.map(c => {
+    const cn = String(c.className);
+    if (cn.includes("user")) return "user";
+    if (cn.includes("tool")) return "tool";
+    if (cn.includes("assistant")) return "assistant";
+    return cn || "sysnote";
+  }).join(" -> ");
 } catch (e) {
   out.ERROR = e.message + " @ " + (e.stack||"").split("\\n")[1];
 }
@@ -306,6 +318,14 @@ check("pallino verde da libero", "ok" in res.get("idleDot", ""), res.get("idleDo
 check("non pronto tiene l'input chiuso", res.get("notReadyInput") is True)
 check("user e assistant in log", "user" in " ".join(res.get("roles", [])) and
       "assistant" in " ".join(res.get("roles", [])), str(res.get("roles")))
+
+# L'ordine e' il punto: la risposta deve stare SOTTO il messaggio utente.
+check("ordine: utente poi risposta", res.get("ordine") == "user -> assistant",
+      str(res.get("ordine")))
+check("il primo elemento e' dell'utente", res.get("primoEUtente") is True)
+check("turno completo in ordine",
+      res.get("ordineCompleto") == "tool -> tool",
+      str(res.get("ordineCompleto")))
 check("gli eventi aggiungono nodi", res.get("nodesAfterAll", 0) > 8, str(res.get("nodesAfterAll")))
 check("reset svuota il log", res.get("afterReset") == 0, str(res.get("afterReset")))
 check("snapshot ricostruisce 2 messaggi", res.get("snapshotMsgs") == 2, str(res.get("snapshotMsgs")))
