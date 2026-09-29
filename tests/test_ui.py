@@ -71,24 +71,39 @@ print("\n[4] Logica degli handler, con DOM finto")
 harness = """
 // --- DOM finto, minimo ma sufficiente ---
 class ClassList {
-  constructor(){ this.s=new Set(); }
-  add(...c){ c.forEach(x=>this.s.add(x)); }
-  remove(...c){ c.forEach(x=>this.s.delete(x)); }
-  toggle(c){ this.s.has(c)?this.s.delete(c):this.s.add(c); }
+  constructor(){ this.s=new Set(); this._onChange=null; }
+  add(...c){ c.forEach(x=>this.s.add(x)); this._changed(); }
+  remove(...c){ c.forEach(x=>this.s.delete(x)); this._changed(); }
+  toggle(c){ this.s.has(c)?this.s.delete(c):this.s.add(c); this._changed(); }
   contains(c){ return this.s.has(c); }
+  // nel DOM, classList non si serializza, ma el.className sì: è il ponte
+  // che tiene insieme i due. Senza questo, toggolare "hidden" non
+  // cambiava className e i test vedevano un pannello sempre aperto.
+  toString(){ return [...this.s].join(" "); }
+  _changed(){ if (this._onChange) this._onChange(); }
 }
 class El {
   constructor(tag){ this.tagName=tag; this.children=[]; this._text=""; this.style={};
-                   this.classList=new ClassList(); this.disabled=false; this._on={}; this._attrs={}; }
+                   this.disabled=false; this._on={}; this._attrs={}; this._cl=null; }
   appendChild(c){ this.children.push(c); return c; }
   cloneNode(){ const e=new El(this.tagName); e._text=this._text; return e; }
-  // Nel DOM vero `el.className = "a b"` AGGIORNA classList. Il fake lo
-  // ignorava, e `querySelectorAll(".tool")` non trovava nulla: i test
-  // misuravano il mock invece del codice.
+  // className e classList devono stare in sync nei due sensi: la UI
+  // scrive con classList.add (per toggolare "hidden") e legge con
+  // className. Tenendoli separati i test misurano il mock e falliscono
+  // su un pannello che nel browser funziona.
+  get classList(){
+    if (!this._cl) {
+      const self = this;
+      this._cl = new ClassList();
+      this._cl._onChange = () => { self._className = this._cl.toString(); };
+    }
+    return this._cl;
+  }
+  set classList(v){ this._cl = v; }   // non usato, ma serve per Coerenza
   set className(v){
     this._className = String(v);
-    this.classList = new ClassList();
-    String(v).split(/\s+/).filter(Boolean).forEach(c => this.classList.add(c));
+    this._cl = new ClassList();
+    String(v).split(/\s+/).filter(Boolean).forEach(c => this._cl.add(c));
   }
   get className(){ return this._className || ""; }
   set textContent(v){ this._text=String(v); this.children=[]; }
@@ -343,6 +358,121 @@ check("send con spazi non spara nulla", res.get("emptySendNoop") is True)
 
 os.unlink(tmp)
 os.unlink(tmp2)
+print("\n[9] Selettore modello e benchmark nella UI")
+# Regressione: la UI serviva una copia in cache e l'utente vedeva una
+# pagina senza selettore ne' benchmark mentre il server era gia' nuovo.
+# Il sintomo era "non funziona niente", che sembrava un bug di codice.
+import subprocess as _sp
+import tempfile as _tf
+
+_gh = HERE = os.path.dirname(os.path.abspath(__file__))
+UI_PATH = os.path.join(os.path.dirname(_gh), "orchestra", "web", "index.html")
+
+with open(UI_PATH, encoding="utf-8") as f:
+    _ui = f.read()
+_ui_js = re.search(r"<script>(.*?)</script>", _ui, re.S).group(1)
+
+_fake_fetch = r"""
+const CALLS = [];
+globalThis.fetch = async (url, opts) => {
+  CALLS.push(url);
+  if (url === "/api/models") {
+    return { ok:true, status:200, json: async () => ({ provider:"openrouter",
+      current:"vendor/a:free", models: [
+        {id:"vendor/a:free", short:"a", free:true,  context:100000, prompt_price:0,     scores:{}, current:true},
+        {id:"vendor/b:free", short:"b", free:true,  context:200000, prompt_price:0,     scores:{}, current:false},
+        {id:"vendor/c",     short:"c", free:false, context:130000, prompt_price:8e-7,  scores:{}, current:false},
+      ]}) };
+  }
+  if (url === "/api/state")
+    return { ok:true, status:200, json: async () => ({ready:true, version:"0.4.0", messages:[]}) };
+  if (url === "/api/bench/status")
+    return { ok:true, status:200, json: async () => ({running:false, log:[], result:null}) };
+  return { ok:true, status:200, json: async () => ({}) };
+};
+"""
+_probe9 = r"""
+const R = {};
+(async () => {
+ try {
+  await new Promise(r => setTimeout(r, 50));
+  R.opzioni = modelPick.children.length;
+  R.disabled = modelPick.disabled;
+  R.testi = modelPick.children.map(c => c.textContent);
+  R.ver = document.getElementById("ver").textContent;
+  // il pannello benchmark deve esistere e togglare la classe hidden
+  R.benchEsiste = !!document.getElementById("bench");
+  R.benchNascosto = benchPanel.className;
+  openBench();
+  R.benchAperto = benchPanel.className;
+  closeBench();
+  R.benchRichiuso = benchPanel.className;
+ } catch (e) { R.ERROR = e.message; }
+ // prefisso univoco: questo file esegue piu' probe e devono distinguersi
+ console.log("PROBE9__" + JSON.stringify(R));
+})();
+"""
+_f = _tf.mktemp(suffix=".js")
+with open(_f, "w", encoding="utf-8") as fh:
+    fh.write(harness + _fake_fetch + _ui_js + _probe9)
+_r = _sp.run(["node", _f], capture_output=True, text=True, timeout=90)
+os.unlink(_f)
+_r9 = {}
+_PREFIX = "PROBE9__"   # 8 caratteri: find() + len, non una costante magica
+for _line in _r.stdout.splitlines():
+    _i = _line.find(_PREFIX)
+    if _i >= 0:
+        try:
+            _r9 = json.loads(_line[_i + len(_PREFIX):])
+        except json.JSONDecodeError as e:
+            print(f"  [debug] non parsabile: {_line[_i:_i+120]!r} ({e})")
+if not _r9 and _r.stderr:
+    print(f"  [debug] stderr: {(_r.stderr or '')[:300]}")
+check("selettore popolato", _r9.get("opzioni") == 3, str(_r9.get("opzioni")))
+check("selettore abilitato", _r9.get("disabled") is False, str(_r9.get("disabled")))
+check("etichette con contesto e prezzo",
+      any("100k" in t for t in _r9.get("testi", [])) and
+      any("free" in t for t in _r9.get("testi", [])), str(_r9.get("testi")))
+check("versione mostrata", _r9.get("ver") == "0.4.0", str(_r9.get("ver")))
+check("pannello benchmark presente", _r9.get("benchEsiste") is True)
+check("pannello si apre", "hidden" not in str(_r9.get("benchAperto")), str(_r9.get("benchAperto")))
+check("pannello si chiude", "hidden" in str(_r9.get("benchRichiuso")), str(_r9.get("benchRichiuso")))
+
+# e con /api/models che fallisce: il selettore NON deve restare grigio
+# senza spiegazione, deve dire cosa sta succedendo
+_fail_fetch = r"""
+globalThis.fetch = async (url) => {
+  if (url === "/api/models") return { ok:false, status:503, json: async () => ({error:"catalogo non disponibile"}) };
+  if (url === "/api/state")
+    return { ok:true, status:200, json: async () => ({ready:true, version:"0.4.0", messages:[]}) };
+  return { ok:true, status:200, json: async () => ({}) };
+};
+"""
+_probe_fail = r"""
+const R = {};
+(async () => {
+ try { await new Promise(r => setTimeout(r, 50)); R.text = modelPick.textContent; R.disabled = modelPick.disabled; }
+ catch (e) { R.ERROR = e.message; }
+ console.log("PROBE9__" + JSON.stringify(R));
+})();
+"""
+_f2 = _tf.mktemp(suffix=".js")
+with open(_f2, "w", encoding="utf-8") as fh:
+    fh.write(harness + _fail_fetch + _ui_js + _probe_fail)
+_r2 = _sp.run(["node", _f2], capture_output=True, text=True, timeout=90)
+os.unlink(_f2)
+_r9b = {}
+for _line in _r2.stdout.splitlines():
+    _i = _line.find(_PREFIX)
+    if _i >= 0:
+        try:
+            _r9b = json.loads(_line[_i + len(_PREFIX):])
+        except json.JSONDecodeError as e:
+            print(f"  [debug] non parsabile: {_line[_i:_i+120]!r} ({e})")
+check("catalogo rotto: il selettore lo dice",
+      "non disponibili" in str(_r9b.get("text", "")), str(_r9b.get("text")))
+check("catalogo rotto: resta disabilitato", _r9b.get("disabled") is True)
+
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

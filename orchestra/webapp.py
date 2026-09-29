@@ -274,6 +274,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        # Senza questi il browser puo' servire una copia vecchia dalla
+        # memoria e non lo dice: si vedeva una UI senza selettore modello
+        # mentre il server era gia' aggiornato, e sembrava un bug del
+        # codice. `no-cache` non impedisce di salvare, obbliga a
+        # riverificare; `must-revalidate` chiude la porta al limbo.
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
         self.end_headers()
         self.wfile.write(body)
 

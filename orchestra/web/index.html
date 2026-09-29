@@ -40,6 +40,7 @@
   }
   .logo { font-weight: 650; letter-spacing: .2px; }
   .logo span { color: var(--accent); }
+  .ver { font: 10px var(--mono); color: var(--muted); margin-left: 6px; }
   .grow { flex: 1; }
   .stat { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
   .stat b { color: var(--fg); font-weight: 500; }
@@ -208,6 +209,7 @@
 
 <header>
   <div class="logo">Orches<span>tra</span></div>
+  <span class="ver" id="ver" title="versione della interfaccia">·</span>
   <div class="grow"></div>
   <button id="btn-bench" class="ghost">Benchmark</button>
   <select id="model-pick" title="Modello in uso" disabled>
@@ -694,8 +696,17 @@ connect();
 fetch("/api/state").then(r => r.json()).then(s => {
   if (s.ready === false) { showBanner(s.error); return; }
   ready = true;
+  showVersion(s.version);
   if (!log.children.length) handle("snapshot", s);
 }).catch(() => { conn.textContent = "server non raggiungibile"; });
+
+// La versione è il modo più economico per capire se stai guardando la
+// pagina giusta. Senza, una UI in cache vecchia si manifesta come
+// "funziona tutto tranne una cosa" e sembra un bug.
+function showVersion(v) {
+  $("ver").textContent = v || "?";
+  $("ver").title = `interfaccia ${v || "?"} — se non corrisponde al server, ricarica`;
+}
 </script>
 </body>
 </html>
