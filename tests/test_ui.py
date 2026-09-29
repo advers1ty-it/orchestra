@@ -140,11 +140,47 @@ class El {
     }
     return [];
   }
+  // `new Option(...)` e `replaceChildren` sono API del DOM vero che il
+  // fake deve simulare: la UI le usa perche' createElement("option") non
+  // produce un <option> valido in tutti i browser. Se il fake le ignora,
+  // il test mente: e' gia' successo piu' volte con questo fake.
+  replaceChildren(...nodes){ this.children = []; for (const n of nodes) this.appendChild(n); }
   // `innerHTML = ""` in un browser vero SVUOTA l'elemento. Il fake doveva
   // farlo: senza, showBanner e handle("reset") sembravano non funzionare,
   // e i test misuravano il mock invece del codice.
   set innerHTML(v){ this._text=""; this.children=[]; }
   get innerHTML(){ return this._text; }
+  // `options` e `value` su un <select>: la UI imposta value per preselezionare
+  // il modello corrente. Se il fake non li ha, quella riga diventa un no-op
+  // silenzioso e il test passa mentre il browser no.
+  get options(){
+    return this.tagName === "select" ? this.children.filter(c => c.tagName === "option") : [];
+  }
+  get value(){
+    // su un <select> il valore e' quello dell'opzione selezionata; su un
+    // <option> (o un input) e' la propria _value
+    if (this.tagName === "select") {
+      if (this._value !== undefined) return this._value;
+      const s = this.options.find(o => o.selected);
+      return s ? s.value : "";
+    }
+    return this._value === undefined ? "" : this._value;
+  }
+  set value(v){
+    const str = v === undefined || v === null ? "" : String(v);
+    if (this.tagName === "select") {
+      // come nel DOM: mette selected sull'option che corrisponde
+      let found = false;
+      for (const o of this.options) {
+        o.selected = (o.value === str);
+        if (o.selected) found = true;
+      }
+      this._value = found ? str : "";
+      return;
+    }
+    // su un option o un input: valore semplice
+    this._value = str;
+  }
   // conteggio ricorsivo: i tool sono figli diretti di `log`
   all(){ let n=1; for(const c of this.children) n+=c.all?c.all():1; return n; }
   addEventListener(k,f){ this._on[k]=f; }
@@ -154,7 +190,27 @@ class El {
 }
 globalThis.CSS = { escape: (s) => String(s).replace(/["\\\\]/g, "\\\\$&") };
 const _els = {};
-function mk(id){ return _els[id] || (_els[id] = new El("div")); }
+function mk(id){
+  if (_els[id]) return _els[id];
+  // i selettori devono essere <select>, altrimenti `options` e `value`
+  // sono no-op e il test passa mentre il browser no
+  const isSelect = id === "model-pick" || id === "bench-sample" || id === "bench-cat";
+  const e = new El(isSelect ? "select" : "div");
+  if (isSelect) e.selectedIndex = -1;
+  _els[id] = e;
+  return e;
+}
+// `new Option(text, value)` costruisce un <option> VERO. La UI lo usa
+// perche' createElement("option") + appendChild non produce un <option>
+// valido in tutti i browser: il select restava vuoto e grigio. Il fake
+// deve rifletterlo, altrimenti il test passa mentre il browser no.
+globalThis.Option = function (text, value) {
+  const o = new El("option");
+  o._text = String(text);
+  o.value = value === undefined ? String(text) : String(value);
+  o.selected = false;
+  return o;
+};
 globalThis.document = {
   createElement: (t) => new El(t),
   getElementById: mk,
@@ -399,6 +455,10 @@ const R = {};
   R.opzioni = modelPick.children.length;
   R.disabled = modelPick.disabled;
   R.testi = modelPick.children.map(c => c.textContent);
+  R.tagPrimi = modelPick.children.map(c => c.tagName);
+  R.tuttiOption = R.tagPrimi.every(t => t === "option");
+  R.value = modelPick.value;
+  R.valori = modelPick.options.map(o => o.value);
   R.ver = document.getElementById("ver").textContent;
   // il pannello benchmark deve esistere e togglare la classe hidden
   R.benchEsiste = !!document.getElementById("bench");
@@ -433,6 +493,16 @@ check("selettore abilitato", _r9.get("disabled") is False, str(_r9.get("disabled
 check("etichette con contesto e prezzo",
       any("100k" in t for t in _r9.get("testi", [])) and
       any("free" in t for t in _r9.get("testi", [])), str(_r9.get("testi")))
+# REGRESSIONE: le voci devono essere <option> VERI, non elementi generici.
+# createElement("option") + appendChild non funziona in tutti i browser e
+# lasciava il select grigio. new Option() lo risolve.
+check("le voci sono option veri", _r9.get("tuttiOption") is True, str(_r9.get("tagPrimi")))
+check("il modello corrente è preselezionato",
+      _r9.get("value") == "vendor/a:free", repr(_r9.get("value")))
+if _r9.get("value") != "vendor/a:free":
+    print(f"     [debug] valori opzione: {_r9.get('valori')}")
+    print(f"     [debug] current atteso: vendor/a:free")
+    print(f"     [debug] testo errore   : {_r9.get('testoErrore')!r}")
 check("versione mostrata", _r9.get("ver") == "0.4.0", str(_r9.get("ver")))
 check("pannello benchmark presente", _r9.get("benchEsiste") is True)
 check("pannello si apre", "hidden" not in str(_r9.get("benchAperto")), str(_r9.get("benchAperto")))

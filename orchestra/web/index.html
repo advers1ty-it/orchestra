@@ -512,27 +512,48 @@ function showBanner(msg) {
 async function loadModels() {
   try {
     const r = await fetch("/api/models");
+    if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    modelPick.textContent = "";
+    // svuota con replaceChildren, non textContent: su un <select> alcuni
+    // browser trattano textContent="" come "nessuna opzione valida" e
+    // rifiutano di accettarne altre. replaceChildren è esplicito.
+    modelPick.replaceChildren();
     // i gratuiti per primi: sono quelli che si possono provare senza
     // pensarci, e sono la maggior parte di quello che c'è
     const sorted = (d.models || []).slice().sort((a, b) =>
       (a.free === b.free) ? a.id.localeCompare(b.id) : (a.free ? -1 : 1));
     for (const m of sorted) {
-      const o = el("option", null);
-      o.value = m.id;
-      const ctx = m.context ? ` ${Math.round(m.context / 1000)}k` : "";
-      const price = m.free ? "free" : `$${m.prompt_price.toFixed(2)}/1M`;
-      o.textContent = `${m.short}${ctx} · ${price}`;
-      if (m.current) o.selected = true;
+      // new Option(...) invece di createElement("option"): costruisce
+      // un <option> vero, con value e testo impostati nel modo giusto.
+      // Con createElement + appendChild il <select> restava vuoto in
+      // alcuni browser, perche' mancava l'attributo implicito.
+      const o = new Option(m.short + ctx_label(m.context) + " · " + price_label(m), m.id);
       modelPick.appendChild(o);
     }
+    // il modello corrente: se non c'è tra le opzioni, aggiungilo, altrimenti
+    // il <select> si apre su "modello…" e sembra non funzionare
+    if (d.current && !sorted.some((m) => m.id === d.current)) {
+      modelPick.appendChild(new Option(d.current, d.current));
+    }
+    modelPick.value = d.current || modelPick.options[0]?.value || "";
     modelPick.disabled = false;
   } catch (e) {
-    modelPick.textContent = "modelli non disponibili";
+    modelPick.replaceChildren();
+    modelPick.appendChild(new Option("modelli non disponibili", ""));
     modelPick.disabled = true;
   }
+}
+
+function ctx_label(context) {
+  return context ? " " + Math.round(context / 1000) + "k" : "";
+}
+function price_label(m) {
+  const p = Number(m.prompt_price);
+  if (m.free || !isFinite(p) || p === 0) return "free";
+  // i prezzi OpenRouter sono stringhe come "8e-07": senza Number diventano
+  // NaN e toFixed() produce "NaN" nell'etichetta
+  return "$" + p.toFixed(p < 0.01 ? 4 : 2) + "/1M";
 }
 
 modelPick.addEventListener("change", async () => {
