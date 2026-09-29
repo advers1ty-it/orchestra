@@ -18,6 +18,7 @@ SUITES = [
     ("sessione", "test_session.py", True),
     ("webapp", "test_webapp.py", True),
     ("ui", "test_ui.py", True),
+    ("benchmark", "test_benchmark.py", True),
     ("e2e", "test_e2e.py", False),
 ]
 

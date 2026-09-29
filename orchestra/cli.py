@@ -10,6 +10,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -228,6 +229,231 @@ def cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_model(args: argparse.Namespace) -> int:
+    """Elenca i modelli e quello in uso, e permette di cambiarlo."""
+    env = _env()
+    provider_name = args.provider or env.get("ORCHESTRA_PROVIDER", "openrouter")
+    from .catalog import Catalog
+
+    try:
+        cat = Catalog.fetch(provider_name)
+    except Exception as e:  # noqa: BLE001
+        print(f"{C['r']}errore: {e}{C['x']}", file=sys.stderr)
+        return 2
+
+    if not cat.models:
+        print("nessun modello con tool-calling trovato")
+        return 1
+
+    current = env.get("ORCHESTRA_MODEL", "")
+    if args.set:
+        if args.set not in cat.models:
+            print(f"{C['r']}modello sconosciuto: {args.set}{C['x']}")
+            print(f"disponibili: {len(cat.models)}")
+            return 1
+        _write_model(args.set)
+        print(f"{C['g']}modello impostato su {args.set}{C['x']}")
+        return 0
+
+    if args.list:
+        print(f"{len(cat.models)} modelli con tool-calling su {provider_name}\n")
+        for p in sorted(cat.with_tools(), key=lambda x: x.info.id):
+            mark = f"{C['g']}*{C['x']} " if p.info.id == current else "  "
+            price = "free" if p.info.is_free else (
+                f"${p.info.prompt_price:.2f}/1M in"
+            )
+            ctx = f"{p.info.context_length // 1000}k" if p.info.context_length else "?"
+            print(f" {mark}{p.info.id:<48} {price:>12}  ctx {ctx:>5}")
+        print(f"\n{'*' } = in uso. Cambia con: orchestra model --set <id>")
+        return 0
+
+    # default: riepilogo + misurazioni
+    print(f"in uso: {current}\n")
+    measured = cat.measured()
+    if not measured:
+        print(f"{C['y']}nessun modello misurato ancora.{C['x']}")
+        print(f"Misura con: orchestra bench --sample 3")
+        print(f"\n{C['dim']}{len(cat.models)} modelli disponibili, "
+              f"{len(cat.free())} gratuiti con tool-calling{C['x']}")
+        return 0
+
+    print(f"{C['b']}misurati{C['x']} (fatto, non ipotesi)\n")
+    for cat_name in sorted({c for p in measured for c in p.scores}):
+        board = cat.leaderboard(cat_name)
+        if not board:
+            continue
+        print(f"{C['b']}{cat_name}{C['x']}")
+        for name, s in board:
+            bar = "#" * int(s * 20)
+            print(f"  {name:<28} {s:.2f}  {C['c']}{bar}{C['x']}")
+        print()
+    return 0
+
+
+def _write_model(model_id: str) -> None:
+    """Scrive ORCHESTRA_MODEL nel .env, sostituendo la riga se c'è."""
+    import re
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    try:
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return
+    if re.search(r"^ORCHESTRA_MODEL=.*$", content, re.M):
+        content = re.sub(r"^ORCHESTRA_MODEL=.*$", f"ORCHESTRA_MODEL={model_id}",
+                         content, flags=re.M)
+    else:
+        content += f"\nORCHESTRA_MODEL={model_id}\n"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    env = _env()
+    provider_name = args.provider or env.get("ORCHESTRA_PROVIDER", "openrouter")
+
+    from .benchmark import render_table, run_task, summarize, tasks_for
+    from .catalog import Catalog
+
+    try:
+        cat = Catalog.fetch(provider_name)
+    except Exception as e:  # noqa: BLE001
+        print(f"{C['r']}errore catalogo: {e}{C['x']}", file=sys.stderr)
+        return 2
+
+    if args.show:
+        tasks = tasks_for(args.category)
+        if not tasks:
+            print(f"nessun task nella categoria {args.category}", file=sys.stderr)
+            return 1
+        print(f"{len(tasks)} task\n")
+        for t in tasks:
+            print(f"  {C['b']}{t.id}{C['x']}  [{C['c']}{t.category}{C['x']}]")
+            print(f"    {C['dim']}{t.prompt[:100]}...{C['x']}\n")
+        return 0
+
+    # scelta dei modelli: campione, non tutti. --all se lo chiedi esplicitamente.
+    if args.models:
+        ids = args.models
+    elif args.all:
+        ids = sorted(cat.models)
+    else:
+        free = sorted(cat.free(), key=lambda p: p.info.id)
+        if not free:
+            print(f"{C['r']}nessun modello gratuito con tool-calling{C['x']}", file=sys.stderr)
+            return 1
+        # campione: primo, uno medio, uno con contesto grande. Non e'
+        # casuale perche' il confronto deve essere leggibile.
+        free.sort(key=lambda p: -(p.info.context_length or 0))
+        step = max(1, len(free) // max(1, args.sample))
+        ids = [m.info.id for m in free[::step]][:args.sample]
+
+    if not ids:
+        print("nessun modello da testare", file=sys.stderr)
+        return 1
+
+    tasks = tasks_for(args.category)
+    if not tasks:
+        print(f"categoria sconosciuta: {args.category}", file=sys.stderr)
+        return 1
+
+    total = len(ids) * len(tasks) * args.repeat
+    print(f"{C['b']}Benchmark{C['x']}: {len(ids)} modelli × {len(tasks)} task"
+          f"{f' × {args.repeat} ripetizioni' if args.repeat > 1 else ''}")
+    print(f"{C['dim']}{total} run. Costo reale: consumo token del provider."
+          f" I modelli :free non costano nulla.{C['x']}\n")
+    print(f"{C['dim']}n=1 per task: indicazione, non statistica. "
+          f"Usa --repeat per confronti che contano.{C['x']}\n")
+    if args.throttle:
+        print(f"{C['dim']}pausa {args.throttle}s fra i run: i free tier di OpenRouter "
+              f"rispondono 429 se vai troppo veloce.{C['x']}\n")
+
+    from .benchmark import RunResult
+
+    results: list[RunResult] = []
+    t0 = time.time()
+    done = 0
+    # un modello che il provider riserva ad altri client fallisce su OGNI
+    # task: inutile insistere. Lo scopriamo al primo run.
+    dead: set[str] = set()
+    for mid in ids:
+        if mid in dead:
+            print(f"{C['b']}{cat.models[mid].info.short if mid in cat.models else mid}{C['x']}"
+                  f"  {C['dim']}saltato: non raggiungibile{C['x']}\n")
+            continue
+        name = cat.models[mid].info.short if mid in cat.models else mid
+        print(f"{C['b']}{name}{C['x']}")
+        for rep in range(args.repeat):
+            for task in tasks:
+                # Pausa fra i run. I free tier di OpenRouter rispondono 429
+                # se spari troppo veloce, e un benchmark interamente
+                # "errore 429" non misura niente. Meglio aspettare che
+                # misurare male.
+                if done and args.throttle:
+                    time.sleep(args.throttle)
+                done += 1
+                sys.stdout.write(f"  {task.id:<18} ")
+                sys.stdout.flush()
+                r = run_task(task, provider_name=provider_name, model=mid,
+                             env=env, max_iterations=args.max_iterations)
+                results.append(r)
+                if r.unusable:
+                    # il modello è riservato ad altri client: inutile
+                    # continuare, e segnarlo 0.00 farebbe sembrare che sia
+                    # scarso quando è solo irraggiungibile da qui
+                    dead.add(mid)
+                    print(f"{C['y']}non raggiungibile{C['x']}  {C['dim']}"
+                          f"{r.error[:70]}{C['x']}")
+                    break
+                if r.error:
+                    mark = f"{C['r']}errore{C['x']}"
+                    note = r.error[:110]
+                elif r.passed:
+                    mark = f"{C['g']}ok{C['x']}"
+                    note = f"{r.seconds:.0f}s {r.completion_tokens}tok"
+                else:
+                    mark = f"{C['y']}fail{C['x']}"
+                    # 60 caratteri tagliavano via metà del messaggio di
+                    # errore, e il dettaglio è l'unica cosa che serve per
+                    # capire se il fallo è del modello o del benchmark
+                    note = r.detail[:110]
+                print(f"{mark}  {C['dim']}{note}{C['x']}")
+            if mid in dead:
+                break
+        if mid in dead:
+            continue
+        passed = sum(1 for r in results if r.model == mid and r.passed)
+        n = len([r for r in results if r.model == mid])
+        print(f"  {C['dim']}-> {passed}/{n}{C['x']}\n")
+
+    summary = summarize(results)
+    print(f"\n{C['b']}risultati ({time.time() - t0:.0f}s){C['x']}\n")
+    print(render_table(summary, cat))
+
+    # persistenza: i punteggi alimentano il routing
+    scored = {}
+    for mid, data in summary["per_model"].items():
+        prof = cat.models.get(mid)
+        if prof:
+            prof.scores = {c: v for c, v in data["by_category"].items() if v > 0}
+            prof.last_measured = time.time()
+            scored[mid] = prof
+    if scored and not args.no_save:
+        cat.save()
+        print(f"\n{C['dim']}misurazioni salvate. "
+              f"Routing: orchestra model{C['x']}")
+
+    if args.json:
+        from .benchmark import asdict as _ad
+        out = os.path.join(os.getcwd(), "bench_result.json")
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump([_ad(r) for r in results], f, indent=2, default=str)
+        print(f"{C['dim']}JSON: {out}{C['x']}")
+
+    return 0
+
+
 def cmd_web(args: argparse.Namespace) -> int:
     env = _env()
     if not env.get("ORCHESTRA_MODEL"):
@@ -259,6 +485,29 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--port", type=int, default=8737)
     w.add_argument("--no-browser", action="store_true", help="non aprire il browser")
     w.set_defaults(func=cmd_web)
+
+    mo = sub.add_parser("model", help="modelli disponibili e cambio modello")
+    mo.add_argument("--list", action="store_true", help="elenca i modelli")
+    mo.add_argument("--set", metavar="ID", help="imposta il modello in uso")
+    mo.add_argument("--provider")
+    mo.set_defaults(func=cmd_model)
+
+    b = sub.add_parser("bench", help="misura quale modello fa cosa")
+    b.add_argument("--sample", type=int, default=3,
+                   help="quanti modelli provare (default 3)")
+    b.add_argument("--all", action="store_true", help="prova tutti i modelli")
+    b.add_argument("--models", nargs="+", metavar="ID", help="modelli specifici")
+    b.add_argument("--category", help="solo una categoria (code, reasoning, ...)")
+    b.add_argument("--repeat", type=int, default=1,
+                   help="ripetizioni per task; >1 per confronti che contano")
+    b.add_argument("--max-iterations", type=int, default=10)
+    b.add_argument("--throttle", type=float, default=3.0,
+                   help="secondi di pausa fra i run (default 3, evita i 429)")
+    b.add_argument("--provider")
+    b.add_argument("--show", action="store_true", help="mostra i task senza eseguirli")
+    b.add_argument("--json", action="store_true", help="salva i risultati in JSON")
+    b.add_argument("--no-save", action="store_true", help="non salvare le misurazioni")
+    b.set_defaults(func=cmd_bench)
 
     d = sub.add_parser("doctor", help="verifica configurazione e connessione")
     d.set_defaults(func=cmd_doctor)

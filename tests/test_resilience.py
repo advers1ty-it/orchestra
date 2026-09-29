@@ -318,6 +318,27 @@ n2 = OpenAICompatAdapter(base_url="http://x/v1", api_key="k", model="m", name="t
 check("tool call senza nome ignorata", all(t.name == "ok" for t in n2.tool_calls), str(n2.tool_calls))
 check("arguments None -> {}", n2.tool_calls[0].parsed_args() == {}, str(n2.tool_calls[0].parsed_args()))
 
+# User-Agent: alcuni modelli free su OpenRouter rispondono 403 se il client
+# non si dichiara un agente ("only available on agentic harnesses"). Il
+# sintomo era un modello a 0.00 su ogni task pur funzionando in chat.
+check("User-Agent dichiara un agente",
+      "orchestra" in OpenAICompatAdapter.UA.lower() and "agent" in OpenAICompatAdapter.UA.lower(),
+      OpenAICompatAdapter.UA)
+ad_ua = OpenAICompatAdapter(base_url="http://x/v1", api_key="k", model="m", name="t")
+check("adapter espone lo UA", ad_ua.UA == OpenAICompatAdapter.UA)
+
+# il body del 403 deve restare leggibile nel messaggio
+ad_err = OpenAICompatAdapter(base_url="http://x/v1", api_key="k", model="m", name="or")
+harness_403 = {"error": {"message": "thinkingmachines/inkling-small:free is only "
+                                "available on agentic harnesses. Try plugging it "
+                                "into a coding agent", "code": 403}}
+try:
+    ad_err._normalize(harness_403)
+    check("403 harness propagato", False, "non ha sollevato")
+except ProviderError as e:
+    check("403 harness propagato", "agentic harnesses" in str(e), str(e)[:120])
+    check("403 harness NON è retryable", e.retryable is False)
+
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

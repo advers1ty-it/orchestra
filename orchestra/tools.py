@@ -19,14 +19,30 @@ from typing import Any
 from .types import Tool, ToolRegistry
 
 
-# confini: il modello non può leggere fuori da qui, per quanto chieda
-ROOT = Path(os.environ.get("ORCHESTRA_ROOT", ".")).resolve()
+# confini: il modello non può leggere fuori da qui, per quanto chieda.
+#
+# ROOT è valutato all'import e ricalcolato solo se cambia
+# ORCHESTRA_ROOT. Senza questo, il benchmark — che cambia la root per ogni
+# task — avrebbe tool che scrivono nella directory del primo import, e
+# ogni verifica fallirebbe guardando il posto sbagliato. Il sintomo era un
+# benchmark intero a 0.00: sembrava che i modelli fossero pessimi, quando
+# il codice non aveva mai scritto dove credevamo.
+def _root() -> Path:
+    return Path(os.environ.get("ORCHESTRA_ROOT", ".")).resolve()
+
+
+ROOT = _root()
 
 
 def _safe_path(rel: str) -> Path:
-    """Risolve un path relativo dentro ROOT, bloccando il traversal."""
-    p = (ROOT / rel).resolve()
-    if not str(p).startswith(str(ROOT)):
+    """Risolve un path relativo dentro ROOT, bloccando il traversal.
+
+    Legge la root al momento della chiamata, non quella congelata
+    all'import: vedi `_root()`. Il benchmark cambia la root a ogni task.
+    """
+    root = _root()
+    p = (root / rel).resolve()
+    if not str(p).startswith(str(root)):
         raise ValueError(f"path fuori dal root consentito: {rel}")
     return p
 
@@ -168,7 +184,7 @@ def tool_run_shell() -> Tool:
                 encoding="utf-8",
                 errors="replace",
                 timeout=timeout,
-                cwd=str(ROOT),
+                cwd=str(_root()),
             )
         except subprocess.TimeoutExpired:
             return f"TIMEOUT dopo {timeout}s: comando interrotto"

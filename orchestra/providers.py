@@ -20,12 +20,31 @@ from .types import LLMResponse, Message, ToolCall, new_id
 
 
 class ProviderError(RuntimeError):
-    """Errore del provider. `retryable` guida la logica di fallback."""
+    """Errore del provider. Tre flag, non uno:
 
-    def __init__(self, message: str, *, retryable: bool = False, status: int = 0):
+    - `retryable`  ha senso ritentare (429, 5xx, rete)?
+    - `unusable`   il modello non e' raggiungibile da noi, e ritentare non
+                   serve. Esempio reale: OpenRouter riserva alcuni modelli
+                   free a un elenco chiuso di harness e risponde 403 "only
+                   available on agentic harnesses". Senza questo flag quel
+                   modello segna 0.00 su ogni task e sembra scarso, quando
+                   e' semplicemente irraggiungibile — e il benchmark
+                   finisce per consigliare il modello sbagliato.
+    - `status`     il codice HTTP, se c'e'.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = False,
+        status: int = 0,
+        unusable: bool = False,
+    ):
         super().__init__(message)
         self.retryable = retryable
         self.status = status
+        self.unusable = unusable
 
 
 # Status che valgono la pena ritentare: rete intasata o quota esaurita.
@@ -38,7 +57,16 @@ class OpenAICompatAdapter:
     Copre la maggior parte dei provider che ci serviranno. La normalizzazione
     che facciamo qui è minima ma sufficiente: prendiamo `tool_calls` e
     ricostruiamo `ToolCall`, tollerando i provider che mandano campi extra.
+
+    User-Agent. Non è un dettaglio: alcuni modelli gratuiti su OpenRouter
+    sono rifiutati con 403 se il client non si dichiara un agente. Il
+    messaggio è esplicito — "only available on agentic harnesses" — ma
+    nel benchmark arrivava come 403 generico, e un modello che funziona
+    perfettamente nella chat segnava 0.00 su ogni task. Dichiararsi è
+    anche la cosa giusta da fare: siamo un agente.
     """
+
+    UA = "Orchestra/0.2 (agentic CLI; +https://github.com/local/orchestra)"
 
     def __init__(
         self,
@@ -64,11 +92,7 @@ class OpenAICompatAdapter:
         body = json.dumps(payload).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
-            # Alcuni provider (es. Groq dietro Cloudflare) respingono lo User-Agent
-            # di default di urllib. Mandiamo sempre qualcosa di realistico.
-            "User-Agent": self.extra_headers.pop(
-                "User-Agent", "Mozilla/5.0 (compatible; orchestra/0.1)"
-            ),
+            "User-Agent": self.extra_headers.pop("User-Agent", self.UA),
             **self.extra_headers,
         }
         if self.api_key:
@@ -84,10 +108,16 @@ class OpenAICompatAdapter:
                 detail = e.read().decode("utf-8")[:500]
             except Exception:
                 pass
+            # "only available on agentic harnesses": il provider riserva il
+            # modello a un elenco chiuso di client. Non e' un errore da
+            # ritentare e non dice niente sulla qualita' del modello, quindi
+            # lo marchiamo a parte (vedi ProviderError.unusable).
+            harness_locked = "agentic harnesses" in (detail or "").lower()
             raise ProviderError(
                 f"{self.name}: HTTP {e.code} — {detail or e.reason}",
                 retryable=e.code in RETRYABLE_STATUS,
                 status=e.code,
+                unusable=harness_locked,
             ) from e
         except urllib.error.URLError as e:
             # errori di rete: quasi sempre transitori
@@ -133,7 +163,7 @@ class OpenAICompatAdapter:
         #              "code": 502, ...}}
         # Senza questo controllo il fallimento si presenta come "nessuna
         # choice" e il retry non scatta, perché non è un errore di rete.
-        # In produzione è la differenza fra recoverare da solo e no.
+        # In produzione è la differenza fra recuperare da solo e no.
         err = data.get("error")
         if err:
             if isinstance(err, str):
@@ -142,12 +172,17 @@ class OpenAICompatAdapter:
                 msg = err.get("message") or json.dumps(err)[:300]
                 code = err.get("code") or 0
             # 502/503/429 del provider sono transitori anche se HTTP era 200
-            transient = code in RETRYABLE_STATUS or code in (408, 409, 425, 429, 500, 502, 503, 504, 529)
+            transient = code in (408, 409, 425, 429, 500, 502, 503, 504, 529)
             raise ProviderError(
                 f"{self.name}: errore nel corpo della risposta "
                 f"(code={code or 'n/a'}): {msg}",
                 retryable=transient,
                 status=int(code) if isinstance(code, int) else 0,
+                # 403 "only available on agentic harnesses" NON e' un errore
+                # nostro: quel modello e' riservato a un elenco chiuso di
+                # client. Segnalarlo permette al benchmark di escluderlo
+                # invece di segnare 0.00 e farlo sembrare un modello scarso.
+                unusable="only available on agentic harnesses" in str(msg).lower(),
             )
 
         choices = data.get("choices") or []
@@ -185,7 +220,15 @@ class OpenAICompatAdapter:
         )
 
     def list_models(self) -> list[str]:
-        """Elenco modelli, se il provider lo espone. Utile per il discovery."""
+        """Elenco modeli, se il provider lo espone. Utile per il discovery."""
+        return [m.get("id", "") for m in self._list_models_raw() if m.get("id")]
+
+    def _list_models_raw(self) -> list[dict[str, Any]]:
+        """JSON grezzo di /models: prezzi, contesto, parametri supportati.
+
+        `list_models` tiene solo gli id, ma il catalogo ha bisogno del
+        resto per stimare i costi e filtrare chi supporta i tool.
+        """
         try:
             r = urllib.request.Request(
                 f"{self.base_url}/models",
@@ -196,7 +239,8 @@ class OpenAICompatAdapter:
             )
             with urllib.request.urlopen(r, timeout=30) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-            return [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+            out = data.get("data")
+            return out if isinstance(out, list) else []
         except Exception:
             return []
 

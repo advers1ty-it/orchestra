@@ -16,17 +16,80 @@ coperti da test, non lasciati a emergere in produzione.
 
 ```bash
 python3 -m orchestra.cli doctor                    # verifica config e connessione
-python3 -m orchestra.cli models --free             # modelli gratuiti disponibili
+python3 -m orchestra.cli model --list              # modelli disponibili
+python3 -m orchestra.cli model --set <id>          # cambia modello
+python3 -m orchestra.cli model                     # cosa sappiamo di ciascuno
+python3 -m orchestra.cli bench --show              # i task, senza eseguirli
+python3 -m orchestra.cli bench --sample 3          # misura 3 modelli
 python3 -m orchestra.cli run "il tuo compito"       # esegui e esci
 python3 -m orchestra.cli chat                      # sessione interattiva
 python3 -m orchestra.cli web                       # interfaccia web
 python3 tests/run_all.py                           # suite completa
 ```
 
-`web` avvia un server locale su `http://127.0.0.1:8737` e apre il browser.
-`--port` e `--no-browser` sono disponibili.
-
 Configurazione in `orchestra/.env` (copia da `.env.example`, mai committato).
+
+## Il benchmark
+
+`bench` misura cosa sa fare ogni modello, **per categoria di compito**.
+
+### Perché non "il modello più potente"
+
+Un punteggio unico non serve a nessuna decisione: un modello può batterne
+un altro in codice e perderlo in ragionamento, e la classifica cambia ogni
+settimana. Quindi si misura per categoria — `code`, `reasoning`,
+`instruction`, `tool_use`, `writing`, `extraction` — e il risultato è una
+tabella, non un vincitore.
+
+### Perché non chiede a un altro LLM
+
+Ogni verifica è **oggettiva e automatica**: se il file contiene
+`def fib` e `fib(10)` ritorna 55, il task è passato. Un giudizio LLM su un
+altro LLM misurerebbe la similarità di stile, non la correttezza, e
+costerebbe token per produrre numeri che non reggono.
+
+### Cosa non è
+
+**n=1 per task.** Ogni categoria gira una volta sola. Non è un dato
+statistico, è un'indicazione, e la tabella lo dichiara. Due valutazioni
+dello stesso modello possono dare risultati diversi: per una decisione che
+costa soldi, `--repeat 3` è il minimo.
+
+**Misura i task che contiene, non l'intelligenza generale.** Ogni task è
+ispezionabile con `bench --show`. Un corpus di 9 task netti batte uno di 30
+ambigui, perché un benchmark che non distingue nulla è inutile quanto non
+farlo.
+
+### Modelli non raggiungibili
+
+Alcuni modelli free su OpenRouter riservano l'accesso a un elenco chiuso di
+harness e rispondono 403 "only available on agentic harnesses". Sono
+**esclusi dal punteggio** e elencati a parte, perché "non lo so" e "so che
+è scarso" non possono finire nello stesso numero — altrimenti il benchmark
+finirebbe per consigliare il modello sbagliato.
+
+### Costo
+
+Ogni run consuma token. I modelli `:free` non costano nulla ma rispondono
+429 se vai veloce: `--throttle` (default 3s) esiste per quello. I paid
+costano davvero, e il catalogo calcola il costo stimato per token.
+
+## Modelli e capacità
+
+`orchestra/catalog.py` tiene separati due cose che si confondono facilmente:
+
+- **`ModelInfo`** — fatti: finestra di contesto, prezzi, supporto tool.
+  Vengono da `/models` e sono misurati.
+- **`ModelProfile.capabilities`** — ipotesi. Nessuna API dice cosa sa fare
+  un modello, quindi partono da `unknown` e il benchmark le riempie.
+
+Un modello non misurato non è "il migliore", è **sconosciuto**, e
+`best_for()` non lo consiglia. La differenza conta quando si tratta di
+soldi del cliente.
+
+Le misurazioni sono persistite in `catalog_<provider>.json`. Se il provider
+ritira un modello, le misurazioni restano: `stale_measurements()` le
+elenca, e se il modello torna sono ancora valide.
 
 ## Struttura
 
@@ -37,10 +100,12 @@ Configurazione in `orchestra/.env` (copia da `.env.example`, mai committato).
 | `context.py` | Conteggio token e compaction a due fasi |
 | `agent.py` | Il loop. Tutte le invarianti vivono qui |
 | `tools.py` | Tool concreti + guard del root |
+| `catalog.py` | Modelli, fatti separati da ipotesi, misurazioni persistenti |
+| `benchmark.py` | Corpus di task, verifiche oggettive, aggregazione |
 | `session.py` | Ponte fra il loop sincrono e un consumatore asincrono |
 | `webapp.py` | Server HTTP stdlib, streaming SSE |
 | `web/index.html` | L'interfaccia. HTML/CSS/JS puro, zero dipendenze |
-| `cli.py` | `run`, `chat`, `web`, `doctor`, `models` |
+| `cli.py` | `run`, `chat`, `web`, `model`, `bench`, `doctor`, `models` |
 
 ## L'interfaccia web
 
