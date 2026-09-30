@@ -106,6 +106,21 @@
       macchina. Orchestra non le rilette mai: qui sotto vedi solo se sono
       configurate e gli ultimi 4 caratteri, niente di piu'.
     </div>
+    <!-- Provider e modello PRIMA delle chiavi, e come menu a tendina.
+         Sono la configurazione, non una credenziale: due campi di testo
+         liberi in mezzo a dodici righe di chiavi si perdono, e un id
+         scritto a mano che sbaglia fallisce solo alla prima chiamata,
+         con un errore che sembra di rete. Un menu non puo' sbagliare. -->
+    <div class="opzioni-selezione">
+      <label>Servizio
+        <select id="opt-provider" disabled></select>
+      </label>
+      <label>Modello
+        <select id="opt-model" disabled></select>
+      </label>
+      <span id="opt-provider-msg" class="small dim"></span>
+    </div>
+
     <div id="chiavi-lista" class="chiavi-lista"></div>
     <div class="opzioni-gratis">
       <b>Dove si trovano modelli gratis</b>

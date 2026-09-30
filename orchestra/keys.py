@@ -33,6 +33,12 @@ from typing import Any
 # Chiavi scrivibili dal menu. Ogni voce e' un provider che Orchestra sa
 # usare, o un'impostazione che il programma legge davvero. Nient'altro:
 # se una chiave non e' in questa lista, non e' scritta.
+# Scrivibili ma NON mostrate fra le chiavi: sono configurazione, e il
+# pannello le espone come menu a tendina. Se comparissero anche nella
+# lista delle chiavi, ci sarebbero due modi per cambiarle e divergerebbero
+# senza che nessuno se ne accorga.
+SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL")
+
 WRITABLE: dict[str, str] = {
     "OPENROUTER_API_KEY": "OpenRouter",
     "GROQ_API_KEY": "Groq",
@@ -138,6 +144,8 @@ def stato(path: str, valori: dict[str, str]) -> list[dict[str, Any]]:
     """
     out = []
     for chiave, etichetta in WRITABLE.items():
+        if chiave in SOLO_SCRIVIBILI:
+            continue  # non e' una credenziale: sta nei menu in alto
         v = (valori or {}).get(chiave, "")
         v = v.strip()
         out.append({

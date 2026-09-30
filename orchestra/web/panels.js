@@ -339,6 +339,174 @@ on($("btn-opzioni"), "click", apriOpzioni);
 on($("opzioni-close"), "click", chiudiOpzioni);
 on(opzioniPanel, "click", (e) => { if (e.target === opzioniPanel) chiudiOpzioni(); });
 
+
+// ---- Servizio e modello: due menu, non due campi di testo
+// Erano due righe di chiavi come le altre, e si perdevano. Sono la
+// configurazione, non una credenziale: un id scritto a mano che sbaglia
+// fallisce solo alla prima chiamata, con un errore che sembra di rete.
+// Un menu non puo' sbagliare.
+//
+// Il menu servizio elenca SOLO i provider che hanno una chiave: quelli
+// senza si rifiutano al momento di usarne uno, quindi el menu direbbe
+// "usa groq" e poi fallirebbe. I motori locali compaiono sempre, perche'
+// non hanno bisogno di chiave e sono l'unica via senza account.
+const optProvider = $("opt-provider");
+const optModel = $("opt-model");
+const optMsg = $("opt-provider-msg");
+
+const NOME_PROVIDER = {
+  openrouter: "OpenRouter",
+  groq: "Groq",
+  nvidia: "NVIDIA NIM",
+  together: "Together",
+  cerebras: "Cerebras",
+  mistral: "Mistral",
+  openai: "OpenAI",
+  ollama: "Ollama (locale)",
+  lmstudio: "LM Studio (locale)",
+};
+
+function chiaviConfigurate(d) {
+  const out = new Set();
+  for (const k of d.chiavi || []) {
+    // ORCHESTRA_PROVIDER e ORCHESTRA_MODEL non sono chiavi: sono
+    // configurazione, e non devono finire nella lista
+    if (k.presente && k.chiave.endsWith("_API_KEY")) out.add(k.chiave);
+  }
+  return out;
+}
+
+function providerDaChiave(envVar) {
+  // GROQ_API_KEY -> groq ; ORCHESTRA_OLLAMA_URL -> ollama
+  if (envVar.startsWith("ORCHESTRA_")) {
+    return envVar.slice("ORCHESTRA_".length, -"_URL".length).toLowerCase();
+  }
+  return envVar.slice(0, -"_API_KEY".length).toLowerCase();
+}
+
+function disegnaProvider(d) {
+  const configurati = chiaviConfigurate(d);
+  const disponibili = new Set();
+  for (const k of d.chiavi || []) {
+    if (k.presente && k.chiave.endsWith("_API_KEY")) {
+      disponibili.add(providerDaChiave(k.chiave));
+    }
+  }
+  // i motori locali non hanno chiave: se sono configurati, sono usabili
+  for (const k of d.chiavi || []) {
+    if (k.presente && k.chiave.endsWith("_URL")) {
+      disponibili.add(providerDaChiave(k.chiave));
+    }
+  }
+  for (const motore of d.motori || []) disponibili.add(motore);
+
+  const corrente = d.provider || "";
+  optProvider.replaceChildren();
+  const utili = Array.from(disponibili).sort();
+  for (const p of utili) {
+    optProvider.appendChild(new Option(NOME_PROVIDER[p] || p, p));
+  }
+  if (!utili.length) {
+    optProvider.appendChild(new Option("nessun servizio configurato", ""));
+  } else if (utili.includes(corrente)) {
+    optProvider.value = corrente;
+  }
+  optProvider.disabled = !utili.length;
+  optMsg.textContent = utili.length
+    ? utili.length + " servizi pronti"
+    : "aggiungi sotto una chiave, o avvia un motore locale";
+}
+
+async function caricaModelli(prov, preseleziona) {
+  optModel.replaceChildren();
+  if (!prov) { optModel.disabled = true; return; }
+  optModel.disabled = true;
+  optModel.appendChild(new Option("carico…", ""));
+  try {
+    const r = await fetch("/api/modelli?provider=" + encodeURIComponent(prov));
+    const d = await r.json();
+    optModel.replaceChildren();
+    if (!r.ok) {
+      optModel.appendChild(new Option(d.error || "errore", ""));
+      optModel.disabled = true;
+      return;
+    }
+    // i gratuiti per primi: sono quelli che si possono usare subito
+    const lista = (d.modelli || []).slice().sort((a, b) =>
+      (a.free === b.free) ? a.id.localeCompare(b.id) : (a.free ? -1 : 1));
+    for (const m of lista) {
+      const s = (m.scores || {})[scopeAttivo];
+      const punteggio = typeof s === "number" ? "  " + s.toFixed(2) : "";
+      const ctx = m.context ? " " + Math.round(m.context / 1000) + "k" : "";
+      optModel.appendChild(new Option(
+        m.short + punteggio + ctx + " · " + (m.free ? "free" : "a pagamento"), m.id));
+    }
+    optModel.disabled = false;
+    if (preseleziona && lista.some((m) => m.id === preseleziona)) {
+      optModel.value = preseleziona;
+    } else if (d.modelli && d.modelli.length) {
+      const primo = lista.find((m) => m.free) || lista[0];
+      optModel.value = primo.id;
+    }
+  } catch (e) {
+    optModel.replaceChildren();
+    optModel.appendChild(new Option("connessione fallita", ""));
+  }
+}
+
+on(optProvider, "change", async () => {
+  const p = optProvider.value;
+  if (!p) return;
+  optMsg.textContent = "cambio servizio…";
+  try {
+    const r = await fetch("/api/provider", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: p }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      optMsg.textContent = d.error || ("errore " + r.status);
+      optMsg.className = "small rosso";
+      return;
+    }
+    optMsg.textContent = "ora: " + (NOME_PROVIDER[p] || p);
+    optMsg.className = "small verde";
+    await caricaModelli(p, null);
+    // il catalogo del provider e' cambiato: anche i modelli della chat
+    // vanno ricaricati, o mostrerebbero quelli del provider vecchio
+    loadModels();
+  } catch (e) {
+    optMsg.textContent = "cambio fallito: " + e;
+    optMsg.className = "small rosso";
+  }
+});
+
+on(optModel, "change", async () => {
+  const m = optModel.value;
+  if (!m) return;
+  optMsg.textContent = "cambio modello…";
+  try {
+    const r = await fetch("/api/model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: m }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      optMsg.textContent = d.error || ("errore " + r.status);
+      optMsg.className = "small rosso";
+      return;
+    }
+    optMsg.textContent = "ora: " + m;
+    optMsg.className = "small verde";
+    loadModels();
+  } catch (e) {
+    optMsg.textContent = "cambio fallito: " + e;
+    optMsg.className = "small rosso";
+  }
+});
+
 // riga di una chiave: etichetta, stato, campo vuoto, due pulsanti
 function rigaChiave(k) {
   const riga = el("div", "chiave-riga");
@@ -464,6 +632,10 @@ async function caricaOpzioni() {
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     opzioniNota.textContent = d.nota_gratis || "";
+
+    // provider e modello: due menu in alto, non due righe di chiavi
+    disegnaProvider(d);
+    caricaModelli(d.provider || optProvider.value, null);
 
     // i motori locali arrivano in una richiesta separata: sono una
     // domanda di rete a localhost e possono costare un timeout. Se

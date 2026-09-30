@@ -26,6 +26,7 @@ import os
 import sys
 import threading
 import time
+import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -86,6 +87,39 @@ class OrchestraApp:
                 self._catalog = None
                 self._catalog_error = str(e)
         return self._catalog
+
+    def switch_provider(self, provider_name: str) -> None:
+        """Cambia il provider predefinito e ricarica il catalogo.
+
+        Stesso vincolo di switch_model: durante un turno non si cambia,
+        o la conversazione si troverebbe a metà fra due provider diversi.
+        La chiave deve gia' esistere: cambiare provider non e' un modo
+        per aggirare la configurazione, quindi se manca la chiave si
+        dice subito e in chiaro.
+        """
+        if self.session.busy:
+            raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
+
+        from .providers import KNOWN_PROVIDERS, NO_KEY_PROVIDERS, base_url_for
+
+        if provider_name not in KNOWN_PROVIDERS:
+            raise ValueError(f"provider sconosciuto: {provider_name}")
+        key_env = KNOWN_PROVIDERS[provider_name][1]
+        if key_env and not (self.env.get(key_env) or load_env(ENV_PATH).get(key_env)):
+            raise ValueError(f"manca la chiave {key_env} per {provider_name}")
+
+        self.env["ORCHESTRA_PROVIDER"] = provider_name
+        # il catalogo appartiene al provider: tenere quello vecchio
+        # mostrerebbe i modelli sbagliati nella select
+        self._catalog = None
+        self._catalog_tried = False
+        from . import keys as keys_mod
+        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider_name)
+        # l'indirizzo viene risolto qui: se il provider e' valido ma
+        # l'override nell'env e' malformato, e' meglio accorgersene
+        # adesso che alla prima richiesta, con un errore di rete
+        if not base_url_for(provider_name, self.env):
+            raise ValueError(f"indirizzo non valido per {provider_name}")
 
     def switch_model(self, model_id: str) -> None:
         """Cambia il modello dell'agent in uso.
@@ -450,6 +484,45 @@ class Handler(BaseHTTPRequestHandler):
                                 "copertura": prior_mod.copertura(priors, self.app.catalog.models)})
                 except Exception as e:  # noqa: BLE001
                     self._json({"messaggio": f"prior non disponibile: {e}", "copertura": {}})
+        elif path == "/api/modelli":
+            # I modelli di un provider SPECIFICO, non di quello attivo.
+            # Serve per la select del pannello Opzioni: scegliendo
+            # "Groq" nel menu, la lista deve cambiare subito, non
+            # continuare a mostrare i modelli di OpenRouter.
+            q = ""
+            if "provider=" in self.path:
+                q = urllib.parse.unquote_plus(
+                    self.path.split("provider=", 1)[1].split("&")[0]).strip()
+            if not q:
+                q = self.app.env.get("ORCHESTRA_PROVIDER", "openrouter")
+            from .providers import KNOWN_PROVIDERS
+            if q not in KNOWN_PROVIDERS:
+                self._json({"error": f"provider sconosciuto: {q}"}, 400)
+                return
+            # catalogo in memoria per provider: cambiarne uno non deve
+            # far riscaricare gli altri a ogni passaggio della select
+            cache = getattr(self.app, "_catalog_per_provider", None)
+            if cache is None:
+                cache = self.app._catalog_per_provider = {}
+            if q not in cache:
+                from .catalog import Catalog
+                try:
+                    cache[q] = Catalog.fetch(q)
+                except Exception as e:  # noqa: BLE001
+                    self._json({"error": f"{type(e).__name__}: {e}"}, 502)
+                    return
+            cat = cache[q]
+            if cat is None or not cat.models:
+                self._json({"error": f"nessun modello disponibile da {q}"}, 404)
+                return
+            out = [{"id": p.info.id, "short": p.info.short,
+                    "free": p.info.is_free,
+                    "context": p.info.context_length or 0,
+                    "prompt_price": p.info.prompt_price,
+                    "scores": dict(p.scores or {})}
+                   for p in sorted(cat.models.values(), key=lambda m: m.info.id)]
+            self._json({"provider": q, "modelli": out,
+                        "gratuiti": len(cat.free())})
         elif path == "/api/chiavi":
             # Solo stato, mai valori. La chiave non esce mai da qui:
             # questa risposta finisce nella cronologia del browser e
@@ -663,6 +736,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return
             self._json(res)
+        elif path == "/api/provider":
+            p = (body.get("provider") or "").strip()
+            if not p:
+                self._json({"error": "indica il provider"}, 400)
+                return
+            try:
+                self.app.switch_provider(p)
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            except (ValueError, KeyError) as e:
+                self._json({"error": str(e)}, 400)
+                return
+            self._json({"ok": True, "provider": p})
         elif path == "/api/chiavi":
             # Scrive una chiave. Whitelist obbligatoria: senza, un POST
             # scriverebbe qualsiasi riga nel .env e avremmo dato una

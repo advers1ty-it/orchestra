@@ -95,15 +95,27 @@ class ModelInfo:
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> "ModelInfo":
         pricing = raw.get("pricing") or {}
-        params = raw.get("supported_parameters") or []
+        params = raw.get("supported_parameters")
         arch = raw.get("architecture") or {}
+        # `supported_parameters` e' un campo di OpenRouter. Groq, NVIDIA,
+        # Together e Cerebras non lo inviano: senza quel campo NON si puo'
+        # dire che un modello non sa fare tool-calling, si puo' solo dire
+        # che l'API non lo dichiara. Confondere le due cose faceva
+        # scartare il catalogo intero di quei provider — 81 modelli
+        # NVIDIA diventavano zero — e il menu servizio restava vuoto
+        # senza dire perche'.
+        # None = non dichiarato. Il benchmark poi lo scopre per davvero.
+        if params is None:
+            supports_tools = None
+        else:
+            supports_tools = "tools" in params or "tool_choice" in params
         return cls(
             id=raw.get("id", ""),
             context_length=int(raw.get("context_length") or 0),
             # OpenRouter esprime i prezzi come stringa per token
             prompt_price=_num(pricing.get("prompt")),
             completion_price=_num(pricing.get("completion")),
-            supports_tools="tools" in params or "tool_choice" in params,
+            supports_tools=supports_tools,
             supports_vision=arch.get("input_modalities", []) != ["text"]
             or "image" in (raw.get("input_modalities") or []),
         )
@@ -214,8 +226,11 @@ class Catalog:
             if not raw.get("id"):
                 continue
             info = ModelInfo.from_api(raw)
-            if not info.supports_tools:
-                # senza tool-calling un modello non serve a Orchestra
+            if info.supports_tools is False:
+                # dichiarato incapace: per Orchestra non serve. Se il
+                # campo non c'e' invece non lo scartiamo — non lo
+                # sappiamo, e "non lo so" e' diverso da "no". Lo scopre
+                # il benchmark, che e' l'unica misura onesta.
                 continue
             prev = cat.models.get(info.id)
             prof = ModelProfile(info=info)
@@ -286,7 +301,13 @@ class Catalog:
     # -- query -------------------------------------------------------------
 
     def with_tools(self) -> list[ModelProfile]:
-        return [p for p in self.models.values() if p.info.supports_tools]
+        """Modelli utilizzabili: capaci di tool-calling, o non dichiarato.
+
+        False = l'API ha detto che non sa farlo, escluso. None = l'API
+        non lo dichiara (tutti i provider diversi da OpenRouter), tenuto:
+        non sappiamo, e "non lo so" non vuol dire "no".
+        """
+        return [p for p in self.models.values() if p.info.supports_tools is not False]
 
     def free(self) -> list[ModelProfile]:
         return [p for p in self.with_tools() if p.info.is_free]

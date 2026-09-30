@@ -1,0 +1,35 @@
+servizio e modello come menu, e il catalogo di ogni provider
+
+Provider e modello erano due righe di chiavi in mezzo a dodici, con
+campi di testo liberi. Si perdevano, e un id scritto a mano che sbaglia
+fallisce solo alla prima chiamata, con un errore che sembra di rete.
+Un menu non puo' sbagliare.
+
+- due <select> in testa al pannello: Servizio e Modello
+- il menu Servizio elenca SOLO i provider con una chiave configurata,
+  piu' i motori locali che non ne hanno bisogno. Quello che non ha
+  chiave comparirebbe e poi fallirebbe al momento dell'uso
+- scegliendo un servizio, /api/modelli?provider=X restituisce il
+  catalogo di QUEL provider, non di quello attivo, e la lista modelli
+  si aggiorna. Il catalogo e' messo in cache per provider, cosi'
+  tornarci sopra non ricarica nulla
+- dopo il cambio, /api/provider scrive nel .env, azzera il catalogo
+  attivo e ricostruisce il client. Se manca la chiave lo dice subito e
+  in chiaro, invece di far fallire la prima chiamata
+- ORCHESTRA_PROVIDER e ORCHESTRA_MODEL non compaiono piu' fra le chiavi:
+  sono configurazione, e due modi per cambiarli divergerebbero
+
+Corretto un bug che rendeva vuoti due provider. from_api leggeva
+supported_parameters, un campo che esiste solo su OpenRouter: Groq,
+NVIDIA, Together e Cerebras non lo inviano, e il filtro "senza
+tool-calling, scarta" buttava via l'intero catalogo. 81 modelli NVIDIA
+diventavano zero e il menu restava vuoto senza dire perche'.
+
+Ora supports_tools e' True / False / None, dove None vuol dire "l'API
+non lo dichiara". Non lo scartiamo: non sappiamo, e "non lo so" e'
+diverso da "no" — lo scopre il benchmark, che e' l'unica misura
+onesta. Dopo la correzione: groq 11 modelli, nvidia 81, openrouter 396.
+
+La compressione esiste gia': context.py ha compact_tools e
+compact_history, e l'agente le chiama a ogni iterazione quando il
+contesto e' troppo grande. Verificato, non implementato adesso.
