@@ -406,6 +406,127 @@ task chiede. Se un comando fallisce, correggilo e riprova."""
 # --------------------------------------------------------------------------
 
 
+@dataclass
+class ManualResult:
+    """Una prova libera: un prompt, un modello, quello che e' successo.
+
+    Diversa da RunResult perche' non c'e' una verifica oggettiva da cui
+    ricavare un punteggio. E' il modo per capire PERCHE' un modello
+    perde un task automatico: si guarda cosa scrive, quali tool chiama,
+    dove si ferma. Senza questo, un 0.00 e' un numero e non un problema.
+    """
+
+    model: str
+    prompt: str
+    reply: str = ""
+    # trascrizione: un passo per messaggio, per ricostruire il ragionamento
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    seconds: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
+    tool_calls: int = 0
+    tool_errors: int = 0
+    iterations: int = 0
+    stopped_because: str = ""
+    error: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "model": self.model, "prompt": self.prompt, "reply": self.reply,
+            "steps": self.steps, "seconds": round(self.seconds, 2),
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "cost_usd": round(self.cost_usd, 6),
+            "tool_calls": self.tool_calls, "tool_errors": self.tool_errors,
+            "iterations": self.iterations,
+            "stopped_because": self.stopped_because, "error": self.error,
+        }
+
+
+def _trascrizione(messaggi: list[Any]) -> list[dict[str, Any]]:
+    """Trasforma i messaggi in una lista di passi leggibili.
+
+    Non serve un formato ricco: serve vedere, in ordine, cosa ha detto il
+    modello e cosa ha risposto ogni tool. Il formato e' lo stesso che la
+    web UI gia' usa per gli eventi, cosi' c'e' una sola rappresentazione.
+    """
+    passi: list[dict[str, Any]] = []
+    for m in messaggi:
+        if m.role == "assistant":
+            if m.content:
+                passi.append({"tipo": "testo", "testo": m.content})
+            for tc in (m.tool_calls or []):
+                passi.append({"tipo": "tool", "nome": tc.name,
+                              "argomenti": tc.arguments, "id": tc.id})
+        elif m.role == "tool":
+            ok = not str(m.content or "").lower().startswith("errore")
+            passi.append({"tipo": "risultato", "nome": m.name,
+                          "id": m.tool_call_id, "ok": ok,
+                          "testo": str(m.content or "")[:2000]})
+    return passi
+
+
+def run_manual(
+    prompt: str,
+    *,
+    provider_name: str,
+    model: str,
+    env: dict[str, str],
+    registry: ToolRegistry | None = None,
+    workdir: str | None = None,
+    max_iterations: int = 10,
+) -> ManualResult:
+    """Esegue un prompt a mano e restituisce tutto quello che e' successo.
+
+    Non solleva mai: un errore torna dentro `error`, perche' una prova
+    manuale che muore non serve a capire niente.
+    """
+    from .providers import ProviderError, build_provider
+
+    work = workdir or os.path.join(
+        os.environ.get("ORCHESTRA_HOME", "."), "_prova",
+        f"{int(time.time() * 1000)}")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work, exist_ok=True)
+    prev_root = os.environ.get("ORCHESTRA_ROOT")
+    os.environ["ORCHESTRA_ROOT"] = work
+
+    t0 = time.time()
+    try:
+        prov = build_provider(provider_name, model=model, env=env)
+        agent = Agent(prov, registry or default_registry(), BENCH_PROMPT,
+                      LoopConfig(max_iterations=max_iterations, context_limit=60_000))
+        agent.run(prompt)
+        st = agent.state
+        # l'ultimo messaggio assistant senza tool e' la risposta
+        risposta = ""
+        for m in reversed(st.messages):
+            if m.role == "assistant" and m.content and not m.tool_calls:
+                risposta = m.content
+                break
+        return ManualResult(
+            model=model, prompt=prompt, reply=risposta,
+            steps=_trascrizione(st.messages),
+            seconds=time.time() - t0,
+            completion_tokens=st.total_tokens,
+            tool_calls=st.tool_calls_made, tool_errors=st.tool_errors,
+            iterations=st.iterations, stopped_because=st.stopped_because,
+        )
+    except (ProviderError, KeyError, ValueError) as e:
+        return ManualResult(model=model, prompt=prompt,
+                            seconds=time.time() - t0, error=str(e))
+    except Exception as e:  # noqa: BLE001
+        return ManualResult(model=model, prompt=prompt,
+                            seconds=time.time() - t0,
+                            error=f"{type(e).__name__}: {e}")
+    finally:
+        if prev_root is None:
+            os.environ.pop("ORCHESTRA_ROOT", None)
+        else:
+            os.environ["ORCHESTRA_ROOT"] = prev_root
+
+
 def score(results: list[RunResult]) -> float:
     """Punteggio 0..1 per un insieme di risultati.
 

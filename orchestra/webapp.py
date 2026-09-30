@@ -120,7 +120,8 @@ class OrchestraApp:
         self.env["ORCHESTRA_MODEL"] = model_id
 
     def start_benchmark(self, *, sample: int = 3, category: str | None = None,
-                        throttle: float = 3.0) -> dict[str, Any]:
+                        throttle: float = 3.0,
+                        models: list[str] | None = None) -> dict[str, Any]:
         """Lancia il benchmark in background e restituisce subito.
 
         Non blocca: l'UI mostra l'avanzamento via /api/bench/status. Un
@@ -133,15 +134,28 @@ class OrchestraApp:
         if cat is None or not cat.models:
             raise RuntimeError("catalogo non disponibile")
 
-        # il campione viene dai modelli gratuiti con tool-calling, sparsi
-        # sulla finestra di contesto: primo, uno medio, uno con contesto
-        # grande. Non e' casuale perche' il confronto deve essere leggibile.
-        free = sorted(cat.free(), key=lambda p: p.info.id)
-        if not free:
-            raise RuntimeError("nessun modello gratuito con tool-calling")
-        free.sort(key=lambda p: -(p.info.context_length or 0))
-        step = max(1, len(free) // max(1, sample))
-        ids = [m.info.id for m in free[::step]][:sample]
+        if models:
+            # lista scelta a mano dalla UI: nessun campionamento. E'
+            # la via normale perche' con 396 modelli la scelta e' di chi
+            # guarda, non del server. Ma solo id che esistono davvero:
+            # un id inventato fallirebbe a meta' del benchmark.
+            sconosciuti = [m for m in models if m not in cat.models]
+            if sconosciuti:
+                raise RuntimeError(
+                    "modelli sconosciuti: " + ", ".join(sconosciuti[:5]))
+            ids = list(dict.fromkeys(models))
+            if not ids:
+                raise RuntimeError("nessun modello selezionato")
+        else:
+            # il campione viene dai modelli gratuiti con tool-calling, sparsi
+            # sulla finestra di contesto: primo, uno medio, uno con contesto
+            # grande. Non e' casuale perche' il confronto deve essere leggibile.
+            free = sorted(cat.free(), key=lambda p: p.info.id)
+            if not free:
+                raise RuntimeError("nessun modello gratuito con tool-calling")
+            free.sort(key=lambda p: -(p.info.context_length or 0))
+            step = max(1, len(free) // max(1, sample))
+            ids = [m.info.id for m in free[::step]][:sample]
 
         self._bench = {"running": True, "log": [], "result": None,
                        "started": time.time(), "models": ids}
@@ -200,8 +214,20 @@ class OrchestraApp:
             finally:
                 self._bench["running"] = False
 
+        from .benchmark import tasks_for
+
+        # I task si risolvono PRIMA di avviare il thread. Servono due
+        # cose: contarli nella risposta, e fallire subito su una categoria
+        # ignota invece di partire e morire dentro il worker. Prima stava
+        # solo dentro il worker, e la risposta al client lanciava
+        # NameError: tasks_for, lasciando il benchmark segnato "in corso"
+        # per sempre anche se il thread era gia' morto.
+        tasks = tasks_for(category)
+        if not tasks:
+            raise RuntimeError(f"categoria sconosciuta: {category}")
+
         threading.Thread(target=worker, daemon=True, name="orchestra-bench").start()
-        return {"ok": True, "models": ids, "tasks": len(tasks_for(category))}
+        return {"ok": True, "models": ids, "tasks": len(tasks)}
 
     @staticmethod
     def _make_session(provider_name: str, model: str) -> Session:
@@ -383,6 +409,11 @@ class Handler(BaseHTTPRequestHandler):
             self._static(path[1:], "text/javascript; charset=utf-8")
         elif path.endswith(".css"):
             self._static(path[1:], "text/css; charset=utf-8")
+        elif path.endswith(".html"):
+            # serve le pagine di prova della diagnostica. Stesso
+            # percorso dei file statici, quindi se questo funziona
+            # sappiamo che il trasporto dei file e' a posto.
+            self._static(path[1:], "text/html; charset=utf-8")
         elif path == "/api/state":
             s = self._need_session()
             if s is None:
@@ -405,6 +436,17 @@ class Handler(BaseHTTPRequestHandler):
                 "result": self.app._bench["result"],
                 "models": self.app._bench.get("models", []),
             })
+        elif path == "/api/prior":
+                # Copertura del prior esterno. Non e' il benchmark: e' un
+                # parere. Darlo per primo evita di fidarsi di numeri che
+                # descrivono un'altra harness.
+                try:
+                    from . import prior as prior_mod
+                    priors, msg = prior_mod.scarica()
+                    self._json({"messaggio": msg,
+                                "copertura": prior_mod.copertura(priors, self.app.catalog.models)})
+                except Exception as e:  # noqa: BLE001
+                    self._json({"messaggio": f"prior non disponibile: {e}", "copertura": {}})
         elif path == "/api/capabilities":
             cat = self.app.catalog
             if cat is None:
@@ -543,8 +585,19 @@ class Handler(BaseHTTPRequestHandler):
             category = body.get("category") or None
             if category == "all":
                 category = None
+            # lista scelta a mano dalla UI. Se manca, il server campiona
+            # come prima: il campione automatico resta il default per lo
+            # script e per chi non ha ancora aperto il pannello.
+            scelti = body.get("models")
+            if scelti is not None and not isinstance(scelti, list):
+                self._json({"error": "models deve essere una lista di id"}, 400)
+                return
+            if isinstance(scelti, list) and len(scelti) > 60:
+                self._json({"error": "troppi modelli: massimo 60 per volta"}, 400)
+                return
             try:
-                res = self.app.start_benchmark(sample=sample, category=category)
+                res = self.app.start_benchmark(sample=sample, category=category,
+                                               models=scelti or None)
             except RuntimeError as e:
                 self._json({"error": str(e)}, 409)
                 return
@@ -552,6 +605,32 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return
             self._json(res)
+        elif path == "/api/prova":
+            # Prova manuale: un prompt, un modello, tutta la trascrizione.
+            # Diversa dal benchmark: qui non c'e' un punteggio, c'e' la
+            # risposta. Serve a capire PERCHE' un modello perde un task,
+            # cosa scrive e quali tool chiama.
+            prompt = (body.get("prompt") or "").strip()
+            model = (body.get("model") or "").strip()
+            if not prompt:
+                self._json({"error": "scrivi un compito"}, 400)
+                return
+            if not model:
+                self._json({"error": "scegli un modello"}, 400)
+                return
+            if len(prompt) > 8000:
+                self._json({"error": "prompt troppo lungo (max 8000 caratteri)"}, 400)
+                return
+            try:
+                from .benchmark import run_manual
+                res = run_manual(
+                    prompt,
+                    provider_name=self.app.env.get("ORCHESTRA_PROVIDER", "openrouter"),
+                    model=model, env=self.app.env)
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return
+            self._json(res.to_dict())
         else:
             self._json({"error": "non trovato"}, 404)
 

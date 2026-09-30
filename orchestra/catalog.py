@@ -294,6 +294,22 @@ class Catalog:
             reverse=True,
         )
 
+    def select(self, *, free: bool = False, paid: bool = False,
+               only_tools: bool = True) -> list[ModelProfile]:
+        """Modelli per fascia di prezzo, in ordine stabile.
+
+        Serve al benchmark e al router. L'ordine e' alfabetico per id:
+        un confronto ripetibile e' piu' utile di un elenco che cambia
+        a ogni esecuzione, e 'il primo' deve significare sempre la stessa
+        cosa quando si fa un batch.
+        """
+        src = self.with_tools() if only_tools else list(self.models.values())
+        if free:
+            src = [p for p in src if p.info.is_free]
+        elif paid:
+            src = [p for p in src if not p.info.is_free]
+        return sorted(src, key=lambda p: p.info.id)
+
     def best_for(self, category: str, *, free_only: bool = False) -> ModelProfile | None:
         """Il migliore misurato per una categoria.
 

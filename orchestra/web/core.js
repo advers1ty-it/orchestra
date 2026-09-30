@@ -3,6 +3,19 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+
+// Aggancio un handler senza mai esplodere. Un elemento assente e' un
+// errore da segnalare, non un motivo per uccidere tutto lo script che
+// segue: e' successo tre volte, e ogni volta la pagina restava a meta'
+// senza dire perche'.
+const on = (el, evento, fn) => {
+  if (!el) {
+    console.warn("elemento assente, handler '" + evento + "' non agganciato");
+    return false;
+  }
+  el.addEventListener(evento, fn);
+  return true;
+};
 const log = $("log"), main = $("main"), input = $("input");
 const btnSend = $("btn-send"), btnCancel = $("btn-cancel"), btnReset = $("btn-reset");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
@@ -259,6 +272,12 @@ async function loadModels() {
     }
     modelPick.value = d.current || modelPick.options[0]?.value || "";
     modelPick.disabled = false;
+    // le liste del pannello benchmark e della prova manuale usano lo
+    // stesso catalogo. Popolarle qui evita un secondo fetch e fa si'
+    // che i tre selettori non possano contraddirsi.
+    if (typeof aggiornaCatalogoUI === "function") {
+      aggiornaCatalogoUI(sorted, d.current);
+    }
   } catch (e) {
     modelPick.replaceChildren();
     modelPick.appendChild(new Option("modelli non disponibili", ""));

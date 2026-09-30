@@ -203,3 +203,39 @@
   }
   .benchlog:empty { display: none; }
   .code { color: var(--muted); }
+
+/* ---- scelta dei modelli e prova manuale ---- */
+.modelpick-list {
+  max-height: 190px; overflow-y: auto; margin: 10px 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-2, rgba(255,255,255,.02)); padding: 4px 0;
+}
+.mp-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 12px; cursor: pointer; font-size: 13px;
+}
+.mp-row:hover { background: rgba(255,255,255,.04); }
+.mp-name { flex: 1; font-family: var(--mono); overflow: hidden;
+           text-overflow: ellipsis; white-space: nowrap; }
+.mp-meta { color: var(--muted); font-size: 11px; min-width: 74px; text-align: right; }
+.bench-controls .chk { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.prova-box {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.prova-box textarea {
+  width: 100%; resize: vertical; font-family: var(--mono); font-size: 13px;
+}
+.prova-out {
+  max-height: 300px; overflow-y: auto; background: var(--bg-2, rgba(255,255,255,.02));
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  font-size: 12.5px; line-height: 1.5; white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.prova-meta { color: var(--muted); font-size: 11.5px; margin-bottom: 8px; }
+.prova-step { margin: 0 0 6px; padding-left: 10px; border-left: 2px solid var(--border); }
+.prova-step.tool { border-left-color: var(--accent); color: var(--muted); }
+.prova-step.res.ok { border-left-color: #3ecf8e; }
+.prova-step.res.ko { border-left-color: #ff6b6b; }
+.prova-step.finale { border-left-color: var(--warn); }
+.prova-err { color: #ffb4b4; margin: 4px 0; }

@@ -333,21 +333,39 @@ def cmd_bench(args: argparse.Namespace) -> int:
             print(f"    {C['dim']}{t.prompt[:100]}...{C['x']}\n")
         return 0
 
-    # scelta dei modelli: campione, non tutti. --all se lo chiedi esplicitamente.
+    # Scelta dei modelli. Tre modi, in ordine di precisione:
+    # lista esplicita, filtro per prezzo, campione.
+    #   --models a b c      proprio quelli che scelgo
+    #   --free / --paid     tutta la fascia, niente casuale'
+    #   (default)           campione di free
+    #   --all               tutto, free e a pagamento
     if args.models:
-        ids = args.models
-    elif args.all:
-        ids = sorted(cat.models)
+        ids = list(args.models)
     else:
-        free = sorted(cat.free(), key=lambda p: p.info.id)
-        if not free:
-            print(f"{C['r']}nessun modello gratuito con tool-calling{C['x']}", file=sys.stderr)
-            return 1
-        # campione: primo, uno medio, uno con contesto grande. Non e'
-        # casuale perche' il confronto deve essere leggibile.
-        free.sort(key=lambda p: -(p.info.context_length or 0))
-        step = max(1, len(free) // max(1, args.sample))
-        ids = [m.info.id for m in free[::step]][:args.sample]
+        if args.free or args.paid:
+            # fascia intera: niente campionamento, niente ordine arbitrario
+            scelti = cat.select(free=args.free, paid=args.paid)
+            if args.batch:
+                scelti = scelti[:args.batch]
+                print(f"{C['dim']}batch: {len(scelti)} modelli, ordine alfabetico."
+                      f" Prosegui con --batch {len(scelti)} per il giro successivo.{C['x']}\n")
+            ids = [p.info.id for p in scelti]
+            if not ids:
+                fascia = "gratuiti" if args.free else "a pagamento"
+                print(f"{C['r']}nessun modello {fascia} con tool-calling{C['x']}", file=sys.stderr)
+                return 1
+        elif args.all:
+            ids = sorted(cat.models)
+        else:
+            free = sorted(cat.free(), key=lambda p: p.info.id)
+            if not free:
+                print(f"{C['r']}nessun modello gratuito con tool-calling{C['x']}", file=sys.stderr)
+                return 1
+            # campione: primo, uno medio, uno con contesto grande. Non e'
+            # casuale perche' il confronto deve essere leggibile.
+            free.sort(key=lambda p: -(p.info.context_length or 0))
+            step = max(1, len(free) // max(1, args.sample))
+            ids = [m.info.id for m in free[::step]][:args.sample]
 
     if not ids:
         print("nessun modello da testare", file=sys.stderr)
@@ -496,6 +514,13 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--sample", type=int, default=3,
                    help="quanti modelli provare (default 3)")
     b.add_argument("--all", action="store_true", help="prova tutti i modelli")
+    b.add_argument("--free", action="store_true",
+                   help="solo i modelli gratuiti, tutti, in ordine alfabetico")
+    b.add_argument("--paid", action="store_true",
+                   help="solo i modelli a pagamento (costano token veri)")
+    b.add_argument("--batch", type=int, metavar="N", default=0,
+                   help="con --free/--paid, fermati dopo N modelli "
+                        "(un batch alla volta invece di 17 in un colpo)")
     b.add_argument("--models", nargs="+", metavar="ID", help="modelli specifici")
     b.add_argument("--category", help="solo una categoria (code, reasoning, ...)")
     b.add_argument("--repeat", type=int, default=1,

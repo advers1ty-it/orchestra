@@ -10,104 +10,54 @@
      silenzio e non si distingue "codice rotto" da "file non servito".
      Qui ogni problema viene scritto a schermo, dove si vede. -->
 <style>
+  /* Barra di errore: compare SOLO se qualcosa va storto. Serve perche'
+     un errore in una pagina senza console e' indistinguibile da una
+     pagina che non e' mai partita. */
   #diag {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
-    background: #2a1e16; color: #ffcf9b; border-top: 2px solid #f5a623;
+    background: #2a1618; color: #ffb4b4; border-top: 2px solid #ff6b6b;
     font: 12px/1.5 ui-monospace, Consolas, monospace;
     padding: 6px 10px; max-height: 34vh; overflow-y: auto;
-    white-space: pre-wrap;
+    white-space: pre-wrap; display: none;
   }
-  #diag.ok { background: #14322a; color: #9fe8c4; border-top-color: #3ecf8e; }
-  #diag.err { background: #2a1618; color: #ffb4b4; border-top-color: #ff6b6b; }
 </style>
 <script>
+// Cattura ogni errore e ogni promise rifiutata e li scrive a schermo.
+// Resta in permanenza perche' il giorno in cui serve e' l'unica
+// differenza fra "rotto" e "non partito", e non richiede F12.
 (function () {
-  var lines = [];
-  var box;
-  function render() {
-    if (!box) return;
-    box.textContent = lines.join("\n");
-    box.className = window.__diagErrors.length ? "err" : "ok";
-  }
-  function add(t) { lines.push(t); window.__diagErrors.push(t); render(); }
-  window.__diagErrors = [];
-  window.__diagInline = true;
-  window.addEventListener("error", function (e) {
-    var f = (e.filename || "?").split("/").pop();
-    add("ERRORE: " + (e.message || "?") + " @ " + f + ":" + (e.lineno || 0));
-  }, true);
-  window.addEventListener("unhandledrejection", function (e) {
-    add("PROMESSA RIFIUTATA: " + String((e.reason && e.reason.message) || e.reason));
-  });
-  document.addEventListener("DOMContentLoaded", function () {
+  var box = null;
+  function mostra(testo) {
+    if (!box) {
       box = document.createElement("div");
       box.id = "diag";
-      document.body.appendChild(box);
-      // Non controlliamo il CSS qui: DOMContentLoaded puo' precedere
-      // l'applicazione dello stylesheet, e il controllo dava un falso
-      // negativo. Lo facciamo dopo, con un timer, e su piu' proprieta'.
-      setTimeout(function () {
-        var cs = getComputedStyle(document.body);
-        // il body deve essere flex: e' nel nostro CSS e non puo' essere un
-        // default del browser. Il colore da solo e' ambiguo.
-        var disp = cs.display || "";
-        var bg = cs.backgroundColor || "";
-        var flexOk = disp.indexOf("flex") >= 0;
-        var bgOk = bg.indexOf("15, 17, 21") >= 0 || bg.indexOf("15,17,21") >= 0;
-        if (!flexOk && !bgOk) {
-          add("CSS NON APPLICATO: display=" + disp + " background=" + bg);
-          add("  -> app.css non e' arrivato, o il browser lo ha rifiutato");
-        } else {
-          lines.unshift("css:ok (display=" + disp + ")");
-        }
-        var mp = document.getElementById("model-pick");
-                if (mp) {
-                  var voci = mp.options ? mp.options.length : mp.children.length;
-                  lines.push("selettore: " + voci + " voci, " +
-                             (mp.disabled ? "DISABILITATO" : "attivo"));
-                }
-                // I marcatori dicono se i file hanno ESEGUITO. Ma distinguere
-                      // "il browser non li ha chiesti" da "li ha chiesti e ha ricevuto
-                      // un rifiuto" e' la domanda giusta: la facciamo con fetch.
-                      var f = window.__diagFiles || [];
-                      var mancanti = ["core", "panels", "main"].filter(function (n) {
-                        return f.indexOf(n) < 0;
-                      });
-                      if (!mancanti.length) {
-                        lines.unshift("js eseguiti: " + f.join(" + "));
-                        render();
-                        return;
-                      }
-                      // non eseguono: chiediamo noi gli stessi file e riportiamo lo stato
-                      lines.unshift("js NON eseguiti: " + mancanti.join(","));
-                      Promise.all(mancanti.map(function (n) {
-                        return fetch("/" + n + ".js", { cache: "no-store" })
-                          .then(function (r) {
-                            return n + " -> HTTP " + r.status + " " +
-                                   (r.headers.get("content-type") || "?") + " " +
-                                   (r.headers.get("content-length") || "?") + " byte";
-                          })
-                          .catch(function (e) { return n + " -> FETCH FALLITA: " + e.message; });
-                      })).then(function (risposte) {
-                        risposte.forEach(function (r) { lines.push("  " + r); });
-                        lines.push("  -> se tornano HTTP 200, il server va bene: e' il browser");
-                        lines.push("     che non esegue i file. Guarda DevTools > Network.");
-                        render();
-                      });
-                      render();
-      }, 1500);
-      render();
-    });
-  })();
+      (document.body || document.documentElement).appendChild(box);
+    }
+    box.style.display = "block";
+    box.textContent += testo + "\n";
+  }
+  window.addEventListener("error", function (e) {
+    var f = (e.filename || "?").split("/").pop();
+    mostra("ERRORE: " + (e.message || "?") + "  @ " + f + ":" + (e.lineno || 0));
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) {
+    mostra("PROMESSA RIFIUTATA: " + String((e.reason && e.reason.message) || e.reason));
+  });
+  // il bundle puo' fallire prima che la barra serva: al caricamento
+  // verifichiamo che i file abbiano girato davvero.
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      if (!window.__diagFiles || window.__diagFiles.length < 3) {
+        mostra("I file JavaScript non sono partiti. Ricarica con Ctrl+F5.");
+      }
+    }, 1500);
+  });
+})();
 </script>
 <link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
 </head>
 <body>
-
-<!-- Ogni file JS ci scrive il proprio nome quando esegue. Se questo
-     elemento si riempie, i file partono; se resta vuoto, non partono.
-     Niente console da aprire, niente supposizioni. -->
-<div id="diag-files" style="position:fixed;top:0;right:0;z-index:9999;background:#14322a;color:#9fe8c4;font:12px ui-monospace,Consolas,monospace;padding:4px 10px;border:1px solid #3ecf8e;border-radius:0 0 0 6px;">&nbsp;</div>
 
 <header>
   <div class="logo">Orches<span>tra</span></div>
@@ -124,7 +74,7 @@
   <button id="btn-reset">Nuova</button>
 </header>
 
-<!-- pannello benchmark: overlay, non una pagina a se' */
+<!-- pannello benchmark: overlay, non una pagina a se' -->
 <div id="bench" class="panel hidden">
   <div class="panel-box">
     <div class="panel-head">
@@ -135,14 +85,6 @@
       <button id="bench-close" class="ghost">Chiudi</button>
     </div>
     <div class="bench-controls">
-      <label>Modelli
-        <select id="bench-sample">
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-          <option value="6">6</option>
-        </select>
-      </label>
       <label>Categoria
         <select id="bench-cat">
           <option value="all">tutte</option>
@@ -152,8 +94,33 @@
           <option value="tool_use">uso tool</option>
         </select>
       </label>
-      <button id="bench-run" class="primary">Avvia</button>
+      <label class="chk"><input type="checkbox" id="bench-free" checked> solo gratuiti</label>
+      <button id="bench-allfree" class="ghost">Seleziona tutti i free</button>
+      <button id="bench-none" class="ghost">Deseleziona</button>
+      <span id="bench-count" class="dim small">0 scelti</span>
     </div>
+
+    <!-- Quali modelli provare: caselle, non un numero. Il campione
+         automatico serviva quando non c'era un catalogo da sfogliare;
+         con 396 modelli la scelta la fa chi guarda. -->
+    <div class="modelpick-list" id="bench-models"></div>
+
+    <div class="bench-controls">
+      <button id="bench-run" class="primary">Avvia benchmark</button>
+      <span class="dim small">costa token reali, i :free no</span>
+    </div>
+    <div class="prova-box">
+      <b>Prova a mano</b>
+      <span class="dim">un compito, un modello, tutta la trascrizione. Serve a capire perché un modello perde un task.</span>
+      <textarea id="prova-prompt" rows="3" placeholder="es: leggi il file X, dimmi cosa contiene e crea Y.txt con la data"></textarea>
+      <div class="bench-controls">
+        <label>Modello
+          <select id="prova-model"></select>
+        </label>
+        <button id="prova-run" class="primary">Prova</button>
+      </div>
+    </div>
+    <pre id="prova-out" class="prova-out"></pre>
     <div id="bench-note" class="dim small">
       Costa token reali. I modelli <code>:free</code> non costano nulla.
       n=1 per task: indicazione, non statistica.
@@ -181,6 +148,5 @@
   </div>
 </footer>
 
-<script src="/app.js"></script>
 </body>
 </html>
