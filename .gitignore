@@ -7,3 +7,7 @@ venv/
 *.log
 _probe/
 tests/_probe3/
+_bench/
+_prova/
+.prova/
+_msg.txt
