@@ -332,25 +332,33 @@ def _percorso_fuori(command: str) -> str:
     import re
 
     low = command.lower()
-    # Percorsi in stile msys (/c/Users/...) sono quello che vede l'agente
-    # quando usa bash su Windows, ma non sono un percorso Windows: il gate
-    # li risolverebbe dentro la root e non chiederebbe. Li traduciamo
-    # prima di ogni altra cosa.
+
     def come_windows(s: str) -> str:
+        # /c/Users/... -> C:\Users\...  (stile msys/git-bash)
         m2 = re.match(r"^/([a-z])/(.*)$", s)
         if m2 and os.name == "nt":
-            return f"{m2.group(1).upper()}:\\{m2.group(2).replace('/', chr(92))}"
+            resto = m2.group(2).replace("/", "\\")
+            return f"{m2.group(1).upper()}:\\{resto}" if resto else f"{m2.group(1).upper()}:\\"
         return s
 
-    for m in re.finditer(r"[a-z]:[\\/](?:[^\s'\";|&)<>]{1,200})", low):
-        return m.group(0).rstrip("/\\")
-    for m in re.finditer(r"/(?:users|home|root|mnt|media)/[^\s'\";|&)<>]{1,200}", low):
-        return come_windows(m.group(0).rstrip("/"))
-    # /c/Users/... : percorso msys
-    for m in re.finditer(r"/[a-z]/[^\s'\";|&)<>]{1,200}", low):
-        tradotto = come_windows(m.group(0).rstrip("/"))
-        if tradotto != m.group(0):
+    # L'ordine conta. Prima le drive msys (/c/Users/...), PERCHE' se
+    # scatta prima /users/... il percorso resta in forma Unix, il gate lo
+    # risolve sulla drive corrente e la domanda arriva con un percorso
+    # che l'utente non riconosce — se non lo riconosce, non autorizza.
+    #
+    # Si cerca nella versione minuscola ma si restituisce il testo
+    # ORIGINALE: nel riquadro deve comparire C:\\Users\\adver\\TraceAppNew
+    # come l'ha scritto l'agente, non tutto minuscolo. Un percorso che
+    # l'utente non riconosce e' un percorso che non autorizza.
+    for m in re.finditer(r"/[a-z](?:/[^\s'\";|&)<>]*)?", low):
+        originale = command[m.start():m.end()]
+        tradotto = come_windows(originale)
+        if tradotto.lower() != originale.lower():
             return tradotto
+    for m in re.finditer(r"[a-z]:[\\/](?:[^\s'\";|&)<>]{0,200})", low):
+        return command[m.start():m.end()].rstrip("/\\") or command[m.start():m.start() + 2]
+    for m in re.finditer(r"/(?:users|home|root|mnt|media)/[^\s'\";|&)<>]{0,200}", low):
+        return come_windows(command[m.start():m.end()].rstrip("/"))
     if "../" in command or "..\\" in command:
         # si risolve solo il PRIMO token che sembra un percorso: passare
         # l'intero comando a resolve() lo tratta come un nome di file e

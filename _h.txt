@@ -1,0 +1,39 @@
+il percorso usciva in forma Unix: la domanda arrivava illeggibile
+
+Terzo difetto della stessa catena, e stavolta lo ha visto l'utente.
+Su Windows l'agente scrive /c/Users/adver/TraceAppNew, non
+C:\Users\adver\TraceAppNew. La regex delle drive msys (/c/...) veniva
+valutata DOPO quella di /users/..., che scattava per prima e lasciava
+il percorso in forma Unix. Il gate lo risolveva sulla drive corrente
+e la domanda non partiva.
+
+L'ordine dei controlli non e' una questione di stile. Prima /c/, poi
+C:\, poi /users/: e' l'ordine in cui ogni forma puo' essere tradotta
+in quella successiva, e ognuna ha bisogno della precedente.
+
+Poi il percorso tornava tutto minuscolo, perche' il confronto avveniva
+sulla versione lower del comando. Nel riquadro compariva
+C:\users\adver\traceappnew: l'utente non riconosce la propria cartella,
+e un percorso che non riconosci non lo autorizzi. Ora si cerca nel
+minuscolo ma si restituisce il testo ORIGINALE.
+
+Verificato sui comandi esatti che l'utente ha provato:
+
+  ls -la "/c/Users/adver/TraceAppNew"  -> C:\Users\adver\TraceAppNew  chiedi
+  ls /d/                              -> D:\                        chiedi
+  cd C:\Users\adver && dir /B ...      -> C:\Users\adver             chiedi
+  cat ../../segreto.txt               -> D:\segreto.txt             chiedi
+  ls -la .                            -> (dentro)                   -
+  python build.py                     -> (dentro)                   -
+
+`ls /d/` prima non veniva visto: la regex voleva almeno un carattere
+dopo la drive, e li' non ce n'era.
+
+End-to-end col messaggio esatto dell'utente: parte l'evento con
+percorso C:\Users\adver, azione "eseguire", e il comando completo nel
+dettaglio. Il gate resta in attesa finche' non si risponde.
+
+Pulizia anche: il file `nul'` era stato creato dal 2>nul di un comando
+shell dell'agente, e fib.py, dedup.py, conta.py, dati.json e due/
+erano residui delle prime prove manuali del benchmark, prima che la
+root fosse isolata. Rimossi, e `nul*` finisce nel .gitignore.
