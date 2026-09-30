@@ -103,7 +103,7 @@ def tool_read_file() -> Tool:
         schema={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Path relativo alla root di lavoro."},
+                "path": {"type": "string", "description": "Percorso relativo alla root, o ASSOLUTO: un percorso fuori dalla root chiede il permesso all utente."},
                 "max_lines": {
                     "type": "integer",
                     "description": "Righe massime da leggere (default 400).",
@@ -131,7 +131,7 @@ def tool_write_file() -> Tool:
         schema={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Path relativo alla root di lavoro."},
+                "path": {"type": "string", "description": "Percorso relativo alla root, o ASSOLUTO: un percorso fuori dalla root chiede il permesso all utente."},
                 "content": {"type": "string", "description": "Contenuto completo del file."},
             },
             "required": ["path", "content"],
@@ -146,8 +146,22 @@ def tool_list_dir() -> Tool:
         if not p.is_dir():
             return f"NON È UNA DIRECTORY: {path}"
         out = []
+        # _root() e non la costante ROOT: ROOT viene congelata all'import,
+        # e se il processo cambia ORCHESTRA_ROOT dopo, il confronto
+        # fallirebbe sempre e ogni percorso — anche interno — uscirebbe
+        # per esteso. Meglio una riga lunga che un elenco illeggibile.
+        base = _root()
         for x in sorted(p.iterdir()):
-            rel = x.relative_to(ROOT)
+            # relative_to(base) solleva quando l'utente ha autorizzato
+            # una cartella FUORI dalla root e l'agente la elenca: senza
+            # questo, il permesso concesso non serve a nulla perche' il
+            # listing muore con un ValueError. Fuori dalla root mostriamo
+            # il percorso per esteso, che e' anche l'unica forma che
+            # l'agente puo' riaprire.
+            try:
+                rel = x.relative_to(base)
+            except ValueError:
+                rel = x
             if x.is_dir():
                 n = len(list(x.rglob("*")))
                 out.append(f"[dir]  {rel}/  ({n} elementi)")
@@ -161,7 +175,14 @@ def tool_list_dir() -> Tool:
         schema={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Directory, default '.'.", "default": "."}
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Directory, default '.'. Può essere ASSOLUTA: se è fuori "
+                        "dalla root, all'utente compare la domanda sul permesso."
+                    ),
+                    "default": ".",
+                }
             },
         },
         handler=handler,
@@ -220,12 +241,16 @@ def tool_run_shell() -> Tool:
                     f"Comando: {command[:200]}"
                 )
         elif fuori and gate is None:
-            # nessuno a cui chiedere (CLI, benchmark): si nega, e si
-            # dice perche' invece di lasciare che fallisca in silenzio
+            # nessuno a cui chiedere (CLI, benchmark): si nega, e si dice
+            # perche' invece di lasciare che fallisca in silenzio. Si
+            # dice anche l'alternativa: un blocco che non dice cosa fare
+            # costringe il modello a indovinare e a riprovare
             return (
                 f"NON ESEGUITO: il comando tocca {fuori}, fuori dalla "
                 f"cartella di lavoro ({_root()}), e non c'è nessuno a cui "
-                f"chiedere il permesso."
+                f"chiedere il permesso.\n"
+                f"Usa un percorso relativo dentro il progetto, oppure "
+                f"avvia Orchestra con ORCHESTRA_ROOT su quella cartella."
             )
 
         # _check_shell_access gira SOLO senza gate, oppure quando il gate
@@ -288,7 +313,12 @@ def tool_run_shell() -> Tool:
         schema={
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "Comando da eseguire."},
+                "command": {"type": "string", "description": (
+     "Comando da eseguire. Può nominare percorsi ASSOLUTI: se sono "
+     "fuori dalla cartella di lavoro, all'utente compare una domanda "
+     "con le scelte (una volta / per questa sessione / sempre / mai) e "
+     "il comando aspetta la risposta. Non serve spiegare come chiedere."
+ )},
                 "timeout": {"type": "integer", "description": "Timeout in secondi.", "default": 60},
             },
             "required": ["command"],
@@ -514,4 +544,22 @@ Come lavori:
 - Se uno strumento restituisce un errore, leggi l'errore e correggi. Non ripetere la stessa chiamata identica.
 - Preferisci `list_dir` e `read_file` a indovinare il contenuto di un file.
 - Rispondi in modo conciso. Niente preamboli, niente ripetizioni di quello che hai già detto.
-- Quando hai finito, dì in una riga cosa hai fatto e dove sta il risultato."""
+- Quando hai finito, dì in una riga cosa hai fatto e dove sta il risultato.
+
+Fuori dalla cartella di lavoro:
+- Gli strumenti accettano percorsi ASSOLUTI, non solo relativi. Puoi quindi
+  leggere C:\\Users\\adver\\pippo senza portare nulla dentro il progetto.
+- Se il percorso è fuori, all'utente compare una domanda con quattro
+  scelte: una volta, per questa sessione, sempre, mai. Non devi fare nulla:
+  la domanda la fa lo strumento e aspetta. Tu non hai strumenti per
+  chiedere e non devi spiegare come fare.
+- Se l'utente nega, il messaggio lo dice. Non riprovare lo stesso percorso
+  con un altro strumento e non presentarlo come un errore: è una risposta,
+  non un guasto. Rispettala e prova un'altra strada, o spiega in una riga
+  che ti serve quel permesso.
+- Alcuni percorsi non sono negabili da nessuna scelta (file di credenziali,
+  cartelle di sistema). Se è così, lo strumento lo dice: è una decisione
+  del sistema, non un errore da riprovare.
+- Non dire mai "non posso accedere a <cartella>" senza averci provato. Se
+  hai la conferma che è irraggiungibile, allora sì, e in una riga spiega
+  perché e cosa hai tentato."""

@@ -516,7 +516,41 @@ on(optModel, "change", async () => {
 const permessiStato = $("permessi-stato");
 const permessiMsg = $("permessi-msg");
 
+// on() normale, ma se l'elemento non c'è non si ferma tutto. Un pannello
+// aggiunto in ritardo — o una pagina servita da una versione vecchia —
+// non deve togliere i pulsanti a tutto il resto. È la stessa lezione
+// di un pannello sparito dal parser: un elemento mancante che uccide
+// l'avvio fa perdere ore a chi guarda una pagina vuota.
+function onSeCè(id, evento, fn) {
+  const e = $(id);
+  if (e) on(e, evento, fn);
+}
+onSeCè("permessi-prova", "click", provaCanalePermessi);
+
+async function provaCanalePermessi() {
+  if (!permessiMsg) return;
+  permessiMsg.textContent = "genero una domanda…";
+  try {
+    const r = await fetch("/api/permesso/prova", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const d = await r.json();
+    if (!r.ok) { permessiMsg.textContent = d.error || "errore"; return; }
+    permessiMsg.textContent = d.in_attesa
+      ? "domanda partita: dovrebbe comparire il riquadro"
+      : "nessun riquadro: ricarica con Ctrl+F5, la pagina è vecchia";
+    permessiMsg.className = "small " + (d.in_attesa ? "verde" : "rosso");
+    caricaPermessi();
+  } catch (e) {
+    permessiMsg.textContent = "connessione fallita: " + e;
+    permessiMsg.className = "small rosso";
+  }
+}
+
 function disegnaPermessi(st) {
+  if (!permessiStato) return;
   permessiStato.replaceChildren();
   const aggiungi = (testo, classe) => {
     const d = el("div", "permesso-stato-riga " + (classe || ""));
@@ -567,7 +601,7 @@ async function caricaPermessi() {
   }
 }
 
-on($("permessi-prova"), "click", async () => {
+onSeCè("permessi-prova", "click", async () => {
   permessiMsg.textContent = "genero una domanda…";
   try {
     const r = await fetch("/api/permesso/prova", {

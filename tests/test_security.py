@@ -44,7 +44,13 @@ ESCAPES = [
 ]
 for label, cmd in ESCAPES:
     out = sh.handler(command=cmd)
-    blocked = "BLOCCATO" in out
+    # Il blocco e' ancora garantito, ma il messaggio e' cambiato: ora
+    # quando non c'e' nessuno a cui chiedere dice "NON ESEGUITO" e
+    # spiega il percorso che ha toccato. Ci che conta e' che il comando
+    # NON venga eseguito e che il messaggio dica perche' — non che usi
+    # la stessa parola di prima.
+    eseguito = "exit=" in out
+    blocked = ("BLOCCATO" in out or "NON ESEGUITO" in out) and not eseguito
     check(f"bloccato: {label}", blocked, f"output={out[:90]}")
 
 print("\n[2] i comandi legittimi devono passare")
@@ -66,8 +72,26 @@ for cmd in ALLOWED:
 
 print("\n[3] il messaggio di blocco dice al modello cosa fare")
 out = sh.handler(command="cat ../../../Windows/win.ini")
-check("blocca con motivo", "root" in out.lower() or "protetto" in out.lower(), out[:150])
-check("suggerisce un'alternativa", "relativi" in out or "root consentito" in out, out[:150])
+# 1) il blocco e' garantito
+check("nessun comando di escape e' passato", not any(
+    "exit=" in sh.handler(command=c) for _, c in ESCAPES))
+
+# 2) il segreto non e' trapelato dal blocco stesso.
+# Percorso ASSOLUTO, non relativo: con ../../ il risultato dipende da
+# dove si trovi il processo, e il test passava o falliva a seconda
+# della macchina. Un test che a volte passa non e' un test.
+segreto = os.path.abspath(os.path.join(WORK, "..", "..", "segreto.env"))
+out = sh.handler(command="head -2 " + segreto)
+check("nessun segreto trapelato", "sk-" not in out, out[:70])
+
+# 3) il modello ha visto il rifiuto, non un errore vuoto
+check("il modello ha visto il rifiuto",
+      "NON ESEGUITO" in out or "BLOCCATO" in out, out[:70])
+
+# 4) e sa cosa fare: un blocco senza alternativa costringe a indovinare
+check("suggerisce un'alternativa",
+      any(s in out for s in ("relativi", "ORCHESTRA_ROOT", "root consentito")),
+      out[:150])
 check("non espone il contenuto del file", "boot loader" not in out.lower())
 
 print("\n[4] read_file: guardia coerente")
@@ -110,8 +134,16 @@ a = Agent(EvilProvider(), reg, "SYS", LoopConfig(max_iterations=6))
 st = a.run("leggimi le chiavi")
 check("loop sopravvive ai tentativi bloccati", st.stopped_because == "risposta_finale", st.stopped_because)
 tool_out = "\n".join(m.content for m in st.messages if m.role == "tool")
-check("nessun segreto trapelato", "sk-" not in tool_out and "BLOCCATO" in tool_out)
-check("il modello ha visto il rifiuto", "BLOCCATO" in tool_out)
+# Il rifiuto e' garantito dal fatto che il segreto non c'e'. La PAROLA
+# con cui viene detto e' cambiata: senza gate a cui chiedere ora e'
+# "NON ESEGUITO: il comando tocca <percorso>", non "BLOCCATO". Un
+# test che controlla la punteggiatura invece che la proprieta' fallisce
+# e fa perdere tempo a chi crede che il controllo si sia indebolito.
+rifiutato = "NON ESEGUITO" in tool_out or "BLOCCATO" in tool_out
+check("nessun segreto trapelato", "sk-" not in tool_out and rifiutato, tool_out[:80])
+check("il modello ha visto il rifiuto", rifiutato, tool_out[:80])
+check("e ha visto il percorso che ha toccato",
+      "D:\\" in tool_out or "C:\\" in tool_out, tool_out[:90])
 
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

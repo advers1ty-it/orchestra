@@ -364,7 +364,18 @@ async function loadModels() {
     // stesso catalogo. Popolarle qui evita un secondo fetch e fa si'
     // che i tre selettori non possano contraddirsi.
     if (typeof aggiornaCatalogoUI === "function") {
-      aggiornaCatalogoUI(sorted, d.current);
+      // in un try separato: se il pannello benchmark non c'esso' — una
+      // pagina vecchia, un elemento rimosso, un test con un DOM
+      // ridotto — la lista modelli deve restare comunque piena. Un
+      // pannello opzionale che uccide il caricamento principale e' la
+      // stessa classe di difetto di un pannello sparito dal parser:
+      // si perde tutto per un pezzo che manca.
+      try {
+        aggiornaCatalogoUI(sorted, d.current);
+      } catch (e) {
+        if (typeof registraErroreDiagnostico === "function")
+          registraErroreDiagnostico("aggiornaCatalogoUI: " + e);
+      }
     }
   } catch (e) {
     modelPick.replaceChildren();
