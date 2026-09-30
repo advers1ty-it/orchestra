@@ -125,6 +125,30 @@ g9b = Gate(root=root, chiedi=chiedi_che_esplode)
 check("se la domanda fallisce si nega",
       g9b.chiedi_all_utente(file_fuori, "leggere") is False)
 
+print("\n[9b] Un canale rotto si dichiara, non si nasconde")
+# Il caso peggiore non e' negare per errore: e' negare per errore
+# SENZA DIRE NIENTE. L'utente vede un rifiuto e pensa che l'agente
+# abbia deciso cosi'. Succede se un AttributeError nel canale viene
+# trattato come una risposta.
+import io  # noqa: E402
+import contextlib  # noqa: E402
+
+
+def chiedi_rompe_sul_metodo(r):
+    # esattamente il bug reale: si chiama un metodo che non esiste
+    return r.session.emit("permission_request", {})
+
+
+g9c = Gate(root=root, chiedi=lambda r: (_ for _ in ()).throw(
+    AttributeError("'Session' object has no attribute 'emit'")))
+buf = io.StringIO()
+with contextlib.redirect_stderr(buf):
+    esito = g9c.chiedi_all_utente(file_fuori, "leggere")
+check("l'errore del canale porta a negare", esito is False)
+check("ma viene dichiarato", "[permessi]" in buf.getvalue()
+      and "AttributeError" in buf.getvalue(),
+      repr(buf.getvalue()[:80]))
+
 print("\n[10] Il permesso di sessione scade")
 import orchestra.permissions as P  # noqa: E402
 

@@ -68,6 +68,21 @@ class Negato(Exception):
     """L'operazione non e' consentita. Non e' un errore da riprovare."""
 
 
+def _log_permesso(msg: str) -> None:
+    """Lo dice a stderr.
+
+    Serve perche' il caso peggiore di questo modulo non e' negare per
+    errore: e' negare per errore SENZA DIRE NIENTE. L'utente vede un
+    rifiuto e pensa che l'agente abbia deciso cosi', mentre in realta' il
+    canale delle domande e' rotto.
+    """
+    import sys
+    try:
+        print("[permessi] " + msg, file=sys.stderr, flush=True)
+    except Exception:  # noqa: BLE001 - stderr puo' essere chiuso
+        pass
+
+
 @dataclass
 class Richiesta:
     """Una domanda all'utente, in attesa di risposta."""
@@ -181,12 +196,18 @@ class Gate:
     # -- la domanda ---------------------------------------------------------
 
     def chiedi_all_utente(self, percorso: str, azione: str,
-                          dettaglio: str = "") -> bool:
+                          dettaglio: str = "",
+                          richiesta_id: str | None = None) -> bool:
         """Ferma l'esecuzione finche' l'utente non risponde.
 
         True = concesso. False = negato. Se non c'e' nessuno a cui
         chiedere (CLI, benchmark) si nega: il default sicuro e' negare,
         non tirare a indovinare.
+
+        `richiesta_id` serve a chi genera la domanda per conto proprio e
+        deve conoscere l'id per rispondere: senza, il chiamante lo
+        scoprirebbe solo dentro l'evento, e nel frattempo la domanda
+        sarebbe gia' partita con un id diverso.
         """
         esito = self.valuta(percorso, azione, dettaglio)
         if esito == "concesso":
@@ -197,8 +218,8 @@ class Gate:
             return False
 
         with self._lock:
+            rid = richiesta_id or f"p{self._contatore + 1}"
             self._contatore += 1
-            rid = f"p{self._contatore}"
         richiesta = Richiesta(id=rid, percorso=str(percorso), azione=azione,
                               dettaglio=dettaglio,
                               motivo="fuori dalla cartella di lavoro")
@@ -208,7 +229,13 @@ class Gate:
 
         try:
             risp = self.chiedi(richiesta)
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            # Un canale rotto NON e' un "no". La differenza e' tutta qui:
+            # se il canale muore e noi rispondiamo "no", l'utente vede un
+            # rifiuto e non sa che il sistema e' guasto. Negare resta il
+            # default sicuro, ma adesso lo si dice, almeno nei log.
+            _log_permesso("canale dei permessi rotto: %s: %s"
+                          % (type(e).__name__, e))
             risp = Risposta("mai")
         finally:
             with self._lock:

@@ -398,3 +398,23 @@ header select { max-width: 230px; }
 .permesso-permetti button { flex: 1 1 auto; min-width: 130px; }
 .permesso-permetti .pericolo { color: #ffb4b4; border-color: rgba(255,107,107,.5); }
 .permesso-nota { margin-top: 12px; line-height: 1.5; }
+
+/* Permessi: stato e prova */
+.opzioni-permessi {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 0 14px; border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.opzioni-permessi-testa { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.opzioni-permessi-testa .dim { font-size: 11.5px; line-height: 1.5; }
+.opzioni-permessi-azioni { display: flex; align-items: center; gap: 10px; }
+button.piccolo { padding: 2px 9px; font-size: 11px; }
+.permessi-stato { display: flex; flex-direction: column; gap: 3px; }
+.permesso-stato-riga {
+  font: 11.5px var(--mono); padding: 4px 9px; border-radius: 5px;
+  display: flex; align-items: center; gap: 10px; overflow-wrap: anywhere;
+}
+.permesso-stato-riga.info  { color: var(--muted); }
+.permesso-stato-riga.ok    { color: #9fe8c4; background: rgba(62,207,142,.08); }
+.permesso-stato-riga.attesa { color: #ffcf9b; background: rgba(245,166,35,.10); }
+.permesso-stato-riga.ko    { color: #ffb4b4; background: rgba(255,107,107,.08); }

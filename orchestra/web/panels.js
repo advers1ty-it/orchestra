@@ -507,6 +507,92 @@ on(optModel, "change", async () => {
   }
 });
 
+
+// ---- Permessi: stato e prova del canale
+// Lo stato serve a non dare l'idea che "per questa sessione" voglia
+// dire "per sempre": ogni concessione mostra quando scade, e si revoca
+// con un clic. Un permesso che non si vede è un permesso che hai
+// dimenticato di dare.
+const permessiStato = $("permessi-stato");
+const permessiMsg = $("permessi-msg");
+
+function disegnaPermessi(st) {
+  permessiStato.replaceChildren();
+  const aggiungi = (testo, classe) => {
+    const d = el("div", "permesso-stato-riga " + (classe || ""));
+    d.textContent = testo;
+    permessiStato.appendChild(d);
+    return d;
+  };
+  aggiungi("Cartella di lavoro: " + (st.root || "?"), "info");
+  if (!st.in_attesa || !st.in_attesa.length) {
+    aggiungi("Nessuna domanda in attesa", "ok");
+  } else {
+    aggiungi(st.in_attesa.length + " domande in attesa", "attesa");
+  }
+  for (const s of st.sessione || []) {
+    const minuti = Math.max(1, Math.round(s.scade_tra / 60));
+    const riga = aggiungi("Concesso: " + s.percorso + " — scade fra " + minuti + " min", "ok");
+    const rev = el("button", "ghost piccolo", "Revoca");
+    riga.appendChild(rev);
+    on(rev, "click", async () => {
+      try {
+        const r = await fetch("/api/permessi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ revoca: s.percorso }),
+        });
+        const d = await r.json();
+        disegnaPermessi(d.stato || st);
+      } catch (e) { /* resta com'e' */ }
+    });
+  }
+  for (const p of st.negati || []) {
+    aggiungi("Negato: " + p, "ko");
+  }
+}
+
+async function caricaPermessi() {
+  try {
+    const r = await fetch("/api/permessi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    disegnaPermessi(d);
+  } catch (e) {
+    permessiMsg.textContent = "stato non disponibile: " + e;
+  }
+}
+
+on($("permessi-prova"), "click", async () => {
+  permessiMsg.textContent = "genero una domanda…";
+  try {
+    const r = await fetch("/api/permesso/prova", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const d = await r.json();
+    if (!r.ok) { permessiMsg.textContent = d.error || "errore"; return; }
+    permessiMsg.textContent = d.in_attesa
+      ? "domanda partita: dovrebbe comparire il riquadro"
+      : "nessun riquadro: ricarica con Ctrl+F5, la pagina è vecchia";
+    permessiMsg.className = "small " + (d.in_attesa ? "verde" : "rosso");
+    caricaPermessi();
+  } catch (e) {
+    permessiMsg.textContent = "connessione fallita: " + e;
+    permessiMsg.className = "small rosso";
+  }
+});
+
+// lo stato dei permessi si ricarica insieme al resto del pannello:
+// un permesso concesso durante un turno deve comparire qui, non al
+// prossimo avvio
+
+
 // riga di una chiave: etichetta, stato, campo vuoto, due pulsanti
 function rigaChiave(k) {
   const riga = el("div", "chiave-riga");
@@ -632,6 +718,8 @@ async function caricaOpzioni() {
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     opzioniNota.textContent = d.nota_gratis || "";
+
+    caricaPermessi();
 
     // provider e modello: due menu in alto, non due righe di chiavi
     disegnaProvider(d);

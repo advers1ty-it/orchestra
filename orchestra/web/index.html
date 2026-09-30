@@ -142,6 +142,24 @@
       <span id="opt-provider-msg" class="small dim"></span>
     </div>
 
+    <!-- Permessi: stato e prova. La prova genera una domanda vera senza
+         spendere un token e senza dipendere da quello che un modello
+         decide di fare — meglio scoprire qui che il canale e' rotto,
+         che accorgersene quando un operazione ti viene negata senza
+         spiegazione. -->
+    <div class="opzioni-permessi">
+      <div class="opzioni-permessi-testa">
+        <b>Permessi</b>
+        <span class="dim">l'agente può uscire dalla cartella di lavoro solo se glielo
+          consenti. Le cartelle di sistema non sono autorizzabili.</span>
+      </div>
+      <div class="opzioni-permessi-azioni">
+        <button id="permessi-prova" class="ghost">Prova il canale</button>
+        <span id="permessi-msg" class="small dim"></span>
+      </div>
+      <div id="permessi-stato" class="permessi-stato"></div>
+    </div>
+
     <div id="chiavi-lista" class="chiavi-lista"></div>
     <div class="opzioni-gratis">
       <b>Dove si trovano modelli gratis</b>

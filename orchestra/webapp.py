@@ -90,10 +90,18 @@ class OrchestraApp:
         from .tools import set_permission_gate
 
         def chiedi(r: Richiesta) -> Risposta:
-            self.session.emit("permission_request", {
+            # self.session.emit NON esiste: l'emittente e' il bridge, e
+            # chiamare il metodo sbagliato solleva AttributeError. Con un
+            # except generico intorno, l'errore di programmazione finiva
+            # per essere letto come "l'utente ha detto no": il popup non
+            # compariva e il tool veniva negato subito, senza che nulla
+            # lo dicesse. Stavolta si chiama quello giusto, e se
+            # fallisce lo si vede.
+            bridge = self.session.bridge
+            bridge.emit("permission_request", {
                 "id": r.id, "percorso": r.percorso, "azione": r.azione,
                 "dettaglio": r.dettaglio, "motivo": r.motivo,
-                "root": str(self.gate_root()) if self.gate else "",
+                "root": str(self.gate_root()),
             })
             # aspetta la risposta. Il tool e' bloccato nel frattempo: e'
             # il prezzo della conferma, ed e' giusto che lo sia.
@@ -784,6 +792,70 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return
             self._json(res)
+        elif path == "/api/permesso/prova":
+            # Fa partire una domanda di permesso vera, senza spendere
+            # token e senza dipendere da quello che un modello decide di
+            # fare. Serve per due motivi: per verificare che il canale
+            # funzioni prima di fidarsi dell'agente con il disco, e
+            # perche' i test end-to-end altrimenti possono solo sperare
+            # che il modello sbagli — e quando non sbaglia il test passa
+            # senza aver provato niente.
+            #
+            # La cartella proposta e' la Documenti dell'utente: fuori dal
+            # root di sicuro, e non sensibile, quindi la domanda deve
+            # comparire e le tre scelte devono funzionare.
+            #
+            # Accetta pero' una cartella a scelta. Non per gli utenti —
+            # per i test: rispondere "mai" a Documents lo mette negli
+            # negati per sempre, e ogni verifica successiva su quella
+            # cartella viene negata all'istante senza domanda. Il primo
+            # test e' fallito per questo, e aveva ragione a fallire: non
+            # per un bug, perche' si stava sabotando da solo.
+            richiesta_cartella = body.get("cartella")
+            if richiesta_cartella:
+                target = str(richiesta_cartella)
+            else:
+                casa = os.path.expanduser("~")
+                target = os.path.join(casa, "Documents")
+                if not os.path.isdir(target):
+                    target = casa
+            gate = self.app.gate
+            if gate is None:
+                self._json({"error": "gate non attivo"}, 503)
+                return
+            from .permissions import Richiesta
+            r = Richiesta(
+                id=f"prova{time.time():.0f}",
+                percorso=target, azione="leggere",
+                dettaglio="prova manuale, nessun file viene letto",
+                motivo="verifica del canale dei permessi")
+            def _prova_thread() -> None:
+                # passa da chiedi_all_utente con l'id che gia' conosciamo:
+                # e' l'unico percorso che registra la domanda in attesa,
+                # ed e' quello che usa davvero un tool. Chiamando chiedi a
+                # mano si verificherebbe meta' del canale.
+                try:
+                    gate.chiedi_all_utente(r.percorso, r.azione, r.dettaglio,
+                                           richiesta_id=r.id)
+                except Exception as e:  # noqa: BLE001
+                    from .permissions import _log_permesso
+                    _log_permesso(f"prova fallita: {type(e).__name__}: {e}")
+
+            threading.Thread(
+                target=_prova_thread, args=(), daemon=True,
+                name="orchestra-permesso-prova").start()
+            # aspetta che la domanda sia in attesa, non che il thread sia
+            # partito: e' la differenza fra "ha chiesto" e "ha gridato
+            # nel vuoto"
+            in_atting = False
+            for _ in range(60):
+                with gate._lock:
+                    in_atting = r.id in gate._attesa
+                if in_atting:
+                    break
+                time.sleep(0.05)
+            self._json({"ok": True, "id": r.id, "percorso": target,
+                        "in_attesa": in_atting})
         elif path == "/api/permesso":
             # La risposta a una domanda di permesso. Tre scelte, e
             # nient'altro: "una_volta", "sessione", "mai". Una scelta
