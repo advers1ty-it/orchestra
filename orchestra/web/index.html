@@ -64,6 +64,7 @@
   <span class="ver" id="ver" title="versione della interfaccia">·</span>
   <span class="stamp" id="stamp">UI-4</span>
   <div class="grow"></div>
+  <button id="btn-opzioni" class="ghost" title="Chiavi API e servizi gratuiti">Opzioni</button>
   <button id="btn-bench" class="ghost">Benchmark</button>
 
   <!-- Lo scopo sta PRIMA del modello, non in un pannello: la domanda
@@ -86,6 +87,34 @@
   <button id="btn-cancel" disabled>Annulla</button>
   <button id="btn-reset">Nuova</button>
 </header>
+
+<!-- Opzioni: chiavi API e servizi gratuiti.
+     Il pannello piu' sensibile dell'app, perche' qui si scrivono le
+     credenziali. Per questo non mostra mai un valore gia' salvato: solo
+     se c'e' e gli ultimi 4 caratteri. -->
+<div id="opzioni" class="panel hidden">
+  <div class="panel-box">
+    <div class="panel-head">
+      <div>
+        <b>Opzioni</b>
+        <span class="dim">chiavi dei servizi e modelli locali</span>
+      </div>
+      <button id="opzioni-close" class="ghost">Chiudi</button>
+    </div>
+    <div class="avviso-sicurezza">
+      Le chiavi finiscono in <code>orchestra/.env</code> e non lasciano questa
+      macchina. Orchestra non le rilette mai: qui sotto vedi solo se sono
+      configurate e gli ultimi 4 caratteri, niente di piu'.
+    </div>
+    <div id="chiavi-lista" class="chiavi-lista"></div>
+    <div class="opzioni-gratis">
+      <b>Dove si trovano modelli gratis</b>
+      <span class="dim" id="opzioni-nota"></span>
+      <div id="locali-avviso" class="gratis-locale" style="display:none"></div>
+      <div id="gratis-lista"></div>
+    </div>
+  </div>
+</div>
 
 <!-- pannello benchmark: overlay, non una pagina a se' -->
 <div id="bench" class="panel hidden">

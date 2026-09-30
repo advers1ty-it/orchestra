@@ -1,0 +1,38 @@
+menu Opzioni: gestione chiavi e dove si trovano modelli gratis
+
+Il pannello piu' sensibile dell'app, perche' qui si scrivono le
+credenziali. Il server sta su 127.0.0.1 senza autenticazione, quindi
+chiunque raggiunga la porta locale potrebbe leggere e scrivere le
+chiavi: le protezioni non sono decorative.
+
+- orchestra/keys.py: whitelist delle chiavi scrivibili, rifiuto dei
+  valori con a capo, sovrascrittura atomica, chmod 600. Commenti,
+  spazi e ordine del .env sopravvivono a una scrittura.
+- stato() restituisce solo "configurata" e gli ultimi 4 caratteri.
+  Mai il valore: la risposta finisce nella cronologia del browser e in
+  qualunque log in mezzo.
+- un campo vuoto non cancella per sbaglio: con una chiave gia' presente
+  il campo vuoto lascia tutto com'e'. La cancellazione ha un pulsante
+  suo, con conferma.
+- dopo aver salvato, l'ambiente viene ricaricato: altrimenti la chiave
+  appena messa non sarebbe usata fino al prossimo avvio e l'utente
+  riceverebbe un 401 senza capire perche'.
+
+I consigli sui servizi gratuiti sono nel menu, non in un documento
+separato: sette servizi con costo, se serve account, requisiti e il
+comando per iniziare. Ollama e LM Studio in evidenza perche' sono gli
+unici che non chiedono nessuna chiave. Sotto una nota con la data del
+rilevamento, perche' i free tier cambiano e un consiglio vecchio e'
+peggio di nessun consiglio.
+
+Risolto un problema di velocita' scoperto verificando: /api/chiavi
+impiegava 3 secondi perche' interrogava due motori locali in fila, e
+una porta chiusa su Windows costa un timeout invece di un rifiuto
+immediato. Il pannello sembrava rotto. Ora /api/chiavi risponde in 4ms
+e i motori vengono chiesti per conto loro in /api/locali, in parallelo,
+con 1,2s.
+
+test_chiavi.py (33/33) scritto per fallire se le regole cedono: prova
+che un segreto finto non finisca mai in nessun campo, nemmeno in un
+prefisso di 8 caratteri, e che una chiave fuori whitelist venga
+respinta.

@@ -314,6 +314,195 @@ function renderBenchResult(res) {
 // prendessero i dati da due fetch separati, potrebbero mostrare modelli
 // diversi e la scelta sarebbe illudente.
 
+
+// ------------------------------------------------------------- Opzioni
+// Il pannello piu' sensibile dell'app: qui si scrivono le credenziali.
+//
+// Regola che governa tutto il file: il valore di una chiave gia'
+// salvata non viene mai letto, e non viene neanche rimesso nel campo.
+// Il campo parte vuoto ogni volta, e se lasci vuoto e salvi, la chiave
+// viene cancellata. E' l'unico modo per essere onesto su cosa succede
+// al file .env: se il campo e' vuoto, sparisce anche la chiave.
+const opzioniPanel = $("opzioni");
+const chiaviLista = $("chiavi-lista");
+const gratisLista = $("gratis-lista");
+const opzioniNota = $("opzioni-nota");
+
+function apriOpzioni() {
+  opzioniPanel.classList.remove("hidden");
+  caricaOpzioni();
+}
+function chiudiOpzioni() {
+  opzioniPanel.classList.add("hidden");
+}
+on($("btn-opzioni"), "click", apriOpzioni);
+on($("opzioni-close"), "click", chiudiOpzioni);
+on(opzioniPanel, "click", (e) => { if (e.target === opzioniPanel) chiudiOpzioni(); });
+
+// riga di una chiave: etichetta, stato, campo vuoto, due pulsanti
+function rigaChiave(k) {
+  const riga = el("div", "chiave-riga");
+  const testa = el("div", "chiave-testa");
+  const nome = el("span", "chiave-nome");
+  nome.textContent = k.etichetta;
+  const statoEl = el("span", "chiave-stato " + (k.presente ? "ok" : "vuota"));
+  // l'indizio sono 4 caratteri, mai di piu': serve a distinguere due
+  // chiavi, non a usarne una
+  statoEl.textContent = k.presente ? ("configurata " + k.indizio) : "non configurata";
+  testa.appendChild(nome);
+  testa.appendChild(statoEl);
+
+  const campo = el("input", "chiave-input");
+  campo.type = "password";
+  campo.placeholder = k.presente ? "lascia vuoto per non cambiarla" : "incolla qui la chiave";
+  campo.autocomplete = "off";
+  campo.spellcheck = false;
+
+  const azioni = el("div", "chiavi-azioni");
+  const salva = el("button", "primary", "Salva");
+  const togli = el("button", "ghost", "Rimuovi");
+  const messaggio = el("span", "small dim");
+
+  salva.onclick = async () => {
+    salva.disabled = true;
+    messaggio.textContent = "salvo…";
+    const v = campo.value.trim();
+    if (!v && k.presente) {
+      messaggio.textContent = "campo vuoto: lascialo cosi' per non toccarla";
+      salva.disabled = false;
+      return;
+    }
+    try {
+      const r = await fetch("/api/chiavi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chiave: k.chiave, valore: v }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        messaggio.textContent = d.error || ("errore " + r.status);
+        messaggio.className = "small rosso";
+      } else {
+        messaggio.textContent = d.messaggio;
+        messaggio.className = "small verde";
+        campo.value = "";  // non tenere la chiave in memoria del DOM
+        caricaOpzioni();
+      }
+    } catch (e) {
+      messaggio.textContent = "connessione fallita: " + e;
+      messaggio.className = "small rosso";
+    } finally {
+      salva.disabled = false;
+    }
+  };
+
+  togli.onclick = async () => {
+    if (k.presente && !confirm("Rimuovere " + k.etichetta + " dal .env?")) return;
+    togli.disabled = true;
+    try {
+      const r = await fetch("/api/chiavi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chiave: k.chiave, valore: "" }),
+      });
+      const d = await r.json();
+      messaggio.textContent = r.ok ? d.messaggio : (d.error || "errore");
+      messaggio.className = r.ok ? "small verde" : "small rosso";
+      caricaOpzioni();
+    } finally { togli.disabled = false; }
+  };
+
+  azioni.appendChild(salva);
+  azioni.appendChild(togli);
+  riga.appendChild(testa);
+  riga.appendChild(campo);
+  riga.appendChild(azioni);
+  riga.appendChild(messaggio);
+  return riga;
+}
+
+// scheda di un servizio gratis: cosa offre, cosa costa, come iniziare
+function schedaGratis(s) {
+  const d = el("div", "gratis-scheda" + (s.chiave ? "" : " senza-chiave"));
+  const capo = el("div", "gratis-capo");
+  const nome = el("span", "gratis-nome");
+  nome.textContent = s.nome;
+  const badge = el("span", "gratis-badge " + (s.chiave ? "con-chiave" : "senza-chiave"));
+  badge.textContent = s.chiave ? "serve account" : "nessuna chiave";
+  capo.appendChild(nome);
+  capo.appendChild(badge);
+
+  const costo = el("div", "gratis-costo");
+  costo.textContent = s.costo;
+  const cosa = el("div", "gratis-cosa");
+  cosa.textContent = s.cosa;
+  const req = el("div", "gratis-req dim small");
+  req.textContent = s.requisiti;
+  const come = el("code", "gratis-come");
+  come.textContent = (s.come || "").trim();
+
+  d.appendChild(capo);
+  d.appendChild(costo);
+  d.appendChild(cosa);
+  d.appendChild(req);
+  d.appendChild(come);
+  if (s.avvertenza) {
+    const w = el("div", "gratis-avv");
+    w.textContent = s.avvertenza;
+    d.appendChild(w);
+  }
+  return d;
+}
+
+async function caricaOpzioni() {
+  chiaviLista.replaceChildren();
+  gratisLista.replaceChildren();
+  opzioniNota.textContent = "carico…";
+  try {
+    const r = await fetch("/api/chiavi");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    opzioniNota.textContent = d.nota_gratis || "";
+
+    // i motori locali arrivano in una richiesta separata: sono una
+    // domanda di rete a localhost e possono costare un timeout. Se
+    // aspettassimo, il pannello si aprirebbe dopo due secondi per
+    // mostrare che non c'e' nessun motore locale.
+    const bottoni = d.motori || [];
+    if (bottoni.length) {
+      fetch("/api/locali")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((ld) => {
+          const locali = (ld && ld.locali) || {};
+          const nomi = Object.keys(locali);
+          const avviso = $("locali-avviso");
+          if (!avviso) return;
+          avviso.style.display = "block";
+          avviso.textContent = nomi.length
+            ? "Motore locale attivo: " + nomi.join(", ") +
+              " — questi modelli sono gia' disponibili, senza chiave e senza rete."
+            : "Nessun motore locale in ascolto. Serve installarlo una volta: " +
+              bottoni.join(" o ") + ".";
+        })
+        .catch(() => { /* se non risponde, resta silenzioso: e' un extra */ });
+    }
+
+    const cat = d.catalogo || {};
+    if (cat.modelli) {
+      const t = el("div", "opzioni-riepilogo");
+      t.textContent = "Catalogo attuale: " + cat.modelli + " modelli, " +
+        (cat.gratuiti || 0) + " gratuiti con tool-calling.";
+      gratisLista.appendChild(t);
+    }
+
+    for (const k of d.chiavi || []) chiaviLista.appendChild(rigaChiave(k));
+    for (const s of d.servizi_gratis || []) gratisLista.appendChild(schedaGratis(s));
+  } catch (e) {
+    opzioniNota.textContent = "caricamento fallito: " + e;
+  }
+}
+
 // ------------------------------------------------- scegli per tipo di lavoro
 // La domanda vera non e' "quale modello e' il migliore" ma "quale
 // modello e' il migliore PER QUELLO CHE DEVO FARE". Un modello puo'

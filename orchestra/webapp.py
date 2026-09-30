@@ -450,6 +450,37 @@ class Handler(BaseHTTPRequestHandler):
                                 "copertura": prior_mod.copertura(priors, self.app.catalog.models)})
                 except Exception as e:  # noqa: BLE001
                     self._json({"messaggio": f"prior non disponibile: {e}", "copertura": {}})
+        elif path == "/api/chiavi":
+            # Solo stato, mai valori. La chiave non esce mai da qui:
+            # questa risposta finisce nella cronologia del browser e
+            # in qualunque log in mezzo.
+            from . import keys as keys_mod
+            from .providers import NO_KEY_PROVIDERS
+            cat_ = self.app.catalog
+            # Niente motori locali qui: sono una richiesta di rete a
+            # localhost che puo' costare un timeout, e le chiavi non
+            # devono aspettarle. Vengono in /api/locali, che il browser
+            # chiede per conto suo.
+            self._json({
+                "chiavi": keys_mod.stato(ENV_PATH, self.app.env),
+                "servizi_gratis": keys_mod.FREE_SERVICES,
+                "nota_gratis": keys_mod.NOTA_FREE,
+                "catalogo": {
+                    "modelli": len(cat_.models) if cat_ is not None else 0,
+                    "gratuiti": len(cat_.free()) if cat_ is not None else 0,
+                },
+                "motori": sorted(NO_KEY_PROVIDERS),
+                "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
+            })
+        elif path == "/api/locali":
+            # Separato perche' e' lento per costruzione: si interrogano
+            # motori in ascolto su localhost e una porta chiusa puo'
+            # costare un timeout. In parallelo, non in fila.
+            from .providers import NO_KEY_PROVIDERS, local_models_multi
+            trovati = local_models_multi(sorted(NO_KEY_PROVIDERS),
+                                         self.app.env, timeout=1.2)
+            self._json({"locali": {k: [m["id"] for m in v]
+                                   for k, v in trovati.items() if v}})
         elif path == "/api/categorie":
             # L'elenco delle categorie con quante task ha ciascuna e
             # quante sono state misurate. La UI non deve tenere
@@ -632,6 +663,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return
             self._json(res)
+        elif path == "/api/chiavi":
+            # Scrive una chiave. Whitelist obbligatoria: senza, un POST
+            # scriverebbe qualsiasi riga nel .env e avremmo dato una
+            # scrittura arbitraria su disco a chiunque raggiunga la porta.
+            from . import keys as keys_mod
+            k = (body.get("chiave") or "").strip()
+            v = body.get("valore")
+            v = "" if v is None else str(v)
+            if not k:
+                self._json({"error": "indica quale chiave"}, 400)
+                return
+            ok, msg = keys_mod.scrivi(ENV_PATH, k, v)
+            if not ok:
+                self._json({"error": msg}, 400)
+                return
+            # ricarichiamo l'ambiente: senza, la chiave appena salvata
+            # non verrebbe usata fino al prossimo avvio, e l'utente
+            # proverebbe a chiamare e riceverebbe 401
+            self.app.env.clear()
+            self.app.env.update(load_env(ENV_PATH))
+            self.app.env.setdefault("ORCHESTRA_PROVIDER", "openrouter")
+            # la risposta porta solo lo stato, mai il valore
+            self._json({"ok": True, "messaggio": msg,
+                        "chiavi": keys_mod.stato(ENV_PATH, self.app.env)})
         elif path == "/api/prova":
             # Prova manuale: un prompt, un modello, tutta la trascrizione.
             # Diversa dal benchmark: qui non c'e' un punteggio, c'e' la

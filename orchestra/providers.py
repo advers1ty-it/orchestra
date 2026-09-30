@@ -324,6 +324,25 @@ def local_models(name: str, env: dict[str, str] | None = None,
     return sorted(out, key=lambda m: m["id"])
 
 
+def local_models_multi(names: list[str], env: dict[str, str] | None = None,
+                       timeout: float = 1.5) -> dict[str, list[dict[str, Any]]]:
+    """Interroga piu' motori locali IN PARALLELA.
+
+    In sequenza, due motori assenti costano 2 timeout: il pannello Opzioni
+    impiegava tre secondi ad aprirsi, e sembrava rotto. Un timeout qui e'
+    un'attesa, non un errore: se non arriva entro, quel motore non c'e' e
+    va detto in un secondo momento, non bloccando la pagina.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    if not names:
+        return {}
+    with ThreadPoolExecutor(max_workers=min(8, len(names))) as ex:
+        risultati = list(ex.map(
+            lambda n: local_models(n, env, timeout=timeout), names))
+    return {n: r for n, r in zip(names, risultati)}
+
+
 def load_env(path: str) -> dict[str, str]:
     """Legge un .env minimale (KEY=VALUE, # commenti, export ammesso)."""
     out: dict[str, str] = {}
