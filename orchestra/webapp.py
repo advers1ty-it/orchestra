@@ -264,6 +264,40 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _static(self, name: str, content_type: str) -> None:
+        """Serve un file statico dalla cartella web/.
+
+        Il nome viene controllato: solo [A-Za-z0-9._-], niente percorsi.
+        Un parametro che arrivasse da fuori (`../webapp.py`) deve poter
+        solo ottenere file della web/, mai altri.
+        """
+        if not all(c.isalnum() or c in "._-" for c in name):
+            self._json({"error": "nome file non valido"}, 400)
+            return
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", name)
+        # doppia barriera: anche senza percorsi, il risultato deve stare
+        # dentro web/
+        if not os.path.abspath(path).startswith(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+        ):
+            self._json({"error": "non trovato"}, 404)
+            return
+        try:
+            with open(path, "rb") as f:
+                body = f.read()
+        except OSError:
+            self._json({"error": "non trovato"}, 404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        # come per l'HTML: obbliga a riverificare. Senza, correggere un .js
+        # e ricaricare non produceva nulla, e sembrava che le modifiche
+        # non arrivassero al browser.
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _html(self, path: str) -> None:
         try:
             with open(path, "rb") as f:
@@ -310,6 +344,10 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/":
             self._html(UI_PATH)
+        elif path.endswith(".js"):
+            self._static(path[1:], "text/javascript; charset=utf-8")
+        elif path.endswith(".css"):
+            self._static(path[1:], "text/css; charset=utf-8")
         elif path == "/api/state":
             s = self._need_session()
             if s is None:

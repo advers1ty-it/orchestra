@@ -38,14 +38,33 @@ def check(name, cond, detail=""):
 with open(UI, encoding="utf-8") as f:
     html = f.read()
 
-print("\n[1] Estrazione e struttura")
-m = re.search(r"<script>(.*?)</script>", html, re.S)
-check("blocco <script> presente", m is not None)
-js = m.group(1) if m else ""
-check("script non vuoto", len(js) > 500, f"{len(js)} caratteri")
+# Dopo lo split non esiste piu' un <script> inline: il codice e' in file
+# separati dichiarati da index.html. Li leggiamo e li concateniamo
+# nell'ordice dichiarato, che e' l'ordine in cui il browser li esegue.
+# I test precedenti leggevano il blocco inline e, dopo lo split, non
+# trovavano nulla: e' il motivo per cui 30 asserzioni sono passate senza
+# verificare niente.
+_scripts = re.findall(r'<script src="([^"]+)"', html)
+assert _scripts, "index.html non dichiara nessuno script: lo split e' rotto?"
+WEB_DIR = os.path.dirname(UI)
+js_parts = []
+for _s in _scripts:
+    _p = os.path.join(WEB_DIR, os.path.basename(_s))
+    with open(_p, encoding="utf-8") as _f:
+        js_parts.append(_f.read())
+js = "\n;\n".join(js_parts)
+# il CSS ora sta in app.css
+_css_files = re.findall(r'<link rel="stylesheet" href="([^"]+)"', html)
+css = ""
+for _c in _css_files:
+    with open(os.path.join(WEB_DIR, os.path.basename(_c)), encoding="utf-8") as _f:
+        css += _f.read()
 
-css = re.search(r"<style>(.*?)</style>", html, re.S)
-check("blocco <style> presente", css is not None and len(css.group(1)) > 500)
+# [1] Estrazione e struttura
+print("\n[1] Estrazione e struttura")
+check("script dichiarati trovati", len(_scripts) >= 1, str(_scripts))
+check("script non vuoto", len(js) > 500, f"{len(js)} caratteri in {len(_scripts)} file")
+check("CSS dichiarato trovato", len(css) > 500, f"{len(css)} caratteri")
 
 print("\n[2] Sintassi JavaScript (Node esegue davvero il codice)")
 tmp = os.path.join(tempfile.gettempdir(), "orchestra_ui_check.js")
@@ -55,9 +74,8 @@ r = subprocess.run(["node", "--check", tmp], capture_output=True, text=True, tim
 check("JS sintatticamente valido", r.returncode == 0, r.stderr[:300])
 
 # lo stesso per i CSS: nessun controllo nativo, cerchiamo sbilanciamenti
-css_text = css.group(1) if css else ""
-check("CSS: graffe bilanciate", css_text.count("{") == css_text.count("}"),
-      f"{css_text.count('{')} vs {css_text.count('}')}")
+check("CSS: graffe bilanciate", css.count("{") == css.count("}"),
+      f"{css.count('{')} vs {css.count('}')}")
 
 print("\n[3] Ogni getElementById punta a un id esistente nel markup")
 declared = set(re.findall(r'id="([^"]+)"', html))
@@ -421,12 +439,8 @@ print("\n[9] Selettore modello e benchmark nella UI")
 import subprocess as _sp
 import tempfile as _tf
 
-_gh = HERE = os.path.dirname(os.path.abspath(__file__))
-UI_PATH = os.path.join(os.path.dirname(_gh), "orchestra", "web", "index.html")
-
-with open(UI_PATH, encoding="utf-8") as f:
-    _ui = f.read()
-_ui_js = re.search(r"<script>(.*?)</script>", _ui, re.S).group(1)
+# il JS gia' concatenato sopra: i file separati, nell'ordice di index.html
+_ui_js = js
 
 _fake_fetch = r"""
 const CALLS = [];
