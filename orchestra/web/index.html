@@ -40,29 +40,50 @@
     add("PROMESSA RIFIUTATA: " + String((e.reason && e.reason.message) || e.reason));
   });
   document.addEventListener("DOMContentLoaded", function () {
-    box = document.createElement("div");
-    box.id = "diag";
-    document.body.appendChild(box);
-    // il body ha background #0f1115 = rgb(15,17,21). Se il CSS non e'
-    // applicato, il colore resta bianco e lo scopriamo qui.
-    var bg = getComputedStyle(document.body).backgroundColor || "";
-    var cssApplied = bg.indexOf("15, 17, 21") >= 0 || bg.indexOf("rgb(15,17,21)") >= 0;
-    lines.unshift("inline:ok  css:" + (cssApplied ? "ok" : "NON ARRIVATO (bg=" + bg + ")"));
-    if (!cssApplied) {
-      lines.push("app.css non e' stato applicato: o il file non e' arrivato o e' rotto");
-    }
-    // lo stato del selettore dice se loadModels e' girato
-    setTimeout(function () {
-      var mp = document.getElementById("model-pick");
-      if (mp) {
-        lines.push("selettore: " + mp.children.length + " voci, " +
-                   (mp.disabled ? "disabilitato" : "attivo"));
-      }
+      box = document.createElement("div");
+      box.id = "diag";
+      document.body.appendChild(box);
+      // Non controlliamo il CSS qui: DOMContentLoaded puo' precedere
+      // l'applicazione dello stylesheet, e il controllo dava un falso
+      // negativo. Lo facciamo dopo, con un timer, e su piu' proprieta'.
+      setTimeout(function () {
+        var cs = getComputedStyle(document.body);
+        // il body deve essere flex: e' nel nostro CSS e non puo' essere un
+        // default del browser. Il colore da solo e' ambiguo.
+        var disp = cs.display || "";
+        var bg = cs.backgroundColor || "";
+        var flexOk = disp.indexOf("flex") >= 0;
+        var bgOk = bg.indexOf("15, 17, 21") >= 0 || bg.indexOf("15,17,21") >= 0;
+        if (!flexOk && !bgOk) {
+          add("CSS NON APPLICATO: display=" + disp + " background=" + bg);
+          add("  -> app.css non e' arrivato, o il browser lo ha rifiutato");
+        } else {
+          lines.unshift("css:ok (display=" + disp + ")");
+        }
+        var mp = document.getElementById("model-pick");
+                if (mp) {
+                  var voci = mp.options ? mp.options.length : mp.children.length;
+                  lines.push("selettore: " + voci + " voci, " +
+                             (mp.disabled ? "DISABILITATO" : "attivo"));
+                }
+                // quali file JS sono arrivati davvero. Un file che non e' nella
+                // lista non e' stato caricato: e' una cosa diversa da un file che
+                // ha caricato e ha lanciato un errore.
+                var f = window.__diagFiles || [];
+                var mancanti = ["core", "panels", "main"].filter(function (n) {
+                  return f.indexOf(n) < 0;
+                });
+                if (mancanti.length) {
+                  add("FILE JS NON ARRIVATI: " + mancanti.join(", "));
+                  add("  -> il browser non li ha scaricati (404? rete? cache?)");
+                } else {
+                  lines.unshift("js: " + f.join(" + "));
+                }
+                render();
+      }, 1500);
       render();
-    }, 900);
-    render();
-  });
-})();
+    });
+  })();
 </script>
 <link rel="stylesheet" href="/app.css">
 </head>

@@ -1,3 +1,4 @@
+(window.__diagFiles = window.__diagFiles || []); window.__diagFiles.push('main');
 // ------------------------------------------------------------- azioni
 async function send() {
   const text = input.value.trim();

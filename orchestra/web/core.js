@@ -1,3 +1,4 @@
+(window.__diagFiles = window.__diagFiles || []); window.__diagFiles.push('core');
 
 "use strict";
 

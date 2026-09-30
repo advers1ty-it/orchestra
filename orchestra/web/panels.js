@@ -1,3 +1,4 @@
+(window.__diagFiles = window.__diagFiles || []); window.__diagFiles.push('panels');
 // -------------------------------------------------------------- benchmark
 
 const benchPanel = $("bench");
