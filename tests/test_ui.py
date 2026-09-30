@@ -46,10 +46,15 @@ with open(UI, encoding="utf-8") as f:
 # verificare niente.
 _scripts = re.findall(r'<script src="([^"]+)"', html)
 assert _scripts, "index.html non dichiara nessuno script: lo split e' rotto?"
+# L'HTML dichiara un solo script, /app.js, che il server assembla
+# concatenando i tre sorgenti in quest'ordine. I sorgenti restano tre
+# file su disco: qui li leggiamo e li concateniamo come fa il server,
+# altrimenti il test misurerebbe il bundle e non il codice.
 WEB_DIR = os.path.dirname(UI)
 js_parts = []
-for _s in _scripts:
-    _p = os.path.join(WEB_DIR, os.path.basename(_s))
+for _s in ("core.js", "panels.js", "main.js"):
+    _p = os.path.join(WEB_DIR, _s)
+    assert os.path.exists(_p), f"sorgente mancante: {_s}"
     with open(_p, encoding="utf-8") as _f:
         js_parts.append(_f.read())
 js = "\n;\n".join(js_parts)

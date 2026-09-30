@@ -256,13 +256,46 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- helper ------------------------------------------------------------
 
-    def _json(self, obj: Any, code: int = 200) -> None:
-        body = json.dumps(obj).encode("utf-8")
+    def _send_bytes(self, code: int, body: bytes, content_type: str) -> None:
+        """Risposta con byte gia' pronti.
+
+        Gli header sono identici per tutti i file statici: il tipo e' quello
+        che il browser pretende per ciascuna risorsa (text/css per lo stile,
+        text/javascript per lo script) e la lunghezza deve corrispondere ai
+        byte inviati, altrimenti su HTTP/1.1 la connessione resta appiccicata
+        e i file successivi non arrivano.
+        """
         self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
+
+    def _json(self, obj: Any, code: int = 200) -> None:
+        self._send_bytes(code, json.dumps(obj).encode("utf-8"),
+                         "application/json; charset=utf-8")
+
+    # I file restano separati su disco: ognuno ha una responsabilita' e
+    # resta testabile da solo. Al browser arrivano in uno, perche' piu'
+    # richieste significa piu' modi in cui la pagina resta a meta' — e con
+    # un solo script inline (la versione monolitica) funzionava.
+    BUNDLE_ORDER = ("core.js", "panels.js", "main.js")
+
+    def _bundle(self) -> None:
+        parts = []
+        web_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+        for name in self.BUNDLE_ORDER:
+            try:
+                with open(os.path.join(web_dir, name), encoding="utf-8") as f:
+                    parts.append("/* ==== %s ==== */\n%s" % (name, f.read()))
+            except OSError:
+                continue
+        if not parts:
+            self._json({"error": "nessun file javascript"}, 404)
+            return
+        body = "\n;\n".join(parts).encode("utf-8")
+        self._send_bytes(200, body, "text/javascript; charset=utf-8")
 
     def _static(self, name: str, content_type: str) -> None:
         """Serve un file statico dalla cartella web/.

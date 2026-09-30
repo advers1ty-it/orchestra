@@ -42,9 +42,7 @@ scripts = re.findall(r'<script src="([^"]+)"', html)
 styles = re.findall(r'<link rel="stylesheet" href="([^"]+)"', html)
 
 print("\n[1] Struttura")
-check("l'HTML dichiara piu' script", len(scripts) >= 2, str(scripts))
-check("ogni file dichiarato esiste",
-      all(os.path.exists(os.path.join(WEB, s.lstrip("/"))) for s in scripts), str(scripts))
+check("l'HTML dichiara uno script", len(scripts) >= 1, str(scripts))
 check("ogni CSS dichiarato esiste",
       all(os.path.exists(os.path.join(WEB, s.lstrip("/"))) for s in styles), str(styles))
 # La diagnostica e' inline per scelta: deve girare anche se i file
@@ -68,14 +66,27 @@ check("gli script sono in fondo al body",
       html.index("<body") < html.index("script src"), "prima dei tag c'e' altro")
 check("nessuno script usa defer", " defer" not in html,
       "defer non serve e aggiunge un modo di fallire")
-check("core.js viene per primo", scripts and "core" in scripts[0], str(scripts))
+# Un solo script esterno, non tre. Tre richieste = tre modi in cui la
+# pagina resta a meta'; e il sintomo era esattamente quello: CSS
+# applicato, script mai eseguiti. I file restano separati su disco,
+# li assembla il server.
+check("un solo script esterno", len(scripts) == 1 and scripts[0] == "/app.js",
+      str(scripts))
 
 # ---------------------------------------------------------------- esecuzione
+# L'HTML dichiara un solo script (/app.js, assemblato dal server), ma
+# i sorgenti restano tre file su disco. Li leggiamo nell'ordine con cui il
+# server li concatena: e' l'ordine in cui il browser li esegue.
+BUNDLE_ORDER = ("core.js", "panels.js", "main.js")
+
 sources = {}
-for s in scripts:
-    name = os.path.basename(s)
+for name in BUNDLE_ORDER:
     with open(os.path.join(WEB, name), encoding="utf-8") as fh:
         sources[name] = fh.read()
+check("i tre sorgenti esistono", len(sources) == 3, str(list(sources)))
+check("ogni sorgente si annuncia", all(
+    "__diagFiles" in src for src in sources.values()),
+    "un file non ha il marcatore: non si puo' sapere se e' partito")
 
 # harness: DOM finto, ma con lo scope condiviso che ha il browser
 harness = """
@@ -193,7 +204,7 @@ const OUT = { errore: null };
 """
 
 # scope condiviso: i file concatenati ed eseguiti insieme, come nel browser
-joined = "\n;\n".join(sources[os.path.basename(s)] for s in scripts)
+joined = "\n;\n".join(sources[name] for name in BUNDLE_ORDER)
 
 prog = harness + joined + "\n" + probe
 f = tempfile.mktemp(suffix=".js")
