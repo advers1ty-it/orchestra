@@ -43,8 +43,8 @@ function autoGrow() {
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
 }
 
-input.addEventListener("input", autoGrow);
-input.addEventListener("keydown", (e) => {
+on(input, "input", autoGrow);
+on(input, "keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
 btnSend.onclick = send;

@@ -187,7 +187,11 @@ function closeBench() {
 }
 on($("btn-bench"), "click", openBench);
 on($("bench-close"), "click", closeBench);
-benchPanel.addEventListener("click", (e) => { if (e.target === benchPanel) closeBench(); });
+// via on(), non addEventListener diretto: se il pannello manca, questo
+// era l'unico punto che uccideva TUTTO lo script che segue. Serve
+// core.js perche' il bundle e' un unico script: un solo elemento
+// assente e la pagina resta a meta' senza dire perche'.
+on(benchPanel, "click", (e) => { if (e.target === benchPanel) closeBench(); });
 
 on($("bench-run"), "click", async () => {
   const scelti = modelliScelti();
@@ -401,20 +405,32 @@ function disegnaProvider(d) {
   for (const motore of d.motori || []) disponibili.add(motore);
 
   const corrente = d.provider || "";
-  optProvider.replaceChildren();
+  // I selettori del servizio sono due — Opzioni e header della chat —
+  // e devono dire la stessa cosa. Se ne aggiungessi un terzo, questa
+  // lista e' il posto dove metterlo: due copie che possono divergere
+  // sono peggio di una sola che si aggiorna tardi.
+  const selettori = [optProvider, $("provider-pick")].filter(Boolean);
   const utili = Array.from(disponibili).sort();
-  for (const p of utili) {
-    optProvider.appendChild(new Option(NOME_PROVIDER[p] || p, p));
+  for (const s of selettori) {
+    s.replaceChildren();
+    if (!utili.length) {
+      s.appendChild(new Option("nessun servizio configurato", ""));
+    } else {
+      for (const p of utili) {
+        s.appendChild(new Option(NOME_PROVIDER[p] || p, p));
+      }
+      s.value = utili.includes(corrente) ? corrente : utili[0];
+    }
+    s.disabled = false;
   }
-  if (!utili.length) {
-    optProvider.appendChild(new Option("nessun servizio configurato", ""));
-  } else if (utili.includes(corrente)) {
-    optProvider.value = corrente;
+  const segnalato = [optMsg, $("provider-note")].filter(Boolean);
+  for (const m of segnalato) {
+    m.textContent = utili.length
+      ? (utili.includes(corrente) ? "ora: " + (NOME_PROVIDER[corrente] || corrente)
+                                 : "servizio attuale non piu' disponibile")
+      : "nessuna chiave API configurata";
+    m.className = "small " + (utili.includes(corrente) ? "verde" : "rosso");
   }
-  optProvider.disabled = !utili.length;
-  optMsg.textContent = utili.length
-    ? utili.length + " servizi pronti"
-    : "aggiungi sotto una chiave, o avvia un motore locale";
 }
 
 async function caricaModelli(prov, preseleziona) {
@@ -454,9 +470,15 @@ async function caricaModelli(prov, preseleziona) {
   }
 }
 
-on(optProvider, "change", async () => {
-  const p = optProvider.value;
+// Il cambio di servizio e' una sola azione, richiamata dai due
+// selettori. Prima era legato solo a quello delle Opzioni, e dalla chat
+// si poteva cambiare il modello ma non il servizio: due modelli con lo
+// stesso nome ("qwen3-8b" su OpenRouter e su Groq) non si distinguevano,
+// e la richiesta andava a un servizio diverso da quello che credevi.
+async function cambiaServizio(p) {
   if (!p) return;
+  const nota = $("provider-note");
+  if (nota) { nota.textContent = "cambio servizio…"; nota.className = "small dim"; }
   optMsg.textContent = "cambio servizio…";
   try {
     const r = await fetch("/api/provider", {
@@ -466,21 +488,43 @@ on(optProvider, "change", async () => {
     });
     const d = await r.json();
     if (!r.ok) {
-      optMsg.textContent = d.error || ("errore " + r.status);
+      const testo = d.error || ("errore " + r.status);
+      optMsg.textContent = testo;
       optMsg.className = "small rosso";
+      if (nota) { nota.textContent = testo; nota.className = "small rosso"; }
+      // il selettore torna indietro: mostrare un servizio che non e'
+      // quello in uso e' peggio che non mostrarlo
+      disegnaProvider(d.stato ? d : { chiavi: [], provider: "", motori: [] });
       return;
     }
-    optMsg.textContent = "ora: " + (NOME_PROVIDER[p] || p);
+    const nome = NOME_PROVIDER[p] || p;
+    optMsg.textContent = "ora: " + nome;
     optMsg.className = "small verde";
+    if (nota) { nota.textContent = nome; nota.className = "small verde"; }
+    // entrambi i selettori devono dire la stessa cosa dopo il cambio
+    for (const s of [optProvider, $("provider-pick")]) {
+      if (s) s.value = p;
+    }
     await caricaModelli(p, null);
     // il catalogo del provider e' cambiato: anche i modelli della chat
     // vanno ricaricati, o mostrerebbero quelli del provider vecchio
-    loadModels();
+    await loadModels();
   } catch (e) {
-    optMsg.textContent = "cambio fallito: " + e;
+    const testo = "cambio fallito: " + e;
+    optMsg.textContent = testo;
     optMsg.className = "small rosso";
+    if (nota) { nota.textContent = testo; nota.className = "small rosso"; }
   }
-});
+}
+
+// on() accetta gia' un elemento assente senza esplodere (vedi core.js),
+// quindi qui basta passargli quello che c'e'.
+on($("opt-provider"), "change", (e) => cambiaServizio(e.target.value));
+
+// Lo stesso gesto, nella chat. Il modello segue il servizio: e' quello
+// che ti aspetteresti, e senza questa sincronizzazione scegli un
+// modello su un servizio e lo scambi su un altro.
+on($("provider-pick"), "change", (e) => cambiaServizio(e.target.value));
 
 on(optModel, "change", async () => {
   const m = optModel.value;
@@ -515,39 +559,6 @@ on(optModel, "change", async () => {
 // dimenticato di dare.
 const permessiStato = $("permessi-stato");
 const permessiMsg = $("permessi-msg");
-
-// on() normale, ma se l'elemento non c'è non si ferma tutto. Un pannello
-// aggiunto in ritardo — o una pagina servita da una versione vecchia —
-// non deve togliere i pulsanti a tutto il resto. È la stessa lezione
-// di un pannello sparito dal parser: un elemento mancante che uccide
-// l'avvio fa perdere ore a chi guarda una pagina vuota.
-function onSeCè(id, evento, fn) {
-  const e = $(id);
-  if (e) on(e, evento, fn);
-}
-onSeCè("permessi-prova", "click", provaCanalePermessi);
-
-async function provaCanalePermessi() {
-  if (!permessiMsg) return;
-  permessiMsg.textContent = "genero una domanda…";
-  try {
-    const r = await fetch("/api/permesso/prova", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    const d = await r.json();
-    if (!r.ok) { permessiMsg.textContent = d.error || "errore"; return; }
-    permessiMsg.textContent = d.in_attesa
-      ? "domanda partita: dovrebbe comparire il riquadro"
-      : "nessun riquadro: ricarica con Ctrl+F5, la pagina è vecchia";
-    permessiMsg.className = "small " + (d.in_attesa ? "verde" : "rosso");
-    caricaPermessi();
-  } catch (e) {
-    permessiMsg.textContent = "connessione fallita: " + e;
-    permessiMsg.className = "small rosso";
-  }
-}
 
 function disegnaPermessi(st) {
   if (!permessiStato) return;
@@ -601,7 +612,7 @@ async function caricaPermessi() {
   }
 }
 
-onSeCè("permessi-prova", "click", async () => {
+on($("permessi-prova"), "click", async () => {
   permessiMsg.textContent = "genero una domanda…";
   try {
     const r = await fetch("/api/permesso/prova", {

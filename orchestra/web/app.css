@@ -418,3 +418,16 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .permesso-stato-riga.ok    { color: #9fe8c4; background: rgba(62,207,142,.08); }
 .permesso-stato-riga.attesa { color: #ffcf9b; background: rgba(245,166,35,.10); }
 .permesso-stato-riga.ko    { color: #ffb4b4; background: rgba(255,107,107,.08); }
+
+/* Servizio accanto al modello, nella barra in alto.
+   Stessa altezza e stesso bordo del select del modello: se uno dei due
+   sembra un campo diverso dall'altro, si legge come se fossero cose
+   diverse, e invece sono due facce della stessa scelta. */
+#provider-pick { max-width: 150px; }
+.provider-note {
+  font: 11px var(--mono); color: var(--muted);
+  min-width: 0; max-width: 130px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.provider-note.verde { color: #9fe8c4; }
+.provider-note.rosso { color: #ffb4b4; }

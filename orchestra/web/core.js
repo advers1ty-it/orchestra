@@ -395,7 +395,7 @@ function price_label(m) {
   return "$" + p.toFixed(p < 0.01 ? 4 : 2) + "/1M";
 }
 
-modelPick.addEventListener("change", async () => {
+on(modelPick, "change", async () => {
   const id = modelPick.value;
   if (!id || busy) return;
   modelPick.disabled = true;

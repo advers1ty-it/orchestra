@@ -20,6 +20,11 @@ SUITES = [
     ("webapp-modelli", "test_webapp_models.py", True),
     ("frontend", "test_frontend_split.py", True),
     ("ui", "test_ui.py", True),
+    ("istruzioni", "test_istruzioni.py", True),
+    ("servizio", "test_servizio_ui.py", True),
+    ("servizio-sync", "test_servizio_sync.py", True),
+    ("permessi", "test_permessi.py", True),
+    ("permesso-shell", "test_permesso_shell.py", True),
     ("benchmark", "test_benchmark.py", True),
     ("e2e", "test_e2e.py", False),
 ]

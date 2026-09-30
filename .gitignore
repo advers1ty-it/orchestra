@@ -11,4 +11,4 @@ _bench/
 _prova/
 .prova/
 _msg.txt
-nul*\n
+nul*\ntests/_run_*.js

@@ -1,0 +1,40 @@
+cambiare servizio anche dalla chat, e due selettori che non divergono
+
+In Opzioni c'era il menu del servizio, nella chat no: si poteva cambiare
+il modello ma non il provider. Non e' un menu che manca, e' che due
+modelli con lo stesso nome su servizi diversi (qwen3-8b su OpenRouter e
+su Groq) si confondono, e la richiesta finisce da un servizio diverso
+da quello che credevi di aver scelto.
+
+Ora il servizio sta nella barra in alto, subito prima del modello, e
+le due scelte si leggono come una cosa sola.
+
+Il punto fragile non e' il menu, e' la SINCRONIZZAZIONE. Adesso c'e'
+una sola azione, cambiaServizio(), richiamata dai due selettori: prima
+erano due handler con due fetch, che divergono alla prima modifica
+dell'uno. Dopo il cambio entrambi vengono riallineati, anche in caso di
+rifiuto (409 se l'agente e' occupato, 400 se la chiave manca) — un
+selettore che mostra un servizio non in uso e' peggio di non mostrarlo.
+E i modelli della chat vengono ricaricati, o si sceglierebbe un modello
+che il servizio nuovo non ha.
+
+Due test nuovi, su due livelli:
+
+- test_servizio_ui controlla il sorgente: un solo punto di verita',
+  una sola richiesta a /api/provider, entrambi i selettori allineati,
+  il rifiuto riallineato
+- test_servizio_sync ESEGUE il bundle con un DOM finto: popola i
+  selettori, cambia davvero dal menu della chat, e verifica che il
+  backend riceva "groq", che entrambi i menu dicano "groq" e che i
+  modelli si ricarichino. Leggere il sorgente non basta: la
+  sincronizzazione si rompe solo eseguendola
+
+Nella stessa corsa sono sparite tre chiamate addEventListener dirette
+che bypassavano on(): benchPanel, input e modelPick. Il bundle e' un
+unico script, quindi un solo elemento assente uccideva tutto quello
+che segue — la stessa classe di difetto del pannello sparito dal
+parser. on() accetta gia' un elemento assente e lo segnala; le
+chiamate dirette no.
+
+Cinque suite che esistevano da prima non erano nel runner. Ora ci sono:
+16 suite, tutte verdi.
