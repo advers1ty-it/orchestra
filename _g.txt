@@ -1,0 +1,44 @@
+il gate chiedeva sulla root invece che sul percorso: nessuna domanda
+
+Il bug che l'utente ha visto. In run_shell passavo al gate
+
+    gate.chiedi_all_utente(str(_root()), "eseguire", ...)
+
+cioe' gli dicevo "questa cartella e' fuori dalla root?" indicando la
+root STESSA. La risposta e' sempre "dentro", il permesso veniva
+concesso senza chiedere, e subito dopo _check_shell_access bloccava in
+silenzio. L'agente riceveva "non posso accedere", l'utente non vedeva
+nessun riquadro, e la cosa sembrava una decisione dell'agente.
+
+Una domanda con la risposta gia' scritta dentro. E' il tipo di errore
+che non si vede finche' non lo fa qualcuno dall'esterno.
+
+Per risolverlo _comando_tocca_fuori e' diventata _percorso_fuori, che
+restituisce il percorso REALE che il comando tocca invece di un
+booleano. Cosi' la domanda dice "ti concedo C:\\Users\\adver\\
+TraceAppNew?" invece di una frase senza soggetto.
+
+Verificato sugli otto casi che un agente produce davvero: percorso
+assoluto Windows, percorso assoluto in stile msys (/c/Users/...),
+risalita con .., home, e i quattro comandi che restano dentro la root
+e non devono chiedere nulla. Tutti corretti.
+
+Due dettagli che il percorso msys e la risalita .. hanno scoperto:
+
+- /c/Users/adver/... non e' un percorso Windows. Il gate lo risolveva
+  dentro la root e congedava. Ora viene tradotto in C:\Users\adver\...
+  prima di ogni altra cosa
+- passare l'intero comando a resolve() lo tratta come un nome di file e
+  dava D:\orchestra\segreto.txt invece di D:\segreto.txt. Ora si
+  risolve solo il token che sembra un percorso
+
+Verificato end-to-end sul server vero, con il messaggio esatto
+dell'utente: il gate risulta in_attesa con p1, l'agente resta fermo,
+alla risposta prosegue. Prima l'agente si arrampicava su tre strumenti
+e poi si dichiarava incapace, senza domanda.
+
+Resta un limite, dichiarato: la coda degli eventi e' una coda singola,
+non una diffusione. Se sono collegati due client SSE, uno prende gli
+eventi dell'altro. Con una sola scheda va bene; con due, una vede i
+messaggi e l'altra no. Prima di mostrarlo a qualcun altro va cambiata
+in una lista di abbonati.

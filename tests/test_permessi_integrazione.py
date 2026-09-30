@@ -130,7 +130,7 @@ sorgente = open(
 check("_safe_path e' usata dai tool su file",
       sorgente.count("_safe_path(") >= 4, str(sorgente.count("_safe_path(")))
 check("run_shell chiede anche lui",
-      "_comando_tocca_fuori" in sorgente and "chiedi_all_utente" in sorgente,
+      "_percorso_fuori" in sorgente and "chiedi_all_utente" in sorgente,
       "run_shell non chiede: il permesso si aggirerebbe con la shell")
 check("il controllo della shell dichiara i suoi limiti",
       "non e' un sandbox" in sorgente,

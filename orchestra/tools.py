@@ -203,14 +203,28 @@ def tool_run_shell() -> Tool:
         # singolo: un comando puo' toccare tre file, e chiedere per
         # uno e poi eseguirlo cosi' com'e' sarebbe autorizzare tutto.
         gate = _gate()
-        if gate is not None and _comando_tocca_fuori(command):
-            if not gate.chiedi_all_utente(
-                    str(_root()), "eseguire", f"comando: {command[:200]}"):
+        fuori = _percorso_fuori(command)
+        if gate is not None and fuori:
+            # si chiede sul percorso REALE che il comando tocca, non
+            # sulla root: chiedere "questa cartella e' fuori dalla root"
+            # indicando la root stessa e' una domanda con la risposta
+            # gia' scritta, e non e' quello che e' successo
+            if not gate.chiedi_all_utente(fuori, "eseguire",
+                                           f"comando: {command[:200]}"):
                 return (
                     "NON ESEGUITO: comando fuori dalla cartella di lavoro, "
-                    f"permesso non concesso.\nIl root consentito è {_root()}.\n"
+                    f"permesso non concesso per {fuori}.\n"
+                    f"Il root consentito è {_root()}.\n"
                     f"Comando: {command[:200]}"
                 )
+        elif fuori and gate is None:
+            # nessuno a cui chiedere (CLI, benchmark): si nega, e si
+            # dice perche' invece di lasciare che fallisca in silenzio
+            return (
+                f"NON ESEGUITO: il comando tocca {fuori}, fuori dalla "
+                f"cartella di lavoro ({_root()}), e non c'è nessuno a cui "
+                f"chiedere il permesso."
+            )
 
         denied = _check_shell_access(command)
         if denied:
@@ -293,8 +307,16 @@ _SUSPICIOUS = (
 )
 
 
-def _comando_tocca_fuori(command: str) -> bool:
-    """Il comando punta fuori dalla cartella di lavoro?
+def _percorso_fuori(command: str) -> str:
+    """Il percorso che il comando tocca ed esce dalla root, o "".
+
+    Restituisce il percorso e non un booleano perche' serve al gate
+    come SOGGETTO della domanda. Passandogli la root — cioe' dicendogli
+    "guarda se questa cartella e' fuori dalla root" while lei e' la
+    root stessa — la risposta e' sempre "dentro", e il permesso viene
+    concesso senza chiedere nulla. E' successo: l'agente si e' sentito
+    dire che non poteva toccare C:\\Users\\adver\\TraceAppNew senza che
+    all'utente comparisse mai la domanda.
 
     Approssimazione dichiarata: non e' un sandbox e non puo' esserlo
     qui dentro. Un `curl`, un `python -c` o una catena di pipe possono
@@ -310,16 +332,41 @@ def _comando_tocca_fuori(command: str) -> bool:
     import re
 
     low = command.lower()
+    # Percorsi in stile msys (/c/Users/...) sono quello che vede l'agente
+    # quando usa bash su Windows, ma non sono un percorso Windows: il gate
+    # li risolverebbe dentro la root e non chiederebbe. Li traduciamo
+    # prima di ogni altra cosa.
+    def come_windows(s: str) -> str:
+        m2 = re.match(r"^/([a-z])/(.*)$", s)
+        if m2 and os.name == "nt":
+            return f"{m2.group(1).upper()}:\\{m2.group(2).replace('/', chr(92))}"
+        return s
+
+    for m in re.finditer(r"[a-z]:[\\/](?:[^\s'\";|&)<>]{1,200})", low):
+        return m.group(0).rstrip("/\\")
+    for m in re.finditer(r"/(?:users|home|root|mnt|media)/[^\s'\";|&)<>]{1,200}", low):
+        return come_windows(m.group(0).rstrip("/"))
+    # /c/Users/... : percorso msys
+    for m in re.finditer(r"/[a-z]/[^\s'\";|&)<>]{1,200}", low):
+        tradotto = come_windows(m.group(0).rstrip("/"))
+        if tradotto != m.group(0):
+            return tradotto
     if "../" in command or "..\\" in command:
-        return True
-    if re.search(r"[a-z]:[\\/]", low):
-        return True
-    if "/home/" in low or "/root/" in low or low.startswith("~/") or "/users/" in low:
-        return True
+        # si risolve solo il PRIMO token che sembra un percorso: passare
+        # l'intero comando a resolve() lo tratta come un nome di file e
+        # produce una destinazione sbagliata
+        for m in re.finditer(r"[^\s'\";|&)<>]*\.\.[^\s'\";|&)<>]*", command):
+            try:
+                return str((_root() / m.group(0)).resolve())
+            except Exception:  # noqa: BLE001
+                return str(_root())
+        return str(_root())
+    if low.startswith("~/"):
+        return os.path.expanduser("~")
     for pat in _SUSPICIOUS:
         if re.search(pat, low):
-            return True
-    return False
+            return os.path.join(os.path.expanduser("~"), pat.strip("^$"))
+    return ""
 
 
 def _check_shell_access(command: str) -> str | None:
