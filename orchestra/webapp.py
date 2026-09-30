@@ -65,6 +65,11 @@ class OrchestraApp:
         )
         self.ready = True
         self.error = ""
+        # Gate dei permessi: l'unico posto dove l'utente puo' autorizzare
+        # un accesso fuori dalla cartella di lavoro. Vive sull'app perche'
+        # deve sopravvivere fra una richiesta e l'altra: il tool che
+        # chiede gira in un thread, la risposta arriva su un altro.
+        self.gate = self._make_gate()
         # il catalogo viene caricato pigramente: `/models` lo chiede, la
         # chat no. Caricarlo all'avvio aggiungerebbe una chiamata di rete a
         # ogni start, anche quando l'utente vuole solo chattare.
@@ -73,6 +78,49 @@ class OrchestraApp:
         self._catalog_error: str = ""
         # stato del benchmark lanciato dalla UI
         self._bench: dict[str, Any] = {"running": False, "log": [], "result": None}
+
+    def _make_gate(self) -> Any:
+        """Il gate che chiede all'utente, collegato agli eventi SSE.
+
+        La domanda viaggia come un evento normale: il tool che si ferma e'
+        in un thread, e senza SSE l'utente non saprebbe che c'e' una
+        domanda in attesa. La risposta arriva su /api/permesso.
+        """
+        from .permissions import Gate, Richiesta, Risposta
+        from .tools import set_permission_gate
+
+        def chiedi(r: Richiesta) -> Risposta:
+            self.session.emit("permission_request", {
+                "id": r.id, "percorso": r.percorso, "azione": r.azione,
+                "dettaglio": r.dettaglio, "motivo": r.motivo,
+                "root": str(self.gate_root()) if self.gate else "",
+            })
+            # aspetta la risposta. Il tool e' bloccato nel frattempo: e'
+            # il prezzo della conferma, ed e' giusto che lo sia.
+            import time as _t
+            attesa = 0.0
+            while attesa < 300:
+                gate = self.gate
+                if gate is None:
+                    return Risposta("mai")
+                with gate._lock:
+                    risposta = gate._risposte.get(r.id)
+                if risposta is not None:
+                    return risposta
+                _t.sleep(0.05)
+                attesa += 0.05
+            # nessuna risposta in cinque minuti: si nega. Un permesso
+            # che scade da solo e' un permesso che qualcuno ha lasciato
+            # aperto: negare e' la scelta che non ti surprises.
+            return Risposta("mai")
+
+        gate = Gate(chiedi=chiedi)
+        set_permission_gate(gate)
+        return gate
+
+    def gate_root(self) -> Any:
+        from .tools import _root
+        return _root()
 
     @property
     def catalog(self) -> Any:
@@ -736,6 +784,40 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return
             self._json(res)
+        elif path == "/api/permesso":
+            # La risposta a una domanda di permesso. Tre scelte, e
+            # nient'altro: "una_volta", "sessione", "mai". Una scelta
+            # sconosciuta viene trattata come "mai" — se il pulsante non
+            # e' arrivato, il caso sicuro e' negare.
+            rid = (body.get("id") or "").strip()
+            scelta = (body.get("scelta") or "mai").strip()
+            if not rid:
+                self._json({"error": "manca l'id della richiesta"}, 400)
+                return
+            if scelta not in ("una_volta", "sessione", "mai"):
+                self._json({"error": f"scelta non valida: {scelta}"}, 400)
+                return
+            gate = self.app.gate
+            if gate is None:
+                self._json({"error": "gate non attivo"}, 503)
+                return
+            if not gate.rispondi(rid, scelta):
+                self._json({"error": "nessuna domanda in attesa con quell'id"}, 404)
+                return
+            self._json({"ok": True, "stato": gate.stato()})
+        elif path == "/api/permessi":
+            # Lo stato dei permessi: cosa e' concesso, cosa e' negato,
+            # cosa scade. Serve a poter revocare, e a non dare l'idea che
+            # "per questa sessione" voglia dire "per sempre".
+            gate = self.app.gate
+            if gate is None:
+                self._json({"error": "gate non attivo"}, 503)
+                return
+            if body.get("revoca"):
+                revocato = gate.revoca(str(body.get("revoca")))
+                self._json({"ok": revocato, "stato": gate.stato()})
+                return
+            self._json(gate.stato())
         elif path == "/api/provider":
             p = (body.get("provider") or "").strip()
             if not p:

@@ -1,0 +1,48 @@
+permessi per uscire dalla cartella di lavoro, con tre scelte
+
+Il default resta chiuso: un tool tocca solo la root, e per andare fuori
+chiede. Non e' una restrizione bizzarra, e' il senso di un agente che
+scrive codice — se puo' arrivare ovunque senza chiedere, non e' un
+aiuto.
+
+Tre scelte, e sono tre perche' due non bastano:
+  una volta     questa chiamata e basta
+  per sessione  due ore, poi la domanda ricomincia
+  mai           resta negato, e si puo' revocare da Opzioni
+
+"Per sempre" non esiste di proposito: "questa volta" e "per sempre"
+sono la stessa parola detta in due momenti, e si arriva a concedere
+tutto per un turno a un agente che ha chiesto una cosa sola.
+
+Quarto caso, non negoziabile: i percorsi sensibili. C:/Windows,
+Program Files, /etc, /bin e cosi' via non sono autorizzabili con
+nessuna delle tre scelte, e non fanno comparire il popup. Su quelli si
+nega e basta: accettare "una volta" per System32 significa che un
+click sbagliato costa il computer.
+
+Corretto un bug di sicurezza che i test hanno preso: il confronto dei
+percorsi sensibili non reggeva su Windows. Path.resolve() restituisce
+backslash, le liste erano scritte con la forward slash, e C:/Windows
+non veniva mai riconosciuto — quindi era autorizzabile con un clic. Un
+controllo che non scatta e' peggio di non averlo, perche' sembra esserci.
+
+Il vincolo e' sul TOOL, non sul prompt. run_shell prima bloccava in
+silenzio i percorsi esterni; ora chiede, con la stessa domanda. Se no,
+l'agente chiedeva il permesso per read_file e arrivarci con `cat`
+avrebbe reso il permesso inutile.
+
+Dichiarato cosa il controllo NON e': non e' un sandbox. Un curl o un
+python -c possono arrivare ovunque senza nominare un percorso. Fermiamo
+gli errori ovvi — .., percorsi assoluti, home, file di credenziali —
+che sono anche la maggior parte degli incidenti reali, e lo diciamo
+invece di far credere che sia totale.
+
+Se nessuno puo' rispondere (CLI, benchmark) si nega. Una domanda a
+cui non arriva risposta non e' una domanda, e indovinare "concesso"
+sarebbe il peggior default possibile.
+
+test_permessi.py (31/31) e test_permessi_integrazione.py (14/14): il
+percorso completo, dal tool che si ferma all'evento che parte alla
+risposta che torna. Il secondo prova anche che il tool resta fermo
+PRIMA che la risposta arrivi: misurare dopo significherebbe misurare la
+risposta, non l'attesa.

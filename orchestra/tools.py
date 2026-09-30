@@ -33,18 +33,48 @@ def _root() -> Path:
 
 ROOT = _root()
 
+# Il gate dei permessi, impostato dalla web UI all'avvio. None in CLI e
+# benchmark: senza nessuno a cui chiedere, la risposta e' negare.
+_GATE: Any = None
+
+
+def set_permission_gate(gate: Any) -> None:
+    global _GATE
+    _GATE = gate
+
+
+def _gate() -> Any:
+    return _GATE
+
 
 def _safe_path(rel: str) -> Path:
-    """Risolve un path relativo dentro ROOT, bloccando il traversal.
+    """Risolve un path, dentro la root per default, fuori solo se autorizzato.
 
     Legge la root al momento della chiamata, non quella congelata
     all'import: vedi `_root()`. Il benchmark cambia la root a ogni task.
+
+    Fuori dalla root non e' un errore: e' una domanda. Se c'e' qualcuno
+    in grado di rispondere — la web UI — gli si chiede, e la risposta
+    vale per questa volta, per la sessione, o per mai. Se non c'e'
+    nessuno (CLI, benchmark) si nega, perche' il default sicuro e'
+    negare e non tirare a indovinare.
     """
     root = _root()
     p = (root / rel).resolve()
-    if not str(p).startswith(str(root)):
+
+    dentro = str(p).startswith(str(root))
+    if dentro:
+        return p
+
+    gate = _gate()
+    if gate is None:
         raise ValueError(f"path fuori dal root consentito: {rel}")
-    return p
+    if gate.chiedi_all_utente(str(p), "leggere", f"{rel} → {p}"):
+        return p
+    raise PermissionError(
+        f"accesso fuori dalla cartella di lavoro non autorizzato: {p}. "
+        f"La cartella di lavoro è {root}."
+    )
 
 
 # --------------------------------------------------------------------------
@@ -164,6 +194,24 @@ def tool_run_shell() -> Tool:
     posix = _detect_posix_shell()
 
     def handler(command: str, timeout: int = 60) -> str:
+        # Il percorso e' il confine di sicurezza, e vale anche per la
+        # shell: se l'agente chiede il permesso per read_file e poi usa
+        # `cat` per arrivarci lo stesso, il permesso non protegge
+        # niente. Quindi si chiede ANCHE qui, con la stessa domanda.
+        #
+        # La domanda e' per il comando intero, non per il percorso
+        # singolo: un comando puo' toccare tre file, e chiedere per
+        # uno e poi eseguirlo cosi' com'e' sarebbe autorizzare tutto.
+        gate = _gate()
+        if gate is not None and _comando_tocca_fuori(command):
+            if not gate.chiedi_all_utente(
+                    str(_root()), "eseguire", f"comando: {command[:200]}"):
+                return (
+                    "NON ESEGUITO: comando fuori dalla cartella di lavoro, "
+                    f"permesso non concesso.\nIl root consentito è {_root()}.\n"
+                    f"Comando: {command[:200]}"
+                )
+
         denied = _check_shell_access(command)
         if denied:
             return (
@@ -243,6 +291,35 @@ _SUSPICIOUS = (
     r"sam\b",
     r"\.config/hermes",
 )
+
+
+def _comando_tocca_fuori(command: str) -> bool:
+    """Il comando punta fuori dalla cartella di lavoro?
+
+    Approssimazione dichiarata: non e' un sandbox e non puo' esserlo
+    qui dentro. Un `curl`, un `python -c` o una catena di pipe possono
+    arrivare ovunque senza mai nominare un percorso. Quello che
+    facciamo e' fermare gli errori ovvi — `..`, un percorso assoluto,
+    la home — che sono anche la maggior parte degli incidenti reali, e
+    chiedere il permesso su quelli invece di negare in silenzio.
+
+    Dichiararlo e' parte del lavoro: un controllo che sembra totale e
+    non lo e' e' peggio di nessun controllo, perche' ci si fiderebbe
+    troppo.
+    """
+    import re
+
+    low = command.lower()
+    if "../" in command or "..\\" in command:
+        return True
+    if re.search(r"[a-z]:[\\/]", low):
+        return True
+    if "/home/" in low or "/root/" in low or low.startswith("~/") or "/users/" in low:
+        return True
+    for pat in _SUSPICIOUS:
+        if re.search(pat, low):
+            return True
+    return False
 
 
 def _check_shell_access(command: str) -> str | None:

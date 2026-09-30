@@ -88,6 +88,27 @@
   <button id="btn-reset">Nuova</button>
 </header>
 
+<!-- Permessi: l'agente vuole uscire dalla cartella di lavoro.
+     Non e' un avviso, e' una domanda che blocca: il tool e' fermo
+     finche' qui non si sceglie. Tre scelte, e sono tre pulsanti e non
+     una frase da interpretare. I percorsi vietati non arrivano qui:
+     vengono negati prima e senza domanda, perche' accettarli sarebbe
+     una sciocchezza. -->
+<div id="permesso" class="permesso hidden">
+  <div class="permesso-box">
+    <b>L'agente chiede di uscire dalla cartella di lavoro</b>
+    <div class="permesso-percorso" id="permesso-percorso"></div>
+    <div class="permesso-riga dim small" id="permesso-dettaglio"></div>
+    <div class="permesso-permetti">
+      <button id="permesso-una" class="primary">Solo questa volta</button>
+      <button id="permesso-ses" class="ghost">Per questa sessione</button>
+      <button id="permesso-mai" class="ghost pericolo">Mai</button>
+    </div>
+    <div class="permesso-nota dim small">La sessione dura due ore, poi la domanda
+      ricomincia. «Mai» resta ricordato e puoi revocarlo da Opzioni.</div>
+  </div>
+</div>
+
 <!-- Opzioni: chiavi API e servizi gratuiti.
      Il pannello piu' sensibile dell'app, perche' qui si scrivono le
      credenziali. Per questo non mostra mai un valore gia' salvato: solo

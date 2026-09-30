@@ -116,6 +116,65 @@ function addNote(text) {
 
 // Tool: intestazione cliccabile + output richiudibile.
 const openTools = new Set();
+
+// ------------------------------------------------------------- Permessi
+// L'agente si e' fermo e aspetta. Questa e' l'unica schermata in cui
+// il tempo conta: senza risposta, dopo cinque minuti il server nega
+// da solo. Chiudere la scheda NON e' "nega" — e' lasciare l'agente
+// appeso. Per questo la chiusura risponde "mai" esplicitamente, e i
+// pulsanti non si disattivano fino a quando la risposta non e' partita.
+const permessoBox = $("permesso");
+let permessoAttivo = null;
+
+function mostraPermesso(d) {
+  permessoAttivo = d.id;
+  $("permesso-percorso").textContent = d.percorso || "";
+  $("permesso-dettaglio").textContent =
+    "azione: " + (d.azione || "") + (d.dettaglio ? " — " + d.dettaglio : "");
+  permessoBox.classList.remove("hidden");
+  $("permesso-una").focus();
+}
+
+function nascondiPermesso() {
+  permessoBox.classList.add("hidden");
+  permessoAttivo = null;
+}
+
+async function rispondiPermesso(scelta) {
+  if (!permessoAttivo) return;
+  const id = permessoAttivo;
+  // blocc subito: due clic non devono mandare due risposte, e la
+  // seconda arriverebbe su una domanda gia' chiusa
+  permessoAttivo = null;
+  for (const b of ["permesso-una", "permesso-ses", "permesso-mai"]) {
+    $(b).disabled = true;
+  }
+  nascondiPermesso();
+  try {
+    await fetch("/api/permesso", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, scelta }),
+    });
+  } catch (e) {
+    // il server non ha ricevuto. Dopo cinque minuti nega da solo, e
+    // quello e' l'esito sicuro: non riprovare, non insistere.
+    addText("error", "risposta non arrivata: " + e);
+  } finally {
+    for (const b of ["permesso-una", "permesso-ses", "permesso-mai"]) {
+      $(b).disabled = false;
+    }
+  }
+}
+
+on($("permesso-una"), "click", () => rispondiPermesso("una_volta"));
+on($("permesso-ses"), "click", () => rispondiPermesso("sessione"));
+on($("permesso-mai"), "click", () => rispondiPermesso("mai"));
+
+// chiudere il pannello Opzioni mentre c'e' una domanda: la domanda
+// resta, non e' un avviso che si nasconde
+on($("btn-bench"), "click", () => { /* il benchmark non copre il permesso */ });
+
 function addTool(name, args, key) {
   const t = el("div", "tool");
   // data-key: serve a `tool_end` per trovare il tool giusto quando ce n'e'
@@ -187,6 +246,11 @@ function handle(kind, d) {
       scrollDown();
       break;
     }
+    case "permission_request":
+      // l'agente si e' fermo e aspetta. Va mostrato subito e per
+      // primo: e' l'unico evento che blocca tutto il resto.
+      mostraPermesso(d);
+      break;
     case "turn_start":
       // segnalava l'inizio del turno. Non crea piu' nulla: il blocco
       // finiva sopra il messaggio dell'utente e la risposta finiva dentro.
