@@ -1,4 +1,4 @@
-(window.__diagFiles = window.__diagFiles || []); window.__diagFiles.push('core');
+(function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("core")<0)window.__diagFiles.push("core");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"core");}})();
 
 "use strict";
 

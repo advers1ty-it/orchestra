@@ -1,4 +1,4 @@
-(window.__diagFiles = window.__diagFiles || []); window.__diagFiles.push('panels');
+(function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels")<0)window.__diagFiles.push("panels");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels");}})();
 // -------------------------------------------------------------- benchmark
 
 const benchPanel = $("bench");

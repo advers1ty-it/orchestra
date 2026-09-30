@@ -344,6 +344,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/":
             self._html(UI_PATH)
+        elif path == "/app.js":
+            self._bundle()
         elif path.endswith(".js"):
             self._static(path[1:], "text/javascript; charset=utf-8")
         elif path.endswith(".css"):

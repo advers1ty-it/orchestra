@@ -66,20 +66,35 @@
                   lines.push("selettore: " + voci + " voci, " +
                              (mp.disabled ? "DISABILITATO" : "attivo"));
                 }
-                // quali file JS sono arrivati davvero. Un file che non e' nella
-                // lista non e' stato caricato: e' una cosa diversa da un file che
-                // ha caricato e ha lanciato un errore.
-                var f = window.__diagFiles || [];
-                var mancanti = ["core", "panels", "main"].filter(function (n) {
-                  return f.indexOf(n) < 0;
-                });
-                if (mancanti.length) {
-                  add("FILE JS NON ARRIVATI: " + mancanti.join(", "));
-                  add("  -> il browser non li ha scaricati (404? rete? cache?)");
-                } else {
-                  lines.unshift("js: " + f.join(" + "));
-                }
-                render();
+                // I marcatori dicono se i file hanno ESEGUITO. Ma distinguere
+                      // "il browser non li ha chiesti" da "li ha chiesti e ha ricevuto
+                      // un rifiuto" e' la domanda giusta: la facciamo con fetch.
+                      var f = window.__diagFiles || [];
+                      var mancanti = ["core", "panels", "main"].filter(function (n) {
+                        return f.indexOf(n) < 0;
+                      });
+                      if (!mancanti.length) {
+                        lines.unshift("js eseguiti: " + f.join(" + "));
+                        render();
+                        return;
+                      }
+                      // non eseguono: chiediamo noi gli stessi file e riportiamo lo stato
+                      lines.unshift("js NON eseguiti: " + mancanti.join(","));
+                      Promise.all(mancanti.map(function (n) {
+                        return fetch("/" + n + ".js", { cache: "no-store" })
+                          .then(function (r) {
+                            return n + " -> HTTP " + r.status + " " +
+                                   (r.headers.get("content-type") || "?") + " " +
+                                   (r.headers.get("content-length") || "?") + " byte";
+                          })
+                          .catch(function (e) { return n + " -> FETCH FALLITA: " + e.message; });
+                      })).then(function (risposte) {
+                        risposte.forEach(function (r) { lines.push("  " + r); });
+                        lines.push("  -> se tornano HTTP 200, il server va bene: e' il browser");
+                        lines.push("     che non esegue i file. Guarda DevTools > Network.");
+                        render();
+                      });
+                      render();
       }, 1500);
       render();
     });
@@ -88,6 +103,11 @@
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
+
+<!-- Ogni file JS ci scrive il proprio nome quando esegue. Se questo
+     elemento si riempie, i file partono; se resta vuoto, non partono.
+     Niente console da aprire, niente supposizioni. -->
+<div id="diag-files" style="position:fixed;top:0;right:0;z-index:9999;background:#14322a;color:#9fe8c4;font:12px ui-monospace,Consolas,monospace;padding:4px 10px;border:1px solid #3ecf8e;border-radius:0 0 0 6px;">&nbsp;</div>
 
 <header>
   <div class="logo">Orches<span>tra</span></div>
@@ -161,8 +181,8 @@
   </div>
 </footer>
 
-<script src="/core.js" defer></script>
-<script src="/panels.js" defer></script>
-<script src="/main.js" defer></script>
+<script src="/core.js"></script>
+<script src="/panels.js"></script>
+<script src="/main.js"></script>
 </body>
 </html>

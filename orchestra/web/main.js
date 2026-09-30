@@ -1,4 +1,4 @@
-(window.__diagFiles = window.__diagFiles || []); window.__diagFiles.push('main');
+(function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("main")<0)window.__diagFiles.push("main");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"main");}})();
 // ------------------------------------------------------------- azioni
 async function send() {
   const text = input.value.trim();

@@ -60,8 +60,14 @@ check("l'unico script inline e' la diagnostica",
 check("la diagnostica c'è", "__diagErrors" in html)
 check("la diagnostica viene prima dei file esterni",
       html.index("__diagErrors") < html.index("script src"))
-check("tutti gli script hanno defer", html.count("defer") == len(scripts),
-      f"{html.count('defer')} defer per {len(scripts)}")
+# Gli script stanno in fondo al body SENZA defer: il browser li esegue in
+# ordine documentale, quindi non serve defer per garantire l'ordine, e toglie
+# un attributo da interpretare. I file sono gia' in coda al body, quindi
+# eseguono a DOM pronto.
+check("gli script sono in fondo al body",
+      html.index("<body") < html.index("script src"), "prima dei tag c'e' altro")
+check("nessuno script usa defer", " defer" not in html,
+      "defer non serve e aggiunge un modo di fallire")
 check("core.js viene per primo", scripts and "core" in scripts[0], str(scripts))
 
 # ---------------------------------------------------------------- esecuzione
