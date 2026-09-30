@@ -232,13 +232,25 @@ globalThis.Option = function (text, value) {
 globalThis.document = {
   createElement: (t) => new El(t),
   getElementById: mk,
-  createTextNode: (t) => { const e=new El("#text"); e._text=t; return e; },
+  createTextNode: (t) => { const e = new El("#text"); e._text = t; return e; },
   addEventListener: () => {},
   body: new El("body"),
 };
+// i marcatori dei file scrivono su window.__diagFiles: senza questo, il
+// primo file che carica la UI muore a runtime e il test misura il mock
+// invece del codice. E' gia' successo con altri dettagli del DOM.
+globalThis.window = globalThis;
+globalThis.addEventListener = () => {};
 globalThis.getComputedStyle = () => ({});
 globalThis.EventSource = class { constructor(){} close(){} };
-globalThis.fetch = async () => ({ ok:true, json: async()=>({ok:true}) });
+globalThis.fetch = async (u) => {
+  if (u === "/api/models")
+    return { ok:true, status:200, json: async () => ({ provider:"or", current:"a:free", models:[
+      {id:"vendor/a:free", short:"a", free:true, context:100000, prompt_price:0, scores:{}, current:true}]}) };
+  if (u === "/api/state")
+    return { ok:true, status:200, json: async () => ({ready:true, version:"0.4.0", messages:[], busy:false}) };
+  return { ok:true, status:200, json: async () => ({}) };
+};
 globalThis.autoGrow = () => {};
 
 const out = {};

@@ -140,6 +140,9 @@ globalThis.document = {
   createTextNode: function (t) { const e = mkEl("#text"); e._text = String(t); return e; },
   addEventListener: function () {}, body: mkEl("body"),
 };
+// i marcatori dei file scrivono su window.__diagFiles
+globalThis.window = globalThis;
+globalThis.addEventListener = function () {};
 globalThis.getComputedStyle = function () { return {}; };
 globalThis.CSS = { escape: function (s) { return String(s); } };
 globalThis.EventSource = class { constructor(u) { this.url = u; } close() {} };
