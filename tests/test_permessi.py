@@ -210,6 +210,45 @@ check("dopo la revoca chiede di nuovo",
       g13.valuta(file_fuori, "leggere") == "chiedi",
       g13.valuta(file_fuori, "leggere"))
 
+print("\n[13] Il permesso su una cartella vale per quello che c'e' dentro")
+# Concedere "Documenti" senza questo non serve: il primo `ls
+# Documenti/2024` chiede di nuovo, e l'utente preme "questa volta" a
+# ogni livello di profondita'. Il permesso che hai dato e' su una
+# cartella, non su un indirizzo esatto.
+cart = os.path.join(fuori, "progetto")
+os.makedirs(os.path.join(cart, "src", "deep"), exist_ok=True)
+g13 = Gate(root=root, chiedi=lambda r: Risposta("sessione"))
+check("la cartella non e' concessa all'inizio",
+      g13.valuta(cart, "leggere") == "chiedi")
+g13.chiedi_all_utente(cart, "leggere")
+check("dopo il permesso e' concessa", g13.valuta(cart, "leggere") == "concesso")
+check("una sottocartella e' concessa",
+      g13.valuta(os.path.join(cart, "src"), "leggere") == "concesso",
+      g13.valuta(os.path.join(cart, "src"), "leggere"))
+check("due livelli sotto e' ancora concesso",
+      g13.valuta(os.path.join(cart, "src", "deep"), "leggere") == "concesso",
+      g13.valuta(os.path.join(cart, "src", "deep"), "leggere"))
+check("ma un fratello no",
+      g13.valuta(os.path.join(fuori, "altro"), "leggere") == "chiedi")
+# e la revoca della cartella revoca anche i figli
+g13.revoca(cart)
+check("revocando la cartella, i figli tornano da chiedere",
+      g13.valuta(os.path.join(cart, "src", "deep"), "leggere") == "chiedi")
+
+print("\n[14] Un percorso SENSIBILE dentro una cartella concessa resta negato")
+# Se concedessi /home e l'agente chiedesse /home/.ssh/id_rsa, la
+# concessione non deve aprire il cassetto: i sensibili si negano
+# SEMPRE, prima di guardare qualsiasi concessione.
+g14 = Gate(root=root, chiedi=lambda r: Risposta("sessione"))
+home = os.path.join(fuori, "home")
+os.makedirs(home, exist_ok=True)
+g14.chiedi_all_utente(home, "leggere")
+check("la cartella e' concessa", g14.valuta(home, "leggere") == "concesso")
+nascosto = os.path.join(home, ".ssh", "id_rsa")
+check("ma dentro .ssh resta negato",
+      g14.valuta(nascosto, "leggere") == "negato",
+      g14.valuta(nascosto, "leggere"))
+
 shutil.rmtree(root, ignore_errors=True)
 shutil.rmtree(fuori, ignore_errors=True)
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")

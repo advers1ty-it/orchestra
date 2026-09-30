@@ -158,6 +158,27 @@ class Gate:
 
     # -- decisione ----------------------------------------------------------
 
+    def _concesso_anche_figli(self, p: Path, chiave: str, scade: float) -> bool:
+        """Il permesso su una cartella vale anche per quello che c'e' dentro.
+
+        Senza, concedere "Documenti" non serve a niente: il primo
+        `ls Documenti/2024` chiede di nuovo, e poi `2024/marzo`, e
+        l'utente preme "questa volta" ogni volta che scende di un
+        livello. Il permesso che hai dato e' su una cartella, non su un
+        indirizzo esatto.
+        """
+        try:
+            padre = p.parent
+        except Exception:  # noqa: BLE001
+            return False
+        while True:
+            kp = self._chiave(padre)
+            if kp == chiave:
+                return True
+            if padre == padre.parent:  # arrivati alla radice
+                return False
+            padre = padre.parent
+
     def valuta(self, percorso: str, azione: str,
                dettaglio: str = "") -> str:
         """Tre esiti: "concesso", "chiedi", "negato".
@@ -187,10 +208,15 @@ class Gate:
                 return "negato"
             # 4. concesso per la sessione, se non e' scaduto
             scade = self._sessione.get(k)
+            ora = time.time()
             if scade is not None:
-                if scade > time.time():
+                if scade > ora:
                     return "concesso"
                 del self._sessione[k]
+            # 4b. concesso perché sta dentro una cartella già concessa
+            for kc, sc in self._sessione.items():
+                if sc > ora and self._concesso_anche_figli(p, kc, sc):
+                    return "concesso"
         return "chiedi"
 
     # -- la domanda ---------------------------------------------------------

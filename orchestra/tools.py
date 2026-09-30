@@ -204,13 +204,15 @@ def tool_run_shell() -> Tool:
         # uno e poi eseguirlo cosi' com'e' sarebbe autorizzare tutto.
         gate = _gate()
         fuori = _percorso_fuori(command)
+        concesso = False
         if gate is not None and fuori:
             # si chiede sul percorso REALE che il comando tocca, non
             # sulla root: chiedere "questa cartella e' fuori dalla root"
             # indicando la root stessa e' una domanda con la risposta
             # gia' scritta, e non e' quello che e' successo
-            if not gate.chiedi_all_utente(fuori, "eseguire",
-                                           f"comando: {command[:200]}"):
+            concesso = gate.chiedi_all_utente(fuori, "eseguire",
+                                              f"comando: {command[:200]}")
+            if not concesso:
                 return (
                     "NON ESEGUITO: comando fuori dalla cartella di lavoro, "
                     f"permesso non concesso per {fuori}.\n"
@@ -226,12 +228,22 @@ def tool_run_shell() -> Tool:
                 f"chiedere il permesso."
             )
 
-        denied = _check_shell_access(command)
-        if denied:
-            return (
-                f"BLOCCATO per sicurezza: {denied}\n"
-                f"Il root consentito è {ROOT}. Usa path relativi dentro il progetto."
-            )
+        # _check_shell_access gira SOLO senza gate, oppure quando il gate
+        # non ha avuto niente da dire (nessun percorso fuori).
+        #
+        # Con il gate che ha concesso, farlo comunque era unENDO di
+        # rispondere due volte: l'utente autorizzava "per questa sessione",
+        # il gate concedeva, e subito dopo questo controllo diceva "BLOCCATO
+        # per sicurezza". Due risposte contraddittorie alla stessa domanda,
+        # e la seconda vinceva. Il gate e' l'autorita': e' piu' severo,
+        # perche' nega i percorsi sensibili senza domanda.
+        if not (gate is not None and fuori and concesso):
+            denied = _check_shell_access(command)
+            if denied:
+                return (
+                    f"BLOCCATO per sicurezza: {denied}\n"
+                    f"Il root consentito è {ROOT}. Usa path relativi dentro il progetto."
+                )
 
         shell_cmd = command
         if posix:
