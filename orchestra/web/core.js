@@ -357,9 +357,15 @@ async function loadModels() {
       const tc = m.tool_calling;
       const tool = tc === true ? "" : (tc === false ? "  [niente tool]" : "  [tool?]");
       const punteggio = punteggioPerScope(m, scopeAttivo);
+      // Il costo per 10k token va nell'opzione insieme al prezzo per
+      // milione. Sono due numeri che dicono cose diverse: $0.01/1M e
+      // $30/1M su un turno da 10k token sono un centesimo e trenta
+      // centesimi, ma nel menu sembrano lontanissimi. Il costo della
+      // richiesta e' quello che decide, quindi e' quello che si vede.
       const o = new Option(
         m.short + tool + (punteggio ? "  " + punteggio : "") +
-        ctx_label(m.context) + " · " + price_label(m), m.id);
+        ctx_label(m.context) + " · " + price_label(m) +
+        costo_breve(m, 10000), m.id);
       modelPick.appendChild(o);
     }
     // il modello corrente: si mette in mezzo solo se esiste davvero
@@ -411,12 +417,59 @@ async function loadModels() {
 function ctx_label(context) {
   return context ? " " + Math.round(context / 1000) + "k" : "";
 }
+// I prezzi OpenRouter sono per TOKEN, non per milione. 5e-07 non e'
+// "gratis con qualche cifra": e' $0.50 per un milione di token. Il
+// codice prima lo stampava cosi' com'era e con toFixed(4), e il
+// risultato era che 377 modelli su 379 dicevano "0.0000" — il 99% del
+// menu diceva la stessa cosa, quindi non diceva niente.
+//
+// Perche' succedeva: i prezzi reali vanno da 7e-08 a 3e-05, e quattro
+// decimali su 5e-07 danno 0.0000. Non era un problema di arrotondamento:
+// era un problema di unita' di misura, e stavamo mostrando arrotondati
+// dei centesimi di centesimo.
+//
+// Si divide per un milione e si sceglie il formato sul valore COSI'.
+// Sotto 0.01 servono 4 decimali per non perdere il senso; sopra, 2
+// bastano e 4 fanno solo rumore.
 function price_label(m) {
   const p = Number(m.prompt_price);
   if (m.free || !isFinite(p) || p === 0) return "free";
-  // i prezzi OpenRouter sono stringhe come "8e-07": senza Number diventano
-  // NaN e toFixed() produce "NaN" nell'etichetta
-  return "$" + p.toFixed(p < 0.01 ? 4 : 2) + "/1M";
+  // -1 e' il prezzo di OpenRouter per "variabile": non e' gratis, e non
+  // e' nemmeno un numero. Mostrarlo come -1 fa sembrare un modello a
+  // pagamento quando puo' costare quanto vuole.
+  if (p < 0) return "prezzo variabile";
+  const per_milione = p * 1_000_000;
+  const cifre = per_milione < 0.01 ? 4 : (per_milione < 1 ? 3 : 2);
+  return "$" + per_milione.toFixed(cifre) + "/1M";
+}
+
+// Quanto costa UNA richiesta, non quanto costa il milione. E' il numero
+// che decide: 30 $/1M su un turno da 10k token sono 30 centesimi, e
+// 0.01 $/1M sono un centesimo. Senza questo, confrontare due modelli
+// significa fare conti a mente dentro la testa.
+//
+// Il formato segue il numero, non l'abitudine: sotto un centesimo si
+// vedono i decimali (un centesimo arrotondato a zero e' un centesimo
+// che sembra gratis), sopra si no.
+function costo_stimato(m, token) {
+  const p = Number(m.prompt_price);
+  if (m.free || !isFinite(p) || p <= 0) return null;
+  // p e' $/TOKEN. Il costo e' semplicemente prezzo per token per numero
+  // di token: 0.8 $/1M = 8e-07 $/token, e su 10000 token fa 0.008 $.
+  //
+  // Prima c'era una divisione per 1000 in piu', e il risultato era
+  // 0.000008 — mille volte troppo piccolo, e con la formattazione
+  // diventava "0.0000" per ogni modello sotto i 3 $/1M. Il numero
+  // sembrava plausibile, quindi il difetto non si vedeva: sembrava
+  // solo un prezzo basso.
+  return p * (token || 0);
+}
+
+function costo_breve(m, token) {
+  const c = costo_stimato(m, token);
+  if (c === null) return "";
+  const testo = c < 0.01 ? c.toFixed(4) : "$" + c.toFixed(2);
+  return "  ·  ~" + testo + "/" + Math.round(token / 1000) + "k";
 }
 
 on(modelPick, "change", async () => {

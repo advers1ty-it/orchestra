@@ -28,6 +28,7 @@ SUITES = [
     ("eventi-bridge", "test_eventi_bridge.py", True),
     ("eventi-client", "test_eventi_client.py", True),
     ("switch-servizio", "test_switch_servizio.py", True),
+    ("prezzi", "test_prezzi.py", True),
     ("benchmark", "test_benchmark.py", True),
     ("e2e", "test_e2e.py", False),
 ]
