@@ -47,8 +47,19 @@ check("ogni file dichiarato esiste",
       all(os.path.exists(os.path.join(WEB, s.lstrip("/"))) for s in scripts), str(scripts))
 check("ogni CSS dichiarato esiste",
       all(os.path.exists(os.path.join(WEB, s.lstrip("/"))) for s in styles), str(styles))
-check("non resta JS inline", "<script>" not in html)
-check("non resta CSS inline", "<style>" not in html)
+# La diagnostica e' inline per scelta: deve girare anche se i file
+# esterni non arrivano, altrimenti non puoi sapere che non sono arrivati.
+# E' l'unico blocco inline ammesso, ed e' identificabile.
+_inline_scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+check("nessun CSS inline oltre alla diagnostica", html.count("<style>") <= 1,
+      f"{html.count('<style>')} blocchi style")
+check("l'unico script inline e' la diagnostica",
+      len(_inline_scripts) <= 1 and
+      (not _inline_scripts or "__diagErrors" in _inline_scripts[0]),
+      f"{len(_inline_scripts)} script inline")
+check("la diagnostica c'è", "__diagErrors" in html)
+check("la diagnostica viene prima dei file esterni",
+      html.index("__diagErrors") < html.index("script src"))
 check("tutti gli script hanno defer", html.count("defer") == len(scripts),
       f"{html.count('defer')} defer per {len(scripts)}")
 check("core.js viene per primo", scripts and "core" in scripts[0], str(scripts))
