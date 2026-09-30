@@ -47,25 +47,36 @@ check("ogni CSS dichiarato esiste",
       all(os.path.exists(os.path.join(WEB, s.lstrip("/"))) for s in styles), str(styles))
 # La diagnostica e' inline per scelta: deve girare anche se i file
 # esterni non arrivano, altrimenti non puoi sapere che non sono arrivati.
-# E' l'unico blocco inline ammesso, ed e' identificabile.
+# E' l'unico blocco inline ammesso, ed e' identificabile dal marcatore.
+# Il nome del marcatero e' cambiato quando la diagnostica e' diventata
+# permanente (da __diagErrors a __diagFiles): e il test ne' si accorgeva
+# ne' segnalava niente, perche' guardava una stringa sparita. Meglio
+# riconoscerlo per quello che fa, non per un nome che puo' cambiare.
+MARCATORE_DIAG = "__diagFiles"
 _inline_scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
 check("nessun CSS inline oltre alla diagnostica", html.count("<style>") <= 1,
       f"{html.count('<style>')} blocchi style")
 check("l'unico script inline e' la diagnostica",
       len(_inline_scripts) <= 1 and
-      (not _inline_scripts or "__diagErrors" in _inline_scripts[0]),
+      (not _inline_scripts or MARCATORE_DIAG in _inline_scripts[0]),
       f"{len(_inline_scripts)} script inline")
-check("la diagnostica c'è", "__diagErrors" in html)
+check("la diagnostica c'è", MARCATORE_DIAG in html,
+      "manca il marcatore della diagnostica inline")
 check("la diagnostica viene prima dei file esterni",
-      html.index("__diagErrors") < html.index("script src"))
-# Gli script stanno in fondo al body SENZA defer: il browser li esegue in
-# ordine documentale, quindi non serve defer per garantire l'ordine, e toglie
-# un attributo da interpretare. I file sono gia' in coda al body, quindi
-# eseguono a DOM pronto.
-check("gli script sono in fondo al body",
-      html.index("<body") < html.index("script src"), "prima dei tag c'e' altro")
-check("nessuno script usa defer", " defer" not in html,
-      "defer non serve e aggiunge un modo di fallire")
+      html.index(MARCATORE_DIAG) < html.index("script src"))
+check("la diagnostica ascolta gli errori",
+      'addEventListener("error"' in html,
+      "senza ascoltare gli errori la barra non serve a nulla")
+# Lo script esterno sta in <head> CON defer. E' la combinazione che
+# funziona: in head gira presto (prima che il body esista, quindi
+# getElementById restituisce null e il bundle muore alla prima riga),
+# e defer rimanda l'esecuzione a DOM pronto, nell'ordine dei file. Senza
+# defer il bundle parte a meta' pagina e muore; con lo script in fondo
+# al body non partiva proprio. Entrambi i modi sono stati provati.
+check("lo script esterno e' in head", html.index("script src") < html.index("<body"),
+      "non e' in head")
+check("lo script esterno ha defer", " defer" in html,
+      "senza defer gira prima che il body esista")
 # Un solo script esterno, non tre. Tre richieste = tre modi in cui la
 # pagina resta a meta'; e il sintomo era esattamente quello: CSS
 # applicato, script mai eseguiti. I file restano separati su disco,

@@ -81,6 +81,19 @@ mancanti = sorted(id_js - id_html)
 check("ogni id cercato esiste nell'HTML", not mancanti, f"mancano: {mancanti}")
 check("il codice cerca un buon numero di id", len(id_js) >= 8, str(len(id_js)))
 
+# $() e' getElementById, quindi il prefisso '#' non esiste: $("modello")
+# cerca un elemento chiamato "modello", non "#modello", e restituisce
+# null. Il sintomo e' silenzioso — un handler agganciato a null muore
+# con "Cannot read properties of null" — ed e' gia' successo.
+con_graffa = re.findall(r'\$\("#([^"]+)"\)', bundle)
+check("nessun id con il prefisso # dentro $()", not con_graffa, str(con_graffa))
+# lo stesso vale per querySelector: li' il # serve, ma i selettori
+# CSS scritti a mano sono facili da sbagliare in un altro modo
+qs = re.findall(r'querySelector\("([^"]+)"\)', bundle)
+check("i selettori CSS sono validi",
+      all(s.startswith((".", "#", "[", "a", "b", "i", "s", "h", "n")) or s[0].isalpha()
+          for s in qs if s), str(qs))
+
 print("\n[4] Nessun elemento puo' far esplodere il caricamento")
 # una riga come X.addEventListener uccide tutto quello che segue se X
 # e' null. Meglio accorgersene qui che a schermo.

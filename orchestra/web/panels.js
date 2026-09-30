@@ -340,25 +340,124 @@ const routingCat = $("routing-cat");
 const routingOut = $("routing-out");
 const routingTop = $("routing-top");
 
+// Lo scope dell'header e il selettore del pannello sono lo stesso
+// controllo in due posti. Se potessero divergere, la raccomandazione
+// mostrerebbe una categoria e i punteggi nell'header un'altra — quindi
+// qui si tiene il sincrone, non si duplica lo stato.
+const scopePick = $("scope-pick");
+const scopeNote = $("scope-note");
+
+// ---- lo scope nell'header: scegli il lavoro, il modello si sceglie da solo
+// Con quanti modelli misurati una raccomandazione e' credibile? Con uno
+// solo non lo e': e' un'anomalia, non un primato. "web" e "app" hanno
+// una misurazione ciascuna perche' una sola corsa su tutte le categorie
+// le ha sfiorate, e consigliare quel modello con tanta sicurezza
+// mentirebbe. Sopra due misurazioni si parla; sotto, si avverte.
+const MIN_PER_CONSIGLIARE = 2;
+
+function misuratiPer(scope) {
+  return tuttiModelli
+    .filter((m) => typeof (m.scores || {})[scope] === "number")
+    .sort((a, b) => b.scores[scope] - a.scores[scope]);
+}
+
+function migliorePer(scope) {
+  return misuratiPer(scope)[0] || null;
+}
+
+function applicaScope(scope) {
+  scopeAttivo = scope || "";
+  if (routingCat && scope) routingCat.value = scope;
+  // i punteggi nelle opzioni cambiano con lo scope: senza rifare
+  // loadModels, il selettore mostrerebbe i numeri della categoria vecchia
+  loadModels();
+  if (!scope) {
+    scopeNote.textContent = "";
+    scopeNote.className = "scope-note";
+    return;
+  }
+  const candidati = misuratiPer(scope);
+  const nome = CAT_ETICHETTE[scope] || scope;
+  if (!candidati.length) {
+    // non misurato: si dice, non si indovina
+    scopeNote.textContent = nome + ": nessuno misurato";
+    scopeNote.className = "scope-note avviso";
+    return;
+  }
+  if (candidati.length < MIN_PER_CONSIGLIARE) {
+    const unico = candidati[0];
+    scopeNote.textContent = nome + ": pochi dati (" + candidati.length +
+      " misurato). Migliore " + unico.short + " " +
+      unico.scores[scope].toFixed(2) + ", ma conviene misurarne altri";
+    scopeNote.className = "scope-note attesa";
+    return;
+  }
+  const best = candidati[0];
+  const attuale = modelPick.value;
+  if (attuale === best.id) {
+    scopeNote.textContent = "già il migliore per " + nome;
+    scopeNote.className = "scope-note ok";
+    return;
+  }
+  if (busy) {
+    // durante un turno non si cambia modello sotto gli occhi di chi
+    // sta guardando: si dice cosa serve e si applica dopo
+    scopeNote.textContent = "dopo il turno: " + best.short;
+    scopeNote.className = "scope-note attesa";
+    return;
+  }
+  scopeNote.textContent = "→ " + best.short + " " + best.scores[scope].toFixed(2);
+  scopeNote.className = "scope-note ok";
+  const sw = $("scope-note");
+  sw.style.cursor = "pointer";
+  sw.onclick = async () => {
+    try {
+      const r = await fetch("/api/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: best.id }),
+      });
+      if (r.ok) { loadModels(); scopeNote.textContent = "ora: " + best.short; }
+    } catch (e) { scopeNote.textContent = "cambio fallito: " + e; }
+  };
+}
+
+on(scopePick, "change", () => applicaScope(scopePick.value));
+
 function disegnaCategorieRouting() {
   if (!routingCat) return;
   const misurate = new Set();
   for (const m of tuttiModelli) {
     for (const c of Object.keys(m.scores || {})) misurate.add(c);
   }
-  routingCat.replaceChildren();
   const ordine = ["js", "web", "app", "code", "reasoning", "instruction", "tool_use", "writing", "extraction"];
-  for (const c of ordine) {
-    if (!misurate.has(c)) continue;
+  const utili = ordine.filter((c) => misurate.has(c));
+
+  routingCat.replaceChildren();
+  for (const c of utili) {
     routingCat.appendChild(new Option(CAT_ETICHETTE[c] || c, c));
   }
   if (!routingCat.options.length) {
     routingCat.appendChild(new Option("nessuna categoria misurata", ""));
   }
-  // un riassunto delle non misurate: e' l'invito a misurare
-  const mancanti = ordine.filter((c) => !misurate.has(c));
-  if (routingOut && mancanti.length) {
-    routingOut.textContent = "non ancora misurato: " + mancanti.join(", ");
+
+  // l'header ha gli stessi valori, piu' "tutto": e' la vista di tutti
+  // i giorni, e non ha senso costringerla a una categoria sola
+  if (scopePick) {
+    const valoreCorrente = scopeAttivo;
+    scopePick.replaceChildren();
+    scopePick.appendChild(new Option("tutto", ""));
+    for (const c of utili) {
+      scopePick.appendChild(new Option(CAT_ETICHETTE[c] || c, c));
+    }
+    scopePick.value = utili.includes(valoreCorrente) ? valoreCorrente : "";
+    scopePick.disabled = !utili.length;
+  }
+
+  if (routingOut) {
+    const mancanti = ordine.filter((c) => !misurate.has(c));
+    routingOut.textContent = mancanti.length
+      ? "non ancora misurato: " + mancanti.join(", ") : "";
   }
 }
 

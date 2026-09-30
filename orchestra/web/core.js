@@ -21,6 +21,23 @@ const btnSend = $("btn-send"), btnCancel = $("btn-cancel"), btnReset = $("btn-re
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
 const modelPick = $("model-pick");
 
+// Lo scope attivo e' la categoria di lavoro scelta nell'header. Vive qui
+// perche' loadModels() la usa per scrivere il punteggio dentro ogni
+// opzione: la stessa variabile governa anche la raccomandazione, e due
+// copie di "quale scope e'" possono divergere senza che nessuno se ne
+// accorga.
+let scopeAttivo = "";
+
+// Il punteggio che va mostrato nell'opzione. Su scope vuoto non mostriamo
+// un numero: sarebbe una media di cose diverse. Con uno scope scelto, il
+// numero vero, e "—" quando quel modello non e' stato misurato li'.
+function punteggioPerScope(m, scope) {
+  if (!scope) return "";
+  const s = m.scores || {};
+  const v = s[scope];
+  return (typeof v === "number") ? v.toFixed(2) : "—";
+}
+
 let busy = false;
 let ready = false;
 
@@ -262,7 +279,14 @@ async function loadModels() {
       // un <option> vero, con value e testo impostati nel modo giusto.
       // Con createElement + appendChild il <select> restava vuoto in
       // alcuni browser, perche' mancava l'attributo implicito.
-      const o = new Option(m.short + ctx_label(m.context) + " · " + price_label(m), m.id);
+      //
+      // Il punteggio va nell'opzione, non in una tabella a parte: e' la
+      // domanda che stai facendo ("quanto e' bravo su QUELLO che devo
+      // fare") e la risposta deve stare dove scegli.
+      const punteggio = punteggioPerScope(m, scopeAttivo);
+      const o = new Option(
+        m.short + (punteggio ? "  " + punteggio : "") +
+        ctx_label(m.context) + " · " + price_label(m), m.id);
       modelPick.appendChild(o);
     }
     // il modello corrente: se non c'è tra le opzioni, aggiungilo, altrimenti

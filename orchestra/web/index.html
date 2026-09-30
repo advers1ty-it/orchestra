@@ -65,9 +65,22 @@
   <span class="stamp" id="stamp">UI-4</span>
   <div class="grow"></div>
   <button id="btn-bench" class="ghost">Benchmark</button>
+
+  <!-- Lo scopo sta PRIMA del modello, non in un pannello: la domanda
+       "che lavoro stai facendo" viene prima di "con quale modello", e
+       se il modello e' gia' scelto per te non ha senso mostrarlo
+       per primo. Cambiando scopo, Orchestra sceglie il modello. -->
+  <label class="scope-wrap" title="Che lavoro stai facendo">
+    <span class="scope-label">scopo</span>
+    <select id="scope-pick" disabled>
+      <option value="">tutto</option>
+    </select>
+  </label>
   <select id="model-pick" title="Modello in uso" disabled>
     <option value="">modello…</option>
   </select>
+  <span id="scope-note" class="scope-note"></span>
+
   <div class="dot" id="dot"></div>
   <div class="stat" id="stats">—</div>
   <button id="btn-cancel" disabled>Annulla</button>

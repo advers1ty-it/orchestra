@@ -1,0 +1,36 @@
+lo scope nell'header: scegli il lavoro, il modello si sceglie da solo
+
+Il routing stava in un pannello separato. Ma la domanda "che lavoro
+stai facendo" viene PRIMA di "con quale modello", e metterla in fondo a
+tre schermate di scorrimento non aiuta nessuno.
+
+- <select id=scope-pick> nell'header, prima del modello. Solo le
+  categorie effettivamente misurate, piu' "tutto"
+- il punteggio va dentro ogni <option> del selettore modello: e' la
+  domanda che stai facendo e la risposta sta dove scegli. Con scope
+  vuoto non si mostra un numero, perche' sarebbe una media di cose
+  diverse
+- cambiando scope, Orchestra propone il migliore con un clic
+- durante un turno non cambia modello sotto gli occhi di chi guarda:
+  dice "dopo il turno: X"
+- i due selettori (header e pannello) restano sincroni: due copie
+  dello stesso stato divergono senza che nessuno se ne accorga
+
+MIN_PER_CONSIGLIARE = 2: con un solo modello misurato una
+raccomandazione non e' un primato, e' un'anomalia. "web" e "app" hanno
+una misurazione ciascuna perche' una corsa su tutte le categorie le ha
+sfiorate, e consigliare con quella sicurezza mentirebbe. Sotto la
+soglia si avverte invece di consigliare.
+
+Verificato in Chrome headless: scelto "Coding JavaScript", le opzioni
+mostrano "dots-3-note-preview 1.00", la nota propone il modello.
+
+Due test allineati alla realta': la diagnostica inline ha cambiato nome
+(__diagErrors -> __diagFiles) e il test guardava una stringa sparita
+senza segnalarlo; e lo script e' in head CON defer, non in fondo al body
+senza defer come il test affermava. Entrambe le configurazioni sono
+state provate a mano e solo una funziona.
+
+test_html_integrita ora controlla anche che nessun $() abbia il
+prefisso #: lo avevo appena scritto con il prefisso per sbaglio e
+restituiva null.
