@@ -110,7 +110,19 @@ check("id univoci", len({t.id for t in TASKS}) == len(TASKS))
 check("ogni task ha una verifica", all(callable(t.verify) for t in TASKS))
 check("ogni task ha un prompt", all(len(t.prompt) > 30 for t in TASKS))
 check("tasks_for filtra", len(tasks_for("code")) == 3, str(len(tasks_for("code"))))
-check("tasks_for su tutto", len(tasks_for(None)) == len(TASKS))
+# tasks_for(None) restituisce TUTTE le task, nucleo piu' quelle per tipo
+# di lavoro (js, web, app). Il test confrontava con TASKS solo: e' stato
+# giusto finche' le task di lavoro non esistevano, poi ha iniziato a
+# mentire senza che nessuno se ne accorgesse.
+from orchestra.benchmark import _task_lavoro  # noqa: E402
+check("tasks_for su tutto = nucleo + lavoro",
+      len(tasks_for(None)) == len(TASKS) + len(_task_lavoro()),
+      f"{len(tasks_for(None))} vs {len(TASKS)}+{len(_task_lavoro())}")
+check("le task di lavoro hanno un id unico",
+      len({t.id for t in tasks_for(None)}) == len(tasks_for(None)))
+check("ogni categoria dichiarata ha task o e' vuota consapevole",
+      all(len(tasks_for(c)) > 0 for c in ("code", "js", "web", "app")),
+      "una categoria dichiarata senza task non e' confrontabile")
 check("tasks_for categoria ignota vuota", tasks_for("inesistente") == [])
 
 # il ragionamento: verifichiamo che la risposta attesa sia quella giusta.

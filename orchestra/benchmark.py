@@ -302,8 +302,23 @@ TASKS: list[Task] = [
 
 def tasks_for(category: str | None = None) -> list[Task]:
     if not category:
-        return list(TASKS)
-    return [t for t in TASKS if t.category == category]
+        return list(TASKS) + list(_task_lavoro())
+    return [t for t in list(TASKS) + list(_task_lavoro()) if t.category == category]
+
+
+def _task_lavoro() -> list[Task]:
+    """Le task per tipo di lavoro (js, web, app).
+
+    In un modulo separato perche' sono la parte che cresce: quando serve
+    misurare un altro tipo di richiesta si aggiunge li', senza toccare il
+    nucleo. Se il modulo manca, il benchmark funziona lo stesso — meglio
+    pochi task che nessuno.
+    """
+    try:
+        from .tasks_lavoro import TASK_LAVORO
+        return list(TASK_LAVORO)
+    except ImportError:  # pragma: no cover
+        return []
 
 
 # --------------------------------------------------------------------------

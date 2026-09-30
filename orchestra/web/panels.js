@@ -8,6 +8,7 @@
 const benchModels = $("bench-models");
 const benchFree = $("bench-free");
 const benchCount = $("bench-count");
+const benchCat = $("bench-cat");
 let tuttiModelli = [];
 
 function modelliScelti() {
@@ -19,8 +20,34 @@ function aggiornaConteggio() {
   benchCount.textContent = n === 1 ? "1 scelto" : n + " scelti";
 }
 
+// Il punteggio sta nella riga, per la categoria scelta. Non in una
+// tabella a parte: la scelta e la valutazione devono stare sulla stessa
+// riga, o il confronto fra due modelli costa due sguardi a due posti.
+// Un modello non misurato mostra "—": non e' zero, e' sconosciuto, e la
+// differenza conta quando si tratta di soldi.
+function punteggioDi(m, cat) {
+  const s = m.scores || {};
+  // su "tutte" non c'e' un punteggio unico: ci sono piu' categorie e
+  // nessuna media ha senso (un 1.00 in codice e un 0.00 in ragionamento
+  // non sono "0.50"). Mostriamo invece quante categorie sono state
+  // misurate: dice se quel modello e' confrontabile o e' ancora sconosciuto.
+  if (cat === "all" || !cat) {
+    const n = Object.keys(s).length;
+    return n ? { testo: n + "/" + CATEGORIE_TOTALE, cls: "quante" } : null;
+  }
+  const v = s[cat];
+  return (typeof v === "number")
+    ? { testo: v.toFixed(2), cls: v >= 0.99 ? "alto" : v > 0 ? "medio" : "basso" }
+    : null;
+}
+
+// quante categorie esistono davvero: il totale nel "3/6" deve essere il
+// numero reale, non una costante che invecchia da sola
+let CATEGORIE_TOTALE = 6;
+
 function disegnaModelli() {
   const soloFree = benchFree.checked;
+  const cat = benchCat ? benchCat.value : "all";
   const lista = tuttiModelli.filter((m) => (soloFree ? m.free : true));
   benchModels.replaceChildren();
   for (const m of lista) {
@@ -33,14 +60,28 @@ function disegnaModelli() {
     const nome = el("span", "mp-name");
     nome.textContent = m.short || m.id;
     const meta = el("span", "mp-meta");
-    meta.textContent = m.free ? "free" : (m.context ? (m.context / 1000) + "k ctx" : "a pagamento");
+    const p = punteggioDi(m, cat);
+    if (p) {
+      meta.textContent = p.testo;
+      meta.className = "mp-meta punteggio " + p.cls;
+    } else {
+      meta.textContent = "—";
+      meta.className = "mp-meta nonmisurato";
+    }
+    const free = el("span", "mp-free");
+    free.textContent = m.free ? "free" : "";
     riga.appendChild(cb);
     riga.appendChild(nome);
+    riga.appendChild(free);
     riga.appendChild(meta);
     benchModels.appendChild(riga);
   }
   aggiornaConteggio();
 }
+
+// Cambiare categoria ricalcola i punteggi mostrati: sono la stessa
+// domanda con parametri diversi, non un dato fisso.
+on(benchCat, "change", disegnaModelli);
 
 on(benchModels, "change", aggiornaConteggio);
 on(benchFree, "change", disegnaModelli);
@@ -272,9 +313,124 @@ function renderBenchResult(res) {
 // pannello. Una sola fonte: se il selettore in alto e le caselle qui
 // prendessero i dati da due fetch separati, potrebbero mostrare modelli
 // diversi e la scelta sarebbe illudente.
+
+// ------------------------------------------------- scegli per tipo di lavoro
+// La domanda vera non e' "quale modello e' il migliore" ma "quale
+// modello e' il migliore PER QUELLO CHE DEVO FARE". Un modello puo'
+// essere ottimo in ragionamento e mediocre in React Native, e scegliere
+// il migliore in assoluto e' scegliere quello sbagliato.
+//
+// Regola che non si negozia: si sceglie solo fra i modelli MISURATI in
+// quella categoria. Se non ce ne sono, si dice che non ce ne sono. Un
+// modello non misurato non e' il migliore, e' sconosciuto, e su un
+// impianto dove si paga la differenza e' una decisione, non una
+// arrotondatura.
+const CAT_ETICHETTE = {
+  code: "Codice in generale",
+  js: "Coding JavaScript",
+  web: "Coding web (HTML/CSS)",
+  app: "Coding app (React Native)",
+  reasoning: "Ragionamento",
+  instruction: "Seguire istruzioni",
+  tool_use: "Uso dei tool",
+  writing: "Scrittura",
+  extraction: "Estrazione",
+};
+const routingCat = $("routing-cat");
+const routingOut = $("routing-out");
+const routingTop = $("routing-top");
+
+function disegnaCategorieRouting() {
+  if (!routingCat) return;
+  const misurate = new Set();
+  for (const m of tuttiModelli) {
+    for (const c of Object.keys(m.scores || {})) misurate.add(c);
+  }
+  routingCat.replaceChildren();
+  const ordine = ["js", "web", "app", "code", "reasoning", "instruction", "tool_use", "writing", "extraction"];
+  for (const c of ordine) {
+    if (!misurate.has(c)) continue;
+    routingCat.appendChild(new Option(CAT_ETICHETTE[c] || c, c));
+  }
+  if (!routingCat.options.length) {
+    routingCat.appendChild(new Option("nessuna categoria misurata", ""));
+  }
+  // un riassunto delle non misurate: e' l'invito a misurare
+  const mancanti = ordine.filter((c) => !misurate.has(c));
+  if (routingOut && mancanti.length) {
+    routingOut.textContent = "non ancora misurato: " + mancanti.join(", ");
+  }
+}
+
+function scegliModello() {
+  const cat = routingCat.value;
+  routingTop.replaceChildren();
+  if (!cat) { routingTop.textContent = "prima misura qualcosa"; return; }
+  const candidati = tuttiModelli
+    .filter((m) => typeof (m.scores || {})[cat] === "number")
+    .sort((a, b) => b.scores[cat] - a.scores[cat]);
+  if (!candidati.length) {
+    const p = el("div", "prova-err");
+    p.textContent = "nessun modello misurato in \u201c" + (CAT_ETICHETTE[cat] || cat) +
+      "\u201d: lancia il benchmark su questa categoria prima";
+    routingTop.appendChild(p);
+    return;
+  }
+  const migliore = candidati[0];
+  const riga = el("div", "routing-vincitore");
+  riga.textContent = migliore.short + " — " + migliore.scores[cat].toFixed(2) +
+    (migliore.free ? " (free)" : "");
+  routingTop.appendChild(riga);
+  if (candidati.length > 1) {
+    const resto = el("div", "routing-altri");
+    resto.textContent = "altri: " + candidati.slice(1, 5)
+      .map((m) => m.short + " " + m.scores[cat].toFixed(2)).join(" · ");
+    routingTop.appendChild(resto);
+  }
+  const btn = el("button", "primary", "Usa questo modello");
+  routingTop.appendChild(btn);
+  on(btn, "click", async () => {
+    btn.disabled = true;
+    try {
+      const r = await fetch("/api/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: migliore.id }),
+      });
+      if (r.ok) {
+        loadModels();
+        const p = el("div", "routing-ok");
+        p.textContent = "ora stai usando " + migliore.short;
+        routingTop.appendChild(p);
+      } else {
+        const d = await r.json();
+        const p = el("div", "prova-err");
+        p.textContent = d.error || ("errore " + r.status);
+        routingTop.appendChild(p);
+      }
+    } finally { btn.disabled = false; }
+  });
+}
+
+on($("routing-go"), "click", scegliModello);
+
 function aggiornaCatalogoUI(elenco, corrente) {
   tuttiModelli = elenco || [];
   disegnaModelli();
+  // il routing si riempia qui: i punteggi arrivano con il catalogo, e
+  // ricalcolarli qui evita che mostri categorie vecchie dopo un benchmark
+  disegnaCategorieRouting();
+  // il totale delle categorie viene dal server. Una costante nel
+  // frontend invecchia in silenzio: un giorno "4/6" con nove categorie
+  // e nessuno che se ne accorge.
+  fetch("/api/categorie")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (!d || !d.totale) return;
+      CATEGORIE_TOTALE = d.totale;
+      disegnaModelli();
+    })
+    .catch(() => { /* il totale resta quello noto: meglio che sparire */ });
   if (provaModel) {
     provaModel.replaceChildren();
     for (const m of tuttiModelli) {

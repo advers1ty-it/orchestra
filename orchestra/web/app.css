@@ -254,3 +254,22 @@
 .bench-status.ko   { color: #ffb4b4; border-color: #ff6b6b;
                      background: rgba(255,107,107,.10); }
 .benchlog { max-height: 220px; }
+
+/* Punteggio sulla riga del modello: e' la valutazione, e sta dove
+   scelgi. Verde se alto, grigio se non misurato — "non misurato" non e'
+   "zero" e non devono sembrare la stessa cosa. */
+.mp-row .mp-free { font-size: 10px; color: var(--muted); min-width: 26px; }
+.mp-row .mp-meta.punteggio { font-family: var(--mono); font-size: 12.5px; min-width: 34px; }
+.mp-row .mp-meta.alto  { color: #3ecf8e; }
+.mp-row .mp-meta.medio { color: var(--warn); }
+.mp-row .mp-meta.basso { color: #ff6b6b; }
+.mp-row .mp-meta.nonmisurato { color: var(--muted); opacity: .45; }
+
+/* Scelta per tipo di lavoro */
+.routing-vincitore {
+  margin-top: 8px; padding: 8px 12px; border-radius: 7px;
+  background: rgba(62,207,142,.10); border: 1px solid #3ecf8e;
+  font-family: var(--mono); font-size: 13px;
+}
+.routing-altri { margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+.routing-ok { margin-top: 6px; color: #9fe8c4; font-size: 12px; }

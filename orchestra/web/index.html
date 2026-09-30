@@ -125,6 +125,18 @@
     <div id="bench-out"></div>
 
     <div class="prova-box">
+      <b>Che lavoro stai facendo?</b>
+      <span class="dim">scegli il tipo di richiesta: Orchestra sceglie il modello migliore in base ai benchmark gia' fatti. Se non e' misurato, lo dice — non indovina.</span>
+      <div class="bench-controls">
+        <label>Tipo di lavoro
+          <select id="routing-cat"></select>
+        </label>
+        <button id="routing-go" class="primary">Scegli il modello</button>
+        <span id="routing-out" class="small dim"></span>
+      </div>
+      <div id="routing-top" class="routing-top"></div>
+    </div>
+    <div class="prova-box">
       <b>Prova a mano</b>
       <span class="dim">un compito, un modello, tutta la trascrizione. Serve a capire perché un modello perde un task.</span>
       <textarea id="prova-prompt" rows="3" placeholder="es: leggi il file X, dimmi cosa contiene e crea Y.txt con la data"></textarea>

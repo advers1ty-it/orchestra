@@ -250,6 +250,18 @@ class OpenAICompatAdapter:
 # --------------------------------------------------------------------------
 
 # name -> (base_url, env var della chiave, modello di default)
+#
+# Una env var CHIAVE VUOTA significa "questo provider non vuole una
+# chiave". E' il caso dei modelli locali: Ollama, LM Studio, llama.cpp,
+# vLLM espongono tutti un'API OpenAI-compatible su localhost e chiedono
+# nessuna autenticazione. Senza questo, l'unico modo di usarli sarebbe
+# inventare una chiave finta — e la chiave finta in un prodotto e' una
+# bug che aspetta di essere scoperta da un cliente.
+#
+# I modelli locali sono l'unica risposta vera alla domanda "gratis senza
+# API key": il free tier dei provider cloud funziona, ma chiede un
+# account, e un account non e' gratis per tutti. Un modello sul proprio
+# computer non chiede nulla, non ha limiti di rate e funziona offline.
 KNOWN_PROVIDERS: dict[str, tuple[str, str, str]] = {
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", ""),
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", ""),
@@ -258,7 +270,58 @@ KNOWN_PROVIDERS: dict[str, tuple[str, str, str]] = {
     "cerebras": ("https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", ""),
     "mistral": ("https://api.mistral.ai/v1", "MISTRAL_API_KEY", ""),
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4o-mini"),
+    # --- locali, senza chiave ---
+    "ollama": ("http://127.0.0.1:11434/v1", "", "llama3.2"),
+    "lmstudio": ("http://127.0.0.1:1234/v1", "", "local-model"),
 }
+
+# Provider che non chiedono autenticazione: la chiave vuota e' corretta,
+# non un errore di configurazione.
+NO_KEY_PROVIDERS: frozenset[str] = frozenset(
+    name for name, (_, key_env, _) in KNOWN_PROVIDERS.items() if not key_env
+)
+
+
+def base_url_for(name: str, env: dict[str, str] | None = None) -> str:
+    """L'indirizzo del provider, con override possibile.
+
+    Serve per i motori locali che girano su una porta diversa dalla
+    solita (vLLM su 8000, un Ollama remoto su un'altra macchina). Senza
+    override si dovrebbe modificare il codice, e un utente non tecnico
+    non puo' farlo.
+    """
+    env = env if env is not None else os.environ
+    if name not in KNOWN_PROVIDERS:
+        raise KeyError(f"provider sconosciuto: {name}")
+    override = env.get(f"ORCHESTRA_{name.upper()}_URL", "").strip()
+    return (override or KNOWN_PROVIDERS[name][0]).rstrip("/")
+
+
+def local_models(name: str, env: dict[str, str] | None = None,
+                 timeout: float = 3.0) -> list[dict[str, Any]]:
+    """Elenco dei modelli gia' scaricati su un motore locale.
+
+    Non solleva: se il motore non e' in ascolto torna una lista vuota, e
+    il chiamante può dire "nessun modello locale" invece di crashare.
+    """
+    import json as _json
+    import urllib.request as _req
+
+    base = base_url_for(name, env).rstrip("/")
+    url = base + "/models"
+    req = _req.Request(url, headers={"Accept": "application/json"})
+    try:
+        with _req.urlopen(req, timeout=timeout) as r:
+            dati = _json.loads(r.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for m in (dati.get("data") or []):
+        mid = m.get("id")
+        if mid:
+            out.append({"id": mid, "free": True, "context": 0,
+                        "prompt_price": 0.0, "scores": {}})
+    return sorted(out, key=lambda m: m["id"])
 
 
 def load_env(path: str) -> dict[str, str]:
@@ -290,16 +353,20 @@ def build_provider(
     env = env if env is not None else os.environ
     if name not in KNOWN_PROVIDERS:
         raise KeyError(f"provider sconosciuto: {name}. Disponibili: {list(KNOWN_PROVIDERS)}")
-    base_url, key_env, default_model = KNOWN_PROVIDERS[name]
-    api_key = env.get(key_env, "")
-    if not api_key:
+    _, key_env, default_model = KNOWN_PROVIDERS[name]
+    api_key = env.get(key_env, "") if key_env else ""
+    # chiave vuota in un provider SENZA chiave e' normale: e' un motore
+    # locale. Su un provider cloud significa configurazione mancante, e
+    # li' conviene dirlo adesso invece di mandare una richiesta che
+    # torna 401.
+    if not api_key and name not in NO_KEY_PROVIDERS:
         raise ProviderError(
             f"manca la chiave {key_env} per il provider '{name}'. "
             f"Mettila nel .env o nell'ambiente."
         )
     return OpenAICompatAdapter(
-        base_url=base_url,
-        api_key=api_key,
+        base_url=base_url_for(name, env),
+        api_key=api_key or "local",  # alcuni motori rifiutano un header vuoto
         model=model or default_model,
         name=name,
     )

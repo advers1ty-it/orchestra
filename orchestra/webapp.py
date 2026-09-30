@@ -450,6 +450,30 @@ class Handler(BaseHTTPRequestHandler):
                                 "copertura": prior_mod.copertura(priors, self.app.catalog.models)})
                 except Exception as e:  # noqa: BLE001
                     self._json({"messaggio": f"prior non disponibile: {e}", "copertura": {}})
+        elif path == "/api/categorie":
+            # L'elenco delle categorie con quante task ha ciascuna e
+            # quante sono state misurate. La UI non deve tenere
+            # costanti: una lista invecchiata fa mostrare "4/6" quando le
+            # categorie sono nove, e nessuno se ne accorge.
+            from .benchmark import tasks_for
+            from .catalog import CATEGORIES, CATEGORY_LABEL
+            cat_ = self.app.catalog
+            misurate = set()
+            if cat_ is not None:
+                for prof in cat_.models.values():
+                    for c, v in (prof.scores or {}).items():
+                        if isinstance(v, (int, float)):
+                            misurate.add(c)
+            out = []
+            for c in CATEGORIES:
+                try:
+                    n = len(tasks_for(c))
+                except Exception:  # noqa: BLE001
+                    n = 0
+                out.append({"id": c, "label": CATEGORY_LABEL.get(c, c),
+                            "tasks": n, "misurata": c in misurate})
+            self._json({"categorie": out, "misurate": len(misurate),
+                        "totale": len(CATEGORIES)})
         elif path == "/api/capabilities":
             cat = self.app.catalog
             if cat is None:

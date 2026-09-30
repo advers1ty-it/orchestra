@@ -18,7 +18,7 @@ from typing import Any
 
 from . import __version__
 from .agent import Agent, LoopConfig
-from .providers import KNOWN_PROVIDERS, ProviderError, build_provider, load_env
+from .providers import KNOWN_PROVIDERS, NO_KEY_PROVIDERS, base_url_for, ProviderError, build_provider, load_env
 from .tools import SYSTEM_PROMPT, default_registry
 
 ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -175,12 +175,38 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print("\nChiavi")
     dim, reset = C["dim"], C["x"]
     for name, (_, key_env, _) in KNOWN_PROVIDERS.items():
+        if not key_env:
+            continue  # i provider locali non hanno chiave: vedi sotto
         present = bool(env.get(key_env))
         # stampiamo solo se presente, mai il valore
         stato = "presente" if present else f"{dim}assente{reset}"
         print(f"  {key_env:<24} {stato}")
-        if name == env.get("ORCHESTRA_PROVIDER") and not present:
-            ok = False
+
+    # Motori locali: l'unica via per usare un LLM senza account e senza
+    # chiave. Se c'e' un motore in ascolto, si dice con quali modelli:
+    # e' l'informazione che serve per iniziare senza pagare nulla.
+    print("\nModelli locali (nessuna chiave richiesta)")
+    from .providers import local_models
+    trovato = False
+    for name in sorted(NO_KEY_PROVIDERS):
+        try:
+            ms = local_models(name, env, timeout=1.5)
+        except Exception:  # noqa: BLE001
+            ms = []
+        if ms:
+            trovato = True
+            print(f"  {C['g']}{name}{reset} su {base_url_for(name, env)}")
+            for m in ms[:8]:
+                print(f"    {m['id']}")
+            if len(ms) > 8:
+                print(f"    {dim}… e altri {len(ms) - 8}{reset}")
+    if not trovato:
+        print(f"  {dim}nessun motore locale in ascolto{reset}")
+        print(f"  Per usarne uno serve installarlo una volta sola:")
+        print(f"    ollama   -> https://ollama.com   (poi: ollama pull qwen2.5-coder:7b)")
+        print(f"    LM Studio -> https://lmstudio.com")
+        print(f"  Una volta in ascolto, Orchestra lo trova da solo: nessuna chiave,")
+        print(f"  nessun account, funziona anche senza rete.")
 
     print("\nProvider")
     name = env.get("ORCHESTRA_PROVIDER", "")

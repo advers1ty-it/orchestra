@@ -40,8 +40,13 @@ Category = Literal[
     "tool_use",    # usare i tool correttamente e in sequenza
 ]
 
+# Le categorie sono i "tipi di richiesta": e' su queste che si instrada.
+# Le prime sei sono generiche, le ultime descrivono il lavoro vero e
+# proprio — e servono perche' "codice" da solo non basta: un modello
+# bravo in Python non e' per forza bravo in JavaScript o in React.
 CATEGORIES: list[str] = [
     "code", "reasoning", "writing", "extraction", "instruction", "tool_use",
+    "js", "web", "app",
 ]
 
 CATEGORY_LABEL: dict[str, str] = {
@@ -51,6 +56,9 @@ CATEGORY_LABEL: dict[str, str] = {
     "extraction": "Estrazione",
     "instruction": "Istruzioni",
     "tool_use": "Uso tool",
+    "js": "Coding JavaScript",
+    "web": "Coding web (HTML/CSS)",
+    "app": "Coding app (React Native)",
 }
 
 
