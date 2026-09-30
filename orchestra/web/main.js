@@ -57,6 +57,11 @@ connect();
 // chiamata restano disabilitati fino a quando non apri Opzioni: si
 // vedono, sembrano cliccabili, e non lo sono. Il pannello e' una vista
 // degli stessi dati, non il posto dove vengono costruiti.
+// Le categorie si chiedono al server, che le conta dai task veri.
+// Prima le categorie, poi il resto: cosi' il riepilogo sotto i
+// selettori sappia cosa e' misurabile prima di dire "non ancora
+// misurato" — o "senza test".
+caricaCategorie();
 caricaOpzioni().catch(() => {
   // un errore qui non deve fermare il bootstrap: la chat resta viva,
   // e i selettori semplicemente restano disabilitati

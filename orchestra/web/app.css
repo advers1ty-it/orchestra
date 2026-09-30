@@ -448,3 +448,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   .scope-label { display: none; }
   .stamp { display: none; }
 }
+
+/* Una categoria senza test non e' una categoria "da misurare": e' un
+   buco, e si dice con un colore diverso da un semplice "non ancora". */
+.avviso-grave { color: #ffb4b4; }

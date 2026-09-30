@@ -1,0 +1,47 @@
+writing ed extraction non hanno nessun test, e non e' colpa del benchmark
+
+L'utente ha chiesto se le categorie del benchmark corrispondono a quelle
+del menu scopo. Corrispondono sette su nove. Manca una parte, ed e'
+quella che conta.
+
+  js 2, web 2, app 2, code 3, reasoning 2, instruction 2, tool_use 2
+  writing 0, extraction 0
+
+Non sono "non ancora misurate": non esiste un solo test su cui misurarle.
+Il messaggio le accorpava a quelle che aspettano solo che qualcuno lanci
+il benchmark, ed e' la differenza fra "non l'ho ancora fatto" e "non
+posso farlo". A un utente che sta decidendo su quale modello usare,
+sono la stessa frase, e una delle due e' falsa.
+
+Ora la UI chiede a /api/categorie quante task ha ciascuna, e separa i
+due casi:
+
+  non ancora misurato: <quelle con task, nessuno misurato>
+  senza test: writing, extraction — non confrontabili finche' non si
+  scrivono i task
+
+La lista nel frontend era anche l'unica fonte di verita': poteva
+divergere dal benchmark senza che nulla lo mostrasse. Ora la lista e'
+solo l'ordine di visualizzazione, e il conteggio arriva dai task
+registrati. Due copie della verita' che divergono non falliscono
+nessun test, e un testo mostrato non e' un test.
+
+Mentre c'ero: /api/categorie rispondeva con un "totale" che contava le
+categorie, e il frontend lo usava come denominatore di "4/6". Se
+qualcuno lo avesse usato per contare i test avrebbe letto 9 invece di
+15, senza che nulla sembrasse rotto. Ora i due numeri hanno due nomi:
+totale_categorie e totale_task.
+
+Il test nuovo confronta il menu con i task registrati, e segnala le
+categorie vuote come un fatto da decidere invece di un errore da
+nascondere: se un giorno saranno tutte vuote, vuol dire che il
+benchmark e' vuoto, e il test deve accorgersene.
+
+E una nota sul metodo, perche' due test di questa sessione si sono
+sbagliati da soli: uno cercava una stringa entro 900 caratteri, e ha
+iniziato a fallire quando il codice e' cresciuto di poche righe — non
+perche' fosse rotto, ma perche' era piu' grande. Un altro prendeva il
+primo "if (!r.ok)" del file, che e' quello della prova manuale, non
+quello del cambio servizio: stava controllando il codice giusto
+mentre credeva di controllare quello sbagliato. Entrambi passavano,
+o fallivano, per il motivo sbagliato.

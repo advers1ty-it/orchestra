@@ -74,8 +74,16 @@ print("\n[5] Un cambio rifiutato non lascia il selettore bugiardo")
 # Il backend puo' rispondere 409 (agente occupato) o 400 (chiave
 # mancante). Senza riallineare, il menu mostra un servizio che non e'
 # quello in uso.
+#
+# Si cerca dentro cambiaServizio, non nel primo `if (!r.ok)` del file:
+# ce n'e' uno anche nella prova manuale, e il test prendeva quello
+# per sbaglio — misurando il codice giusto mentre pensava di
+# controllare quello sbagliato.
+inizio_sc = panels.index("async function cambiaServizio")
+ramo = panels[inizio_sc:]
+ramo = ramo.split("if (!r.ok)")[1].split("\n  }")[0]
 check("in caso di errore riallinea il selettore",
-      "disegnaProvider(" in panels.split("if (!r.ok)")[-1][:900])
+      "disegnaProvider(" in ramo, ramo[-140:])
 
 print("\n[6] Nessun selettore usa $() con il prefisso #")
 # $() e' getElementById: con il # restituisce null in silenzio. E' gia'

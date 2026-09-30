@@ -819,8 +819,20 @@ class Handler(BaseHTTPRequestHandler):
                     n = 0
                 out.append({"id": c, "label": CATEGORY_LABEL.get(c, c),
                             "tasks": n, "misurata": c in misurate})
-            self._json({"categorie": out, "misurate": len(misurate),
-                        "totale": len(CATEGORIES)})
+            # `totale_categorie` e `totale_task` sono due numeri
+            # diversi, e prima c'era un solo `totale` che poteva
+            # significare entrambi. Il frontend lo mostrava come "4/6"
+            # contando le categorie: se qualcuno lo avesse usato per
+            # contare i test, avrebbe detto 9 invece di 15 senza che
+            # nulla sembrasse rotto.
+            misurabili = [c for c in out if c["tasks"] > 0]
+            self._json({
+                "categorie": out,
+                "misurate": len(misurate),
+                "totale_categorie": len(CATEGORIES),
+                "categorie_misurabili": len(misurabili),
+                "totale_task": sum(c["tasks"] for c in out),
+            })
         elif path == "/api/capabilities":
             cat = self.app.catalog
             if cat is None:

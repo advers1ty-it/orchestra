@@ -958,6 +958,33 @@ function applicaScope(scope) {
 
 on(scopePick, "change", () => applicaScope(scopePick.value));
 
+// Quante task ha ogni categoria lo SA il server: /api/categorie
+// risponde dai task realmente registrati. La lista qui sotto e' solo
+// l'ordine di visualizzazione.
+//
+// Prima la lista era anche l'unica fonte di verita', e cosi' due
+// categorie senza nessun task comparivano come "non ancora misurato"
+// — cioe' come se aspettassero solo qualcuno che le misurasse. Non
+// e' vero: non esiste nulla da misurare. La differenza e' tutta qui,
+// ed e' la differenza fra "non l'ho ancora fatto" e "non posso farlo".
+let categorieServer = [];
+
+async function caricaCategorie() {
+  try {
+    const r = await fetch("/api/categorie");
+    if (!r.ok) return;
+    const d = await r.json();
+    categorieServer = d.categorie || [];
+  } catch (e) {
+    // resta la lista vuota: meglio mostrare meno che fingere
+  }
+}
+
+function taskDi(categoria) {
+  const c = categorieServer.find((x) => x.id === categoria);
+  return c ? c.tasks : null;   // null = il server non ne parla
+}
+
 function disegnaCategorieRouting() {
   if (!routingCat) return;
   const misurate = new Set();
@@ -989,9 +1016,27 @@ function disegnaCategorieRouting() {
   }
 
   if (routingOut) {
+    // Due cose diverse, e dirle insieme e' mentire.
+    //
+    // "non ancora misurato" = ci sono task, nessuno e' stato misurato.
+    //   E' una promessa: basta lanciare il benchmark.
+    // "nessun test" = non esiste task per questa categoria. Non e' una
+    //   promessa, e' un buco: finche' non se ne scrive uno, quella
+    //   categoria non e' confrontabile con nessuna altra, e il modello
+    //   "migliore per scrittura" non esiste.
     const mancanti = ordine.filter((c) => !misurate.has(c));
-    routingOut.textContent = mancanti.length
-      ? "non ancora misurato: " + mancanti.join(", ") : "";
+    const vuote = mancanti.filter((c) => taskDi(c) === 0);
+    const daMisurare = mancanti.filter((c) => taskDi(c) !== 0);
+    const parti = [];
+    if (daMisurare.length) {
+      parti.push("non ancora misurato: " + daMisurare.join(", "));
+    }
+    if (vuote.length) {
+      parti.push("senza test: " + vuote.join(", ")
+        + " — non confrontabili finche' non si scrivono i task");
+    }
+    routingOut.textContent = parti.join(" · ");
+    routingOut.className = vuote.length ? "avviso-grave" : "";
   }
 }
 
@@ -1059,8 +1104,8 @@ function aggiornaCatalogoUI(elenco, corrente) {
   fetch("/api/categorie")
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      if (!d || !d.totale) return;
-      CATEGORIE_TOTALE = d.totale;
+      if (!d || !d.totale_categorie) return;
+      CATEGORIE_TOTALE = d.totale_categorie;
       disegnaModelli();
     })
     .catch(() => { /* il totale resta quello noto: meglio che sparire */ });
