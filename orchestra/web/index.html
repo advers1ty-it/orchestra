@@ -4,6 +4,66 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Orchestra</title>
+
+<!-- Diagnostica inline, PRIMA di ogni altra cosa.
+     Se il CSS o un JS non arrivano, senza questo la pagina fallisce in
+     silenzio e non si distingue "codice rotto" da "file non servito".
+     Qui ogni problema viene scritto a schermo, dove si vede. -->
+<style>
+  #diag {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
+    background: #2a1e16; color: #ffcf9b; border-top: 2px solid #f5a623;
+    font: 12px/1.5 ui-monospace, Consolas, monospace;
+    padding: 6px 10px; max-height: 34vh; overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  #diag.ok { background: #14322a; color: #9fe8c4; border-top-color: #3ecf8e; }
+  #diag.err { background: #2a1618; color: #ffb4b4; border-top-color: #ff6b6b; }
+</style>
+<script>
+(function () {
+  var lines = [];
+  var box;
+  function render() {
+    if (!box) return;
+    box.textContent = lines.join("\n");
+    box.className = window.__diagErrors.length ? "err" : "ok";
+  }
+  function add(t) { lines.push(t); window.__diagErrors.push(t); render(); }
+  window.__diagErrors = [];
+  window.__diagInline = true;
+  window.addEventListener("error", function (e) {
+    var f = (e.filename || "?").split("/").pop();
+    add("ERRORE: " + (e.message || "?") + " @ " + f + ":" + (e.lineno || 0));
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) {
+    add("PROMESSA RIFIUTATA: " + String((e.reason && e.reason.message) || e.reason));
+  });
+  document.addEventListener("DOMContentLoaded", function () {
+    box = document.createElement("div");
+    box.id = "diag";
+    document.body.appendChild(box);
+    // il body ha background #0f1115 = rgb(15,17,21). Se il CSS non e'
+    // applicato, il colore resta bianco e lo scopriamo qui.
+    var bg = getComputedStyle(document.body).backgroundColor || "";
+    var cssApplied = bg.indexOf("15, 17, 21") >= 0 || bg.indexOf("rgb(15,17,21)") >= 0;
+    lines.unshift("inline:ok  css:" + (cssApplied ? "ok" : "NON ARRIVATO (bg=" + bg + ")"));
+    if (!cssApplied) {
+      lines.push("app.css non e' stato applicato: o il file non e' arrivato o e' rotto");
+    }
+    // lo stato del selettore dice se loadModels e' girato
+    setTimeout(function () {
+      var mp = document.getElementById("model-pick");
+      if (mp) {
+        lines.push("selettore: " + mp.children.length + " voci, " +
+                   (mp.disabled ? "disabilitato" : "attivo"));
+      }
+      render();
+    }, 900);
+    render();
+  });
+})();
+</script>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
