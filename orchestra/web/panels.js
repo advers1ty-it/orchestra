@@ -477,6 +477,9 @@ async function caricaModelli(prov, preseleziona) {
 // e la richiesta andava a un servizio diverso da quello che credevi.
 async function cambiaServizio(p) {
   if (!p) return;
+  // invalida ogni caricaOpzioni() in volo: la sua risposta porta il
+  // provider di quando e' partita e rimetterebbe il menu sul vecchio
+  generazioneChiavi++;
   const nota = $("provider-note");
   if (nota) { nota.textContent = "cambio servizio…"; nota.className = "small dim"; }
   optMsg.textContent = "cambio servizio…";
@@ -498,6 +501,22 @@ async function cambiaServizio(p) {
       return;
     }
     const nome = NOME_PROVIDER[p] || p;
+    // Se il server ha dovuto cambiare anche il modello — quello vecchio
+    // non esiste su questo servizio — si dice, e si sceglie subito
+    // quello nuovo. Senza, la select mostra il modello di un servizio
+    // e l'agente chiama un altro: la divergenza si vede solo alla
+    // prima risposta, e sembra un errore di rete.
+    if (d.modello_cambiato && d.modello) {
+      const msg = nome + " — modello " + d.modello;
+      optMsg.textContent = msg;
+      if (nota) { nota.textContent = msg; nota.className = "small giallo"; }
+      await caricaModelli(p, d.modello);
+      await loadModels();
+      // stessa ragione del ramo sotto: Opzioni deve dire il servizio
+      // vero, non quello che ricordava di prima
+      await caricaOpzioni();
+      return;
+    }
     optMsg.textContent = "ora: " + nome;
     optMsg.className = "small verde";
     if (nota) { nota.textContent = nome; nota.className = "small verde"; }
@@ -505,10 +524,14 @@ async function cambiaServizio(p) {
     for (const s of [optProvider, $("provider-pick")]) {
       if (s) s.value = p;
     }
-    await caricaModelli(p, null);
-    // il catalogo del provider e' cambiato: anche i modelli della chat
-    // vanno ricaricati, o mostrerebbero quelli del provider vecchio
+    // Si ricarica tutto, non solo il menu. /api/chiavi risponde con il
+    // provider VERO, e quella e' l'unica lettura che non puo' essere
+    // superata da una richiesta partita prima. Senza, il menu delle
+    // Opzioni restava sul servizio precedente mentre la chat era gia'
+    // su quello nuovo: misurato, non ipotizzato.
+    await caricaModelli(p, d.modello || null);
     await loadModels();
+    await caricaOpzioni();
   } catch (e) {
     const testo = "cambio fallito: " + e;
     optMsg.textContent = testo;
@@ -753,7 +776,20 @@ function schedaGratis(s) {
   return d;
 }
 
+// Una risposta in volo non deve poter sovrascrivere una scelta piu'
+// recente. caricaOpzioni() parte all'avvio e arriva DOPO un cambio
+// servizio: senza questo contatore, la sua risposta — che contiene il
+// provider di quando e' partita — rimetteva il menu a openrouter
+// mentre la chat era gia' su groq. Due menu che dicono cose diverse
+// e' peggio di un menu che non si aggiorna: l'utente sceglie, crede
+// di aver scelto, e non e' successo niente.
+//
+// Non e' una paranoia: e' successo, misurato, con i due selettori a
+//perti su servizi diversi.
+let generazioneChiavi = 0;
+
 async function caricaOpzioni() {
+  const mia = ++generazioneChiavi;
   chiaviLista.replaceChildren();
   gratisLista.replaceChildren();
   opzioniNota.textContent = "carico…";
@@ -762,6 +798,10 @@ async function caricaOpzioni() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
+    // una risposta vecchia non disegna niente: il provider e' cambiato
+    // mentre questa era in volo, e ridisegnere rimetterebbe il valore
+    // superato
+    if (mia !== generazioneChiavi) return;
     opzioniNota.textContent = d.nota_gratis || "";
 
     caricaPermessi();

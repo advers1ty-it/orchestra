@@ -52,6 +52,15 @@ btnCancel.onclick = cancel;
 btnReset.onclick = reset;
 
 connect();
+// Opzioni si caricano QUI, non solo quando apri il pannello. I
+// selettori di servizio e di scopo vivono nell'header, e senza questa
+// chiamata restano disabilitati fino a quando non apri Opzioni: si
+// vedono, sembrano cliccabili, e non lo sono. Il pannello e' una vista
+// degli stessi dati, non il posto dove vengono costruiti.
+caricaOpzioni().catch(() => {
+  // un errore qui non deve fermare il bootstrap: la chat resta viva,
+  // e i selettori semplicemente restano disabilitati
+});
 fetch("/api/state").then(r => r.json()).then(s => {
   if (s.ready === false) { showBanner(s.error); return; }
   ready = true;

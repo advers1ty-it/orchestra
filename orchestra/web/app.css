@@ -431,3 +431,20 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 }
 .provider-note.verde { color: #9fe8c4; }
 .provider-note.rosso { color: #ffb4b4; }
+.small.giallo, .provider-note.giallo { color: #ffcf9b; }
+
+/* Header piu' affollato: servizio, scopo e modello sulla stessa riga.
+   Senza un punto di rottura, su una finestra stretta i tre selettori
+   si comprimono fino a diventare illeggibili e difficili da centrare —
+   sembrano rotti, ma e' solo spazio mancante. Meglio andare a capo
+   che far sembrare la pagina guasta. */
+@media (max-width: 1100px) {
+  header { flex-wrap: wrap; row-gap: 8px; }
+  header .grow { flex-basis: 100%; height: 0; }
+  .provider-note { display: none; }
+}
+@media (max-width: 720px) {
+  #provider-pick, #model-pick, #scope-pick { max-width: 100%; flex: 1 1 140px; }
+  .scope-label { display: none; }
+  .stamp { display: none; }
+}

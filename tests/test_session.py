@@ -78,9 +78,17 @@ def noop_reg():
 print("\n[1] EventBridge")
 b = EventBridge()
 got = []
+# L'iscrizione avviene quando si chiama stream(), non prima: un client
+# che arriva dopo gli eventi non li riceve, e non deve. Il suo punto di
+# partenza e' la snapshot, non un replay che potrebbe doppiare.
+# Prima la coda teneva tutto e un test poteva emettere e poi mettersi
+# in ascolto — era una proprieta' comoda e sbagliata: significava che
+# due client collegati in momenti diversi vedevano cose diverse senza
+# saperlo.
+it = b.stream(timeout=0.2)
 for i in range(5):
     b.emit("test", {"i": i})
-for item in b.stream(timeout=0.2):
+for item in it:
     got.append(item)
     if len(got) == 5:
         break
@@ -98,23 +106,44 @@ first = next(b2.stream(timeout=0.3))
 check("keepalive emesso durante il silenzio", first["kind"] == "keepalive", str(first))
 check("keepalone dopo ~timeout", 0.2 < time.time() - t0 < 1.5, f"{time.time()-t0:.2f}s")
 
-# overflow: emittere molto piu' di quanto si legga non deve far crashare
+# overflow: emettere molto piu' di quanto si legga non deve far crashare
+# L'iscrizione viene PRIMA del flood: la coda e' per client, e un client
+# che non c'e' non accumula niente. Prima l'overflow si misurava sul
+# backlog, che ora non esiste piu'.
 b3 = EventBridge(maxsize=10)
+flood = b3.stream(timeout=0.2)
 for i in range(500):
     b3.emit("flood", {"i": i})
 check("non crasha su overflow", True)
 received = 0
-for item in b3.stream(timeout=0.2):
+for item in flood:
     received += 1
     if received >= 10:
         break
 check("la coda mantiene il limite", received <= 20, str(received))
 check("eventi persi dichiarati", b3.dropped > 0, f"dropped={b3.dropped}")
 
-# close: il flusso termina
+# close: il flusso termina.
+# close() chiude i client gia' collegati: se nessuno e' collegato, non
+# c'e' niente da chiudere e stream() resta aperto, come deve. Chi si
+# collega DOPO un close() su una sessione che non ha piu' agent e'
+# un caso che il server non produce — l'app ricrea la sessione.
 b4 = EventBridge()
+it4 = b4.stream(timeout=0.2)
 b4.close()
-check("stream termina dopo close", list(b4.stream(timeout=0.2)) == [])
+# Non con list(): dopo la sentinella il generatore finisce, ma se la
+# sentinella non arrivasse per colpa di una coda piena, list()
+# ascolterebbe i keepalive PER SEMPRE e il test si bloccherebbe invece
+# di fallire. Un test che puo' non terminare non e' un test.
+try:
+    primo = next(it4)
+    chiuso = primo is None
+except StopIteration:
+    chiuso = True
+except Exception as e:  # noqa: BLE001
+    chiuso = False
+    print("   [errore]", e)
+check("stream termina dopo close", chiuso)
 
 # emettere dopo close e' harmless
 b4.emit("x", {})
@@ -239,15 +268,31 @@ class BrokenProvider:
 
 s8 = Session(provider=BrokenProvider(), registry=noop_reg(), system_prompt="SYS",
              config=LoopConfig(max_iterations=2))
+# L'ascolto parte PRIMA del turno. Prima si mandava il messaggio, si
+# aspettava la fine, e solo dopo si leggeva lo stream: funzionava con
+# una coda che teneva il passato, e ora non deve piu' funzionare —
+# un client che si collega dopo gli eventi non li vede, e mentire
+# sarebbe peggio che non riceverli.
+raccolti8: list[Any] = []
+stop8 = threading.Event()
+
+
+def ascolta8() -> None:
+    for ev in s8.bridge.stream(timeout=0.3):
+        if ev["kind"] != "keepalive":
+            raccolti8.append(ev)
+        if ev["kind"] == "idle":
+            return
+
+
+t8 = threading.Thread(target=ascolta8, daemon=True)
+t8.start()
+time.sleep(0.2)
 s8.send("booma")
 s8.wait(timeout=10)
+t8.join(timeout=3)
 check("sessione liberata dopo l'errore", s8.busy is False)
-errs = []
-for item in s8.bridge.stream(timeout=0.2):
-    if item["kind"] == "error":
-        errs.append(item["data"])
-    if item["kind"] == "idle":
-        break
+errs = [e["data"] for e in raccolti8 if e["kind"] == "error"]
 check("evento error emesso", len(errs) == 1, str(errs))
 check("messaggio d'errore leggibile",
       errs and "provider esploso" in errs[0]["message"], str(errs))

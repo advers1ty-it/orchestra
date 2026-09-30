@@ -25,6 +25,9 @@ SUITES = [
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),
     ("permesso-shell", "test_permesso_shell.py", True),
+    ("eventi-bridge", "test_eventi_bridge.py", True),
+    ("eventi-client", "test_eventi_client.py", True),
+    ("switch-servizio", "test_switch_servizio.py", True),
     ("benchmark", "test_benchmark.py", True),
     ("e2e", "test_e2e.py", False),
 ]

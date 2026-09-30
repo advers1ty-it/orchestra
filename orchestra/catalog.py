@@ -209,9 +209,20 @@ class Catalog:
         base = os.environ.get("ORCHESTRA_HOME")
         if not base:
             home = os.environ.get("HERMES_HOME") or os.path.expanduser("~")
-            base = os.path.join(
-                home, "AppData", "Local", "hermes", "orchestra"
-            ) if os.name == "nt" else os.path.join(home, ".orchestra")
+            # HERMES_HOME punta gia' alla cartella di Hermes. Appiattirla
+            # sotto ancora "AppData/Local/hermes" produceva un percorso
+            # doppio tipo
+            #   ...\hermes\AppData\Local\hermes\orchestra\catalog_x.json
+            # che funziona (salvataggio e lettura puntano allo stesso
+            # posto) ma mette i dati in una cartella che nessuno cerca.
+            # Se la base finisce gia' per Hermes, si aggiunge solo
+            # "orchestra".
+            if os.name == "nt":
+                se_hermes = home.rstrip("\\/").lower().endswith("hermes")
+                base = (os.path.join(home, "orchestra") if se_hermes
+                        else os.path.join(home, "AppData", "Local", "hermes", "orchestra"))
+            else:
+                base = os.path.join(home, ".orchestra")
         os.makedirs(base, exist_ok=True)
         return os.path.join(base, f"catalog_{provider}.json")
 
@@ -263,6 +274,11 @@ class Catalog:
                 prof.scores = blob.get("scores") or {}
                 prof.capabilities.update(blob.get("capabilities") or {})
                 prof.last_measured = blob.get("last_measured", 0)
+                # un "no" sui tool, appreso dalla risposta del provider,
+                # si rilegge. Senza, ogni turno riprova lo stesso modello
+                # e il ciclo non converge mai.
+                if blob.get("supports_tools") is False:
+                    prof.info.supports_tools = False
                 applied += 1
         return applied
 
@@ -279,6 +295,26 @@ class Catalog:
             return []
         return [mid for mid in (data.get("models") or {}) if mid not in self.models]
 
+    def segnala_senza_tool(self, model_id: str) -> bool:
+        """Segna un modello come incapace di tool-calling. Ritorna True se salvato.
+
+        Serve perche' alcuni provider NON dichiarano il tool-calling nel
+        loro catalogo: il campo arriva vuoto, che vuol dire "non lo so",
+        non "no". Un modello che non lo supporta viene allora scelto come
+        se lo supportasse, e la richiesta muore con un HTTP 400 che
+        sembra di rete.
+
+        Quando il provider lo dice nella risposta, si crede al provider
+        e si scrive il fatto. La prossima volta non verra' piu' scelto,
+        anche dopo un riavvio: e' una misura, non una congettura.
+        """
+        prof = self.models.get(model_id)
+        if prof is None or prof.info.supports_tools is False:
+            return False
+        prof.info.supports_tools = False
+        self.save()
+        return True
+
     def save(self) -> None:
         import os as _os
 
@@ -286,8 +322,16 @@ class Catalog:
             "provider": self.provider,
             "saved_at": time.time(),
             "models": {
+                # supports_tools si salva SOLO quando e' un no. Il si'
+                # arriva dal provider e si rileggge a ogni fetch: tenere
+                # un "true" scaduto significa ignorare un provider che
+                # nel frattempo ha tolto il supporto. Un no, invece, e'
+                # una misura — l'ho appena appreso dalla risposta — e va
+                # tenuto, altrimenti il ciclo riparte da capo ogni turno.
                 mid: {"scores": p.scores, "capabilities": p.capabilities,
-                      "last_measured": p.last_measured}
+                      "last_measured": p.last_measured,
+                      **({"supports_tools": False}
+                         if p.info.supports_tools is False else {})}
                 for mid, p in self.models.items()
             },
         }
@@ -301,13 +345,45 @@ class Catalog:
     # -- query -------------------------------------------------------------
 
     def with_tools(self) -> list[ModelProfile]:
-        """Modelli utilizzabili: capaci di tool-calling, o non dichiarato.
+        """Modelli utilizzabili come agenti: sanno fare tool-calling.
 
-        False = l'API ha detto che non sa farlo, escluso. None = l'API
-        non lo dichiara (tutti i provider diversi da OpenRouter), tenuto:
-        non sappiamo, e "non lo so" non vuol dire "no".
+        Un modello che non regge i tool non e' Orchestra: e' un endpoint
+        di chat. Non "meno utile" — uselesse al nostro scopo, perche' un
+        agente senza strumenti non puo' leggere un file, eseguire un
+        comando o chiederti un permesso. Percio' qui si esclude sul
+        principio, non per prudenza.
+
+        "Non lo so" pero' resta "non lo so". Solo un False esplicito
+        tiene fuori: un provider che non dichiara il campo non sta
+        dicendo che il modello non regge, e trattare il silenzio come
+        un no farebbe sparire interi cataloghi (Groq non dichiara
+        niente, e costerebbe tutto anche i suoi modelli migliori).
         """
         return [p for p in self.models.values() if p.info.supports_tools is not False]
+
+    def agent_capable(self, p: ModelProfile) -> bool:
+        """Questo profilo puo' fare il lavoro di Orchestra?
+
+        Tre casi, non due. Il terzo e' il motivo per cui questa
+        funzione esiste invece di un `if supports_tools`.
+
+        - True: il provider lo dichiara
+        - False: il provider lo nega, o l'abbiamo appreso da un 400
+        - None: il provider non lo dice. Non lo scartiamo — ma non lo
+          trattiamo nemmeno come adatto: e' sconosciuto, e su uno
+          sconosciuto non si fa affidamento.
+        """
+        return p.info.supports_tools is not False
+
+    def ignoti_sui_tool(self) -> list[str]:
+        """Modelli di cui il provider non dichiara il tool-calling.
+
+        Non sono un errore: sono una domanda aperta. Elencarli serve a
+        capire quanto del catalogo e' davvero utilizzabile, e a decidere
+        se vale la pena misurarli col benchmark.
+        """
+        return sorted(mid for mid, p in self.models.items()
+                      if p.info.supports_tools is None)
 
     def free(self) -> list[ModelProfile]:
         return [p for p in self.with_tools() if p.info.is_free]

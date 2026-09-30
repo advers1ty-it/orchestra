@@ -177,6 +177,184 @@ class OrchestraApp:
         if not base_url_for(provider_name, self.env):
             raise ValueError(f"indirizzo non valido per {provider_name}")
 
+        # Il modello in uso va verificato: cambiando servizio, quasi
+        # nessun id sopravvive. Un id come "vendor/modello-grande" puo'
+        # esistere su OpenRouter e non su Groq, e allora la combinazione
+        # e' impossibile: la select mostra il modello nuovo servizio ma
+        # l'agente continua a chiamare il vecchio, e la prima richiesta
+        # muore con un errore che sembra di rete.
+        #
+        # Non si lascia cosi'. Si sceglie un modello che quel servizio
+        # ha davvero, e si DICE quale: un cambio silenzioso lascia
+        # l'utente convinto di stare usando il modello che ha scelto.
+        modello_vecchio = self.env.get("ORCHESTRA_MODEL", "")
+        scelto = self._modello_per_servizio(provider_name, modello_vecchio)
+        if scelto:
+            self.switch_model(scelto)
+        return {
+            "provider": provider_name,
+            "modello": scelto or modello_vecchio,
+            "modello_cambiato": bool(scelto and scelto != modello_vecchio),
+        }
+
+    def _modello_per_servizio(self, provider_name: str,
+                              attuale: str,
+                              escluso: str = "") -> str | None:
+        """Un modello che questo servizio ha davvero, o None se non si puo' sapere.
+
+        L'ordine di preferenza non e' arbitrario: prima i gratuiti con
+        il tool-calling, perche' sono gli unici che si possono provare
+        senza pensarci; poi gli altri con i tool; poi, se proprio non
+        c'e' niente, il primo disponibile. Un agente senza tool-calling
+        non e' Orchestra: puo' rispondere, ma non lavorare.
+
+        `escluso` serve per il recupero: un modello appena morto non
+        viene riproposto come sostituto di se stesso.
+        """
+        cat = self.catalog  # forza il ricaricamento: l'abbiamo svuotato
+        if cat is None or not getattr(cat, "models", None):
+            # catalogo non disponibile: non si sceglie a caso. Si lascia
+            # com'e' e si dice che non e' stato verificato.
+            return None
+
+        profili = cat.models
+        # L'esclusione viene PRIMA del "tieni quello di adesso": se il
+        # modello corrente e' proprio quello appena morto, restituirlo
+        # qui fa riprovare lo stesso identico modello che ha appena
+        # fallito, e il recovery non recupera niente.
+        if attuale in profili and attuale != escluso:
+            return attuale
+
+        # i fatti stanno in .info: is_free, supports_tools, prezzi.
+        # Scriverli sul profilo direbbe "quello che penso", e al primo
+        # cambio servizio — proprio quando serve — un AttributeError.
+        def ordina(mid: str) -> tuple:
+            prof = profili[mid]
+            # UNA definizione di "gratis": quella del ModelInfo. Qui il
+            # prezzo era confrontato con "> 0", e openrouter/auto ha
+            # prezzo -1 ("variabile", non "gratis"): finiva ordinato
+            # come se fosse gratuito e diventava il default. Due
+            # definizioni che non concordano producono una scelta che
+            # nessuno dei due voleva.
+            gratis = prof.info.is_free
+            prezzo = prof.info.prompt_price or 0.0
+            # I modelli MISURATI vengono prima di tutto il resto, e
+            # gratis-paga all'interno di ciascun gruppo. Un modello
+            # misurato ha gia' girato un task con i tool: e' una prova,
+            # non una congettura. Senza questo, "gratuito" vuol dire
+            # "gratuito e magari un modello audio": un provider puo'
+            # elencare whisper e i modelli di guardia, che non fanno
+            # chat e non si accorgono di esserne elencati.
+            misurato = 0 if prof.scores else 1
+            return (misurato, not gratis, max(prezzo, 0.0), mid)
+
+        def gratis_con_tool(p) -> bool:
+            # Solo i True. Un None — il provider non lo dichiara — non
+            # e' "adatto per principio": e' sconosciuto, e su uno
+            # sconosciuto non si fa affidamento. Prima entrava, e per
+            # un servizio come Groq finiva a scegliere whisper.
+            return p.info.supports_tools is True
+
+        def con_tool(p) -> bool:
+            return p.info.supports_tools is True
+
+        candidati = [m for m in profili if m != escluso]
+        # Se il servizio non dichiara niente, nessun filtro e' utile:
+        # si passa al terzo, che non pretende nulla.
+        for filtro in (gratis_con_tool, con_tool, lambda p: True):
+            scelti = [m for m in candidati if filtro(profili[m])]
+            if scelti:
+                return sorted(scelti, key=ordina)[0]
+        return None
+
+    def _collega_recupero_tool(self) -> None:
+        """Collega alla sessione i due pezzi che dipendono dal provider.
+
+        Li fornisce l'app perche' la Session non sa cosa sia un
+        catalogo: sa solo che un turno e' morto e che bisogna
+        riprovare. Chi decide QUALE modello provare sta qui.
+        """
+        if self.session is None:
+            return
+
+        def scegli(morto: str) -> str | None:
+            # prima si scrive il fatto: il provider ha detto che quel
+            # modello non regge i tool, e questo e' un fatto, non una
+            # congettura. Rimane scritto anche dopo un riavvio.
+            cat = self.catalog
+            if cat is not None:
+                cat.segnala_senza_tool(morto)
+            return self._modello_per_servizio(
+                self.env.get("ORCHESTRA_PROVIDER", "openrouter"),
+                self.env.get("ORCHESTRA_MODEL", ""),
+                escluso=morto,
+            )
+
+        def cambia(mid: str) -> bool:
+            try:
+                # switch_model vieta il cambio a sessione occupata, per non
+                # lasciare la conversazione a meta' fra due modelli. Qui il
+                # cambio e' voluto e sicuro — il vecchio e' morto — quindi
+                # si scavalca il controllo, non per disattenzione ma perche'
+                # il caso e' esattamente quello che il controllo vieta.
+                # `busy` e' una property: non si assegna, si tocca il
+                # campo che la alimenta.
+                _salva_busy = self.session._busy
+                self.session._busy = False
+                try:
+                    self.switch_model(mid)
+                finally:
+                    self.session._busy = _salva_busy
+                return True
+            except (ValueError, RuntimeError, ProviderError, KeyError):
+                return False
+
+        self.session._scegli_sostituto = scegli
+        self.session._cambia_modello = cambia
+
+    def _ripara_modello_iniziale(self) -> None:
+        """Se il modello salvato non esiste su questo servizio, lo corregge.
+
+        Non e' un caso teorico: la configurazione su disco puo' essere
+        rimasta con una combinazione impossibile — il servizio e' stato
+        cambiato quando il codello non sapeva ancora che i modelli non
+        sopravvivono al cambio. All'avvio si rileva e si sistema, altrimenti
+        la prima richiesta muore con un errore che sembra di rete e non
+        c'e' niente nella UI che lo spieghi.
+
+        Silenzioso quando tutto e' regolare: la riparazione e' una
+        correzione, non un avvenimento. Se pero' tocca il modello, lo
+        dice, perche' e' una scelta che l'utente non ha fatto.
+        """
+        if self.session is None:
+            return
+        provider_name = self.env.get("ORCHESTRA_PROVIDER", "openrouter")
+        modello = self.env.get("ORCHESTRA_MODEL", "")
+        if not modello:
+            return
+        cat = self.catalog
+        if cat is None or not getattr(cat, "models", None):
+            return          # non lo sappiamo: non si tocca niente
+        if modello in cat.models:
+            return          # la combinazione e' valida
+
+        sostituto = self._modello_per_servizio(provider_name, modello)
+        if not sostituto:
+            self.error = (
+                f"il modello '{modello}' non esiste su {provider_name} e "
+                f"non c'e' nessun alternativa nel catalogo"
+            )
+            return
+        try:
+            self.switch_model(sostituto)
+        except (ValueError, RuntimeError, ProviderError, KeyError) as e:
+            self.error = f"modello iniziale non valido ({modello}): {e}"
+            return
+        self.error = (
+            f"il modello '{modello}' non esiste su {provider_name}: "
+            f"uso '{sostituto}'. Cambialo dal menu in alto."
+        )
+
     def switch_model(self, model_id: str) -> None:
         """Cambia il modello dell'agent in uso.
 
@@ -345,13 +523,16 @@ class OrchestraApp:
         env = dict(os.environ)
         env.update(load_env(ENV_PATH))
         try:
-            return cls(
+            app = cls(
                 env,
                 session=cls._make_session(
                     env.get("ORCHESTRA_PROVIDER", "openrouter"),
                     env.get("ORCHESTRA_MODEL", ""),
                 ),
             )
+            app._collega_recupero_tool()
+            app._ripara_modello_iniziale()
+            return app
         except (ProviderError, KeyError) as e:
             # l'app esiste anche senza sessione: /api/state deve poter
             # rispondere con l'errore, e la UI lo mostra
@@ -575,10 +756,16 @@ class Handler(BaseHTTPRequestHandler):
                     "free": p.info.is_free,
                     "context": p.info.context_length or 0,
                     "prompt_price": p.info.prompt_price,
+                    "tool_calling": p.info.supports_tools,
                     "scores": dict(p.scores or {})}
                    for p in sorted(cat.models.values(), key=lambda m: m.info.id)]
+            ignoti = 0
+            conta = getattr(cat, "ignoti_sui_tool", None)
+            if callable(conta):
+                ignoti = len(conta())
             self._json({"provider": q, "modelli": out,
-                        "gratuiti": len(cat.free())})
+                        "gratuiti": len(cat.free()),
+                        "tool_calling_ignoti": ignoti})
         elif path == "/api/chiavi":
             # Solo stato, mai valori. La chiave non esce mai da qui:
             # questa risposta finisce nella cronologia del browser e
@@ -663,8 +850,24 @@ class Handler(BaseHTTPRequestHandler):
                 "prompt_price": p.info.prompt_price,
                 "scores": p.scores,
                 "current": p.info.id == current,
+                # Dichiarato dal provider, o appreso da un 400 reale.
+                # None vuol dire che il provider non lo dice: non e' un
+                # "no", e la UI lo mostra come tale invece di fingere
+                # certezze. Su uno sconosciuto non si fa affidamento,
+                # ma non si nasconde nemmeno.
+                "tool_calling": p.info.supports_tools,
             })
-        self._json({"models": out, "current": current, "provider": self.app.env.get("ORCHESTRA_PROVIDER")})
+        ignoti = 0
+        if cat is not None:
+            # un catalogo finto o un wrapper non ha per forza questo
+            # metodo: l'assenza non e' un errore, e' "non lo so", che
+            # e' gia' un terzo esito
+            conta = getattr(cat, "ignoti_sui_tool", None)
+            if callable(conta):
+                ignoti = len(conta())
+        self._json({"models": out, "current": current,
+                    "provider": self.app.env.get("ORCHESTRA_PROVIDER"),
+                    "tool_calling_ignoti": ignoti})
 
     def _sse(self) -> None:
         """Stream degli eventi, formato SSE.
@@ -896,14 +1099,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "indica il provider"}, 400)
                 return
             try:
-                self.app.switch_provider(p)
+                risultato = self.app.switch_provider(p)
             except RuntimeError as e:
                 self._json({"error": str(e)}, 409)
                 return
             except (ValueError, KeyError) as e:
                 self._json({"error": str(e)}, 400)
                 return
-            self._json({"ok": True, "provider": p})
+            # si rimanda anche il modello scelto: se quello vecchio non
+            # esiste sul servizio nuovo, l'utente deve sapere che si e'
+            # cambiato sotto i piedi, non scoprirlo dalla prima risposta
+            # che arriva da un altro servizio
+            risposta = {"ok": True, "provider": p}
+            if risultato:
+                risposta.update(risultato)
+            self._json(risposta)
         elif path == "/api/chiavi":
             # Scrive una chiave. Whitelist obbligatoria: senza, un POST
             # scriverebbe qualsiasi riga nel .env e avremmo dato una

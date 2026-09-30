@@ -49,7 +49,13 @@ globalThis.Option = function (testo, val) {
 for (const id of ["provider-pick", "opt-provider", "opt-model", "model-pick",
                   "scope-pick", "provider-note", "opt-provider-msg", "dot",
                   "stats", "conn", "log", "main", "input", "btn-send",
-                  "btn-cancel", "btn-reset", "ver", "scope-note"]) {
+                  "btn-cancel", "btn-reset", "ver", "scope-note",
+                  // caricaOpzioni li tocca subito: senza, il cambio
+                  // servizio finisce in "cambio fallito" e il test
+                  // misura un problema del finto DOM, non del codice
+                  "chiavi-lista", "gratis-lista", "opzioni-nota",
+                  "permessi-stato", "permessi-msg", "routing-cat",
+                  "routing-out", "routing-go"]) {
   document._els[id] = mk(id === "log" || id === "main" ? "div" : "select");
 }
 
@@ -64,7 +70,8 @@ let modelliChiamati = 0;
 globalThis.fetch = async function (u) {
   const ok = (o) => ({ ok: true, status: 200, json: async () => o });
   if (u === "/api/chiavi")
-    return ok({ provider: servizioCorrente, chiavi: CHIAVI, motori: [] });
+    return ok({ provider: servizioCorrente, chiavi: CHIAVI, motori: [],
+                nota_gratis: "", servizi_gratis: [] });
   if (String(u).startsWith("/api/provider")) {
     servizioCorrente = JSON.parse(globalThis.__corpoChiamata).provider;
     return ok({ ok: true, provider: servizioCorrente });

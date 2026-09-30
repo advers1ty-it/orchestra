@@ -344,21 +344,45 @@ async function loadModels() {
       // Con createElement + appendChild il <select> restava vuoto in
       // alcuni browser, perche' mancava l'attributo implicito.
       //
-      // Il punteggio va nell'opzione, non in una tabella a parte: e' la
-      // domanda che stai facendo ("quanto e' bravo su QUELLO che devo
+      // Il punteggio va nell'opzione, non in una tabella a parte: e'
+      // la domanda che stai facendo ("quanto e' bravo su QUELLO che devo
       // fare") e la risposta deve stare dove scegli.
+      //
+      // "tool?" per i modelli di cui il provider NON dichiara il
+      // tool-calling. Non e' un difetto: e' una domanda aperta, e
+      // segnalarla vale piu' di fingere certezze. Su un "sconosciuto"
+      // non si fa affidamento — ma non si nasconde nemmeno, perche' un
+      // modello che nasconde le sue carte peggio di uno che ammette di
+      // non sapere.
+      const tc = m.tool_calling;
+      const tool = tc === true ? "" : (tc === false ? "  [niente tool]" : "  [tool?]");
       const punteggio = punteggioPerScope(m, scopeAttivo);
       const o = new Option(
-        m.short + (punteggio ? "  " + punteggio : "") +
+        m.short + tool + (punteggio ? "  " + punteggio : "") +
         ctx_label(m.context) + " · " + price_label(m), m.id);
       modelPick.appendChild(o);
     }
-    // il modello corrente: se non c'è tra le opzioni, aggiungilo, altrimenti
-    // il <select> si apre su "modello…" e sembra non funzionare
-    if (d.current && !sorted.some((m) => m.id === d.current)) {
-      modelPick.appendChild(new Option(d.current, d.current));
+    // il modello corrente: si mette in mezzo solo se esiste davvero
+    // nella lista. Senza questo controllo, cambiando servizio la select
+    // si posiziona su un id che quel servizio non ha: si vede il
+    // modello vecchio mentre il backend sta chiamando un altro, e la
+    // divergenza si vede solo alla prima risposta.
+    if (d.current && sorted.some((m) => m.id === d.current)) {
+      modelPick.value = d.current;
+    } else {
+      const primo = sorted.find((m) => m.free) || sorted[0];
+      modelPick.value = primo ? primo.id : "";
+      if (d.current && primo && primo.id !== d.current) {
+        // il modello in uso non esiste piu' su questo servizio: lo
+        // diciamo. Un cambio silenzioso lascia l'utente convinto di
+        // stare usando quello che ha scelto.
+        const nota = $("provider-note");
+        if (nota) {
+          nota.textContent = "modello non disponibile su questo servizio, uso " + primo.id;
+          nota.className = "provider-note rosso";
+        }
+      }
     }
-    modelPick.value = d.current || modelPick.options[0]?.value || "";
     modelPick.disabled = false;
     // le liste del pannello benchmark e della prova manuale usano lo
     // stesso catalogo. Popolarle qui evita un secondo fetch e fa si'

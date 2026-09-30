@@ -66,8 +66,8 @@ print("\n[3] Il modello segue il servizio")
 # servizio vecchio: scegli un modello che quel servizio non ha.
 check("i modelli della chat sono stati ricaricati",
       len(d["dopo"]["modelliChat"]) >= 2, str(d["dopo"]["modelliChat"]))
-check("e la nota dice il servizio nuovo",
-      d["dopo"]["nota"].lower().startswith("groq"), d["dopo"]["nota"])
+check("e la nota dice il servizio nuovo in parole",
+      "groq" in d["dopo"]["nota"].lower(), d["dopo"]["nota"])
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
