@@ -171,15 +171,57 @@ on($("bench-run"), "click", async () => {
       }),
     });
     const d = await r.json();
-    if (!r.ok) { benchLog.textContent = ""; addText("error", d.error || `errore ${r.status}`); }
+    if (!r.ok) {
+      // errore del server: si vede qui, non solo in fondo al pannello
+      benchLog.textContent = "";
+      statoBench(d.error || ("errore " + r.status), "ko");
+      $("bench-run").disabled = false;
+      addText("error", d.error || `errore ${r.status}`);
+      return;
+    }
+    // il totale arriva subito: la percentuale ha un denominatore
+    attesaTotale = d.runs || 0;
+    statoBench("in corso — 0/" + attesaTotale + " run", "on");
+    pollBench();
   } catch (e) {
     benchLog.textContent = "";
+    // anche un errore di rete deve dirlo dove si guarda: se resta "in
+    // corso" per sempre, sembra che stia lavorando
+    statoBench("connessione fallita: " + e, "ko");
+    $("bench-run").disabled = false;
     addText("error", String(e));
   } finally {
     $("bench-run").disabled = false;
     if (!benchTimer) pollBench();
   }
 });
+
+// Stato e avanzamento, in alto nel pannello. Il conteggio dei run
+// e' quello che serve per capire quanto manca: un "sta girando" senza
+// numeri non dice niente quando un benchmark dura tre minuti.
+const benchStatus = $("bench-status");
+let attesaTotale = 0;
+
+function statoBench(testo, classe) {
+  benchStatus.textContent = testo;
+  benchStatus.className = "bench-status " + (classe || "");
+}
+
+function contaAvanzamento(log) {
+  // una riga per run finito: "== modello ==" segna l'inizio, "  task:"
+  // segna un risultato. Contiamo i risultati.
+  const finiti = (log || []).filter((l) => /^\s{2}\S+:\s/.test(l)).length;
+  const modelli = new Set((log || [])
+    .filter((l) => /^== /.test(l))
+    .map((l) => l.slice(3, -3)));
+  if (attesaTotale) {
+    const pct = Math.min(100, Math.round((finiti / attesaTotale) * 100));
+    statoBench("in corso — " + modelli.size + " modelli · " +
+               finiti + "/" + attesaTotale + " run · " + pct + "%", "on");
+  } else {
+    statoBench("in corso…", "on");
+  }
+}
 
 function pollBench() {
   if (benchTimer) return;
@@ -189,14 +231,19 @@ function pollBench() {
       const d = await r.json();
       benchLog.textContent = (d.log || []).join("\n");
       benchLog.scrollTop = benchLog.scrollHeight;
-      if (!d.running) {
+      if (d.running) {
+        contaAvanzamento(d.log);
+      } else {
         clearInterval(benchTimer);
         benchTimer = null;
         renderBenchResult(d.result);
+        const n = (d.log || []).filter((l) => /^\s{2}\S+:\s/.test(l)).length;
+        statoBench(n === 0 ? "nessun run eseguito" : "finito — " + n + " run", "ok");
       }
     } catch (e) {
       clearInterval(benchTimer);
       benchTimer = null;
+      statoBench("connessione persa: " + e, "ko");
     }
   }, 1500);
 }

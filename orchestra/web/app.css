@@ -239,3 +239,18 @@
 .prova-step.res.ko { border-left-color: #ff6b6b; }
 .prova-step.finale { border-left-color: var(--warn); }
 .prova-err { color: #ffb4b4; margin: 4px 0; }
+
+/* Stato del benchmark: visibile in alto, sempre. "sta girando" senza
+   numeri non serve a niente quando un giro dura minuti. */
+.bench-status {
+  margin-top: 6px; font: 12px var(--mono); color: var(--muted);
+  padding: 3px 9px; border-radius: 5px; display: inline-block;
+  border: 1px solid var(--border);
+}
+.bench-status.on   { color: #ffcf9b; border-color: #f5a623;
+                     background: rgba(245,166,35,.10); }
+.bench-status.ok   { color: #9fe8c4; border-color: #3ecf8e;
+                     background: rgba(62,207,142,.10); }
+.bench-status.ko   { color: #ffb4b4; border-color: #ff6b6b;
+                     background: rgba(255,107,107,.10); }
+.benchlog { max-height: 220px; }

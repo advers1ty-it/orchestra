@@ -227,7 +227,10 @@ class OrchestraApp:
             raise RuntimeError(f"categoria sconosciuta: {category}")
 
         threading.Thread(target=worker, daemon=True, name="orchestra-bench").start()
-        return {"ok": True, "models": ids, "tasks": len(tasks)}
+        # totale esatto: la UI lo usa per la percentuale di avanzamento.
+        # Senza questo il pannello puo' dire 'sta girando' ma non quanto manca.
+        return {"ok": True, "models": ids, "tasks": len(tasks),
+                "runs": len(ids) * len(tasks)}
 
     @staticmethod
     def _make_session(provider_name: str, model: str) -> Session:

@@ -81,6 +81,10 @@
       <div>
         <b>Benchmark</b>
         <span class="dim">misura cosa sa fare ogni modello, per categoria</span>
+        <!-- Stato e avanzamento: senza questo non si capiva se stesse
+             girando. Il risultato e' in fondo al pannello, quindi il
+             posto per dire "sta lavorando" e' in alto, sempre visibile. -->
+        <div id="bench-status" class="bench-status">pronto</div>
       </div>
       <button id="bench-close" class="ghost">Chiudi</button>
     </div>
@@ -109,6 +113,17 @@
       <button id="bench-run" class="primary">Avvia benchmark</button>
       <span class="dim small">costa token reali, i :free no</span>
     </div>
+
+    <!-- Log e risultati PRIMA della prova manuale. Dopo aver premuto
+         "Avvia" l'occhio va li', non in fondo: mezzo metro di lista
+         e di form prima, e il risultato sembrava sparito. -->
+    <div id="bench-note" class="dim small">
+      Costa token reali. I modelli <code>:free</code> non costano nulla.
+      n=1 per task: indicazione, non statistica.
+    </div>
+    <pre id="bench-log" class="benchlog"></pre>
+    <div id="bench-out"></div>
+
     <div class="prova-box">
       <b>Prova a mano</b>
       <span class="dim">un compito, un modello, tutta la trascrizione. Serve a capire perché un modello perde un task.</span>
@@ -121,12 +136,6 @@
       </div>
     </div>
     <pre id="prova-out" class="prova-out"></pre>
-    <div id="bench-note" class="dim small">
-      Costa token reali. I modelli <code>:free</code> non costano nulla.
-      n=1 per task: indicazione, non statistica.
-    </div>
-    <pre id="bench-log" class="benchlog"></pre>
-    <div id="bench-out"></div>
   </div>
 </div>
 
