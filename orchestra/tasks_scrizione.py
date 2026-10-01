@@ -102,7 +102,20 @@ TASK_EXTRACTION = [
             "Deve essere un JSON valido con questi campi: cliente (stringa), "
             "codice (stringa), preventivo (stringa), data (stringa in formato "
             "AAAA-MM-GG), totale (numero).\n"
-            "La data e' quella dentro 'Preventivo n. 2026/1847 del 14 giugno 2026'. "
+            # Nella riga "Preventivo n. 2026/1847 del 14 giugno 2026" ci
+            # sono tre informazioni, e ognuna va in un campo diverso.
+            # Il prompt le indicava tutte e tre in un colpo solo, senza
+            # dire quale andasse dove: il modello ha messo
+            # "Preventivo n. 2026/1847" nel campo preventivo, il
+            # verificatore pretendeva "2026/1847", e il compito non
+            # sceglieva nessuna delle due. Non stava misurando
+            # l'estrazione — stava misurando se il modello aveva
+            # indovinato una convenzione che nessuno aveva scritto.
+            "Nella riga 'Preventivo n. 2026/1847 del 14 giugno 2026' ci "
+            "sono tre cose, e ognuna va in un campo diverso:\n"
+            "  - preventivo: SOLO '2026/1847', senza la parola "
+            "'Preventivo' e senza 'n.'\n"
+            "  - data: '2026-06-14', ricavata dal 14 giugno 2026\n"
             "Il totale e' la somma dei tre importi elencati dopo 'Servizi'.\n"
             "Scrivi solo il file JSON, senza spiegazioni."
         ),

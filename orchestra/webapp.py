@@ -485,16 +485,16 @@ class OrchestraApp:
                         state = "ok" if r.passed else ("errore" if r.error else "fail")
                         self._bench["log"].append(
                             f"  {t.id}: {state}"
-                            + (f" — {(r.detail or r.error)[:80]}" if not r.passed else "")
+                            + (f" — {perché(r)}" if not r.passed else "")
                         )
                         if throttle:
                             time.sleep(throttle)
                 summary = summarize(results)
-                for mid, data in summary["per_model"].items():
-                    prof = cat.models.get(mid)
-                    if prof:
-                        prof.scores = {c: v for c, v in data["by_category"].items() if v > 0}
-                        prof.last_measured = time.time()
+                # salva_punteggi scrive i punteggi sul catalogo.
+                # Sta in una funzione perche' qui dentro non era
+                # raggiungibile da nessun test, ed e' il posto dove
+                # due bug hanno vissuto senza essere visti.
+                salva_punteggi(cat, summary)
                 try:
                     cat.save()
                 except Exception:
@@ -1608,6 +1608,70 @@ class Handler(BaseHTTPRequestHandler):
             self._json(res.to_dict())
         else:
             self._json({"error": "non trovato"}, 404)
+
+
+def perché(r) -> str:
+    """Dice perche' un task e' fallito — e cosa non dice.
+
+    "il file conta.py non esiste" e' il messaggio giusto, ma e'
+    ambiguo: non distingue un modello che non ha chiamato nessuno
+    strumento da uno che ha provato e non c'e' riuscito. Sono due
+    fallimenti diversi, e portano a due correzioni diverse — il primo
+    e' del modello, il secondo e' dell'agente o della rete.
+
+    Il benchmark riportava lo stesso testo per i due e li metteva
+    nella stessa colonna: il primo modello che falliva cosi' sembrava
+    la prova che gli strumenti non funzionassero, e il sospetto
+    cadeva sul posto sbagliato.
+    """
+    testo = (r.detail or r.error or "senza dettaglio").replace("\n", " ").strip()
+    if r.passed:
+        return ""
+    if "non esiste" in testo and not getattr(r, "tool_calls", 0):
+        return f"{testo} (il modello non ha chiamato nessuno strumento)"
+    if "non esiste" in testo and getattr(r, "tool_errors", 0):
+        return (f"{testo} (strumenti chiamati: {r.tool_calls}, "
+                f"con errore: {r.tool_errors})")
+    return testo[:100]
+
+
+def salva_punteggi(cat, summary: dict[str, Any]) -> int:
+    """Scrive i punteggi misurati sul catalogo. Ritorna quanti modelli.
+
+    `by_category[categoria]` e' un dizionario — score, passati, quanti —
+    e non un numero. Prima che il campo della frazione esistesse era
+    un numero, e due posti hanno continuato a farci `v > 0`: il primo
+    crashava il benchmark DOPO aver eseguito tutti i task, e il secondo
+    usava `cat` come nome della variabile del ciclo — ma `cat` e' il
+    catalogo, e dichiarare una locale con quel nome la rende locale per
+    tutto il corpo, anche per le righe precedenti. Da li':
+    "UnboundLocalError: cannot access local variable 'cat'".
+
+    Tre sintomi, una causa: il formato e' cambiato e non si e' cercato
+    chi lo leggeva. Questa funzione sta fuori dal handler perche' una
+    riga che nessun test puo' chiamare e' una riga che l'unico a
+    eseguire e' l'utente, dopo tre minuti di benchmark.
+    """
+    if cat is None:
+        return 0
+    n = 0
+    for mid, data in (summary.get("per_model") or {}).items():
+        prof = cat.models.get(mid)
+        if not prof:
+            continue
+        prof.scores = {}
+        prof.frazioni = {}
+        prof.task_per_cat = {}
+        for categoria, d in (data.get("by_category") or {}).items():
+            v = d.get("score", 0) if isinstance(d, dict) else d
+            if v > 0:
+                prof.scores[categoria] = v
+            if isinstance(d, dict):
+                prof.frazioni[categoria] = d.get("passati", 0)
+                prof.task_per_cat[categoria] = d.get("quanti", 0)
+        prof.last_measured = time.time()
+        n += 1
+    return n
 
 
 def _skill_elenco(indice) -> dict[str, Any]:

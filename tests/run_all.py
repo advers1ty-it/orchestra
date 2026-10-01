@@ -35,6 +35,8 @@ SUITES = [
     ("scrizione", "test_scrizione.py", True),
     ("allegato-giro", "test_allegato_giro.py", True),
     ("benchmark", "test_benchmark.py", True),
+    ("task-eseguibili", "test_task_eseguibili.py", True),
+    ("salva-punteggi", "test_salva_punteggi.py", True),
     ("punteggio", "test_punteggio.py", True),
     ("runner", "test_runner.py", True),
     ("skills", "test_skills.py", True),

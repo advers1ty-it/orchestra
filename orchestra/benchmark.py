@@ -258,9 +258,18 @@ TASKS: list[Task] = [
     ),
     Task(
         id="reason_sched", category="reasoning",
+        # Il quesito originale era: "Ada non fa A. Bo non fa C e non fa
+        # B. Chi fa B?" — e ha DUE risposte valide. Bo non puo' fare
+        # C ne' B, quindi fa A; restano B e C per Ada e Cy, e nessun
+        # vincolo dice quale delle due. Un modello che risponde "Ada"
+        # ragiona correttamente e il benchmark lo conta sbagliato,
+        # insieme a uno che indovina. Un test cosi' non distingue niente.
+        #
+        # Qui il vincolo e' su Ada, e la risposta resta Cy: Ada fa C,
+        # quindi B non puo' essere di Ada; Bo non fa B; resta Cy.
         prompt="Tre amici devono fare tre compiti A, B, C. Ognuno fa un compito "
-                "diverso. Ada non fa A. Bo non fa C e non fa B. Chi fa B? "
-                "Scrivi in risposta.txt solo la lettera del nome: Ada, Bo o Cy.",
+                "diverso. Ada fa C. Bo non fa B. Chi fa B? "
+                "Scrivi in risposta.txt solo il nome: Ada, Bo o Cy.",
         verify=v_all(
             v_contains("risposta.txt", "Cy"),
         ),
