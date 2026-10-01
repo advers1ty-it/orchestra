@@ -54,7 +54,31 @@ os.makedirs(WORK, exist_ok=True)
 def mk_agent(system_extra="", **cfg):
     p = build_provider(provider_name, model=model, env=env)
     conf = LoopConfig(**{**{"max_iterations": 8, "context_limit": 60_000}, **cfg})
-    return Agent(p, default_registry(), "Sei Orchestra, agente tecnico." + system_extra, conf)
+    # Ogni tentativo e ogni turno si vedono mentre accadono.
+    #
+    # Senza questo, un turno appeso e un turno lento sono la stessa
+    # cosa: il file non cresce, non esce niente, e l'unica cosa che
+    # sai e' che da diciassette minuti non hai notizie. Il primo
+    # arrivo cosi' e' stato un blocco vero, travestito da lentezza —
+    # e per distinguerli ho dovuto misurare i byte del file a mano.
+    #
+    # Il tetto, poi: 4 tentativi da 120 s per 8 iterazioni sono oltre
+    # un'ora di attesa silenziosa. Qui si stampa ogni tentativo, cosi'
+    # il costo si vede mentre lo si paga.
+    _n = [0]
+
+    def _guarda(kind, data):
+        if kind == "retry":
+            print(f"     (tentativo {data.get('attempt')}: "
+                  f"{str(data.get('error'))[:60]})", flush=True)
+        elif kind == "assistant":
+            _n[0] += 1
+            testo = str((data.get("text") or ""))[:60].replace("\n", " ")
+            print(f"     (turno {_n[0]}: {testo})", flush=True)
+
+    return Agent(p, default_registry(),
+                 "Sei Orchestra, agente tecnico." + system_extra,
+                 conf, on_event=_guarda)
 
 
 # ------------------------------------------------------------------
