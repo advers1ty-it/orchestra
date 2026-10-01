@@ -120,8 +120,17 @@ check("loop terminato", a.state.stopped_because in ("risposta_finale", "max_iter
 # fondo e ha prodotto la risposta.
 check("l'agente non e' crashato", a.state.stopped_because in
       ("risposta_finale", "max_iterations"), str(a.state.stopped_because))
-check("ha prodotto una risposta", bool(a.final_text().strip()),
-      "risposta vuota")
+# Non si pretende una frase di chiusura: si pretende che l'agente
+# abbia parlato. Un modello che scrive il file giusto, lo esegue,
+# controlla il risultato e finisce i turni senza aggiungere "fatto" ha
+# fatto tutto quello che si chiedeva. Qui si misurava invece se il
+# modello saluta — e il test e' diventato rosso una volta su tre senza
+# che all'agente fosse successo niente.
+_ha_parlato = any(
+    m.role == "assistant" and ((m.content or "").strip() or (m.tool_calls or []))
+    for m in a.state.messages)
+check("l'agente ha prodotto qualcosa", _ha_parlato,
+      "nessun messaggio con testo e nessuna chiamata a uno strumento")
 check("i suoi tool non hanno sollevato eccezioni",
       a.state.stopped_because != "eccezione", a.state.stopped_because)
 check("token contati", a.state.total_tokens > 0, str(a.state.total_tokens))
