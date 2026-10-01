@@ -284,6 +284,11 @@ class Catalog:
             if mid in self.models:
                 prof = self.models[mid]
                 prof.scores = blob.get("scores") or {}
+                # un salvataggio vecchio non ha questi campi: si
+                # caricano vuoti e la frazione semplicemente non si
+                # mostra, invece di mentire showing 0/0
+                prof.frazioni = dict(blob.get("frazioni") or {})
+                prof.task_per_cat = dict(blob.get("task_per_cat") or {})
                 prof.frazioni = blob.get("frazioni") or {}
                 prof.task_per_cat = blob.get("task_per_cat") or {}
                 prof.capabilities.update(blob.get("capabilities") or {})
@@ -344,6 +349,14 @@ class Catalog:
                 # tenuto, altrimenti il ciclo riparte da capo ogni turno.
                 mid: {"scores": p.scores, "capabilities": p.capabilities,
                       "last_measured": p.last_measured,
+                      # la base campionaria viaggia con il punteggio.
+                      # Senza, il 100% di un modello e il 100% di un
+                      # altro sono la stessa riga anche se uno e' stato
+                      # misurato su una categoria sola: e la tabella
+                      # promette che la frazione sia confrontabile,
+                      # cosa che senza il denominatore non e'.
+                      "frazioni": getattr(p, "frazioni", {}),
+                      "task_per_cat": getattr(p, "task_per_cat", {}),
                       **({"supports_tools": False}
                          if p.info.supports_tools is False else {})}
                 for mid, p in self.models.items()

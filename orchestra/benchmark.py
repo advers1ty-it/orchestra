@@ -367,6 +367,10 @@ class RunResult:
     tool_errors: int
     stopped_because: str
     error: str = ""
+    # quali strumenti hanno fallito, non solo quanti: "con errore: 1" non
+    # distingue un modello che ha sbagliato la chiamata da uno strumento
+    # rotto — che sono due cose da sistemare in due posti diversi
+    tool_error_names: list[str] = field(default_factory=list)
     # il provider lo riserva ad altri client: non e' colpa del modello e non
     # deve entrare nel punteggio
     unusable: bool = False
@@ -412,7 +416,9 @@ def run_task(
             passed=passed, detail=detail, seconds=time.time() - t0,
             prompt_tokens=0, completion_tokens=st.total_tokens,
             cost_usd=0.0, tool_calls=st.tool_calls_made,
-            tool_errors=st.tool_errors, stopped_because=st.stopped_because,
+            tool_errors=st.tool_errors,
+            tool_error_names=list(getattr(st, "tool_error_names", [])),
+            stopped_because=st.stopped_because,
         )
     except Exception as e:  # noqa: BLE001 - un task che fallisce non ferma il benchmark
         # Un modello irraggiungibile non e' un modello scarso: segnalarlo
@@ -480,6 +486,7 @@ class ManualResult:
             "completion_tokens": self.completion_tokens,
             "cost_usd": round(self.cost_usd, 6),
             "tool_calls": self.tool_calls, "tool_errors": self.tool_errors,
+            "tool_error_names": list(self.tool_error_names),
             "iterations": self.iterations,
             "stopped_because": self.stopped_because, "error": self.error,
         }
@@ -703,3 +710,41 @@ def render_table(summary: dict[str, Any], catalog: Catalog | None = None) -> str
         for m in summary["unusable_models"]:
             lines.append(f"  {short.get(m, m)}")
     return "\n".join(lines)
+
+
+def perché(r) -> str:
+    """Perche' e' fallito un task — e cosa il messaggio non dice.
+
+    Sta in benchmark.py e non in webapp.py perche' la riga di
+    comando stampa lo stesso messaggio: quando stava solo dalla
+    parte web, l'utente leggeva 'il file risposta.txt non esiste'
+    senza metterci dentro il pezzo che dice perche'.
+
+    "il file conta.py non esiste" e' il messaggio giusto, ma e'
+    ambiguo: non distingue un modello che non ha chiamato nessuno
+    strumento da uno che ha provato e non c'e' riuscito. Sono due
+    fallimenti diversi, e portano a due correzioni diverse — il primo
+    e' del modello, il secondo e' dell'agente o della rete.
+
+    Il benchmark riportava lo stesso testo per i due e li metteva
+    nella stessa colonna: il primo modello che falliva cosi' sembrava
+    la prova che gli strumenti non funzionassero, e il sospetto
+    cadeva sul posto sbagliato.
+    """
+    testo = (r.detail or r.error or "senza dettaglio").replace("\n", " ").strip()
+    if r.passed:
+        return ""
+    if "non esiste" in testo and not getattr(r, "tool_calls", 0):
+        return f"{testo} (il modello non ha chiamato nessuno strumento)"
+    if "non esiste" in testo and getattr(r, "tool_errors", 0):
+        # il nome, non il numero: se ha fallito 'read_file' il problema
+        # e' che il file non c'era (del modello), se ha fallito
+        # 'write_file' potrebbe essere lo strumento (nostro)
+        quali = list(getattr(r, "tool_error_names", []) or [])
+        dettaglio = f"con errore: {r.tool_errors}"
+        if quali:
+            dettaglio += " (" + ", ".join(dict.fromkeys(quali)) + ")"
+        return f"{testo} (strumenti chiamati: {r.tool_calls}, {dettaglio})"
+    return testo[:100]
+
+

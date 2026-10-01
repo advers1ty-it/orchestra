@@ -55,6 +55,11 @@ class AgentState:
     total_tokens: int = 0
     tool_calls_made: int = 0
     tool_errors: int = 0
+    # quali strumenti hanno fallito, non solo quanti: 'con errore: 1'
+    # non dice se il modello ha sbagliato una chiamata o se c'e' un
+    # bug in uno strumento — che sono due cose da sistemare in due
+    # posti diversi.
+    tool_error_names: list[str] = field(default_factory=list)
     consecutive_errors: int = 0
     compactions: int = 0
     stopped_because: str = ""
@@ -287,6 +292,7 @@ class Agent:
                         self.state.consecutive_errors = 0
                     else:
                         self.state.tool_errors += 1
+                        self.state.tool_error_names.append(tc.name)
                         self.state.consecutive_errors += 1
 
                     self.state.messages.append(

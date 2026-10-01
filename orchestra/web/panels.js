@@ -295,10 +295,22 @@ function contaAvanzamento(log) {
 
 function pollBench() {
   if (benchTimer) return;
+  // Quante volte si puo' sbagliare prima di dichiarare la connessione
+  // persa. Una richiesta every 1,5 secondi per tre minuti sono
+  // centoventi richieste: se basta che una fallisca per chiudere il
+  // polling, una singola scossa di rete lascia la UI ferma mentre il
+  // benchmark continua a girare sul server. Il lavoro va avanti e non
+  // lo vedi piu', e la cosa sembra un crash.
+  //
+  // Non e' che il server sia andato via: si puo' chiedere. Solo se
+  // falliscono piu' richieste di fila, e il server conferma che
+  // risponde male, si smette.
+  let errori = 0;
   benchTimer = setInterval(async () => {
     try {
       const r = await fetch("/api/bench/status");
       const d = await r.json();
+      errori = 0;
       benchLog.textContent = (d.log || []).join("\n");
       benchLog.scrollTop = benchLog.scrollHeight;
       if (d.running) {
@@ -311,9 +323,17 @@ function pollBench() {
         statoBench(n === 0 ? "nessun run eseguito" : "finito — " + n + " run", "ok");
       }
     } catch (e) {
+      errori += 1;
+      // Non e' finito: si riprova. Un benchmark dura minuti, e un
+      // tentativo non riuscito non vuol dire che il server sia andato.
+      if (errori < 12) {
+        statoBench("connessione instabile — riprovo (" + errori + ")", "on");
+        return;
+      }
       clearInterval(benchTimer);
       benchTimer = null;
-      statoBench("connessione persa: " + e, "ko");
+      statoBench("connessione persa dopo " + errori + " tentativi: " + e +
+                 " — il benchmark puo' continuare sul server", "ko");
     }
   }, 1500);
 }

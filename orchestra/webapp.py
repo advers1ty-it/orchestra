@@ -456,7 +456,7 @@ class OrchestraApp:
                        "started": time.time(), "models": ids}
 
         def worker() -> None:
-            from .benchmark import render_table, run_task, summarize, tasks_for
+            from .benchmark import render_table, run_task, summarize, tasks_for, perché
 
             tasks = tasks_for(category)
             if not tasks:
@@ -1608,31 +1608,6 @@ class Handler(BaseHTTPRequestHandler):
             self._json(res.to_dict())
         else:
             self._json({"error": "non trovato"}, 404)
-
-
-def perché(r) -> str:
-    """Dice perche' un task e' fallito — e cosa non dice.
-
-    "il file conta.py non esiste" e' il messaggio giusto, ma e'
-    ambiguo: non distingue un modello che non ha chiamato nessuno
-    strumento da uno che ha provato e non c'e' riuscito. Sono due
-    fallimenti diversi, e portano a due correzioni diverse — il primo
-    e' del modello, il secondo e' dell'agente o della rete.
-
-    Il benchmark riportava lo stesso testo per i due e li metteva
-    nella stessa colonna: il primo modello che falliva cosi' sembrava
-    la prova che gli strumenti non funzionassero, e il sospetto
-    cadeva sul posto sbagliato.
-    """
-    testo = (r.detail or r.error or "senza dettaglio").replace("\n", " ").strip()
-    if r.passed:
-        return ""
-    if "non esiste" in testo and not getattr(r, "tool_calls", 0):
-        return f"{testo} (il modello non ha chiamato nessuno strumento)"
-    if "non esiste" in testo and getattr(r, "tool_errors", 0):
-        return (f"{testo} (strumenti chiamati: {r.tool_calls}, "
-                f"con errore: {r.tool_errors})")
-    return testo[:100]
 
 
 def salva_punteggi(cat, summary: dict[str, Any]) -> int:

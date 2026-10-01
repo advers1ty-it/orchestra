@@ -339,7 +339,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
     env = _env()
     provider_name = args.provider or env.get("ORCHESTRA_PROVIDER", "openrouter")
 
-    from .benchmark import render_table, run_task, summarize, tasks_for
+    from .benchmark import render_table, run_task, summarize, tasks_for, perché
     from .catalog import Catalog
 
     try:
@@ -461,7 +461,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
                     # 60 caratteri tagliavano via metà del messaggio di
                     # errore, e il dettaglio è l'unica cosa che serve per
                     # capire se il fallo è del modello o del benchmark
-                    note = r.detail[:110]
+                    note = perché(r)
                 print(f"{mark}  {C['dim']}{note}{C['x']}")
             if mid in dead:
                 break
