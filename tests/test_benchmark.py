@@ -174,18 +174,30 @@ s = summarize([
 check("riepilogo per modello", set(s["per_model"]) == {"buono", "medio", "scarso"})
 check("punteggio migliore", s["per_model"]["buono"]["score"] == 1.0)
 check("punteggio peggiore", s["per_model"]["scarso"]["score"] == 0.0)
+# by_category[cat] e' un dizionario: il punteggio, quanti ne ha
+# passati e quanti ne erano. Prima era solo il numero, e 2/3 e 13/20
+# erano indistinguibili pur avendo la stessa percentuale.
+_bc = s["per_model"]["medio"]["by_category"]
 check("specializzazione visibile",
-      s["per_model"]["medio"]["by_category"]["code"] == 1.0
-      and s["per_model"]["medio"]["by_category"]["reasoning"] == 0.0,
-      str(s["per_model"]["medio"]["by_category"]))
+      _bc.get("code", {}).get("score") == 1.0
+      and _bc.get("reasoning", {}).get("score") == 0.0,
+      str(_bc))
+check("e porta la base, che serve a sapere se e' confrontabile",
+      _bc.get("code", {}).get("quanti") == 1
+      and _bc.get("code", {}).get("passati") == 1,
+      str(_bc))
 check("riepilogo per categoria", set(s["by_category"]) == {"code", "reasoning"})
 
 # la cosa che rende il benchmark utile: due modelli con profili diversi
 prof_a = summarize([rr("A", "code", True), rr("A", "reasoning", False)])
 prof_b = summarize([rr("B", "code", False), rr("B", "reasoning", True)])
 check("profili opposti distinguibili",
-      prof_a["per_model"]["A"]["by_category"]["code"] == 1.0
-      and prof_b["per_model"]["B"]["by_category"]["reasoning"] == 1.0)
+      prof_a["per_model"]["A"]["by_category"]["code"]["score"]
+      > prof_b["per_model"]["B"]["by_category"]["code"]["score"]
+      and prof_a["per_model"]["A"]["by_category"]["reasoning"]["score"]
+      < prof_b["per_model"]["B"]["by_category"]["reasoning"]["score"],
+      f"A={prof_a['per_model']['A']['by_category']} "
+      f"B={prof_b['per_model']['B']['by_category']}")
 
 tab = render_table(s)
 check("tabella ha un header", "modello" in tab, tab[:60])

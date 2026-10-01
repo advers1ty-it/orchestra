@@ -32,19 +32,39 @@ def check(nome, cond, dettaglio=""):
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 panels = open(os.path.join(ROOT, "orchestra", "web", "panels.js"), encoding="utf-8").read()
-m = re.search(r"const ordine = \[(.*?)\]", panels)
-offerte = [x.strip().strip('"') for x in m.group(1).split(",") if x.strip()]
+html = open(os.path.join(ROOT, "orchestra", "web", "index.html"), encoding="utf-8").read()
+
+from orchestra.catalog import CATEGORIES, CATEGORY_LABEL  # noqa: E402
 
 per_cat = collections.Counter(t.category for t in tasks_for())
 
-print("[1] Le due liste sono coerenti")
-print("   menu:", len(offerte), "categorie")
-print("   benchmark:", len(per_cat), "categorie con almeno un task")
-check("il menu non inventa categorie",
-      set(offerte) >= set(per_cat),
-      str(sorted(set(per_cat) - set(offerte))))
-check("non ci sono categorie duplicate nel menu",
-      len(offerte) == len(set(offerte)), str(offerte))
+print("[1] Il menu non e' piu' scritto a mano")
+# Prima questo test leggeva "const ordine = [...]" da panels.js e
+# verificava che contenesse tutte le categorie. Ma un elenco scritto a
+# mano e' un elenco che invecchia: ne aveva cinque su nove, e nessuno
+# se ne accorgeva perche' il test era costruito sul presupposto che
+# l'elenco esistesse.
+#
+# Ora il menu lo prende dal server, quindi il controllo e' un altro:
+# non ci sia piu' un elenco scritto, e ci sia il meccanismo che lo
+# riempie.
+m = re.search(r"const ordine = \[(.*?)\]", panels)
+check("non c'e' piu' un elenco di categorie scritto a mano",
+      m is None,
+      "trovato: const ordine = [" + (m.group(1)[:60] if m else "") + "]")
+check("e il menu si riempie dal server",
+      "categorieServer.map" in panels,
+      "senza questo non si sa come le categorie arrivino al menu")
+check("e il menu del benchmark si riempie anche lui",
+      "benchCat.replaceChildren" in panels,
+      "era un <select> con cinque option scritte nell'HTML")
+i = html.index('id="bench-cat"')
+menu = html[i:html.index("</select>", i)]
+n_opzioni = menu.count("<option")
+check("nell'HTML c'e' una sola option scritta",
+      n_opzioni == 1, f"{n_opzioni} nell'HTML")
+print(f"   task: {len(per_cat)} categorie con almeno un test")
+print("   (il menu le prende tutte dal server, non le elenca qui)")
 
 print("\n[2] I dati sul server dicono la verita'")
 # /api/categorie risponde dai task registrati: e' la stessa fonte che
@@ -79,11 +99,11 @@ print("\n[3] Le categorie vuote sono dichiarate come vuote")
 # Non e' un fallimento: e' il punto. Il test esiste perche' il
 # difetto originale non falliva da nessuna parte — era un testo
 # mostrato, e un testo non fallisce nessun test.
-vuote = [c for c in offerte if per_cat.get(c, 0) == 0]
+vuote = [c for c in CATEGORIES if per_cat.get(c, 0) == 0]
 print("   categorie senza task:", vuote or "nessuna")
 check("le categorie vuote sono poche, non la maggior parte",
-      len(vuote) < len(offerte) / 2,
-      f"{len(vuote)} su {len(offerte)}")
+      len(vuote) < len(CATEGORIES) / 2,
+      f"{len(vuote)} su {len(CATEGORIES)}")
 
 print("\n[4] La UI distingue 'vuota' da 'da misurare'")
 # Il punto del fix: due messaggi diversi per due situazioni diverse.
@@ -102,11 +122,16 @@ print("\n[5] Ogni categoria offerta nel menu esiste nel catalogo")
 # qualcuno abbia confrontato i modelli su quello. Se la categoria non
 # esiste in CATEGORIES, il menu offre qualcosa che il backend non
 # conosce, e il click produce una categoria che nessuno calcola.
-from orchestra.catalog import CATEGORIES, CATEGORY_LABEL  # noqa: E402
 
-check("ogni categoria del menu esiste nel catalogo",
-      set(offerte) <= set(CATEGORIES),
-      str(sorted(set(offerte) - set(CATEGORIES))))
+# Prima era "set(CATEGORIES) <= set(CATEGORIES)" e controllava che
+# l'elenco scritto a mano non contenesse categorie inesistenti. Ora
+# non c'e' piu' quell'elenco: il menu prende tutto dal catalogo, e
+# l'unico elenco che esiste e' CATEGORIES. Il controllo diventa
+# un'altra cosa: ogni categoria abbia un'etichetta leggibile e una
+# lista di task, altrimenti comparirebbe nel menu senza spiegazione.
+check("ogni categoria ha almeno un task",
+      set(per_cat) >= set(CATEGORIES),
+      str(sorted(set(CATEGORIES) - set(per_cat))))
 check("ogni categoria ha un'etichetta leggibile",
       all(c in CATEGORY_LABEL and CATEGORY_LABEL[c] for c in CATEGORIES),
       str([c for c in CATEGORIES if not CATEGORY_LABEL.get(c)]))

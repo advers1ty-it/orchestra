@@ -66,8 +66,15 @@ print("\n[3] Il modello segue il servizio")
 # servizio vecchio: scegli un modello che quel servizio non ha.
 check("i modelli della chat sono stati ricaricati",
       len(d["dopo"]["modelliChat"]) >= 2, str(d["dopo"]["modelliChat"]))
-check("e la nota dice il servizio nuovo in parole",
-      "groq" in d["dopo"]["nota"].lower(), d["dopo"]["nota"])
+# La nota NON deve ripetere il servizio: il menu a tendina lo dice
+# gia', e due versioni della stessa informazione con affidabilita'
+# diversa sono peggio di una sola. Prima questo test pretendeva
+# "groq" nella nota, e l'ha mantenuto vivo un messaggio che l'utente
+# aveva chiesto di togliere.
+check("e la nota non ripete il servizio",
+      "groq" not in d["dopo"]["nota"].lower(),
+      d["dopo"]["nota"])
+
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

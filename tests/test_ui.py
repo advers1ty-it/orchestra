@@ -240,6 +240,36 @@ globalThis.document = {
   createTextNode: (t) => { const e = new El("#text"); e._text = t; return e; },
   addEventListener: () => {},
   body: new El("body"),
+
+  // Il bundle chiama document.querySelectorAll per il pannello a
+  // sezioni. Senza questo metodo collegaSezioni() muore e i tab di
+  // Opzioni restano scollegati — senza errore in pagina, perche' il
+  // bundle e' servito col try/catch. Aggiunto a mano in tre test
+  // diversi perche' ognuno costruiva il proprio document; qui si
+  // mette una volta sola, cosi' il prossimo test che costruisce un
+  // document non deve ricordarsene.
+  querySelectorAll(sel) {
+    const out = [];
+    const push = (e) => { if (e && out.indexOf(e) < 0) out.push(e); };
+    const R = Object.assign({}, globalThis.REG || {},
+                            globalThis.document && globalThis.document._els || {});
+    if (typeof sel !== "string") return out;
+    if (sel.indexOf("opz-sez") >= 0 || sel.indexOf("section") === 0) {
+      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+        .forEach((n) => push(R["opz-sez-" + n]));
+    } else if (sel.indexOf("opzioni-tab") >= 0 || sel.indexOf("button") === 0) {
+      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+        .forEach((n) => push(R["opz-tab-" + n]));
+    } else if (sel.indexOf("opzioni-nav") >= 0) {
+      push(R["opzioni-nav"]);
+    }
+    return out;
+  },
+  querySelector(sel) {
+    const t = this.querySelectorAll(sel);
+    return t.length ? t[0] : null;
+  },
+
 };
 // i marcatori dei file scrivono su window.__diagFiles: senza questo, il
 // primo file che carica la UI muore a runtime e il test misura il mock

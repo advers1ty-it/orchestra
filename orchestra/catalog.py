@@ -159,6 +159,14 @@ class ModelProfile:
     capabilities: dict[str, str] = field(default_factory=dict)
     # punteggi misurati dal benchmark, categoria -> 0..1
     scores: dict[str, float] = field(default_factory=dict)
+    # Quanti test sono passati e quanti ne erano, per categoria.
+    # Senza questi la percentuale nasconde la base: 50% su 2 test e
+    # 50% su 20 sembrano la stessa misura, e non lo sono. Con 2-3 test
+    # per categoria la differenza e' enorme: due terzi su due test e
+    # due terzi su venti non sono confrontabili, e il numero da solo
+    # non lo dice.
+    frazioni: dict[str, int] = field(default_factory=dict)
+    task_per_cat: dict[str, int] = field(default_factory=dict)
     last_measured: float = 0.0
 
     def confidence(self, category: str) -> str:
@@ -186,6 +194,8 @@ class ModelProfile:
             "info": asdict(self.info),
             "capabilities": self.capabilities,
             "scores": self.scores,
+            "frazioni": self.frazioni,
+            "task_per_cat": self.task_per_cat,
             "last_measured": self.last_measured,
         }
 
@@ -248,6 +258,8 @@ class Catalog:
             if prev:
                 prof.capabilities = prev.capabilities
                 prof.scores = prev.scores
+                prof.frazioni = prev.frazioni
+                prof.task_per_cat = prev.task_per_cat
                 prof.last_measured = prev.last_measured
             prof.capabilities = {c: "unknown" for c in CATEGORIES}
             cat.models[info.id] = prof
@@ -272,6 +284,8 @@ class Catalog:
             if mid in self.models:
                 prof = self.models[mid]
                 prof.scores = blob.get("scores") or {}
+                prof.frazioni = blob.get("frazioni") or {}
+                prof.task_per_cat = blob.get("task_per_cat") or {}
                 prof.capabilities.update(blob.get("capabilities") or {})
                 prof.last_measured = blob.get("last_measured", 0)
                 # un "no" sui tool, appreso dalla risposta del provider,

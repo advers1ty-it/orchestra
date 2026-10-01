@@ -101,18 +101,31 @@ check("il server accetta il file", _st == 200, f"HTTP {_st}: {caricato}")
 check("e gli dà un id", bool(caricato.get("id")), json.dumps(caricato)[:100])
 ids = caricato.get("id") or []
 
-stato, risposta = post("/api/send", {
-    "text": "quanti pixel Rossi ci sono?",
-    "allegati": ids,
-})
-check("il server accetta l'invio", stato == 200, f"HTTP {stato}: {risposta}")
-if stato == 200:
-    print("   risposta:", json.dumps(risposta)[:140])
-    check("e conta i token", isinstance(risposta.get("token"), int)
-          and risposta["token"] > 0, str(risposta.get("token")))
-    check("un'immagine costa circa 1100 token",
-          900 <= risposta.get("token", 0) <= 1300,
-          str(risposta.get("token")))
+# Qui il giro NON parte. La sezione [3] verifica gia' che il payload
+# che esce dal Message sia quello giusto — istruzione prima,
+# immagine dopo — e quello e' il contratto col provider, senza
+# spendere un turno per scoprirlo.
+#
+# Un turno vero qui non aggiunge copertura e toglie determinismo:
+# costa token, occupa l'agente, e la suite successiva legge il 409 e
+# crede che il difetto sia suo. E' successo due volte.
+stato = 0
+risposta = {}
+print("   (il giro col modello vero e' in tests/test_allegato_vero.py)")
+# Il conto dei token lo calcola attachments.py, e non ha bisogno
+# del server ne' di un turno: si verifica direttamente. Prima questa
+# riga leggeva la risposta HTTP di un turno vero, e con il turno
+# tolto non avrebbe piu' avuto niente da guardare — ma il numero
+# esiste lo stesso, e la sua utilita' no: e' quello che decide se
+# conviene mandare la foto al provider.
+check("il conto dei token e' calcolato",
+      isinstance(a.token_stimati, int) and a.token_stimati > 0,
+      str(a.token_stimati))
+check("un'immagine costa circa 1100 token",
+      900 <= a.token_stimati <= 1300, str(a.token_stimati))
+check("e il conto torna col numero di immagini",
+      a.token_stimati == 1100 * len(a.immagini),
+      f"{a.token_stimati} per {len(a.immagini)} immagini")
 
 print("\n[3] Quello che esce davvero verso il provider")
 # Qui non si guarda la risposta HTTP: si guarda il payload. Una risposta

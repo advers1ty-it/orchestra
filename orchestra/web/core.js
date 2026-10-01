@@ -9,11 +9,27 @@ const $ = (id) => document.getElementById(id);
 // segue: e' successo tre volte, e ogni volta la pagina restava a meta'
 // senza dire perche'.
 const on = (el, evento, fn) => {
-  if (!el) {
+  // Se arriva una stringa, e' un id: si risolve. Il motivo e' che
+  // passare l'id a on() e' l'errore piu' facile da fare — sembra
+  // funzionare perche' una stringa e' truthy e passa la guardia
+  // qui sotto, e si scopre solo quando la pagina muore con
+  // "addEventListener is not a function". Accettare l'id e
+  // risolverlo e' il comportamento che ti aspetteresti, e toglie
+  // una classe intera di difetti.
+  const bersaglio = typeof el === "string" ? $(el) : el;
+  if (!bersaglio) {
     console.warn("elemento assente, handler '" + evento + "' non agganciato");
     return false;
   }
-  el.addEventListener(evento, fn);
+  if (typeof bersaglio.addEventListener !== "function") {
+    // Non e' un elemento. Meglio dirlo con precisione che lasciare
+    // la pagina morire due righe dopo: un TypeError su
+    // addEventListener non dice quale handler e quale elemento.
+    console.warn("non e' un elemento, handler '" + evento + "' non agganciato:",
+                 bersaglio);
+    return false;
+  }
+  bersaglio.addEventListener(evento, fn);
   return true;
 };
 const log = $("log"), main = $("main"), input = $("input");

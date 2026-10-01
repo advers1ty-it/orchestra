@@ -596,8 +596,18 @@ def summarize(results: list[RunResult]) -> dict[str, Any]:
             "tokens": sum(r.total_tokens for r in rs),
             "tool_calls": sum(r.tool_calls for r in rs),
             "errors": [r.error for r in rs if r.error],
+            # Per ogni categoria: la proporzione, quanti ne ha passati
+            # e quanti ne aveva. La frazione serve perche' la
+            # percentuale da sola nasconde la base — 50% su 2 test e
+            # 50% su 20 non sono la stessa misura, e senza questo
+            # numero non si puo' accorgersene.
             "by_category": {
-                c: score([r for r in rs if r.category == c])
+                c: {
+                    "score": score([x for x in rs if x.category == c]),
+                    "passati": sum(1 for x in rs
+                                   if x.category == c and x.passed),
+                    "quanti": sum(1 for x in rs if x.category == c),
+                }
                 for c in sorted({r.category for r in rs})
             },
         }
@@ -630,18 +640,54 @@ def render_table(summary: dict[str, Any], catalog: Catalog | None = None) -> str
     w = max(len(s) for s in short.values())
     w = max(w, 8)
 
-    head = f"{'modello':<{w}} {'tot':>5}  " + "  ".join(f"{c[:9]:>9}" for c in cats)
+    # La colonna "tot" e' una somma di percentuali su categorie con
+    # un numero di test diverso: non e' confrontabile con niente, e
+    # come prima stava li' senza dirlo. Per questo adesso e' una
+    # media pesata dal numero reale di test — che almeno e' una
+    # media di cose confrontabili — e l'etichetta sotto dice che va
+    # letta per categoria, non come numero unico.
+    def _quanti(data, cat):
+        d = (data.get("by_category") or {}).get(cat)
+        return (d.get("quanti", 0) if isinstance(d, dict) else 0)
+
+    def _peso(data):
+        # media pesata per numero di test: un modello con 10 test
+        # passati su 20 conta il doppio di uno con 5 su 10.
+        num = den = 0.0
+        for c in cats:
+            n = _quanti(data, c)
+            if n:
+                d = data["by_category"][c]
+                num += (d.get("score", 0) if isinstance(d, dict) else 0) * n
+                den += n
+        return num / den if den else 0.0
+
+    head = (f"{'modello':<{w}} {'media':>6}  "
+            + "  ".join(f"{c[:9]:>9}" for c in cats))
     lines = [head, "-" * len(head)]
 
-    for mid, data in sorted(per_model.items(), key=lambda kv: -kv[1]["score"]):
-        row = f"{short[mid]:<{w}} {data['score']:>5.2f}  "
-        row += "  ".join(
-            f"{data.get('by_category', {}).get(c, 0):>9.2f}" for c in cats
-        )
+    for mid, data in sorted(per_model.items(),
+                            key=lambda kv: -_peso(kv[1])):
+        row = f"{short[mid]:<{w}} {_peso(data) * 100:>5.0f}%  "
+        for c in cats:
+            d = (data.get("by_category") or {}).get(c)
+            if isinstance(d, dict) and d.get("quanti"):
+                # la frazione accanto: la percentuale da sola nasconde
+                # la base, e con 2-3 test per categoria la base conta
+                row += f"{d['score'] * 100:>4.0f}%({d['passati']}/{d['quanti']})"
+            else:
+                row += f"{'—':>9}"
         lines.append(row)
 
     lines.append("")
-    lines.append("per_model = percentuale di task superati (n=1 per task, non è statistico)")
+    lines.append("ogni colonna e' una percentuale di test passati in QUELLA categoria")
+    lines.append("(la frazione dice quanti test erano: 2/3 e 13/20 non sono")
+    lines.append(" confrontabili anche se la percentuale coincide)")
+    lines.append("")
+    lines.append("'media' e' una media pesata per numero di test. Serve per")
+    lines.append(" dare un ordine di grandezza, non per scegliere: per quello")
+    lines.append(" guarda la colonna della categoria che ti interessa.")
+    lines.append("(n=1 per task: non e' statistico, e' un'indicazione)")
     if summary.get("unusable_models"):
         lines.append("")
         lines.append("NON MISURATI (il provider li riserva ad altri client, esclusi dal punteggio):")

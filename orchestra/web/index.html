@@ -135,40 +135,148 @@
          liberi in mezzo a dodici righe di chiavi si perdono, e un id
          scritto a mano che sbaglia fallisce solo alla prima chiamata,
          con un errore che sembra di rete. Un menu non puo' sbagliare. -->
-    <div class="opzioni-selezione">
-      <label>Servizio
-        <select id="opt-provider" disabled></select>
-      </label>
-      <label>Modello
-        <select id="opt-model" disabled></select>
-      </label>
-      <span id="opt-provider-msg" class="small dim"></span>
-    </div>
+    <!-- Barra laterale a sinistra, una sezione per volta.
+         Prima erano cinque blocchi in colonna: servizio, permessi,
+         chiavi, skill, gratis. Ogni blocco aggiunto spingeva in
+         giu' tutto il resto, e per arrivare alle skill si passava
+         davanti a dodici righe di chiavi. Con sei sezioni la colonna
+         e' un muro, e un muro si risolve nascondendo informazioni,
+         che e' il contrario di quello che serve.
 
-    <!-- Permessi: stato e prova. La prova genera una domanda vera senza
-         spendere un token e senza dipendere da quello che un modello
-         decide di fare — meglio scoprire qui che il canale e' rotto,
-         che accorgersene quando un operazione ti viene negata senza
-         spiegazione. -->
-    <div class="opzioni-permessi">
-      <div class="opzioni-permessi-testa">
-        <b>Permessi</b>
-        <span class="dim">l'agente può uscire dalla cartella di lavoro solo se glielo
-          consenti. Le cartelle di sistema non sono autorizzabili.</span>
-      </div>
-      <div class="opzioni-permessi-azioni">
-        <button id="permessi-prova" class="ghost">Prova il canale</button>
-        <span id="permessi-msg" class="small dim"></span>
-      </div>
-      <div id="permessi-stato" class="permessi-stato"></div>
-    </div>
+         Barra e non tab: i nomi delle sezioni sono lunghi e
+         significano qualcosa ("Dove si trovano modelli gratis",
+         "Imparate dall'agente"). Con le tab servirebbero icone o
+         abbreviazioni, e ogni clic costerebbe una decodifica. Qui il
+         nome si legge intero e resta leggibile anche a sette sezioni.
 
-    <div id="chiavi-lista" class="chiavi-lista"></div>
-    <div class="opzioni-gratis">
-      <b>Dove si trovano modelli gratis</b>
-      <span class="dim" id="opzioni-nota"></span>
-      <div id="locali-avviso" class="gratis-locale" style="display:none"></div>
-      <div id="gratis-lista"></div>
+         Le sezioni restano tutte nel DOM e si nascondono. Il motivo e'
+         che ricaricarne il contenuto a ogni cambio e' la via per
+         perdere uno stato: il filtro sulle skill, per esempio,
+         finirebbe svuotato a ogni passaggio. -->
+    <div class="opzioni-corpo">
+      <nav class="opzioni-nav" aria-label="sezioni">
+        <button id="opz-tab-modello" class="opzioni-tab attiva" data-sez="modello">Modello</button>
+        <button id="opz-tab-skill" class="opzioni-tab" data-sez="skill">Skill</button>
+        <button id="opz-tab-cestino" class="opzioni-tab" data-sez="cestino">Cestino</button>
+        <button id="opz-tab-servizi" class="opzioni-tab" data-sez="servizi">Servizi</button>
+        <button id="opz-tab-permessi" class="opzioni-tab" data-sez="permessi">Permessi</button>
+        <button id="opz-tab-gratis" class="opzioni-tab" data-sez="gratis">Gratis</button>
+      </nav>
+
+      <div class="opzioni-pannelli">
+
+        <section id="opz-sez-modello" class="opz-sez" data-sez="modello">
+          <!-- Servizio e modello PRIMA delle chiavi, e come menu a
+               tendina. Sono la configurazione, non una credenziale:
+               due campi di testo liberi in mezzo a dodici righe di
+               chiavi si perdono, e un id scritto a mano che sbaglia
+               fallisce solo alla prima chiamata, con un errore che
+               sembra di rete. Un menu non puo' sbagliare. -->
+          <div class="opzioni-selezione">
+            <label>Servizio
+              <select id="opt-provider" disabled></select>
+            </label>
+            <label>Modello
+              <select id="opt-model" disabled></select>
+            </label>
+            <span id="opt-provider-msg" class="small dim"></span>
+          </div>
+          <p class="opzioni-nota">La stessa scelta e' anche nei menu in
+            alto, sopra la chat. Qui la trovi insieme a tutto il resto.</p>
+        </section>
+
+        <section id="opz-sez-skill" class="opz-sez" data-sez="skill" hidden>
+          <!-- Le skill stanno per prime: sono la cosa che si consulta
+               di rado e per cui vale la pena venire apposta. Le
+               generate hanno una colonna in piu' perche' non hanno la
+               stessa affidabilita' di una scaricata: e' roba scritta
+               dallo stesso agente che la usa, e porta con se' le
+               prove apposta perche' tu possa controllarle. -->
+          <div class="opzioni-skill">
+            <div class="opzioni-skill-testa">
+              <b>Skill</b>
+              <span class="dim" id="skill-riepilogo">procedure che l'agente puo' usare</span>
+            </div>
+            <div class="opzioni-skill-azioni">
+              <input id="skill-cartella" type="text" class="skill-input"
+                     placeholder="Cartella dello store (un percorso)" spellcheck="false">
+              <button id="skill-importa" class="ghost">Importa</button>
+              <button id="skill-ricarica" class="ghost" title="Rilegge da disco">Aggiorna</button>
+            </div>
+            <div id="skill-categorie" class="skill-cat"></div>
+            <div class="skill-sottotitolo">
+              <span>Imparate dall'agente</span>
+              <span class="dim small" id="skill-generate-nota"></span>
+            </div>
+            <div id="skill-generate" class="skill-griglia"></div>
+            <div class="skill-sottotitolo"><span>Scaricate</span></div>
+            <div class="skill-filtro">
+              <input id="skill-filtro" type="text" class="skill-input"
+                     placeholder="Filtra per nome, categoria o descrizione" spellcheck="false">
+            </div>
+            <div id="skill-scaricate" class="skill-griglia"></div>
+            <div id="skill-vista" class="skill-vista" hidden></div>
+          </div>
+        </section>
+
+        <section id="opz-sez-cestino" class="opz-sez" data-sez="cestino" hidden>
+          <!-- Il cestino e' una sezione, non una nota a pie' di pagina.
+               Cancellare una skill senza poterla vedere e' peggio che
+               non cancellarla: l'utente smette di fidarsi del
+               pulsante perche' non sa dove vanno le cose. Qui si vede
+               cosa c'e', si rimette, e si cancella davvero. -->
+          <div class="opzioni-skill">
+            <div class="opzioni-skill-testa">
+              <b>Cestino</b>
+              <span class="dim" id="skill-cestino-nota"></span>
+            </div>
+            <div class="opzioni-skill-azioni">
+              <button id="skill-svuota" class="ghost">Cancella tutto</button>
+            </div>
+            <div id="skill-cestino" class="skill-griglia"></div>
+          </div>
+        </section>
+
+        <section id="opz-sez-servizi" class="opz-sez" data-sez="servizi" hidden>
+          <div class="opzioni-servizi-testa">
+            <b>Chiavi dei servizi</b>
+            <span class="dim">per OpenRouter, Groq, NVIDIA, Google e
+              per i modelli che girano in locale</span>
+          </div>
+          <div id="chiavi-lista" class="chiavi-lista"></div>
+        </section>
+
+        <section id="opz-sez-permessi" class="opz-sez" data-sez="permessi" hidden>
+          <!-- Permessi: stato e prova. La prova genera una domanda
+               vera senza spendere un token e senza dipendere da quello
+               che un modello decide di fare: meglio scoprire qui che il
+               canale e' rotto, che accorgersene quando un'operazione
+               ti viene negata senza spiegazione. -->
+          <div class="opzioni-permessi">
+            <div class="opzioni-permessi-testa">
+              <b>Permessi</b>
+              <span class="dim">l'agente puo' uscire dalla cartella di lavoro
+                solo se glielo consenti. Le cartelle di sistema non sono
+                autorizzabili.</span>
+            </div>
+            <div class="opzioni-permessi-azioni">
+              <button id="permessi-prova" class="ghost">Prova il canale</button>
+              <span id="permessi-msg" class="small dim"></span>
+            </div>
+            <div id="permessi-stato" class="permessi-stato"></div>
+          </div>
+        </section>
+
+        <section id="opz-sez-gratis" class="opz-sez" data-sez="gratis" hidden>
+          <div class="opzioni-gratis">
+            <b>Dove si trovano modelli gratis</b>
+            <span class="dim" id="opzioni-nota"></span>
+            <div id="locali-avviso" class="gratis-locale" style="display:none"></div>
+            <div id="gratis-lista"></div>
+          </div>
+        </section>
+
+      </div>
     </div>
   </div>
 </div>
@@ -189,12 +297,12 @@
     </div>
     <div class="bench-controls">
       <label>Categoria
+        <!-- Le opzioni arrivano da /api/categorie. Scriverle qui
+             significava che il menu mostrava cinque categorie su
+             nove, e una delle tre piu' affollate — estrazione —
+             non era raggiungibile da nessuna parte. -->
         <select id="bench-cat">
           <option value="all">tutte</option>
-          <option value="code">codice</option>
-          <option value="reasoning">ragionamento</option>
-          <option value="instruction">istruzioni</option>
-          <option value="tool_use">uso tool</option>
         </select>
       </label>
       <label class="chk"><input type="checkbox" id="bench-free" checked> solo gratuiti</label>

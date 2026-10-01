@@ -25,20 +25,45 @@ function aggiornaConteggio() {
 // riga, o il confronto fra due modelli costa due sguardi a due posti.
 // Un modello non misurato mostra "—": non e' zero, e' sconosciuto, e la
 // differenza conta quando si tratta di soldi.
+// Il punteggio e' una percentuale, non una frazione.
+//
+// "0.50" non dice niente di useful: con due task i valori possibili
+// sono 0, 0.33, 0.5, 0.66, 1 — e due modelli con 0.67 e 0.66 sono
+// indistinguibili, mentre uno che ne ha passati 1 su 2 sembra
+// comparabile con uno che ne ha passati 10 su 20. In percento la
+// scala e' continua e l'occhio la legge.
+//
+// Accanto c'e' sempre la frazione — "50 · 1/2" — perche' la
+// percentuale da sola nasconde la base: 50 su 2 test e 50 su 20
+// test non sono la stessa cosa, e tu non puoi saperlo altrimenti.
 function punteggioDi(m, cat) {
   const s = m.scores || {};
-  // su "tutte" non c'e' un punteggio unico: ci sono piu' categorie e
-  // nessuna media ha senso (un 1.00 in codice e un 0.00 in ragionamento
-  // non sono "0.50"). Mostriamo invece quante categorie sono state
-  // misurate: dice se quel modello e' confrontabile o e' ancora sconosciuto.
+  const base = m.passi || {};        // quanti ne ha passati, per categoria
+  const totale = m.task_per_cat || {};
+
+  // su "tutte" non c'e' un punteggio unico, e non lo si inventa. Un
+  // 1.00 in codice e uno 0.00 in ragionamento non sono "0.50": sono
+  // due fatti che la media nasconde. Mostriamo quante categorie sono
+  // state misurate, che e' quello che ti dice se quel modello e'
+  // confrontabile o e' ancora sconosciuto.
   if (cat === "all" || !cat) {
     const n = Object.keys(s).length;
-    return n ? { testo: n + "/" + CATEGORIE_TOTALE, cls: "quante" } : null;
+    return n ? { testo: n + "/" + CATEGORIE_TOTALE, cls: "quante",
+                 titolo: "categorie misurate su " + CATEGORIE_TOTALE
+                         + " — su Tutte non c'e' un punteggio unico" } : null;
   }
   const v = s[cat];
-  return (typeof v === "number")
-    ? { testo: v.toFixed(2), cls: v >= 0.99 ? "alto" : v > 0 ? "medio" : "basso" }
-    : null;
+  if (typeof v !== "number") return null;
+  const pct = Math.round(v * 100);
+  const f = base[cat];
+  const n = totale[cat];
+  const frazione = (typeof f === "number" && n) ? (" · " + f + "/" + n) : "";
+  const cls = pct >= 99 ? "alto" : pct > 0 ? "medio" : "basso";
+  const titolo = "percentuale di test passati in questa categoria"
+    + frazione
+    + "\nSolo confrontabile con un altro punteggio della STESSA "
+      "categoria: le categorie hanno un numero di test diverso.";
+  return { testo: pct + frazione, cls: cls, titolo: titolo };
 }
 
 // quante categorie esistono davvero: il totale nel "3/6" deve essere il
@@ -425,9 +450,13 @@ function disegnaProvider(d) {
   }
   const segnalato = [optMsg, $("provider-note")].filter(Boolean);
   for (const m of segnalato) {
+    // Solo quando qualcosa non torna. "ora: <nome>" e' il menu
+    // a tendina con un altro livello di affidabilita', e quando il
+    // servizio e' regolare la riga resta vuota.
     m.textContent = utili.length
-      ? (utili.includes(corrente) ? "ora: " + (NOME_PROVIDER[corrente] || corrente)
-                                 : "servizio attuale non piu' disponibile")
+      ? (utili.includes(corrente)
+          ? ""
+          : "servizio attuale non piu' disponibile")
       : "nessuna chiave API configurata";
     m.className = "small " + (utili.includes(corrente) ? "verde" : "rosso");
   }
@@ -517,9 +546,13 @@ async function cambiaServizio(p) {
       await caricaOpzioni();
       return;
     }
-    optMsg.textContent = "ora: " + nome;
+    // Niente "ora: <nome>": il menu a tendina lo dice gia', e ripeterlo
+    // in una riga sotto e' la stessa informazione due volte con un
+    // diverso livello di affidabilita'. Resta solo il colore verde,
+    // che distingue "cambiato" da "non e' successo niente".
+    optMsg.textContent = "";
     optMsg.className = "small verde";
-    if (nota) { nota.textContent = nome; nota.className = "small verde"; }
+    if (nota) { nota.textContent = ""; nota.className = "small verde"; }
     // entrambi i selettori devono dire la stessa cosa dopo il cambio
     for (const s of [optProvider, $("provider-pick")]) {
       if (s) s.value = p;
@@ -533,6 +566,15 @@ async function cambiaServizio(p) {
     await loadModels();
     await caricaOpzioni();
   } catch (e) {
+    // Il select torna a quello che il server sta usando davvero. Prima
+    // restava sul valore nuovo: il menu diceva "Groq" e la chat
+    // rispondeva con OpenRouter, e la divergenza si vedeva solo alla
+    // prima risposta — sembrava un errore di rete.
+    //
+    // Il messaggio d'errore resta, perche' il select da solo non dice
+    // PERCHE'. Dopo il ripristino il menu e' la verita' e il testo e'
+    // la spiegazione: due cose diverse.
+    await caricaOpzioni();
     const testo = "cambio fallito: " + e;
     optMsg.textContent = testo;
     optMsg.className = "small rosso";
@@ -561,11 +603,16 @@ on(optModel, "change", async () => {
     });
     const d = await r.json();
     if (!r.ok) {
+      // Il select torna al modello vero: dopo un rifiuto restava
+      // quello nuovo, e il menu mentiva su quello che l'agente
+      // avrebbe usato davvero.
+      await caricaModelli(d.provider || optProvider.value, null);
       optMsg.textContent = d.error || ("errore " + r.status);
       optMsg.className = "small rosso";
       return;
     }
-    optMsg.textContent = "ora: " + m;
+    // Come sopra: il menu dice gia' quale modello e' attivo.
+    optMsg.textContent = "";
     optMsg.className = "small verde";
     loadModels();
   } catch (e) {
@@ -805,6 +852,12 @@ async function caricaOpzioni() {
     opzioniNota.textContent = d.nota_gratis || "";
 
     caricaPermessi();
+    // Le skill anche. Una chiamata in piu' a /api/skill durante
+    // l'apertura del pannello, e su 103 file la costruzione dell'indice
+    // richiede qualche decimo di secondo: per quello NON aspetta il
+    // resto del pannello. Se il server non risponde, la sezione resta
+    // muta e Opzioni funziona lo stesso.
+    caricaSkill();
 
     // provider e modello: due menu in alto, non due righe di chiavi
     disegnaProvider(d);
@@ -951,7 +1004,9 @@ function applicaScope(scope) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: best.id }),
       });
-      if (r.ok) { loadModels(); scopeNote.textContent = "ora: " + best.short; }
+      // Il menu si aggiorna da solo con loadModels(), quindi basta un
+      // punto di sospeso: il cambio e' avvenuto e si vede.
+      if (r.ok) { loadModels(); scopeNote.textContent = ""; }
     } catch (e) { scopeNote.textContent = "cambio fallito: " + e; }
   };
 }
@@ -980,6 +1035,14 @@ async function caricaCategorie() {
   }
 }
 
+// L'etichetta la sa il server: CAT_ETICHETTE e' un fallback per
+// quando non ha ancora risposto. Se le due divergono, vince il
+// server — e' lui che conta i task.
+function etichettaCategoria(id, fallback) {
+  const c = categorieServer.find((x) => x.id === id);
+  return (c && (c.label || c.nome)) || CAT_ETICHETTE[id] || fallback || id;
+}
+
 function taskDi(categoria) {
   const c = categorieServer.find((x) => x.id === categoria);
   return c ? c.tasks : null;   // null = il server non ne parla
@@ -991,12 +1054,35 @@ function disegnaCategorieRouting() {
   for (const m of tuttiModelli) {
     for (const c of Object.keys(m.scores || {})) misurate.add(c);
   }
-  const ordine = ["js", "web", "app", "code", "reasoning", "instruction", "tool_use", "writing", "extraction"];
+  // L'ordine viene dal server, non da una lista scritta qui. Prima
+  // c'era un array con tutte e nove le categorie: se ne avessi
+  // aggiunta una decima al backend, questo menu — e quello del
+  // benchmark — avrebbero continuato a non mostrarla, e nessuno
+  // avrebbe detto niente. Un elenco statico invecchia da solo e
+  // mente quando succede.
+  const ordine = categorieServer.map((c) => c.id);
   const utili = ordine.filter((c) => misurate.has(c));
+
+  // Il menu del benchmark mostra TUTTE le categorie, misurate o no:
+  // se ne manca una dal menu, non esiste un modo per misurarla. E
+  // accanto al nome dice quanti task ha, perche' "estrazione" senza
+  // quel numero sembra una categoria minore.
+  if (benchCat) {
+    const scelto = benchCat.value;
+    benchCat.replaceChildren();
+    benchCat.appendChild(new Option("tutte", "all"));
+    for (const c of categorieServer) {
+      const n = c.tasks;
+      const etichetta = (CAT_ETICHETTE[c.id] || c.label || c.id)
+        + (n ? " · " + n + " test" : " · senza test");
+      benchCat.appendChild(new Option(etichetta, c.id));
+    }
+    benchCat.value = categorieServer.some((c) => c.id === scelto) ? scelto : "all";
+  }
 
   routingCat.replaceChildren();
   for (const c of utili) {
-    routingCat.appendChild(new Option(CAT_ETICHETTE[c] || c, c));
+    routingCat.appendChild(new Option(etichettaCategoria(c), c));
   }
   if (!routingCat.options.length) {
     routingCat.appendChild(new Option("nessuna categoria misurata", ""));
@@ -1009,7 +1095,7 @@ function disegnaCategorieRouting() {
     scopePick.replaceChildren();
     scopePick.appendChild(new Option("tutto", ""));
     for (const c of utili) {
-      scopePick.appendChild(new Option(CAT_ETICHETTE[c] || c, c));
+      scopePick.appendChild(new Option(etichettaCategoria(c), c));
     }
     scopePick.value = utili.includes(valoreCorrente) ? valoreCorrente : "";
     scopePick.disabled = !utili.length;
@@ -1122,3 +1208,489 @@ function aggiornaCatalogoUI(elenco, corrente) {
     }
   }
 }
+
+// ------------------------------------------------------------------ skill
+//
+// Il pannello skill in Opzioni.
+//
+// Tre sezioni: quante sono, da dove vengono, e le due liste. Le generate
+// sono separate dalle scaricate perche' non hanno la stessa affidabilita' —
+// una e' scritta da qualcun altro, l'altra e' un'affermazione dello stesso
+// agente che la usa, e tu devi poter distinguere le due cose.
+//
+// Con 103 skill la lista non entra in una schermata. Il filtro c'e' per
+// quello, e filtra mentre scrivi: attendere un tasto e poi scorrere
+// cento righe e' piu' lento di quello che stai facendo.
+//
+// Il pulsante "Aggiorna" esiste perche' l'indice puo' cambiare fuori dal
+// browser: l'agente genera una skill mentre tu stai guardando la pagina,
+// e senza un ricaricamento la lista mente per trenta secondi.
+
+let skillDati = { scaricate: [], generate: [], categorie: [], totale: 0,
+                  scaricate_n: 0, generate_n: 0, nel_prompt_max: 0,
+                  cestino: [] };
+
+function skillPost(body) {
+  return fetch("/api/skill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+}
+
+async function caricaSkill() {
+  try {
+    const d = await skillPost({ azione: "elenca" });
+    if (d && !d.error) {
+      skillDati = {
+        scaricate: d.lista_scaricate || [],
+        generate: d.lista_generate || [],
+        categorie: d.categorie || [],
+        totale: d.totale || 0,
+        scaricate_n: d.scaricate || 0,
+        generate_n: d.generate || 0,
+        nel_prompt_max: d.nel_prompt_max || 0,
+        cestino: d.cestino || [],
+      };
+      disegnaSkill();
+    }
+  } catch (e) {
+    // Le skill non sono un requisito. Se questo fallisce, Opzioni si
+    // apre lo stesso e la sezione resta vuota: meglio un pannello
+    // muto che un pannello che impedisce di cambiare modello.
+    const r = $("skill-riepilogo");
+    if (r) r.textContent = "non raggiungibile: " + (e.message || e);
+  }
+}
+
+function skillCorrisponde(s, testo) {
+  if (!testo) return true;
+  const t = testo.toLowerCase();
+  return (s.nome || "").toLowerCase().includes(t)
+      || (s.categoria || "").toLowerCase().includes(t)
+      || (s.descrizione || "").toLowerCase().includes(t);
+}
+
+function skillCarta(s, generata) {
+  // Una scheda, non una riga. Con cento skill in lista si scorreva per
+  // metri; in griglia se ne vedono tre o quattro per riga e confrontare
+  // i nomi diventa immediato — che e' la ragione per cui uno cerca
+  // una skill: capire se quella che serve c'e' gia'.
+  const carta = el("div", "skill-carta");
+  if (generata) carta.classList.add("skill-carta-generata");
+
+  const capo = el("div", "skill-carta-capo");
+  // Il '+' e' lo stesso segno del prompt: due posti che parlano lo
+  // stesso linguaggio, e uno sguardo basta per capire se una procedura
+  // e' stata scritta da qualcun altro o dall'agente che la usa.
+  if (generata) {
+    const segno = el("span", "skill-segno");
+    segno.textContent = "+";
+    segno.title = s.con_prove
+      ? "imparata dall'agente, con " + s.prove + " prove"
+      : "imparata dall'agente, SENZA prove";
+    capo.appendChild(segno);
+  }
+  const titolo = el("span", "skill-carta-nome");
+  titolo.textContent = s.nome;
+  capo.appendChild(titolo);
+  carta.appendChild(capo);
+
+  const desc = el("div", "skill-carta-desc");
+  desc.textContent = s.descrizione || "(senza descrizione)";
+  desc.title = s.descrizione || "";
+  carta.appendChild(desc);
+
+  const meta = el("div", "skill-carta-meta");
+  const info = [];
+  if (s.categoria) info.push(s.categoria);
+  if (generata) {
+    info.push(s.con_prove
+      ? s.prove + (s.prove === 1 ? " prova" : " prove")
+      : "senza prove");
+  }
+  if (s.usata) {
+    info.push("usata " + s.usata + (s.usata === 1 ? " volta" : " volte"));
+  }
+  meta.textContent = info.join(" · ");
+  carta.appendChild(meta);
+
+  const pie = el("div", "skill-carta-pie");
+  const apri = el("button", "ghost skill-pulsante");
+  apri.textContent = "Apri";
+  apri.title = "Leggi la procedura";
+  apri.onclick = () => skillApri(s);
+  pie.appendChild(apri);
+
+  const via = el("button", "ghost skill-pulsante skill-bottone-cancella");
+  via.textContent = "Cestino";
+  via.title = "Metti nel cestino, da cui puoi rimetterla";
+  via.onclick = () => skillCancella(s.nome);
+  pie.appendChild(via);
+  carta.appendChild(pie);
+
+  return carta;
+}
+
+function skillCartaCestino(v) {
+  const carta = el("div", "skill-carta skill-carta-cestino");
+  const capo = el("div", "skill-carta-capo");
+  const titolo = el("span", "skill-carta-nome");
+  titolo.textContent = v.nome;
+  capo.appendChild(titolo);
+  carta.appendChild(capo);
+
+  const meta = el("div", "skill-carta-meta");
+  meta.textContent = v.data || "";
+  carta.appendChild(meta);
+
+  const pie = el("div", "skill-carta-pie");
+  const rimetti = el("button", "ghost skill-pulsante");
+  rimetti.textContent = "Rimetti";
+  rimetti.onclick = () => skillRipristina(v.nome);
+  pie.appendChild(rimetti);
+
+  const distruggi = el("button", "ghost skill-pulsante skill-bottone-cancella");
+  distruggi.textContent = "Cancella";
+  distruggi.title = "Cancellazione definitiva: non si recupera";
+  distruggi.onclick = () => skillDefinitiva(v.nome);
+  pie.appendChild(distruggi);
+  carta.appendChild(pie);
+  return carta;
+}
+
+function skillCestinoNota(t) {
+  const n = $("skill-cestino-nota");
+  if (n) n.textContent = t;
+}
+
+function aggiornaDa(elenco, cestino) {
+  skillDati.scaricate = elenco.lista_scaricate || [];
+  skillDati.generate = elenco.lista_generate || [];
+  skillDati.categorie = elenco.categorie || [];
+  skillDati.totale = elenco.totale || 0;
+  skillDati.scaricate_n = elenco.scaricate || 0;
+  skillDati.generate_n = elenco.generate || 0;
+  skillDati.nel_prompt_max = elenco.nel_prompt_max || 0;
+  skillDati.cestino = cestino || [];
+  disegnaSkill();
+}
+
+async function skillRipristina(nome) {
+  try {
+    const d = await skillPost({ azione: "ripristina", nome });
+    if (d && d.ok) {
+      aggiornaDa(d.elenco, d.cestino);
+      skillCestinoNota(nome + " rimessa");
+    } else {
+      skillCestinoNota((d && d.error) || "ripristino rifiutato");
+    }
+  } catch (e) {
+    skillCestinoNota("errore: " + (e.message || e));
+  }
+}
+
+// Chiede una parola, non un si'/'no'. La cancellazione definitiva non ha
+// ritorno, e un pulsante "Cancella" che cancella quello che si voleva
+// tenere e' il modo migliore per perdere roba. Un prompt che chiede
+// di scrivere CANCELLA costa due secondi e ferma i diti sbagliati.
+function chiediConferma(nome) {
+  const r = window.prompt(
+    "Cancellare DEFINITIVAMENTE " + nome + "?\n\nNon si recupera.",
+    "scrivi CANCELLA");
+  return (r || "").trim().toUpperCase() === "CANCELLA";
+}
+
+async function skillDefinitiva(nome) {
+  if (!chiediConferma(nome)) return;
+  try {
+    const d = await skillPost({ azione: "cancella_definitivo", nome });
+    if (d && d.ok) {
+      aggiornaDa(d.elenco, d.cestino);
+      skillCestinoNota(nome + " cancellata per sempre");
+    } else {
+      skillCestinoNota((d && d.error) || "cancellazione rifiutata");
+    }
+  } catch (e) {
+    skillCestinoNota("errore: " + (e.message || e));
+  }
+}
+
+async function skillSvuotaTutto() {
+  const n = (skillDati.cestino || []).length;
+  if (!n) {
+    skillCestinoNota("il cestino e' gia' vuoto");
+    return;
+  }
+  const r = window.prompt(
+    "Cancellare DEFINITIVAMENTE " + n + " skill?\n\nNon si recupera nulla.",
+    "scrivi CANCELLA");
+  if ((r || "").trim().toUpperCase() !== "CANCELLA") return;
+  try {
+    const d = await skillPost({ azione: "svuota_cestino" });
+    if (d && d.ok) {
+      aggiornaDa(d.elenco, d.cestino);
+      skillCestinoNota(d.rimosse + " cancellate per sempre");
+    } else {
+      skillCestinoNota((d && d.error) || "rifiutato");
+    }
+  } catch (e) {
+    skillCestinoNota("errore: " + (e.message || e));
+  }
+}
+
+async function skillApri(s) {
+  try {
+    // Il nome, non il percorso: il percorso lo risolve il server dentro
+    // la radice delle skill. Passargliero significherebbe accettare
+    // un percorso qualunque, e questa rotta non ha autenticazione.
+    const r = await fetch("/api/skill/file?nome=" + encodeURIComponent(s.nome));
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.error || ("HTTP " + r.status));
+    }
+    const d = await r.json();
+    const v = $("skill-vista");
+    if (!v) return;
+    v.hidden = false;
+    const parti = [];
+    parti.push(el("div", "skill-vista-testa",
+      el("b", null, d.nome || s.nome),
+      el("span", "dim small", " · " + (s.categoria || ""))));
+    parti.push(el("pre", "skill-testo", d.contenuto || "(vuota)"));
+    if (d.allegati && d.allegati.length) {
+      parti.push(el("div", "skill-vista-nota",
+        d.allegati.length + " file che viaggiano con questa skill: "
+        + d.allegati.map((a) => a.nome).join(", ")));
+    }
+    v.replaceChildren(...parti);
+    v.scrollIntoView({ block: "nearest" });
+  } catch (e) {
+    skillMossa("non riesco ad aprire: " + (e.message || e));
+  }
+}
+
+function skillMossa(testo) {
+  const n = $("skill-generate-nota");
+  if (n) n.textContent = testo;
+}
+
+async function skillCancella(nome) {
+  try {
+    const d = await skillPost({ azione: "cancella", nome });
+    if (d && d.ok) {
+      // La risposta porta il cestino aggiornato: senza, la lista a
+      // schermo e quella vera divergono, e il pannello mente proprio
+      // dove deve rassicurare che niente e' andato perso.
+      aggiornaDa(d.elenco, d.cestino);
+      skillMossa(nome + " nel cestino");
+    } else {
+      skillMossa((d && d.error) || "cancellazione rifiutata");
+    }
+  } catch (e) {
+    skillMossa("errore: " + (e.message || e));
+  }
+}
+
+function disegnaSkill() {
+  const somma = $("skill-riepilogo");
+  if (somma) {
+    const n = skillDati.totale;
+    somma.textContent = n
+      ? (n + " procedure · " + skillDati.scaricate_n + " scaricate, "
+         + skillDati.generate_n + " imparate dall'agente · nel prompt: fino a "
+         + skillDati.nel_prompt_max + " alla volta")
+      : "nessuna. Importane da una cartella.";
+  }
+
+  const cats = $("skill-categorie");
+  if (cats) {
+    cats.replaceChildren();
+    for (const c of skillDati.categorie) {
+      const b = el("span", "skill-cat-pill");
+      b.textContent = c.nome + " " + c.skill;
+      b.title = "Filtra per questa categoria";
+      b.onclick = () => {
+        const f = $("skill-filtro");
+        if (f) { f.value = c.nome; disegnaSkill(); }
+      };
+      cats.appendChild(b);
+    }
+  }
+
+  const gen = $("skill-generate");
+  if (gen) {
+    gen.replaceChildren();
+    if (!skillDati.generate.length) {
+      // Il vuoto e' un messaggio, non uno spazio. "L'agente non ha
+      // ancora imparato niente" e' una cosa che ti dice dove guardare.
+      gen.appendChild(el("div", "skill-vuota",
+        "Nessuna ancora. L'agente ne scrive una quando un metodo gli " +
+        "funziona: glielo chiedi, o semplicemente lavora con lui e " +
+        "guarda qui dopo."));
+    } else {
+      for (const s of skillDati.generate) gen.appendChild(skillCarta(s, true));
+    }
+  }
+
+  // Il cestino si disegna insieme al resto. Sta qui e non in una
+  // funzione sua perche' l'elenco e il cestino cambiano insieme —
+  // rimettere una skill modifica l'uno E l'altro, e due funzioni
+  // chiamate separatamente possono mostrare uno il nuovo elenco e
+  // l'altro il cestino vecchio.
+  const cest = $("skill-cestino");
+  if (cest) {
+    cest.replaceChildren();
+    const nel = skillDati.cestino || [];
+    if (!nel.length) {
+      cest.appendChild(el("div", "skill-vuota",
+        "Vuoto. Le skill che cancelli finiscono qui, e puoi rimetterle."));
+    } else {
+      for (const v of nel) cest.appendChild(skillCartaCestino(v));
+    }
+  }
+  const notaCest = $("skill-cestino-nota");
+  if (notaCest) {
+    const nel = (skillDati.cestino || []).length;
+    notaCest.textContent = nel ? nel + " da recuperare" : "";
+  }
+
+  const testo = ($("skill-filtro") && $("skill-filtro").value) || "";
+  const sc = $("skill-scaricate");
+  if (sc) {
+    sc.replaceChildren();
+    const filtrate = skillDati.scaricate.filter((s) => skillCorrisponde(s, testo));
+    if (!skillDati.scaricate.length) {
+      sc.appendChild(el("div", "skill-vuota", "Nessuna scaricata."));
+    } else if (!filtrate.length) {
+      sc.appendChild(el("div", "skill-vuota",
+        "Nessuna corrisponde a “" + testo + "”."));
+    } else {
+      for (const s of filtrate) sc.appendChild(skillCarta(s, false));
+      if (filtrate.length !== skillDati.scaricate.length) {
+        sc.appendChild(el("div", "skill-conto",
+          filtrate.length + " su " + skillDati.scaricate.length));
+      }
+    }
+  }
+}
+
+function collegaSkill() {
+  // on() vuole l'ELEMENTO, non l'id: passargli la stringa faceva
+  // fallire la riga di addEventListener — una stringa e' truthy, quindi
+  // la guardia "elemento assente" passava, e il pulsante restava
+  // scollegato senza che nulla lo dicesse. Con l'errore in pagina,
+  // pero', si vedeva subito.
+  on($("skill-ricarica"), "click", caricaSkill);
+  on($("skill-svuota"), "click", skillSvuotaTutto);
+  on($("skill-importa"), "click", async () => {
+    const inp = $("skill-cartella");
+    const cartella = inp ? inp.value.trim() : "";
+    if (!cartella) {
+      skillMossa("scrivi la cartella dello store");
+      if (inp) inp.focus();
+      return;
+    }
+    skillMossa("importo da " + cartella + "…");
+    try {
+      const d = await skillPost({ azione: "importa", cartella });
+      if (d && d.ok) {
+        skillDati.scaricate = d.elenco.lista_scaricate || [];
+        skillDati.generate = d.elenco.lista_generate || [];
+        skillDati.categorie = d.elenco.categorie || [];
+        skillDati.totale = d.elenco.totale || 0;
+        skillDati.scaricate_n = d.elenco.scaricate || 0;
+        skillDati.generate_n = d.elenco.generate || 0;
+        skillDati.nel_prompt_max = d.elenco.nel_prompt_max || 0;
+        disegnaSkill();
+        skillMossa(d.importate + " importate");
+        if (inp) inp.value = "";
+      } else {
+        skillMossa((d && d.error) || "importazione rifiutata");
+      }
+    } catch (e) {
+      skillMossa("errore: " + (e.message || e));
+    }
+  });
+  const filtro = $("skill-filtro");
+  if (filtro) {
+    filtro.addEventListener("input", () => disegnaSkill());
+  }
+}
+
+// Si collega qui, in fondo al file, e non da un bootstrap centrale:
+// in questo file gli handler sono registrati in linea appena sono
+// definiti. Una funzione che nessuno chiama e' la stessa cosa dei
+// selettori disabilitati di due giorni fa — la funzione c'e', il
+// lavoro no, e la pagina sembra rotta.
+collegaSkill();
+
+// ---------------------------------------------------------- sezioni Opzioni
+//
+// Cinque sezioni, una per volta. Il nome intero nella barra, perche' sono
+// nomi che significano qualcosa e abbreviarli costerebbe una decodifica a
+// ogni clic.
+//
+// Le sezioni restano tutte nel DOM e si nascondono: ricaricare il
+// contenuto a ogni cambio e' la via per perdere lo stato, e il filtro
+// sulle skill finirebbe svuotato a ogni passaggio.
+//
+// Il primo caricamento e' pigro. Aprire Opzioni non deve scaricare
+// l'indice di cento skill se poi vai solo a cambiare modello: si chiede
+// quando serve e si ricorda, cosi' la seconda volta e' gia' fatto.
+
+let sezioneSkillCaricata = false;
+
+function mostraSezione(nome) {
+  const sezioni = document.querySelectorAll(".opz-sez");
+  let trovata = false;
+  for (const s of sezioni) {
+    const mostra = s.dataset.sez === nome;
+    if (mostra) trovata = true;
+    // hidden e' l'attributo, non lo stile: e' quello che il DOM finto
+    // dei test rispetta, ed e' lo stesso che il browser usa per
+    // l'accessibilita' (un display:none a mano lascia la sezione
+    // leggibile dagli screen reader senza motivo).
+    if (mostra) s.removeAttribute("hidden");
+    else s.setAttribute("hidden", "");
+  }
+  const tabs = document.querySelectorAll(".opzioni-tab");
+  for (const t of tabs) {
+    if (t.dataset.sez === nome) t.classList.add("attiva");
+    else t.classList.remove("attiva");
+  }
+  if (!trovata) return;
+  // pigro: la prima volta che si arriva alle skill, si chiedono
+  if ((nome === "skill" || nome === "cestino") && !sezioneSkillCaricata) {
+    sezioneSkillCaricata = true;
+    caricaSkill();
+  }
+}
+
+function collegaSezioni() {
+  const tabs = document.querySelectorAll(".opzioni-tab");
+  for (const t of tabs) {
+    t.addEventListener("click", () => mostraSezione(t.dataset.sez));
+  }
+  // I tasti freccia passano da una sezione all'altra. Non e' un
+  // vezzo da aggiungere: senza, con cinque sezioni e nessun tab
+  // premuto, il passaggio costa cinque clic, e il modo normale in cui
+  // ci si muove in un'interfaccia a sezioni e' la tastiera.
+  const nav = document.querySelector(".opzioni-nav");
+  if (nav) {
+    nav.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const nomi = Array.from(document.querySelectorAll(".opzioni-tab"))
+        .map((t) => t.dataset.sez);
+      const i = nomi.indexOf(document.querySelector(".opzioni-tab.attiva").dataset.sez);
+      const j = e.key === "ArrowDown" ? (i + 1) % nomi.length
+                                         : (i - 1 + nomi.length) % nomi.length;
+      mostraSezione(nomi[j]);
+      const t = document.querySelector(".opzioni-tab[data-sez=\'" + nomi[j] + "\']");
+      if (t) t.focus();
+      e.preventDefault();
+    });
+  }
+}
+
+collegaSezioni();

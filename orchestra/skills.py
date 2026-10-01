@@ -454,6 +454,18 @@ class Indice:
             for extra in os.listdir(dest):
                 if extra.endswith(".prove.json"):
                     os.remove(os.path.join(dest, extra))
+            # Il frontmatter ricorda la categoria. Senza, rimettere una
+            # skill dal cestino la piazzava sotto "generale": la copia
+            # nel cestino ha la stessa posizione della copia attiva, e
+            # la categoria si ricava dal percorso — ma in .cestino quel
+            # percorso e' fatto di timestamp e non dice piu' nulla.
+            p_copia = os.path.join(dest, "SKILL.md")
+            campi, corpo = _leggi(p_copia)
+            campi["name"] = nome
+            if not campi.get("categoria"):
+                campi["categoria"] = "/".join(parti)
+            campi.setdefault("origine", "scaricata")
+            _scrivi(p_copia, campi, corpo)
             n += 1
             dentro.append(nome)
         if n:

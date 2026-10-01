@@ -62,21 +62,37 @@ def _aspetta_libero(secondi: int = 60) -> None:
     cosa sbagliata: due risposte diverse con lo stesso numero, e si
     sceglie la comoda.
     """
+    # Si chiede a /api/state se l'agente sta lavorando, invece di
+    # tirare a indovinare. Prima mandava una POST vuota a /api/allega
+    # e contava un 400 come "libero": ma /api/allega risponde 409
+    # quando l'agente e' occupato e 400 solo per input sbagliato, e la
+    # differenza si e' vista solo a runtime, con il test che segnalava
+    # un difetto che non c'era.
     import time
-    for _ in range(secondi * 2):
+    for tentativo in range(secondi * 2):
         try:
-            r = urllib.request.Request(
-                f"http://127.0.0.1:{PORT}/api/allega",
-                json.dumps({"files": []}).encode(),
-                {"Content-Type": "application/json"})
-            urllib.request.urlopen(r, timeout=10)
-            return                      # 200: libero
-        except urllib.error.HTTPError as e:
-            if e.code == 400:
-                return                  # errore di input, ma libero
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{PORT}/api/state", timeout=10) as f:
+                d = json.loads(f.read())
+            if not d.get("busy"):
+                if tentativo > 2:
+                    # L'attesa e' costata qualche secondo. Dirlo serve
+                    # perche' una suite che aspetta due minuti spiega
+                    # un ritardo che sembrerebbe venire da qui.
+                    print(f"   (l'agente era occupato: attesi "
+                          f"{tentativo // 2}s)")
+                return
         except Exception:
             pass
         time.sleep(0.5)
+    # Timeout: si dice, invece di proseguire e far fallire i check
+    # con un 409 che sembrerebbe un difetto dell'allegato. La suite
+    # precedente ha lasciato un turno aperto e nessuno l'ha chiuso:
+    # e' un problema di ordine fra le suite, non di questo file.
+    raise RuntimeError(
+        f"l'agente era ancora occupato dopo {secondi}s: la suite "
+        f"precedente ha lasciato un turno aperto. Riavvia il server "
+        f"prima di girare questa suite da sola.")
 
 
 print("[1] Caricare un file: torna un id e un conto")
@@ -105,21 +121,66 @@ check("il corpo dell'invio non contiene il file",
       "base64" not in corpo_invio and len(corpo_invio) < 300,
       f"{len(corpo_invio)} byte")
 
-print("\n[3] Mandare: parte col suo allegato")
-stato2, d2 = post("/api/send", {"text": "quanti pixel rossi?", "allegati": ids})
-check("accettato", stato2 == 200, f"HTTP {stato2}: {d2}")
-check("risponde con il conto", isinstance(d2.get("token"), int)
-      and d2["token"] > 0, str(d2.get("token")))
+# [3] era "mandare: parte col suo allegato", e mandava davvero — un
+# turno di inferenza su un modello vero, senza attendere la fine.
+# Non verificava l'allegato: verificava che il provider rispondesse,
+# cosa che [1] e [2] non coprono ma che non e' il mestiere di questo
+# file.
+#
+# Se serve una prova col modello vero, si lancia a mano:
+#     python3 tests/test_allegato_vero.py
+# con ORCHESTRA_MODEL=<un modello con visione>.
 
 print("\n[4] Un allegato non vive per due messaggi")
-# Se l'id restasse valido, Invio due volte manderebbe la stessa foto
-# due volte. L'utente riceverebbe due risposte identiche e penserebbe
-# a un bug.
-_aspetta_libero()
-stato3, d3 = post("/api/send", {"text": "di nuovo", "allegati": ids})
-check("il secondo inveso viene rifiutato", stato3 == 400, f"HTTP {stato3}")
-check("e il motivo e' leggibile",
-      "scaduto" in d3.get("error", ""), d3.get("error", "")[:70])
+# Prima questo check mandava due messaggi veri e verificava che il
+# secondo fosse rifiutato. Ma l'unico modo di consumare un id e'
+# usarlo: senza una POST a /api/send l'id resta valido per sempre, e
+# il test verificava se stesso invece che il codice.
+#
+# Il consumo si verifica sulla funzione, senza rete e senza token:
+# _dal_registro prende l'allegato dal registro, e _svuota_allegati
+# lo svuota. Se l'id non sparisce dopo il passaggio, il secondo invio
+# riusa lo stesso file — che e' il difetto che l'utente vedrebbe.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from orchestra import webapp as _w  # noqa: E402
+
+
+class _AppFinta:
+    """Solo il registro: non serve un server per questo."""
+
+    def __init__(self):
+        import orchestra.skills as sk
+        self._registro_allegati = {}
+
+    def svuota(self):
+        self._registro_allegati.clear()
+
+
+app_finta = _AppFinta()
+h = _w.Handler.__new__(_w.Handler)
+h.app = app_finta
+import orchestra.skills as _sk  # noqa: E402
+h._registro_allegati = {}          # lo mette a mano: e' un attributo
+
+a = type("A", (), {})()
+a.nome = "prova.png"
+ident = h._registra(a)
+check("l'allegato si registra", bool(ident) and h.app._registro_allegati.get(ident) is a,
+      str(ident))
+trovati, problema = h._dal_registro([ident])
+check("e si rilegge per id", trovati == [a] and problema == "", problema)
+h._svuota_allegati()
+check("dopo l'invio il registro e' vuoto",
+      not h.app._registro_allegati,
+      str(list(h.app._registro_allegati)))
+trovati2, problema2 = h._dal_registro([ident])
+check("e l'id non e' piu' valido",
+      not trovati2 and "scaduto" in problema2, problema2[:60])
+
+# un id che non e' mai esistito
+trovati3, problema3 = h._dal_registro(["al-inventato"])
+check("un id inesistente lo dice",
+      not trovati3 and "scaduto" in problema3, problema3[:60])
 
 print("\n[5] Un file che non e' un allegato viene detto, non fallito in silenzio")
 rotta = post("/api/allega", {"files": [{"nome": "vuoto.png", "data_url": "data:image/png;base64,"}]})

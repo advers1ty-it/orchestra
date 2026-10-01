@@ -480,7 +480,21 @@ def cmd_bench(args: argparse.Namespace) -> int:
     for mid, data in summary["per_model"].items():
         prof = cat.models.get(mid)
         if prof:
-            prof.scores = {c: v for c, v in data["by_category"].items() if v > 0}
+            # by_category ora e' un dizionario per categoria, non un
+            # numero: c'era dentro anche la frazione. Con la sola
+            # proporzione, due modelli a 0.67 e 0.66 sul display
+            # arrotondano allo stesso numero e non si distinguono; e
+            # 50% su 2 test sembra 50% su 20.
+            prof.scores = {}
+            prof.frazioni = {}
+            prof.task_per_cat = {}
+            for cat, d in (data.get("by_category") or {}).items():
+                v = d.get("score", 0) if isinstance(d, dict) else d
+                if v > 0:
+                    prof.scores[cat] = v
+                if isinstance(d, dict):
+                    prof.frazioni[cat] = d.get("passati", 0)
+                    prof.task_per_cat[cat] = d.get("quanti", 0)
             prof.last_measured = time.time()
             scored[mid] = prof
     if scored and not args.no_save:

@@ -162,11 +162,44 @@ IDS.forEach(function (id) {
   const sel = id === "model-pick" || id === "bench-sample" || id === "bench-cat";
   REG[id] = mkEl(sel ? "select" : "div");
 });
+// Gli elementi del pannello a sezioni servono anche qui: il bundle
+// chiama document.querySelectorAll(".opzioni-tab") e, senza,
+// collegaSezioni() muore e i pulsanti di Opzioni restano scollegati.
+// Il bundle e' servito col try/catch, quindi il fallimento non si
+// vede: la pagina sembra funzionante e i tab non cambiano sezione.
+["modello", "skill", "cestino", "servizi", "permessi", "gratis"].forEach(
+  function (n) {
+    const sez = mkEl("section");
+    sez.dataset = { sez: n };
+    if (n !== "modello") sez.setAttribute("hidden", "");
+    REG["opz-sez-" + n] = sez;
+    const tab = mkEl("button");
+    tab.dataset = { sez: n };
+    REG["opz-tab-" + n] = tab;
+  });
 globalThis.document = {
   createElement: function (t) { return mkEl(t); },
   getElementById: function (id) { return REG[id] || null; },
   createTextNode: function (t) { const e = mkEl("#text"); e._text = String(t); return e; },
   addEventListener: function () {}, body: mkEl("body"),
+  querySelectorAll: function (sel) {
+    const out = [];
+    const push = function (e) { if (e && out.indexOf(e) < 0) out.push(e); };
+    if (sel === ".opz-sez" || sel === "section.opz-sez") {
+      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+        .forEach(function (n) { push(REG["opz-sez-" + n]); });
+    } else if (sel === ".opzioni-tab" || sel === "button.opzioni-tab") {
+      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+        .forEach(function (n) { push(REG["opz-tab-" + n]); });
+    } else if (sel === ".opzioni-nav" || sel === "nav.opzioni-nav") {
+      push(REG["opzioni-nav"]);
+    }
+    return out;
+  },
+  querySelector: function (sel) {
+    const t = this.querySelectorAll(sel);
+    return t.length ? t[0] : null;
+  },
 };
 // i marcatori dei file scrivono su window.__diagFiles
 globalThis.window = globalThis;
@@ -211,21 +244,23 @@ const OUT = { errore: null };
   OUT.valori = mp.options.map(o => o.value);
   OUT.tagPrimi = mp.children.map(c => c.tagName);
   console.log("SPLIT" + JSON.stringify(OUT));
-})();
+})().catch((e) => { console.log("SPLIT" + JSON.stringify({crash: String(e && e.stack || e)})); });
 """
 
 # scope condiviso: i file concatenati ed eseguiti insieme, come nel browser
 joined = "\n;\n".join(sources[name] for name in BUNDLE_ORDER)
 
-prog = harness + joined + "\n" + probe
+prog = (harness + joined + "\n"
+        + "try {\n" + probe + "\n} catch (e) {\n"
+        + '  console.log("SPLIT" + JSON.stringify({crash: String(e && e.stack || e)}));\n'
+        + "}\n")
 f = tempfile.mktemp(suffix=".js")
 with open(f, "w", encoding="utf-8") as fh:
     fh.write(prog)
 r = subprocess.run(["node", f], capture_output=True, text=True, timeout=120)
-try:
-    os.unlink(f)
-except OSError:
-    pass
+# Il file resta su disco se il probe non risponde: leggerlo dice
+# l'errore vero, e "NESSUN OUTPUT" da solo non dice dove guardare.
+pass  # il file resta
 
 out = {}
 for line in r.stdout.splitlines():

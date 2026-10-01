@@ -34,7 +34,12 @@ def node_prezzi():
     out = os.path.join(os.environ.get("TEMP", "."), "_prezzi.js")
     with open(out, "w", encoding="utf-8") as fh:
         fh.write("""
-globalThis.document = { getElementById: () => null };
+globalThis.document = {
+  getElementById: () => null,
+  // serve al pannello a sezioni; senza, collegaSezioni() muore
+  querySelectorAll: () => [],
+  querySelector: () => null,
+};
 globalThis.window = globalThis;
 """)
         for nome in ("price_label", "costo_stimato", "costo_breve"):

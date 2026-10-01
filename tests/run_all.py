@@ -35,6 +35,8 @@ SUITES = [
     ("scrizione", "test_scrizione.py", True),
     ("allegato-giro", "test_allegato_giro.py", True),
     ("benchmark", "test_benchmark.py", True),
+    ("punteggio", "test_punteggio.py", True),
+    ("runner", "test_runner.py", True),
     ("skills", "test_skills.py", True),
     ("skill-tools", "test_skill_tools.py", True),
     ("e2e", "test_e2e.py", False),
@@ -52,9 +54,18 @@ failed = []
 for name, code, required in results:
     if code == 0:
         print(f"  PASS  {name}")
-    elif not required:
-        print(f"  SKIP  {name} (non richiesto)")
     else:
+        # Un exit non-zero e' un fallimento, sempre. Prima c'era un
+        # ramo che riportava come "SKIP" qualunque errore di una suite
+        # marcata come non obbligatoria, e il riepilogo diceva "Tutto
+        # verde" con l'e2e partito, fallito, e contato come saltato.
+        #
+        # Il caso "non posso girare" e' gia' diverso: le suite escono
+        # con 0 quando non possono fare il loro lavoro (manca la
+        # chiave, per esempio). Quindi l'informazione "opzionale" non
+        # serve qui dentro — e tenere un interruttore "i fallimenti non
+        # contano" in un runner e' il modo piu' rapido per non accorgersi
+        # che qualcosa si e' rotto.
         print(f"  FAIL  {name} (exit {code})")
         failed.append(name)
 
