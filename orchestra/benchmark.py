@@ -302,21 +302,38 @@ TASKS: list[Task] = [
 
 def tasks_for(category: str | None = None) -> list[Task]:
     if not category:
-        return list(TASKS) + list(_task_lavoro())
-    return [t for t in list(TASKS) + list(_task_lavoro()) if t.category == category]
+        return list(TASKS) + list(_task_lavoro()) + list(_task_scrizione())
+    tutte = list(TASKS) + list(_task_lavoro()) + list(_task_scrizione())
+    return [t for t in tutte if t.category == category]
 
 
 def _task_lavoro() -> list[Task]:
     """Le task per tipo di lavoro (js, web, app).
 
     In un modulo separato perche' sono la parte che cresce: quando serve
-    misurare un altro tipo di richiesta si aggiunge li', senza toccare il
-    nucleo. Se il modulo manca, il benchmark funziona lo stesso — meglio
+    misurare un altro tipo di richiesta si aggiunge li', senza toccare
+    il nucleo. Se il modulo manca, il benchmark funziona lo stesso — meglio
     pochi task che nessuno.
     """
     try:
         from .tasks_lavoro import TASK_LAVORO
         return list(TASK_LAVORO)
+    except ImportError:  # pragma: no cover
+        return []
+
+
+def _task_scrizione() -> list[Task]:
+    """Le task per estrazione e scrittura.
+
+    Stesso motivo di sopra, e un motivo in piu': sono le due uniche
+    categorie che non hanno tool. Il resto del benchmark misura
+    l'agente al lavoro; queste misurano se produce un file che si puo'
+    usare senza ritoccarlo a mano. E' un altro tipo di lavoro, e va
+    detto per nome, non mescolato in silenzio.
+    """
+    try:
+        from .tasks_scrizione import TASK_EXTRACTION, TASK_WRITING
+        return list(TASK_EXTRACTION) + list(TASK_WRITING)
     except ImportError:  # pragma: no cover
         return []
 

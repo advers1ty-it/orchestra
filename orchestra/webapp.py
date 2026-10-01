@@ -6,6 +6,7 @@ Server stdlib, nessuna dipendenza. Tre endpoint:
     GET  /api/stream     SSE: gli eventi dell'agente in tempo reale
     GET  /api/state      snapshot dello stato
     POST /api/send       {text}       invia un messaggio
+    POST /api/allega     {files}      allega foto o PDF, dice il costo
     POST /api/cancel     arresta il turno in corso
     POST /api/reset      nuova conversazione
     POST /api/system     {prompt}     cambia le istruzioni di sistema
@@ -43,6 +44,19 @@ UI_PATH = os.path.join(HERE, "web", "index.html")
 
 MAX_BODY = 64 * 1024  # un prompt non occupa 64KB: oltre e' un errore
 
+# Un allegato e' una cosa diversa da un prompt. Il limite dei 64KB
+# sopra vale per i messaggi scritti; un file da 12 MB in base64 sono
+# 16, e con quel tetto non passava NESSUN file. Il browser si
+# limitava a dire "Failed to fetch", che e' un errore di rete: la
+# richiesta non e' mai arrivata al server, si e' interrotta a
+# meta' strada e non c'e' nessun modo di sapere perche'.
+#
+# Due limiti, due scopi: uno protegge da un prompt assurdo, l'altro
+# da un allegato che non entra. Un unico numero per i due e' un numero
+# che non protegge nessuno dei due.
+MAX_ALLEGATO = 20 * 1024 * 1024   # 20 MB: 12 di file + base64 + margine
+MAX_ALLEGATO_FILE_MB = 12         # il tetto che l'utente vede prima
+
 
 class OrchestraApp:
     """Lo stato del server, condiviso fra i thread.
@@ -54,6 +68,17 @@ class OrchestraApp:
 
     def __init__(self, env: dict[str, str], session: Session | None = None) -> None:
         self.env = env
+        # Allegati già validati, per id. Vivono finche' il messaggio non
+        # parte: sono in memoria, non su disco. E il motivo per cui il
+        # browser manda il file una volta sola invece di due.
+        #
+        # Sta qui e non nella classe Handler perche' un dizionario creato
+        # come attributo di classe e' condiviso da tutte le richieste: se
+        # _registra scrive dentro quello e la pulizia ne crea uno nuovo,
+        # quello nuovo lo vede solo la richiesta che lo ha creato, e
+        # quello vecchio resta con dentro tutti gli id. Il secondo Invio
+        # riusava l'allegato del primo, senza che nulla lo dicesse.
+        self._registro_allegati: dict[str, Any] = {}
         # la sessione può arrivare già costruita (dal create, che deve poter
         # catturare l'errore del provider) o essere costruita qui. Il punto
         # è che TUTTE le istanze passano da qui: prima `create()` usava
@@ -508,11 +533,22 @@ class OrchestraApp:
             except (TypeError, ValueError):
                 return default
 
+        # Solo il prompt di base: le skill le aggiunge l'Agent a ogni
+        # turno, in Agent._aggiorna_prompt.
+        #
+        # Qui il contesto non e' disponibile, e non solo perche' questo
+        # e' uno staticmethod: l'app non esiste ancora, viene costruita
+        # proprio adesso con la sessione che stiamo restituendo.
+        # Chiamare un metodo dell'app da qui faceva saltare ogni avvio
+        # con NameError, presentato come un crash in create() — che e'
+        # dove guardavo, e non dove era.
         return Session(
-            provider=build_provider(provider_name, model=model, env=load_env(ENV_PATH) | os.environ),
+            provider=build_provider(provider_name, model=model,
+                                    env=load_env(ENV_PATH) | os.environ),
             registry=default_registry(),
             system_prompt=SYSTEM_PROMPT,
-            config=LoopConfig(max_iterations=12, context_limit=120_000, keep_recent=8),
+            config=LoopConfig(max_iterations=12, context_limit=120_000,
+                              keep_recent=8),
         )
 
     @classmethod
@@ -651,19 +687,61 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _body(self) -> dict[str, Any]:
+    def _body(self, *, per_allegato: bool = False) -> dict[str, Any]:
+        # Il tetto dipende da cosa arriva. Un prompt e' testo scritto e
+        # 64KB sono gia' generosi; un allegato in base64 e' un terzo
+        # piu' grande del file, e 12 MB diventano 16.
+        #
+        # Prima il limite era uno solo, pensato per i prompt: nessun
+        # file passava, e il browser diceva "Failed to fetch" senza
+        # dire perche'. Un errore che sembra di rete quando il problema
+        # e' una soglia e' il peggiore dei due, perche' fa perdere
+        # tempo a cercare la rete.
+        tetto = MAX_ALLEGATO if per_allegato else MAX_BODY
         try:
             n = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             return {}
         if n <= 0:
             return {}
-        if n > MAX_BODY:
-            raise ValueError("corpo troppo grande")
+        if n > tetto:
+            # Si risponde DOPO aver letto (o svuotato) il corpo. Se si
+            # risponde e si esce, la connessione si chiude con dati
+            # ancora in arrivo e il client vede un errore di rete
+            # invece di un 400 con la spiegazione.
+            self._consuma_corpo(n)
+            if per_allegato:
+                raise ValueError(
+                    f"richiesta troppo grande ({round(n / 1048576, 1)} MB, "
+                    f"il limite e' {round(tetto / 1048576)} MB). "
+                    f"Un allegato oltre i {MAX_ALLEGATO_FILE_MB} MB non "
+                    f"passa: riduci la risoluzione, oppure metti il file "
+                    f"nella cartella di lavoro e chiedi all'agente di "
+                    f"leggerlo da li'."
+                )
+            raise ValueError(
+                f"messaggio troppo grande ({round(n / 1024)} KB, il limite "
+                f"e' {round(MAX_BODY / 1024)} KB)"
+            )
         try:
             return json.loads(self.rfile.read(n).decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise ValueError("JSON non valido")
+
+    def _consuma_corpo(self, n: int) -> None:
+        """Legge e butta il corpo, a pezzi.
+
+        Serve per poter rispondere con un errore comprensibile: se il
+        corpo resta nel socket e la connessione si chiude, il client
+        vede un errore di rete e non sa che il problema era la
+        dimensione.
+        """
+        letti = 0
+        while letti < n:
+            pezzo = self.rfile.read(min(65536, n - letti))
+            if not pezzo:
+                break
+            letti += len(pezzo)
 
     def _need_session(self) -> Session | None:
         if not self.app.ready or self.app.session is None:
@@ -919,6 +997,151 @@ class Handler(BaseHTTPRequestHandler):
             # il browser ha chiuso: normale, non e' un errore da loggare
             pass
 
+    def _svuota_allegati(self) -> None:
+        """Butta gli allegati in attesa.
+
+        Dopo un messaggio inviato non valgono piu': senza questo,
+        premendo Invio due volte la stessa foto parte due volte, e
+        l'utente che riceve due risposte identiche pensa a un bug.
+        """
+        # getattr e non self.app._registro_allegati: questo server puo'
+        # essere costruito senza passare da __init__ (lo fa un test, e
+        # lo faceva anche create() prima che lo sistemassi), e allora
+        # l'attributo non c'e'. Un invio che cade perche' manca un
+        # dizionario vuoto e' il caso peggiore: non c'e' niente da
+        # salvare, e pero' l'utente perde il messaggio.
+        registro = getattr(self.app, "_registro_allegati", None)
+        if registro is not None:
+            registro.clear()
+
+    def _registra(self, a: Any) -> str:
+        """Memorizza un allegato e gli da' un id.
+
+        L'id e' quello che viaggia a /api/send. Il file no: e' gia' qui,
+        e rimandarlo significa fare due volte un viaggio di 12 MB.
+        """
+        import uuid
+        ident = "al-" + uuid.uuid4().hex[:16]
+        # Stessa difesa di sopra: un registro che non esiste viene
+        # creato, non e' un errore. Caricare un file non puo' fallire
+        # perche' manca un contenitore.
+        if not hasattr(self.app, "_registro_allegati"):
+            self.app._registro_allegati = {}
+        self.app._registro_allegati[ident] = a
+        return ident
+
+    def _dal_registro(self, ids: list) -> tuple[list, str]:
+        """Gli allegati gia' preparati, presi dal registro.
+
+        Il file attraversa la rete UNA volta, a /api/allega, dove
+        viene validato e si impara quanto costa. A /api/send arrivano
+        solo gli id.
+
+        Prima il browser mandava i data URL due volte: una per il
+        conto, una per l'invio. Un file da 12 MB viaggiava 32 MB, e il
+        secondo passaggio faceva fallire l'invio con "Failed to
+        fetch" — un errore che sembra di rete e che invece era la
+        nostra stessa richiesta, di nuovo troppo grande.
+        """
+        out = []
+        for ident in ids:
+            if not isinstance(ident, str):
+                return [], "allegato non valido"
+            if ident in self.app._registro_allegati:
+                out.append(self.app._registro_allegati[ident])
+                continue
+            return [], ("questo allegato e' scaduto: rimettilo. "
+                       "Gli allegati si tengono per un messaggio.")
+        return out, ""
+
+    def _prepara_allegati(self, dati: list) -> tuple[list, str]:
+        """Quello che il browser ha mandato, diventa lista di Attachment.
+
+        Il browser manda data URL, non file: rileggere il disco a ogni
+        richiesta costerebbe un file da 12 MB in un JSON, che e' una
+        richiesta che si rompe. Il base64 qui e' gia' fatto.
+
+        Un solo percorso di validazione, lo stesso che fa `allega()` su
+        un file vero: magic number, PDF con testo letto come testo, tetto
+        sulle pagine. Se l'allegato dal browser passasse da un controllo
+        che il file non fa, avremmo due porte con due regole diverse.
+        """
+        from .attachments import LIMITE_MB, allega
+        import base64
+
+        out: list = []
+        for item in dati:
+            nome = (item.get("nome") or "allegato").strip() or "allegato"
+            url = item.get("data_url") or ""
+            if "," not in url or not url.startswith("data:"):
+                return [], f"{nome}: allegato malformato"
+            # base64.b64decode, NON unquote_to_bytes: quest'ultimo
+            # convertsce gli escape URL e lascia il base64 come testo.
+            # Il risultato e' un "file" che inizia con i caratteri
+            # iVBORw0 e non con la firma PNG — e il rifiuto dice
+            # "formato non riconosciuto", che sembra un file corrotto
+            # invece di un errore di decodifica.
+            try:
+                grezzo = base64.b64decode(url.split(",", 1)[1], validate=True)
+            except Exception:  # noqa: BLE001
+                return [], f"{nome}: base64 non valido"
+            if len(grezzo) > LIMITE_MB * 1024 * 1024:
+                return [], (f"{nome}: troppo grande, il limite e' "
+                            f"{LIMITE_MB} MB")
+            try:
+                out.append(allega(nome, grezzo))
+            except ValueError as e:   # AttachmentError
+                return [], str(e)
+        return out, ""
+
+    def _allega(self, s: Any, body: dict[str, Any]) -> None:
+        """POST /api/allega: dice subito quanto costeranno.
+
+        Si manda il file PRIMA del messaggio, e si risponde con il conto
+        in token. Un allegato da 12 MB diventa una richiesta da 40.000
+        token: se lo scopri dalla risposta, e' troppo tardi e sembra un
+        errore. Prima si sa, e si puo' dire "sono in troppi".
+
+        Se il modello non legge le immagini si dice e si rifiuta. Non e'
+        un dettaglio: un modello senza visione su una foto risponde con
+        confidenza inventata, e quella la scopri quando hai gia' scritto
+        il sito con i dati sbagliati.
+        """
+        allegati, problema = self._prepara_allegati(body.get("files") or [])
+        if problema:
+            self._json({"error": problema}, 400)
+            return
+        if s.busy:
+            self._json({"error": "l'agente sta lavorando: aspetta la fine "
+                                 "del turno o annulla"}, 409)
+            return
+        if any(a.immagini for a in allegati):
+            cat = self.app.catalog
+            modello = self.app.env.get("ORCHESTRA_MODEL", "")
+            profilo = cat.models.get(modello) if cat is not None else None
+            if profilo is not None and profilo.info.supports_vision is False:
+                self._json({
+                    "error": f"{modello} non legge le immagini. "
+                             f"Cambia modello dal menu in alto, o allega "
+                             f"un file di testo.",
+                    "serve_visione": True,
+                }, 400)
+                return
+        # Una sola risposta. Prima ce n'erano due in sequenza nella stessa
+        # funzione: la vecchia, con "token_stimati", e quella nuova con
+        # gli id. Il server rispondeva e poi ritornava — e restava la
+        # prima, che non aveva gli id. Il frontend leggeva una risposta
+        # senza id e non lo capiva: l'allegato restava "carico..."
+        # per sempre e l'invio non sapeva a cosa riferirsi.
+        self._json({
+            "ok": True,
+            "id": [self._registra(a) for a in allegati],
+            "allegati": [{"nome": a.nome, "kind": a.kind,
+                          "immagini": len(a.immagini),
+                          "token": a.token_stimati} for a in allegati],
+            "token": sum(a.token_stimati for a in allegati),
+        })
+
     def _sse_send(self, item: dict[str, Any]) -> None:
         payload = json.dumps(item, default=str)
         self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
@@ -931,24 +1154,59 @@ class Handler(BaseHTTPRequestHandler):
         if s is None:
             return
         try:
-            body = self._body()
+            # /api/allega e' l'unica rotta che puo' ricevere un file:
+            # solo li si permette un corpo grande. Su /api/send il
+            # tetto resta quello dei prompt, e gli allegati che vi
+            # arrivano hanno gia' passato i controlli.
+            body = self._body(per_allegato=(path == "/api/allega"))
         except ValueError as e:
             self._json({"error": str(e)}, 400)
             return
 
-        if path == "/api/send":
+        if path == "/api/allega":
+            self._allega(s, body)
+        elif path == "/api/send":
             text = (body.get("text") or "").strip()
-            if not text:
+            allegati, problema = self._dal_registro(
+                body.get("allegati") or [])
+            if problema:
+                self._json({"error": problema}, 400)
+                return
+            if not text and not allegati:
                 self._json({"error": "messaggio vuoto"}, 400)
                 return
-            ok = s.send(text)
+            ok = s.send(text, allegati)
+            if ok:
+                # Gli allegati vivono per un messaggio. Senza questo,
+                # premendo Invio due volte la stessa foto parte due
+                # volte: e l'utente che vuole sapere "perche' l'ha
+                # fatta due volte?" riceve due risposte identiche e
+                # pensa a un bug.
+                # _svuota_allegati sta sul Handler e svuota il
+                # registro dell'app. Chiamarlo sull'app dava
+                # AttributeError: la pulizia era sulla classe sbagliata,
+                # e ogni invio faceva cadere la connessione — che il
+                # browser legge come "Failed to fetch", lo stesso
+                # errore di prima ma con una causa nuova.
+                self._svuota_allegati()
             if not ok:
                 # l'agente sta lavorando: l'UI deve saperlo e non far partire
                 # una richiesta che verrebbe silenziosamente persa
                 self._json({"error": "occupato: attendi la fine del turno o annulla",
                             "busy": True}, 409)
                 return
-            self._json({"ok": True})
+            # Il conto in token torna QUI e non viene stimato dal
+            # browser: il server sa quante pagine ha il PDF e quante
+            # immagini sono, e una stima fatta a monte sarebbe una
+            # stima diversa dalla verita'. Non serve dopo, serve subito.
+            self._json({
+                "ok": True,
+                "id": [self._registra(a) for a in allegati],
+                "allegati": [{"nome": a.nome, "kind": a.kind,
+                              "immagini": len(a.immagini),
+                              "token": a.token_stimati} for a in allegati],
+                "token": sum(a.token_stimati for a in allegati),
+            })
         elif path == "/api/cancel":
             self._json({"ok": s.cancel()})
         elif path == "/api/reset":

@@ -148,6 +148,10 @@
     font: 11.5px var(--mono); color: var(--muted);
     margin-top: 7px; display: flex; gap: 14px; flex-wrap: wrap;
   }
+  /* Le statistiche vanno in fondo a destra: sotto la chat, dove si
+     guarda a lavoro finito. In testa erano un numero in piu' che
+     spingeva i selettori e non diceva niente finche' non finiva. */
+  .hint .stat { margin-left: auto; }
   kbd {
     background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 3px; padding: 1px 5px; font: 11px var(--mono);
@@ -452,3 +456,50 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 /* Una categoria senza test non e' una categoria "da misurare": e' un
    buco, e si dice con un colore diverso da un semplice "non ancora". */
 .avviso-grave { color: #ffb4b4; }
+
+/* ---- Allegati ---- */
+/* La graffetta sta con il campo, non in alto: allegare e' parte di
+   scrivere il messaggio. */
+#btn-allega { flex-shrink: 0; font-size: 15px; padding: 7px 10px; }
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+.allegati-lista {
+  display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px;
+}
+.allegati-lista[hidden] { display: none; }
+.allegato-riga {
+  display: flex; align-items: center; gap: 9px;
+  font: 11.5px var(--mono); padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: rgba(255,255,255,.03);
+}
+.allegato-icona { font-size: 13px; flex-shrink: 0; }
+.allegato-nome {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg);
+}
+.allegato-nome input[type="text"] {
+  width: 100%; background: transparent; border: none; color: var(--fg);
+  font: inherit; outline: none;
+}
+/* Il conto in token e' accanto al nome perche' e' LA cosa che
+   decide: 40.000 token e' una richiesta da 30 centesimi, 1.100 e' un
+   centesimo. Vederlo solo dopo averlo gia' speso e' inutile. */
+.allegato-costo { color: var(--muted); white-space: nowrap; }
+.allegato-costo.alto { color: #ffcf9b; }
+.allegato-tomba {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font-size: 15px; padding: 0 2px; line-height: 1;
+}
+.allegato-tomba:hover { color: #ffb4b4; }
+.allegato-errore {
+  font: 11.5px var(--mono); color: #ffb4b4;
+  padding: 5px 10px; border-left: 2px solid #ff6b6b;
+}
+.allegato-avviso {
+  font: 11.5px var(--mono); color: #ffcf9b;
+  padding: 5px 10px; border-left: 2px solid var(--warn);
+}

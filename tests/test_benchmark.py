@@ -114,14 +114,29 @@ check("tasks_for filtra", len(tasks_for("code")) == 3, str(len(tasks_for("code")
 # di lavoro (js, web, app). Il test confrontava con TASKS solo: e' stato
 # giusto finche' le task di lavoro non esistevano, poi ha iniziato a
 # mentire senza che nessuno se ne accorgesse.
-from orchestra.benchmark import _task_lavoro  # noqa: E402
-check("tasks_for su tutto = nucleo + lavoro",
-      len(tasks_for(None)) == len(TASKS) + len(_task_lavoro()),
-      f"{len(tasks_for(None))} vs {len(TASKS)}+{len(_task_lavoro())}")
+# di lavoro (js, web, app) e di scrittura (estrazione, writing). Il
+# test confrontava con TASKS solo: e' stato giusto finche' le task di
+# lavoro non esistevano, poi ha iniziato a mentire senza che nessuno
+# se ne accorgesse. Poi ha mentito di nuovo quando sono arrivate
+# quelle di scrittura.
+#
+# La lezione e' una: un elenco di gruppi scritto a mano in un test e'
+# un elenco che invecchia. Qui si prende la lista dei moduli che
+# tasks_for() somma davvero, cosi' il test non puo' restare indietro
+# senza fallire.
+from orchestra.benchmark import _task_lavoro, _task_scrizione  # noqa: E402
+GRUPPI = [TASKS, _task_lavoro(), _task_scrizione()]
+check("tasks_for su tutto = tutti i gruppi",
+      len(tasks_for(None)) == sum(len(g) for g in GRUPPI),
+      f"{len(tasks_for(None))} vs {'+'.join(str(len(g)) for g in GRUPPI)}")
+check("i gruppi non sono vuoti",
+      all(len(g) > 0 for g in GRUPPI),
+      str([len(g) for g in GRUPPI]))
 check("le task di lavoro hanno un id unico",
       len({t.id for t in tasks_for(None)}) == len(tasks_for(None)))
 check("ogni categoria dichiarata ha task o e' vuota consapevole",
-      all(len(tasks_for(c)) > 0 for c in ("code", "js", "web", "app")),
+      all(len(tasks_for(c)) > 0 for c in ("code", "js", "web", "app",
+                                          "writing", "extraction")),
       "una categoria dichiarata senza task non e' confrontabile")
 check("tasks_for categoria ignota vuota", tasks_for("inesistente") == [])
 

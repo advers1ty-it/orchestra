@@ -87,7 +87,6 @@
   <span id="scope-note" class="scope-note"></span>
 
   <div class="dot" id="dot"></div>
-  <div class="stat" id="stats">—</div>
   <button id="btn-cancel" disabled>Annulla</button>
   <button id="btn-reset">Nuova</button>
 </header>
@@ -258,13 +257,30 @@
 <footer>
   <div class="cwrap">
     <div class="row">
-      <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio per a capo)" disabled></textarea>
+      <button id="btn-allega" class="ghost" title="Allega una foto, un PDF o un file di testo" disabled>
+        <span aria-hidden="true">📎</span><span class="sr">Allega un file</span>
+      </button>
+      <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
       <button class="primary" id="btn-send" disabled>Invia</button>
     </div>
+    <!-- Gli allegati attesi stanno qui, SOPRA il campo: si vedono
+         mentre scrivi, e il conto in token e' accanto al nome. Un
+         allegato da 40.000 token che scopri dalla risposta e' troppo
+         tardi: e' gia' stato mandato. -->
+    <div id="allegati-lista" class="allegati-lista" hidden></div>
+    <input type="file" id="file-input" multiple hidden
+           accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.txt,.csv,.json,.md">
     <div class="hint">
       <span><kbd>Invio</kbd> invia</span>
       <span><kbd>Shift</kbd>+<kbd>Invio</kbd> a capo</span>
       <span id="conn">connessione…</span>
+      <!-- Le statistiche del turno stanno qui, in basso a destra, e non
+           in alto con gli altri comandi. In testa erano un quarto
+           numero che si leggeva solo a lavoro finito, e spingevano i
+           selettori di servizio e scopo verso il basso. Qui non
+           rubano niente: sotto la chat, dove guardi quando hai
+           finito. -->
+      <span class="stat" id="stats">—</span>
     </div>
   </div>
 </footer>

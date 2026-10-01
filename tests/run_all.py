@@ -30,7 +30,13 @@ SUITES = [
     ("switch-servizio", "test_switch_servizio.py", True),
     ("prezzi", "test_prezzi.py", True),
     ("categorie", "test_categorie.py", True),
+    ("allegati", "test_allegati.py", True),
+    ("allegato-e2e", "test_allegato_e2e.py", True),
+    ("scrizione", "test_scrizione.py", True),
+    ("allegato-giro", "test_allegato_giro.py", True),
     ("benchmark", "test_benchmark.py", True),
+    ("skills", "test_skills.py", True),
+    ("skill-tools", "test_skill_tools.py", True),
     ("e2e", "test_e2e.py", False),
 ]
 

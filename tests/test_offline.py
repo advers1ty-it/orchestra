@@ -30,7 +30,16 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 # ---------------------------------------------------------------- TOOL
 print("\n[1] Tool e sicurezza")
 r = default_registry()
-check("registro contiene 5 tool", len(r) == 5, f"trovati {len(r)}")
+# Non un numero: "5 tool" era giusto fino a quando ho aggiunto le
+# skill, e allora il test ha iniziato a segnalare come difetto una
+# cosa che era un miglioramento. Il punto che voleva verificare e'
+# un altro — che ci sia la base, non quanta ce n'e'.
+BASE = {"read_file", "write_file", "list_dir", "run_shell", "calculate"}
+check("la base dei tool c'e' tutta", BASE.issubset(set(r.all_names())),
+      f"mancano: {sorted(BASE - set(r.all_names()))}")
+check("ogni tool ha una descrizione",
+      all(len(t.description) > 20 for t in r.active),
+      "una descrizione vuota o troppo corta non dice al modello quando usarlo")
 check("read_file dichiara path required",
       r.get("read_file").schema["required"] == ["path"])
 

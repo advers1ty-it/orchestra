@@ -297,12 +297,23 @@ class Session:
 
     # -- esecuzione --------------------------------------------------------
 
-    def send(self, user_input: str) -> bool:
+    def send(self, user_input: str, allegati: list | None = None) -> bool:
         """Invia un messaggio all'agente. Non blocca.
 
         Restituisce False se la sessione e' gia' occupata: rifiutiamo il
         secondo turno invece di accodarlo, perche' accodare richieste che
         l'utente non vede e' peggio che dirgli di aspettare.
+
+        `allegati` sono Attachment gia' pronti (foto, pagine di PDF come
+        data URL). Vanno sull'UTIMO messaggio utente, non su un nuovo
+        messaggio: l'utente ha scritto "estrai i prezzi" e l'immagine
+        insieme, e due messaggi separati fanno leggere all'agente
+        l'istruzione senza l'allegato, o il contrario.
+
+        Un PDF con testo non viaggia come immagine: finisce nel testo
+        del messaggio. Costa zero token ed e' esatto, mentre renderlo
+        in immagini costerebbe 1100 token a pagina per un risultato
+        peggiore.
         """
         with self._lock:
             if self._busy:
@@ -312,18 +323,30 @@ class Session:
 
         self._thread = threading.Thread(
             target=self._run_turn,
-            args=(user_input,),
+            args=(user_input, allegati or []),
             daemon=True,
             name="orchestra-turn",
         )
         self._thread.start()
         return True
 
-    def _run_turn(self, user_input: str) -> None:
+    def _run_turn(self, user_input: str, allegati: list | None = None) -> None:
+        allegati = allegati or []
+        if allegati:
+            # Si dice subito quanto costeranno. Un allegato da 12 MB
+            # diventa una richiesta da 40.000 token, e scoprirlo dalla
+            # fattura e' peggio che vederlo prima.
+            totale = sum(a.token_stimati for a in allegati)
+            self.bridge.emit("allegati", {
+                "nomi": [a.nome for a in allegati],
+                "immagini": len(allegati[0].immagini) if allegati else 0,
+                "token_stimati": totale,
+            })
         try:
             self.bridge.emit("turn_start", {"input": user_input})
             try:
-                self.agent.run(user_input, should_continue=self._should_continue)
+                self.agent.run(user_input, allegati=allegati,
+                               should_continue=self._should_continue)
             except Exception as e:  # noqa: BLE001
                 # Alcuni provider listano modelli che non si possono usare
                 # come agenti: senza tool-calling, o che non fanno chat
@@ -351,7 +374,8 @@ class Session:
                     if not self.cambia_modello(sostituto):
                         raise
                     try:
-                        self.agent.run(user_input, should_continue=self._should_continue)
+                        self.agent.run(user_input, allegati=allegati,
+                                       should_continue=self._should_continue)
                         break
                     except Exception as e2:  # noqa: BLE001
                         e = e2

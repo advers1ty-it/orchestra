@@ -65,6 +65,12 @@ function setBusy(v) {
   dot.className = "dot" + (v ? " busy" : " ok");
   input.disabled = !ready || v;
   btnSend.disabled = !ready || v;
+  // La graffetta segue la chat: durante un turno la richiesta e' gia'
+  // partita, e allegare un file adesso significherebbe che viaggia
+  // con il messaggio DOPO, senza che nessuno lo dica.
+  if (typeof btnAllega !== "undefined" && btnAllega) {
+    btnAllega.disabled = !ready || v;
+  }
   btnCancel.disabled = !v;
   $("btn-reset").disabled = v;
 }

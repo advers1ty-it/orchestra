@@ -150,10 +150,44 @@ class Agent:
 
     # -- il loop -----------------------------------------------------------
 
+    def _aggiorna_prompt(self) -> None:
+        """Riscrive il messaggio di sistema con le skill di adesso.
+
+        Ma solo se ce ne sono. Senza skill il prompt resta identico,
+        carattere per carattere: un test che verifica "il system
+        prompt non e' mai perso" confronta l'uguaglianza esatta, e
+        aggiungere anche solo una riga vuota lo faceva fallire — e il
+        sintomo sarebbe stato "la compaction perde il prompt", che e'
+        falso. In quel caso si faceva cercare un bug nella
+        compattazione, che era perfettamente funzionante.
+
+        Fallisce in silenzio e lascia il prompt come era: un errore
+        qui non deve fermare il turno.
+        """
+        try:
+            import orchestra.skills as sk
+            ultimo = ""
+            for m in reversed(self.state.messages):
+                if m.role == "user" and m.content:
+                    ultimo = m.content
+                    break
+            extra = sk.Indice().prompt(ultimo[:2000])
+        except Exception:
+            return
+        if not extra:
+            return                      # nessuna skill: prompt identico
+        nuovo = self.system_prompt + extra
+        for m in self.state.messages:
+            if m.role == "system":
+                m.content = nuovo
+                return
+        self.state.messages.insert(0, Message(role="system", content=nuovo))
+
     def run(
         self,
         user_input: str,
         *,
+        allegati: list | None = None,
         should_continue: Callable[[AgentState], bool] | None = None,
     ) -> AgentState:
         """Esegue il loop fino a risposta finale, budget esaurito o stop esterno.
@@ -161,8 +195,39 @@ class Agent:
         `should_continue` permette il cancel: se restituisce False, il loop
         si ferma e lo stato è coerente. È il gancio per il task lungo.
         """
-        self.state.messages.append(Message(role="user", content=user_input))
-        self._emit("user_message", text=user_input)
+        # Gli allegati finiscono SULL'ULTIMO messaggio utente, non su uno
+        # nuovo. Due messaggi separati fanno leggere all'agente
+        # l'istruzione senza l'allegato: "estrai i prezzi" e poi
+        # l'immagine come messaggio a se' e' una domanda senza
+        # domanda.
+        #
+        # Un PDF con testo entra nel `content`, non nelle immagini: costa
+        # zero token ed e' esatto.
+        testo = user_input
+        immagini: list[str] = []
+        for a in (allegati or []):
+            if getattr(a, "testo", ""):
+                testo += ("\n\n" if testo else "") + (
+                    f"[{a.nome}]\n{a.testo}"
+                )
+            immagini.extend(getattr(a, "immagini", []) or [])
+
+        msg = Message(role="user", content=testo, images=immagini)
+        self.state.messages.append(msg)
+        self._emit("user_message", text=user_input,
+                   allegati=[a.nome for a in (allegati or [])])
+
+        # Il prompt di sistema si ricalcola a ogni turno, perche' le
+        # skill cambiano durante la sessione: l'agente ne genera una,
+        # tu ne importi una. Senza questo, la skill appena scritta non
+        # entrerebbe fino al riavvio — l'agente la salva e poi non la
+        # usa mai, e il motivo resta invisibile.
+        #
+        # Si aggiorna il MESSAGGIO di sistema in place invece di
+        # prependerne uno nuovo: due messaggi system nello stesso
+        # contesto confondono i provider che prendono solo il primo,
+        # e la lezione si impara da quello che succede con i doppi.
+        self._aggiorna_prompt()
 
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):

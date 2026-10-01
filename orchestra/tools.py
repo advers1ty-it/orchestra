@@ -534,6 +534,12 @@ def default_registry() -> ToolRegistry:
     r.register(tool_list_dir())
     r.register(tool_run_shell())
     r.register(tool_calculate())
+    # Le skill vengono dopo: i loro tool hanno senso solo se l'indice
+    # sa di cosa parla, e l'indice si riempie con skill_importa. Ma
+    # sono attivi subito — un tool che si accende solo dopo che
+    # l'hai usato una volta e' un tool che non usi mai.
+    import orchestra.skill_tools as _st
+    _st.registra(r)
     return r
 
 

@@ -152,7 +152,22 @@ missing = tc_ids_req - tc_ids_res
 check("nessun tool_call orfano dopo compaction", not missing, f"orfani={list(missing)[:5]}")
 
 # il system prompt non è mai stato perso
-check("system prompt mai perso", any(m.role == "system" and m.content == "SYS" for m in st6.messages))
+#
+# Non si confronta con "SYS" ma con l'inizio di "SYS": dal momento in
+# che le skill esistono, il messaggio di sistema è "SYS" più due righe
+# per skill, e l'uguaglianza esatta falliva. Il sintomo diceva "il
+# system prompt si perde nella compaction" e il colpevole era la
+# funzione che lo arricchiva. Il punto che qui si verifica è che il
+# system c'è e che conserva l'istruzione originale — non che sia
+# rimasto identico a quando non c'erano le skill.
+sys_msgs = [m for m in st6.messages if m.role == "system"]
+check("system prompt mai perso", bool(sys_msgs), "nessun messaggio system")
+check("e conserva l'istruzione originale",
+      bool(sys_msgs) and sys_msgs[0].content.startswith("SYS"),
+      repr(sys_msgs[0].content[:40]) if sys_msgs else "assente")
+check("e resta in testa",
+      bool(st6.messages) and st6.messages[0].role == "system",
+      st6.messages[0].role if st6.messages else "vuoto")
 
 
 # ------------------------------------------------------------ degenerazione

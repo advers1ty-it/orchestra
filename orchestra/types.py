@@ -40,20 +40,48 @@ class ToolCall:
 
 @dataclass
 class Message:
-    """Un singolo messaggio nella conversazione."""
+    """Un singolo messaggio nella conversazione.
+
+    Allegati: un messaggio puo' portare immagini. `images` e' una lista
+    di data URL gia' encodate, non percorsi — il percorso esiste solo
+    sul disco di chi ha caricato il file, e chi chiama l'API non ce
+    l'ha. Per lo stesso motivo non si tiene traccia del nome originale:
+    finisce nella cronologia del browser e occupa spazio per sempre.
+    """
 
     role: Role
     content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None  # solo per role="tool"
     name: str | None = None  # nome del tool, per role="tool"
+    # data: URL delle immagini allegate (foto, pagine di PDF)
+    images: list[str] = field(default_factory=list)
     # metadati di conteggio per la compaction
     tokens: int = 0
     created_at: float = field(default_factory=time.time)
 
     def to_api(self) -> dict[str, Any]:
-        """Converte nel formato OpenAI chat-completions."""
-        msg: dict[str, Any] = {"role": self.role, "content": self.content}
+        """Converte nel formato OpenAI chat-completions.
+
+        Con immagini, `content` non e' piu' una stringa: e' una lista di
+        parti, e l'ordine conta. Il testo va PRIMA delle immagini, e non
+        per abitudine: e' l'istruzione, e se viene dopo un modello puo'
+        leggerla come descrizione di quello che ha appena visto invece
+        che come richiesta.
+
+        Senza immagini resta una stringa: alcuni gateway rifiutano la
+        forma a lista, e non costa nulla mandare la forma semplice
+        quando la semplice basta.
+        """
+        if not self.images:
+            msg: dict[str, Any] = {"role": self.role, "content": self.content}
+        else:
+            parti: list[dict[str, Any]] = []
+            if self.content:
+                parti.append({"type": "text", "text": self.content})
+            for url in self.images:
+                parti.append({"type": "image_url", "image_url": {"url": url}})
+            msg = {"role": self.role, "content": parti}
         if self.tool_calls:
             msg["tool_calls"] = [
                 {
