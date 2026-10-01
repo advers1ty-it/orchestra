@@ -12,3 +12,5 @@ _prova/
 .prova/
 _msg.txt
 nul*\ntests/_run_*.js
+_*.py
+_ext*.py
