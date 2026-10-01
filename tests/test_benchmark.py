@@ -17,6 +17,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from orchestra.benchmark import (  # noqa: E402
+    _task_curva,  # noqa: E402
     TASKS, RunResult, render_table, score, summarize, tasks_for,
     v_contains, v_file_lines, v_json_field, v_python_prints_exact,
     v_written,
@@ -109,7 +110,14 @@ check("categorie valide", all(t.category in CATEGORIES for t in TASKS),
 check("id univoci", len({t.id for t in TASKS}) == len(TASKS))
 check("ogni task ha una verifica", all(callable(t.verify) for t in TASKS))
 check("ogni task ha un prompt", all(len(t.prompt) > 30 for t in TASKS))
-check("tasks_for filtra", len(tasks_for("code")) == 3, str(len(tasks_for("code"))))
+# Il filtro si verifica per categoria, non con un numero fisso: la curva
+# aggiunge task e il totale cambia ogni volta. Qui si controlla la
+# proprieta' che conta — restituisce esattamente quelli di quella
+# categoria — e che non si rompe quando se ne aggiunge uno.
+_c = tasks_for("code")
+check("tasks_for filtra per categoria",
+      all(t.category == "code" for t in _c) and len(_c) >= 3,
+      f"{len(_c)} task, categorie {sorted({t.category for t in _c})}")
 # tasks_for(None) restituisce TUTTE le task, nucleo piu' quelle per tipo
 # di lavoro (js, web, app). Il test confrontava con TASKS solo: e' stato
 # giusto finche' le task di lavoro non esistevano, poi ha iniziato a
@@ -126,9 +134,16 @@ check("tasks_for filtra", len(tasks_for("code")) == 3, str(len(tasks_for("code")
 # senza fallire.
 from orchestra.benchmark import _task_lavoro, _task_scrizione  # noqa: E402
 GRUPPI = [TASKS, _task_lavoro(), _task_scrizione()]
-check("tasks_for su tutto = tutti i gruppi",
-      len(tasks_for(None)) == sum(len(g) for g in GRUPPI),
-      f"{len(tasks_for(None))} vs {'+'.join(str(len(g)) for g in GRUPPI)}")
+# Non si conta piu' a mano: la curva aggiunge i suoi task e il numero
+# cambia ogni volta che se ne aggiunge uno. Un test che fissa il totale
+# non misura niente e costringe a modificarlo a ogni task nuovo — e un
+# test che va modificato a ogni nuova funzionalita' e' un test che
+# prima o poi qualcuno modifica senza guardare.
+_gr = TASKS + _task_lavoro() + _task_scrizione() + _task_curva()
+check("tasks_for su tutto = tutti i gruppi", len(tasks_for()) == len(_gr),
+      f"{len(tasks_for())} contro {len(_gr)}")
+check("e non manca nessuno", len({t.id for t in _gr}) == len(_gr),
+      "due task con lo stesso id: uno dei due non gira mai")
 check("i gruppi non sono vuoti",
       all(len(g) > 0 for g in GRUPPI),
       str([len(g) for g in GRUPPI]))

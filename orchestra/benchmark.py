@@ -309,11 +309,20 @@ TASKS: list[Task] = [
 ]
 
 
+def _task_curva():
+    from .tasks_curva import TASK_CURVA
+    return list(TASK_CURVA)
+
+
+def _tutte() -> list[Task]:
+    return (list(TASKS) + list(_task_lavoro()) + list(_task_scrizione())
+            + list(_task_curva()))
+
+
 def tasks_for(category: str | None = None) -> list[Task]:
     if not category:
-        return list(TASKS) + list(_task_lavoro()) + list(_task_scrizione())
-    tutte = list(TASKS) + list(_task_lavoro()) + list(_task_scrizione())
-    return [t for t in tutte if t.category == category]
+        return _tutte()
+    return [t for t in _tutte() if t.category == category]
 
 
 def _task_lavoro() -> list[Task]:
@@ -748,3 +757,33 @@ def perché(r) -> str:
     return testo[:100]
 
 
+def per_livello(risultati: list["RunResult"]) -> dict[str, dict[str, Any]]:
+    """Il punteggio per livello di difficolta', per modello.
+
+    E' la domanda a cui la curva risponde: non "quanto ha sbagliato in
+    tutto", ma "dove comincia a sbagliare". Un modello che passa
+    l1 e l2 e sbaglia l3 non e' peggio di uno che sbaglia l1 — e' un
+    modello con un limite preciso, che e' una informazione che
+    permette di scegliere dove usarlo. Un punteggio unico lo schiaccia
+    insieme a chi sbaglia subito.
+
+    Il livello si legge dall'id (`code_l2`) e non da un campo
+    apposito: aggiungere un campo significa che prima o poi un task
+    avra' il campo vuoto e il livello scomparira' senza che nessuno se
+    ne accorga.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for r in risultati:
+        if r.unusable:
+            continue
+        parti = r.task_id.rsplit("_", 1)
+        livello = parti[1] if len(parti) == 2 and parti[1].startswith("l") else "?"
+        m = out.setdefault(r.model, {"per_livello": {}, "quanti": {}})
+        v = m["per_livello"].setdefault(livello, {"passati": 0, "totali": 0})
+        v["totali"] += 1
+        if r.passed:
+            v["passati"] += 1
+    for m in out.values():
+        for liv, v in m["per_livello"].items():
+            v["score"] = (v["passati"] / v["totali"]) if v["totali"] else 0.0
+    return out

@@ -41,6 +41,8 @@ SUITES = [
     ("runner", "test_runner.py", True),
     ("poll-bench", "test_poll_bench.py", True),
     ("base-campionaria", "test_base_campionaria.py", True),
+    ("verifica-codice", "test_verifica_codice.py", True),
+    ("curva", "test_curva.py", True),
     ("skills", "test_skills.py", True),
     ("skill-tools", "test_skill_tools.py", True),
     ("e2e", "test_e2e.py", False),
