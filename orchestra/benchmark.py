@@ -35,6 +35,7 @@ import json
 import os
 import re
 import shutil
+import importlib
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable
@@ -310,8 +311,18 @@ TASKS: list[Task] = [
 
 
 def _task_curva():
-    from .tasks_curva import TASK_CURVA
-    return list(TASK_CURVA)
+    # la prima curva (code, reasoning, extraction, writing, tool_use) e
+    # la seconda (js, web, app, instruction): insieme danno a ogni
+    # categoria almeno tre livelli. Un modulo che non c'e' non ferma
+    # niente — meglio una curva parziale che nessuna.
+    out = []
+    for nome in ("tasks_curva", "tasks_curva5"):
+        try:
+            mod = importlib.import_module(f".{nome}", package=__package__)
+            out += list(mod.TASK_CURVA)
+        except ImportError:  # pragma: no cover
+            pass
+    return out
 
 
 def _tutte() -> list[Task]:

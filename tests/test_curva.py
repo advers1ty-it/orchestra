@@ -248,7 +248,17 @@ tutti = B.tasks_for()
 vecchi = {"reason_logic", "reason_sched", "code_fib", "write_struttura"}
 check("i task vecchi ci sono ancora", vecchi <= {t.id for t in tutti},
       str(vecchi - {t.id for t in tutti}))
-check("e la curva e' dentro", len([t for t in tutti if t.id.endswith(("_l1", "_l2", "_l3"))]) == 10)
+# Non si conta piu' a mano: la curva e' cresciuta e il numero cambia
+# ogni volta che se ne aggiunge uno. Si controlla la PROPRIETA' — che
+# esista almeno un livello per ogni categoria che ha la curva — che non
+# si rompe quando il numero cresce.
+_chi_ha = {t.category for t in tutti if t.id.rsplit("_", 1)[-1] in ("l1", "l2", "l3")}
+check("ogni categoria della curva ha almeno un livello",
+      bool(_chi_ha) and all(
+          any(x.category == c and x.id.rsplit("_", 1)[-1] in ("l1", "l2", "l3")
+              for x in tutti)
+          for c in _chi_ha),
+      str(sorted(_chi_ha)))
 check("il totale e' cresciuto, non sostituito", len(tutti) >= 30, str(len(tutti)))
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")

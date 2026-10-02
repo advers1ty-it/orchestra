@@ -44,6 +44,8 @@ SUITES = [
     ("verifica-codice", "test_verifica_codice.py", True),
     ("curva", "test_curva.py", True),
     ("punteggio-unico", "test_punteggio_unico.py", True),
+    ("verifica-js", "test_verifica_js.py", True),
+    ("curva5", "test_curva5.py", True),
     ("skills", "test_skills.py", True),
     ("skill-tools", "test_skill_tools.py", True),
     ("e2e", "test_e2e.py", False),
