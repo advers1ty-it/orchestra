@@ -367,11 +367,17 @@ class Agent:
                 last = e
                 if not e.retryable or attempt == 3:
                     raise
-                self._emit("retry", attempt=attempt + 1, error=str(e))
                 import time
 
-                # backoff esponenziale con tetto: 0.5, 1, 2 secondi
-                time.sleep(min(2 ** attempt * 0.5, 4.0))
+                # quanto aspettare: prima si chiede al server, e il
+                # backoff e' il minimo quando non risponde. Su un 429
+                # il provider scrive quanto aspettare; noi lo
+                # ignoravamo e ripartivamo dentro la sua finestra.
+                attesa = min(max(getattr(e, "retry_after", 0.0),
+                                 2.0 ** attempt * 0.5), 120.0)
+                self._emit("retry", attempt=attempt + 1,
+                           error=str(e), attesa=attesa)
+                time.sleep(attesa)
         assert last is not None
         raise last
 

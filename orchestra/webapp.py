@@ -505,6 +505,10 @@ class OrchestraApp:
                     "table": render_table(summary, cat),
                     "per_model": summary["per_model"],
                     "unusable": summary.get("unusable_models", []),
+                    # il numero unico: calcolato qui e non nel
+                    # frontend, altrimenti se ne avrebbe due versioni
+                    # e divergerebbero
+                    "punteggio_unico": summary.get("punteggio_unico"),
                 }
             except Exception as e:  # noqa: BLE001
                 self._bench["log"].append(f"ERRORE: {type(e).__name__}: {e}")
@@ -949,6 +953,15 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": getattr(self.app, "_catalog_error", "catalogo non disponibile")}, 503)
             return
         current = self.app.env.get("ORCHESTRA_MODEL", "")
+        # il numero unico calcolato sui puntezzi SALVATI, cosi' la web UI
+        # lo mostra anche a un giorno dal benchmark. Senza, la colonna
+        # compariva solo durante il benchmark e poi spariva — e una
+        # colonna che va e viene non serve a scegliere niente.
+        try:
+            from .punteggio import da_catalogo
+            unici = (da_catalogo(cat.models) or {}).get("modelli") or {}
+        except Exception:  # noqa: BLE001
+            unici = {}
         out = []
         for p in sorted(cat.with_tools(), key=lambda x: x.info.id):
             out.append({
@@ -958,6 +971,16 @@ class Handler(BaseHTTPRequestHandler):
                 "context": p.info.context_length,
                 "prompt_price": p.info.prompt_price,
                 "scores": p.scores,
+                # la base: quante volte passato e su quanti, per
+                # categoria. Senza, la percentuale da sola nasconde se
+                # un 50% sta su due test o su venti.
+                "passi": getattr(p, "frazioni", {}),
+                "task_per_cat": getattr(p, "task_per_cat", {}),
+                "livelli": getattr(p, "livelli", {}),
+                # il numero unico: ogni categoria pesa uguale, il
+                # livello dentro la categoria conta di piu', e le
+                # poche prove vengono dichiarate come poche.
+                "punteggio_unico": unici.get(p.info.id),
                 "current": p.info.id == current,
                 # Dichiarato dal provider, o appreso da un 400 reale.
                 # None vuol dire che il provider non lo dice: non e' un

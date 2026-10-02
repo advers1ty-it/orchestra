@@ -11,6 +11,7 @@ Il punto di innesto per Anthropic nativo è `AnthropicAdapter`.
 from __future__ import annotations
 
 import json
+import re
 import os
 import urllib.request
 import urllib.error
@@ -40,15 +41,59 @@ class ProviderError(RuntimeError):
         retryable: bool = False,
         status: int = 0,
         unusable: bool = False,
+        retry_after: float = 0.0,
     ):
         super().__init__(message)
         self.retryable = retryable
         self.status = status
         self.unusable = unusable
+        # Quanto il server chiede di aspettare, in secondi. Su un 429
+        # OpenRouter scrive "Please try again in 8.13s" nel corpo e
+        # rimette anche l'header: noi lo leggevamo e non lo usiavamo,
+        # e il backoff di mezzo secondo faceva quattro tentativi
+        # dentro la finestra che il provider aveva chiesto di non
+        # toccare. Il server dice quanto aspettare e noi indoviniamo
+        # di meno.
+        self.retry_after = retry_after
 
 
 # Status che valgono la pena ritentare: rete intasata o quota esaurita.
 RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
+
+def _retry_after(corpo: str, headers=None) -> float:
+    """Quanti secondi chiede il server di aspettare. Zero se non lo dice.
+
+    OpenRouter scrive la richiesta in due modi: l'header
+    `Retry-After` e, dentro il corpo, frasi come "Please try again in
+    8.13s". Li leggevamo entrambi senza usarne nessuno, e il backoff
+    di mezzo secondo faceva quattro tentativi dentro la finestra che
+    il provider aveva chiesto di lasciare stare.
+
+    Si guardano entrambi perche' non tutti i gateway mandano l'header,
+    e alcuni non scrivono niente. Zero significa "non lo ha detto" e il
+    chiamante usa il suo backoff: nessun numero inventato.
+    """
+    try:
+        if headers is not None:
+            v = headers.get("Retry-After") or headers.get("retry-after")
+            if v:
+                return max(0.0, min(float(str(v).strip()), 300.0))
+    except (TypeError, ValueError, AttributeError):
+        pass
+    m = re.search(r"try again in\s+([\d.]+)\s*s", corpo or "", re.I)
+    if m:
+        try:
+            return max(0.0, min(float(m.group(1)), 300.0))
+        except ValueError:
+            pass
+    m = re.search(r"retry[_ ]after[^\d]{0,12}(\d+)", corpo or "", re.I)
+    if m:
+        try:
+            return max(0.0, min(float(m.group(1)), 300.0))
+        except ValueError:
+            pass
+    return 0.0
+
 
 
 class OpenAICompatAdapter:
@@ -113,11 +158,20 @@ class OpenAICompatAdapter:
             # ritentare e non dice niente sulla qualita' del modello, quindi
             # lo marchiamo a parte (vedi ProviderError.unusable).
             harness_locked = "agentic harnesses" in (detail or "").lower()
+            # quanto aspettare: l'header e la frase dentro il corpo. Su
+            # un 429 il provider scrive "try again in 8.13s" e noi
+            # ripartivamo dopo mezzo secondo — quattro tentativi dentro
+            # la sua finestra, e poi un rate limit finiva nel
+            # benchmark come un modello scarso.
+            attesa = _retry_after(
+                detail or "",
+                getattr(e, "headers", None))
             raise ProviderError(
                 f"{self.name}: HTTP {e.code} — {detail or e.reason}",
                 retryable=e.code in RETRYABLE_STATUS,
                 status=e.code,
                 unusable=harness_locked,
+                retry_after=attesa,
             ) from e
         except urllib.error.URLError as e:
             # errori di rete: quasi sempre transitori

@@ -48,9 +48,31 @@ function punteggioDi(m, cat) {
   // confrontabile o e' ancora sconosciuto.
   if (cat === "all" || !cat) {
     const n = Object.keys(s).length;
-    return n ? { testo: n + "/" + CATEGORIE_TOTALE, cls: "quante",
-                 titolo: "categorie misurate su " + CATEGORIE_TOTALE
-                         + " — su Tutte non c'e' un punteggio unico" } : null;
+    if (!n) return null;
+    const unico = m.punteggio_unico;
+    if (unico && typeof unico.punteggio === "number") {
+      const cls = unico.punteggio >= 90 ? "alto"
+                 : unico.punteggio > 0 ? "medio" : "basso";
+      const contro = Math.round(unico.grezzo || 0);
+      const scarto = Math.round((unico.grezzo || 0) - unico.punteggio);
+      return {
+        testo: Math.round(unico.punteggio) + "% · " + n + "/" + CATEGORIE_TOTALE,
+        cls: cls,
+        titolo: "VALORE UNICO su tutte le categorie\n"
+          + "ogni categoria pesa uguale; dentro la categoria il livello\n"
+          + "conta di piu' (facile x1, medio x1.5, difficile x2)\n"
+          + "prove: " + (unico.prove || 0) + " · categorie coperte: "
+          + n + "/" + CATEGORIE_TOTALE
+          + "\ngrezzo " + contro + "%"
+          + (scarto > 0 ? ", tirato verso la media di " + scarto + " punti"
+                        + "\nperche' ha poche prove: con poche prove il"
+                        + " numero resta\nun'indicazione, non una sentenza"
+                        : "")
+      };
+    }
+    return { testo: n + "/" + CATEGORIE_TOTALE, cls: "quante",
+             titolo: "categorie misurate su " + CATEGORIE_TOTALE
+                     + " — nessun numero unico disponibile" };
   }
   const v = s[cat];
   if (typeof v !== "number") return null;

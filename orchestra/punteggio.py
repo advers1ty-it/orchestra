@@ -161,3 +161,67 @@ def punteggio_unico(risultati: list, media_di_insieme: float | None = None) -> d
         "task_comuni": len(comuni),
         "motivo": motivo,
     }
+
+
+def da_catalogo(models: dict[str, Any]) -> dict[str, Any]:
+    """Il numero unico calcolato dai puntezzi SALVATI, non da un benchmark.
+
+    `punteggio_unico` lavora su una lista di RunResult: va bene mentre
+    un benchmark gira, ma la web UI mostra i punteggi che trova nel
+    catalogo anche molto dopo, e a un giorno dal benchmark. Senza
+    questa, il numero unico compariva solo per un minuto e poi spariva
+    — e una colonna che va e viene non è una colonna su cui si decide.
+
+    Le regole sono le stesse: ogni categoria pesa uguale, il livello
+    dentro la categoria moltiplica, e la correzione per le prove
+    tirerebbe verso una media che qui non esiste ancora (i modelli non
+    misurati non hanno un punteggio da cui prendere la media), quindi
+    la correzione viene saltata e il numero è il grezzo. Dichiarato,
+    perché un numero senza la correzione è un numero diverso.
+
+    Il livello arriva dal campo `livelli` del profilo, che viene
+    riempito insieme alle frazioni: senza, un modello misurato solo su
+    task senza livello avrebbe pesi tutti uguali e il numero direbbe
+    "100%" dove la curva direbbe "non lo so".
+    """
+    pesi_livello = getattr(models, "pesi", None) or PESO_LIVELLO
+
+    grezzi: dict[str, float] = {}
+    out: dict[str, Any] = {}
+    for mid, p in models.items():
+        scores = getattr(p, "scores", None) or {}
+        if not scores:
+            continue
+        livelli = getattr(p, "livelli", None) or {}
+        per_cat = []
+        for cat, v in scores.items():
+            if not isinstance(v, (int, float)):
+                continue
+            peso = float(pesi_livello.get(livelli.get(cat, "senza"), 1.0))
+            per_cat.append((v, peso))
+        if not per_cat:
+            continue
+        grezzo = sum(v * peso for v, peso in per_cat) / sum(peso for _, peso in per_cat)
+        grezzi[mid] = grezzo * 100
+        prove = sum(peso for _, peso in per_cat)
+        frazioni = getattr(p, "frazioni", None) or {}
+        base = getattr(p, "task_per_cat", None) or {}
+        out[mid] = {
+            "punteggio": round(grezzo * 100, 1),
+            "grezzo": round(grezzo * 100, 1),
+            # le prove sono il DENOMINATORE, non i task: con le
+            # ripetizioni uno stesso task puo' dare due prove
+            "prove": round(prove, 1),
+            "task": int(sum(base.values())) if base else None,
+            "categorie": len(per_cat),
+            # nessuna correzione: da sola non ha verso cui tirare, e
+            # tirare verso se stessi sarebbe un cerchio
+            "contrasto": 0.0,
+            "corretto": False,
+            "per_categoria": {c: round(v * 100, 1) for (c, v) in
+                              ((c, scores[c]) for c in scores)},
+        }
+
+    media = sum(grezzi.values()) / len(grezzi) if grezzi else 0.0
+    return {"modelli": out, "media_di_insieme": round(media, 1),
+            "confrontabili": True, "task_comuni": 0, "motivo": ""}
