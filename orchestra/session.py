@@ -248,6 +248,10 @@ class Session:
         # scrive in chat deve poter mandare senza sapere niente dei
         # punteggi.
         self._routing_attivo: bool = False
+        # su quale modello si e' gia' ripiegati: senza il segno,
+        # ogni turno sbagliato cambia modello e la sessione diventa
+        # un carosello
+        self._ripiegato_su: str | None = None
 
         # La delega. Il padre riceve il tool `delega`; il figlio NON
         # lo riceve, e questo e' il tetto — non un contatore che
@@ -458,6 +462,102 @@ class Session:
                       else "instradamento spento",
         })
 
+    def _ripiego_se_ripetono(self, richiesta: str) -> None:
+        """Se il modello ha sbagliato due volte, prova il successivo.
+
+        Il ripiego e' l'unica parte dell'instradamento che vale la
+        pena dopo che l'hai scritto: senza misurazioni non c'e' un
+        "successivo", c'e' solo l'unico che hai. Con, c'e' una fila e si
+        sa chi viene dopo — e quella fila era gia' scritta e testata
+        mentre nessuno la chiamava.
+
+        Perche' DOPO il turno e non dentro. Cambiare modello a meta'
+        di un ragionamento cambia il modo in cui lo stesso compito
+        viene affrontato, e l'errore che ha fatto fallire il tentativo
+        non e' stato letto dal nuovo modello: si ripeterebbe. Dopo il
+        turno, il prossimo parte pulito.
+
+        Perche' UNA volta sola per errore. Senza un segno, ogni turno
+        sbagliato cambia modello e la sessione diventa un carosello:
+        quattro modelli in quattro turni, nessuno che finisce un
+        lavoro. Il segno e' `_ripiegato_su`: quando il nuovo modello
+        funziona, si cancella.
+
+        E se non c'e' un successivo non si fa niente e si dice. Un
+        "non ho alternative" detto adesso e' una riga; detto fra tre
+        settimane e' un ciphertext.
+        """
+        from .routing import SOGLIA_DI_CAMBIO, il_successivo
+
+        errori = int(getattr(self.agent.state, "consecutive_errors", 0) or 0)
+
+        # Il segno si cancella QUI, e non dentro il ramo del cambio.
+        #
+        # Prima non lo cancellavo, e il docstring prometteva il
+        # contrario: dopo il primo ripiego la sessione non ripiegava
+        # piu' per tutta la vita. Non e' che ripiegasse troppo — e' che
+        # smetteva di ripiegare, che e' il difetto peggiore: un
+        # modello scelto male per due errori ti resta addosso anche
+        # dopo che hai scritto tre messaggi buoni.
+        #
+        # La regola e' semplice e non ha bisogno di essere giusta in
+        # ogni caso: se il modello corrente non sta sbagliando piu' di
+        # fila, il ripiego di prima non e' piu' valido come divieto.
+        if errori == 0 and self._ripiegato_su is not None:
+            self._ripiegato_su = None
+
+        if errori < SOGLIA_DI_CAMBIO:
+            return
+        if getattr(self, "_ripiegato_su", None) == self.modello_in_uso():
+            return
+
+        cat = getattr(self, "_catalogo_per_costo", None)
+        if cat is None or not getattr(cat, "models", None):
+            return
+
+        try:
+            from .routing import Scelta
+            # Si esclude il modello ATTUALE, non quello da cui si e'
+            # partiti. Sono due cose diverse dopo un ripiego, ed e'
+            # stato un test a notarlo: escludendo solo il primo,
+            # il secondo ripiego sceglieva di nuovo quello di
+            # partenza e la sessione tornava indietro invece che
+                    # avanti — cioe' non ripiegava.
+            prima = Scelta(self.modello_in_uso(), "", None, None, "")
+            dopo = il_successivo(prima, cat)
+        except Exception as e:  # noqa: BLE001
+            self.bridge.emit("routing", {
+                "modello": "", "categoria": "", "punteggio": None,
+                "prove": None, "scartati": [], "spiegazione": "",
+                "motivo": f"ripiego non disponibile: {e}",
+            })
+            return
+
+        if dopo.modello is None or dopo.modello == self.modello_in_uso():
+            self.bridge.emit("routing", {
+                "modello": "", "categoria": dopo.categoria,
+                "punteggio": None, "prove": None, "scartati": [],
+                "spiegazione": "",
+                "motivo": (f"{errori} errori di fila e nessuna "
+                           f"alternativa misurata"),
+            })
+            return
+
+        if not self.cambia_modello(dopo.modello):
+            return
+        self._ripiegato_su = dopo.modello
+        self.agent.state.consecutive_errors = 0
+        self.bridge.emit("routing", {
+            "modello": dopo.modello,
+            "categoria": dopo.categoria,
+            "punteggio": dopo.punteggio,
+            "prove": dopo.prove,
+            "scartati": dopo.scartati[:3],
+            "spiegazione": dopo.spiega(),
+            "motivo": (f"{errori} errori di fila: passo a "
+                       f"{dopo.modello}"),
+        })
+
     def instradamento_ora(self) -> bool:
         """Se l'instradamento automatico e' acceso adesso."""
         return bool(self._routing_attivo)
@@ -594,6 +694,8 @@ class Session:
                             f"testo vuoto: probabilmente non e' un modello "
                             f"conversazionale. Cambialo dal menu in alto."
                 })
+            self._ripiego_se_ripetono(user_input)
+
             self.bridge.emit(
                 "turn_end",
                 {

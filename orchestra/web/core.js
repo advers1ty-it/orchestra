@@ -312,6 +312,29 @@ function handle(kind, d) {
       addNote(`contesto compattato: ${d.tokens_before} → ${d.tokens_after} token ` +
               `(potati ${d.tools_pruned} tool, fusi ${d.history_merged} turni)`);
       break;
+
+    // Instradamento e delega: le due cose che Orchestra fa da sola.
+    // Senza una riga qui, l'agente cambia modello e chiede a un
+    // sub-agente senza che nulla lo dica, e un comportamento
+    // automatico che non si vede e' indistinguibile da uno che non
+    // esiste.
+    case "routing": {
+      const chi = d.modello ? `${d.categoria || "?"} → ${d.modello}` : "routing";
+      const p = (d.punteggio !== null && d.punteggio !== undefined)
+        ? ` (${Math.round(d.punteggio)}% su ${Math.round(d.prove || 0)} prove)` : "";
+      addNote(`instradamento: ${chi}${p} — ${d.motivo || ""}`);
+      break;
+    }
+    case "delega": {
+      const esito = {risposto: "fatto", esaurito: "senza risposta",
+                     errore: "errore"}[d.esito] || d.esito;
+      addNote(`delega a un sub-agente (${d.modello || "senza modello"}, ` +
+              `${d.passi || 0} passi): ${esito} — "${String(d.obiettivo || "").slice(0, 70)}"`);
+      break;
+    }
+    case "log":
+      addNote(d.text || "");
+      break;
     case "retry":
       addNote(`retry ${d.attempt}: ${d.error}`);
       break;
