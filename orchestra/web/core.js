@@ -57,11 +57,19 @@ function punteggioPerScope(m, scope) {
   }
   // Senza scope: il numero unico, che confronta tutto il benchmark.
   //
-  // Prima qui si restituiva "" e il menu non mostrava nessun
-  // punteggio finche' non avevi scelto una categoria nel pannello
-  // Benchmark. Il numero c'era ed era giusto, ma solo a una condizione
-  // che nessuno sapeva — e il menu sembrava semplicemente muto.
-  const t = m.totale;
+  // Prima qui si restituiva stringa vuota e il menu non mostrava
+  // nessun punteggio finche' non avevi scelto una categoria nel
+  // pannello Benchmark. Il numero c'era ed era giusto, ma solo a una
+  // condizione che nessuno sapeva, e il menu sembrava semplicemente
+  // muto.
+  //
+  // Il campo si chiama `punteggio_unico`, non `totale`: la rotta
+  // /api/models lo espone gia' da prima. Avevo cercato un nome che
+  // non esisteva invece di guardare cosa arrivava, e poi avevo
+  // duplicato il dato sotto un altro nome per far quadrare il mio
+  // errore. Due copie dello stesso numero divergono, e quella che
+  // resta indietro e' quella che qualcuno crede sia quella giusta.
+  const t = m.punteggio_unico;
   return (t && typeof t.punteggio === "number")
     ? String(Math.round(t.punteggio)) : "";
 }
