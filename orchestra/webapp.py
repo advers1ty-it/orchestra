@@ -336,6 +336,52 @@ class OrchestraApp:
             except (ValueError, RuntimeError, ProviderError, KeyError):
                 return False
 
+        def instrada(prima_richiesta: str) -> str | None:
+            """Il PRIMO modello, scelto sui punteggi. None se non si puo'.
+
+            Chiama routing.instrada, che non conosce la Sessione: il
+            motore di scelta e' uno solo e testato da solo, e la
+            Sessione gli passa solo la richiesta. Se la scelta fosse
+            dentro questa funzione, il classifier non si potrebbe
+            verificare senza una sessione viva — che e' esattamente
+            come i punteggi hanno finito per non essere usati da
+            nessuno.
+            """
+            from .routing import instrada as _instrada
+            cat = self.catalog
+            if cat is None or not getattr(cat, "models", None):
+                return None
+            scelta = _instrada(cat, prima_richiesta)
+            # la scelta si scrive SEMPRE, anche quando coincide con
+            # quello che gia' si usa: "perche' ha scelto questo" e' la
+            # domanda che si fa davanti a un instradamento, e senza
+            # risposta sembra che non sia successo niente
+            try:
+                self.session.bridge.emit(
+                    "routing", **{
+                        "modello": scelta.modello or "",
+                        "categoria": scelta.categoria,
+                        "punteggio": scelta.punteggio,
+                        "prove": scelta.prove,
+                        "motivo": scelta.motivo,
+                        "scartati": scelta.scartati[:3],
+                        "spiegazione": scelta.spiega(),
+                    })
+            except Exception:
+                pass
+            if scelta.modello is None:
+                return None
+            if scelta.modello == self.env.get("ORCHESTRA_MODEL", ""):
+                return None      # gia' quello: non toccare la sessione
+            return scelta.modello
+
+        self.session._scegli_primo = instrada
+        # Si accende qui, e non in send(): il gancio e' l'unico posto
+        # dove si sa che il catalogo esiste. Accenderlo altrove
+        # significherebbe instradare con un catalogo che potrebbe non
+        # essere ancora stato caricato.
+        if hasattr(self.session, "instradamento_attivo"):
+            self.session.instradamento_attivo(True)
         self.session._scegli_sostituto = scegli
         self.session._cambia_modello = cambia
 

@@ -237,6 +237,17 @@ class Session:
         # il turno con un errore che sembra di rete.
         self._scegli_sostituto: Any = None
         self._cambia_modello: Any = None
+        # Instrada il PRIMO modello sui punteggi del benchmark.
+        # Diverso dal sostituto: quello serve quando un modello e'
+        # morto, questo serve quando la sessione comincia, e la
+        # domanda a cui risponde e' "quale modello e' migliore per
+        # QUESTA domanda" invece di "quale ne rimane".
+        self._scegli_primo: Any = None
+        # Perche' e' una variabile e non un parametro di send(): la
+        # scelta la fa chi ha il catalogo, non chi ha la chat. Chi
+        # scrive in chat deve poter mandare senza sapere niente dei
+        # punteggi.
+        self._routing_attivo: bool = False
 
         self.agent = Agent(
             provider,
@@ -297,6 +308,31 @@ class Session:
 
     # -- esecuzione --------------------------------------------------------
 
+    def instradamento_attivo(self, attivo: bool = True) -> None:
+        """Accende o spegne l'instradamento automatico.
+
+        Di' default True perche' e' quello che rende utile lo
+        strumento, ma l'interruttore esiste perche' un
+        instradamento che non si puo' disattivare non e' automatico:
+        e' imposto. E quando e' spento si puo' scegliere a mano e
+        vedere se la scelta automatica era migliore — che e' l'unico
+        modo di sapere se il router serve.
+        """
+        self._routing_attivo = attivo
+        # emit(kind, data) e non emit(kind, **kwargs): la firma e' quella,
+        # e un errore qui impedisce al server di partire — il che
+        # significa che un falso segno in una riga ferma tutto.
+        self.bridge.emit("routing", {
+            "modello": "", "categoria": "", "punteggio": None,
+            "prove": None, "scartati": [], "spiegazione": "",
+            "motivo": "instradamento acceso" if attivo
+                      else "instradamento spento",
+        })
+
+    def instradamento_ora(self) -> bool:
+        """Se l'instradamento automatico e' acceso adesso."""
+        return bool(self._routing_attivo)
+
     def send(self, user_input: str, allegati: list | None = None) -> bool:
         """Invia un messaggio all'agente. Non blocca.
 
@@ -315,6 +351,42 @@ class Session:
         in immagini costerebbe 1100 token a pagina per un risultato
         peggiore.
         """
+        # Instradamento automatico. Prima di occupare la sessione e
+        # prima di accodare il messaggio: se lo si facesse dopo, il
+        # turno partirebbe col modello sbagliato e la correzione
+        # arriverebbe al turno successivo — cioe' mai, perche' nel
+        # frattempo hai gia' letto la risposta.
+        #
+        # Non e' il posto giusto per farlo? Lo e': qui la richiesta
+        # dell'utente esiste per intero, e prima non si sa cosa
+        # rispondere. Dopo, si sa e si e' tardi.
+        if self._routing_attivo and self._scegli_primo is not None \
+                and not self._busy:
+            scelto = None
+            try:
+                scelto = self._scegli_primo(user_input)
+            except Exception:  # noqa: BLE001
+                # Una scelta che fallisce non puo' far fallire il
+                # turno: si continua col modello che si ha. Ma si dice
+                # — un instradamento che non parte e non lo dice e'
+                # un instradamento spento.
+                self.bridge.emit("routing", {
+                    "modello": "", "categoria": "", "punteggio": None,
+                    "prove": None, "scartati": [], "spiegazione": "",
+                    "motivo": "instradamento non disponibile",
+                })
+                scelto = None
+            if scelto:
+                _busy = self._busy
+                self._busy = False
+                try:
+                    if self._cambia_modello is not None:
+                        self._cambia_modello(scelto)
+                except Exception:  # noqa: BLE001
+                    pass
+                finally:
+                    self._busy = _busy
+
         with self._lock:
             if self._busy:
                 return False

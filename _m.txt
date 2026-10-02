@@ -1,0 +1,62 @@
+il motore di instradamento: i punteggi esistevano, e non li usava nessuno
+
+Tutta la materia prima c'era gia: Catalog.select, best_for, by_score,
+leaderboard, e i punteggi misurati con la curva di difficolta'. Nessuno
+la usava. L'agente prendeva il provider che aveva e andava. Non e'
+che mancasse il motore a meta' — e' che il motore non c'era, e il
+misuratore girava a vuoto.
+
+TRE REGOLE
+
+1. Si instrada all'AVVIO, non a ogni turno. Cambiare modello a meta'
+   di una conversazione cambia il modo in cui lo stesso compito viene
+   affrontato, e un agente che cambia modello ogni tre messaggi
+   sembra instabile anche quando sta facendo bene. Si cambia solo se
+   quello scelto si dimostra sbagliato.
+
+2. La CATEGORIA viene da una regola, non da un modello. Se per capire
+   quale modello usare servisse un LLM, si pagherebbe due volte ogni
+   turno e si aggiungerebbe un errore. Il default e' `code` perche' e'
+   la maggior parte di cio' che si fa qui, e sbagliare in quel senso e'
+   molto meno peggio del contrario.
+
+3. Se un modello ha poche prove non guida la scelta, e si dice. Due
+   test non distinguono il migliore dal primo arrivato, e scegliere
+   come se distinguessero e' il difetto.
+
+LA COSA CHE NON FA
+
+Non nasconde la scelta. Ogni decisione porta con se' il motivo, il
+punteggio, la base su cui e' stato misurato e gli scartati con la
+loro ragione. Un instradamento invisibile e' un errore che si scopre
+tre settimane dopo, e allora l'unica cosa che resta e' spegnere
+tutto. L'evento SSE `routing` porta tutto questo.
+
+E c'e' un interruttore. Un instradamento che non si puo' disattivare
+non e' automatico, e' imposto — e quando e' spento si puo' scegliere a
+mano e vedere se la scelta automatica era migliore, che e' l'unico
+modo di sapere se il router serve.
+
+DUE DIFETTI MIEI NELLO STESSO PEZZO
+
+Ho scritto `bridge.emit(kind, **kwargs)` due volte, e la firma e'
+`emit(kind, data)`. Il server non partiva. Non l'ho visto ne' dai test
+unitari — coprono il classifier, non il gancio che lo chiama — e
+l'ho visto solo avviando il server, che e' la ragione per cui l'e2e
+sta nel runner.
+
+E la terza volta che mi fido di una firma senza guardarla. Il rimedio
+non e' stare attenti: e' guardare.
+
+UNA COSA CHE NON SO
+
+Un test fallisce, `domanda 'mai' partita`, e non ho potuto
+stabilire se l'ho rotto io. Il confronto col codice di prima e' stato
+inconcludente perche' quel server e' crashato per un conflitto di
+porta. Quello che so e' che quel test non passa mai da send() — usa
+solo /api/permessi e /api/permesso — e l'instradamento sta dentro
+send(), quindi non viene eseguito in quel percorso. Non e' la prova
+che non sia mio: e' l'indizio giusto. Il test resta rosso e va
+chiarito.
+
+40 suite verdi.
