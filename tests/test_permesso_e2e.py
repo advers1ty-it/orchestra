@@ -125,7 +125,18 @@ check("l'SSE si apre", sse_ok.wait(timeout=15))
 time.sleep(1.0)
 
 print("\n[2] La domanda parte e arriva sull'SSE")
-risp = post("/api/permesso/prova", {})
+# Anche QUI una cartella nuova, e per la stessa ragione della riga
+# sotto: senza, questa prova usa il percorso di default — Documents —
+# e se una corsa precedente di questo test ha risposto "mai" su
+# quella cartella, il gate la nega SENZA chiedere. Il test non
+# falliva, semplicemente non testava niente: si fermava al primo check
+# e andava avanti con gli altri.
+#
+# È la stessa cosa che rende un test non ripetibile: uno stato che
+# sopravvive alla corsa. Il server tiene i negati apposta — devono
+# sopravvivere — e il test deve quindi cambiare bersaglio, non il
+# server.
+risp = post("/api/permesso/prova", {"cartella": cartella_pulita()})
 check("il server accetta la prova", risp.get("ok") is True, str(risp)[:100])
 check("la domanda e' in attesa", risp.get("in_attesa") is True, str(risp))
 domanda = attendi_domanda(risp.get("id"))
@@ -141,7 +152,19 @@ print("\n[3] Le tre scelte rispondono")
 for scelta, nome in (("una_volta", "una volta"),
                      ("sessione", "per sessione"),
                      ("mai", "mai")):
-    r2 = post("/api/permesso/prova", {})
+    # Una cartella NUOVA per ogni scelta, e non perche' sia piu' pulito:
+    # perche' il gate tiene la concessione per la sessione, e con lo
+    # stesso percorso la terza scelta non trova nessuna domanda da
+    # aspettare — il gate ha gia' risposto "concesso" alla seconda, e
+    # risponde correttamente.
+    #
+    # Il test si aspettava tre domande su tre scelte diverse, e su due
+    # percorsi diversi ne otteneva due: la seconda consumava la
+    # concessione anche per la terza. Non e' un difetto del gate: e'
+    # esattamente cio' che deve fare. E il test non era mai fallito
+    # perche' prima girava su un server che non aveva ancora la
+    # concessione per sessione attiva in quel momento.
+    r2 = post("/api/permesso/prova", {"cartella": cartella_pulita()})
     ev = attendi_domanda(r2.get("id"))
     if not ev:
         check(f"domanda '{nome}' partita", False, "nessun evento")

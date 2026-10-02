@@ -1,62 +1,40 @@
-il motore di instradamento: i punteggi esistevano, e non li usava nessuno
+il test dei permessi non era rotto: non era ripetibile
 
-Tutta la materia prima c'era gia: Catalog.select, best_for, by_score,
-leaderboard, e i punteggi misurati con la curva di difficolta'. Nessuno
-la usava. L'agente prendeva il provider che aveva e andava. Non e'
-che mancasse il motore a meta' — e' che il motore non c'era, e il
-misuratore girava a vuoto.
+Avevo lasciato aperta la domanda se il fallimento di ieri fosse
+mio. Non lo era: il test usava lo stesso percorso di default su tre
+probe di fila, e il gate tiene la concessione per la sessione e i
+negati per sempre — che e' esattamente cio' che deve fare.
 
-TRE REGOLE
+La prima probe chiedeva Documents. Se una corsa precedente aveva
+risposto "mai" su quella cartella, il gate negava SENZA chiedere: il
+check "la domanda e' in attesa" falliva e il test non falliva per
+quello che diceva, ma perche' non stava piu' guardando.
 
-1. Si instrada all'AVVIO, non a ogni turno. Cambiare modello a meta'
-   di una conversazione cambia il modo in cui lo stesso compito viene
-   affrontato, e un agente che cambia modello ogni tre messaggi
-   sembra instabile anche quando sta facendo bene. Si cambia solo se
-   quello scelto si dimostra sbagliato.
+E la terza scelta non trovava nessuna domanda da aspettare perche' la
+seconda aveva concesso l'intera sessione. Anche questo corretto, e
+anche questo non un difetto.
 
-2. La CATEGORIA viene da una regola, non da un modello. Se per capire
-   quale modello usare servisse un LLM, si pagherebbe due volte ogni
-   turno e si aggiungerebbe un errore. Il default e' `code` perche' e'
-   la maggior parte di cio' che si fa qui, e sbagliare in quel senso e'
-   molto meno peggio del contrario.
+Il gate tiene i negati apposta: devono sopravvivere al riavvio, se no
+un "mai" diventerebbe "una volta" alla prima richiesta dopo un
+riavvio, e l'utente avrebbe detto una cosa e ottenuto un'altra. Il
+server fa bene. Il test deve cambiare bersaglio, non il server — e il
+bersaglio era lo stesso da tre righe.
 
-3. Se un modello ha poche prove non guida la scelta, e si dice. Due
-   test non distinguono il migliore dal primo arrivato, e scegliere
-   come se distinguessero e' il difetto.
+Tre volte di fila sullo stesso server, verde: la prova che sia
+ripetibile.
 
-LA COSA CHE NON FA
+E due cose che ho sbagliato mentre ci arrivavo. Ho dato per scontato
+che il test fosse rosso perche' avessi rotto io qualcosa, e ho
+provato a fare il confronto col codice precedente — che e' inconcludente
+perche' il server di confronto e' crashato per un conflitto di porta,
+e un confronto inconclusivee non prova niente in nessuna delle due
+direzioni. E ho scritto un probe in GET su una rotta che sta nel
+dispatcher POST, e ho concluso che la rotta fosse sparita.
 
-Non nasconde la scelta. Ogni decisione porta con se' il motivo, il
-punteggio, la base su cui e' stato misurato e gli scartati con la
-loro ragione. Un instradamento invisibile e' un errore che si scopre
-tre settimane dopo, e allora l'unica cosa che resta e' spegnere
-tutto. L'evento SSE `routing` porta tutto questo.
+Il filo dei due: ho trattato un sintomo come una diagnosi. Il sintomo
+era giusto — il test era rosso — e la diagnosi no, due volte. La
+prima cosa da fare davanti a un test rosso e' capire se e' stato
+sempre rosso, e la seconda e' accertarsi che il proprio probe usi lo
+stesso metodo di chi ha scritto il test.
 
-E c'e' un interruttore. Un instradamento che non si puo' disattivare
-non e' automatico, e' imposto — e quando e' spento si puo' scegliere a
-mano e vedere se la scelta automatica era migliore, che e' l'unico
-modo di sapere se il router serve.
-
-DUE DIFETTI MIEI NELLO STESSO PEZZO
-
-Ho scritto `bridge.emit(kind, **kwargs)` due volte, e la firma e'
-`emit(kind, data)`. Il server non partiva. Non l'ho visto ne' dai test
-unitari — coprono il classifier, non il gancio che lo chiama — e
-l'ho visto solo avviando il server, che e' la ragione per cui l'e2e
-sta nel runner.
-
-E la terza volta che mi fido di una firma senza guardarla. Il rimedio
-non e' stare attenti: e' guardare.
-
-UNA COSA CHE NON SO
-
-Un test fallisce, `domanda 'mai' partita`, e non ho potuto
-stabilire se l'ho rotto io. Il confronto col codice di prima e' stato
-inconcludente perche' quel server e' crashato per un conflitto di
-porta. Quello che so e' che quel test non passa mai da send() — usa
-solo /api/permessi e /api/permesso — e l'instradamento sta dentro
-send(), quindi non viene eseguito in quel percorso. Non e' la prova
-che non sia mio: e' l'indizio giusto. Il test resta rosso e va
-chiarito.
-
-40 suite verdi.
+41 suite verdi.
