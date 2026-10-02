@@ -128,6 +128,17 @@ def v_avviso() -> Callable:
     """
     attesi = ["## Cosa e' successo", "## Cosa non fare", "## Cosa fare"]
 
+    def _norm(t: str) -> str:
+        """L'apostrofo e' l'unica cosa che si normalizza.
+
+        'e' ed è sono la stessa lettera: un modello che scrive
+        l'accento ha scritto bene quanto uno che non lo mette, e
+        bocciarlo significa misurare la tastiera invece della
+        scrittura. Su una categoria che si chiama `writing` è
+        particolarmente fuori luogo.
+        """
+        return t.replace("è", "e'").replace("È", "E'")
+
     def _verifica(work: str) -> tuple[bool, str]:
         p = os.path.join(work, "avviso.md")
         if not os.path.exists(p):
@@ -135,7 +146,7 @@ def v_avviso() -> Callable:
         with open(p, encoding="utf-8") as f:
             testo = f.read()
         righe = [r.strip() for r in testo.split("\n") if r.strip()]
-        titoli = [r for r in righe if r.startswith("## ")]
+        titoli = [_norm(r) for r in righe if r.startswith("## ")]
         if titoli != attesi:
             return False, f"sezioni {titoli} invece di {attesi}"
         if len(testo) > 180:

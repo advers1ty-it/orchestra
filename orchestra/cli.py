@@ -339,7 +339,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
     env = _env()
     provider_name = args.provider or env.get("ORCHESTRA_PROVIDER", "openrouter")
 
-    from .benchmark import render_table, run_task, summarize, tasks_for, perché
+    from .benchmark import  render_table, run_task, summarize, tasks_for, perché, salva_punteggi
     from .catalog import Catalog
 
     try:
@@ -476,27 +476,25 @@ def cmd_bench(args: argparse.Namespace) -> int:
     print(render_table(summary, cat))
 
     # persistenza: i punteggi alimentano il routing
-    scored = {}
-    for mid, data in summary["per_model"].items():
-        prof = cat.models.get(mid)
-        if prof:
-            # by_category ora e' un dizionario per categoria, non un
-            # numero: c'era dentro anche la frazione. Con la sola
-            # proporzione, due modelli a 0.67 e 0.66 sul display
-            # arrotondano allo stesso numero e non si distinguono; e
-            # 50% su 2 test sembra 50% su 20.
-            prof.scores = {}
-            prof.frazioni = {}
-            prof.task_per_cat = {}
-            for cat, d in (data.get("by_category") or {}).items():
-                v = d.get("score", 0) if isinstance(d, dict) else d
-                if v > 0:
-                    prof.scores[cat] = v
-                if isinstance(d, dict):
-                    prof.frazioni[cat] = d.get("passati", 0)
-                    prof.task_per_cat[cat] = d.get("quanti", 0)
-            prof.last_measured = time.time()
-            scored[mid] = prof
+    #
+    # La scrittura sta in salva_punteggi, in benchmark.py: qui c'era una
+    # copia inline, e dentro c'era `for cat, d in ...` in una funzione
+    # dove `cat` è il CATALOGO. Dichiarare una locale con quel nome la
+    # rende locale per tutto il corpo, anche per le righe precedenti:
+    # il benchmark finiva tutti i task e poi moriva con
+    # "AttributeError: 'str' object has no attribute 'models'" — cioe'
+    # dopo quarantatre minuti di lavoro buttati.
+    #
+    # E' la terza volta che questa variabile viene omessa, dopo
+    # _ripara_modello_iniziale e il ciclo in webapp. La causa comune non
+    # e' la disattenzione: e' che il codice era in due copie, e di due
+    # copie se ne corregge una. Ora c'e' una sola.
+    scored = {mid: prof
+              for mid, prof in ((m, cat.models.get(m))
+                                for m in summary["per_model"])
+              if prof is not None}
+    salva_punteggi(cat, summary)
+
     if scored and not args.no_save:
         cat.save()
         print(f"\n{C['dim']}misurazioni salvate. "

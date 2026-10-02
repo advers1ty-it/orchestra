@@ -133,9 +133,27 @@ class Agent:
                 result = asyncio.run(result)
             text = result if isinstance(result, str) else json.dumps(result, default=str)
         except TypeError as e:
-            # quasi sempre argomenti sbagliati: lo riportiamo con precisione.
-            # È un errore del modello, quindi conta verso il breaker.
-            return f"ERRORE DI ARGOMENTI per '{name}': {e}", False
+            # quasi sempre argomenti sbagliati: lo riportiamo con
+            # precisione. È un errore del modello, quindi conta verso
+            # il breaker.
+            #
+            # Il nome del parametro atteso è la parte che serve: senza,
+            # il modello riceve "unexpected keyword argument 'file_path'"
+            # e un nome interno di Python, e non ha modo di capire che
+            # il parametro giusto e' un altro. Su un benchmark la
+            # differenza e' visibile: tre chiamate con il nome del
+            # parametro sbagliato sembrano tre strumenti rotti.
+            attesi = ""
+            try:
+                import inspect
+                attesi = ", ".join(
+                    str(p) for p in inspect.signature(tool.handler).parameters
+                    if p not in ("self",))
+            except (TypeError, ValueError):
+                pass
+            dettaglio = f" Accetta: {attesi}." if attesi else ""
+            return (f"ERRORE DI ARGOMENTI per '{name}': {e}."
+                    f"{dettaglio}"), False
         except Exception as e:
             self._emit(
                 "tool_error",
