@@ -65,6 +65,21 @@ MAX_ALLEGATO_FILE_MB = 12         # il tetto che l'utente vede prima
 
 
 
+def _totali(cat: Any) -> dict[str, Any]:
+    """Il punteggio unico per modello, gia' calcolato da punteggio.py.
+
+    Non solleva mai. Un catalogo mezzo misurato deve comunque caricare
+    il menu dei modelli: se qui si alza, il difetto si presenta come
+    "la lista dei modelli e' vuota", che e' un'altra cosa, e
+    manderebbe a cercare il difetto dove non e'.
+    """
+    try:
+        from .punteggio import da_catalogo
+        return (da_catalogo(cat.models) or {}).get("modelli", {})
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 class OrchestraApp:
     """Lo stato del server, condiviso fra i thread.
 
@@ -953,12 +968,18 @@ class Handler(BaseHTTPRequestHandler):
             if cat is None or not cat.models:
                 self._json({"error": f"nessun modello disponibile da {q}"}, 404)
                 return
+            # Il punteggio UNICO calcolato qui, non nel browser:
+            # e' lo stesso numero del pannello Benchmark, e se lo
+            # calcolassimo anche in JavaScript i due potrebbero
+            # divergere senza che nessuno se ne accorga.
+            _totale = _totali(cat)
             out = [{"id": p.info.id, "short": p.info.short,
                     "free": p.info.is_free,
                     "context": p.info.context_length or 0,
                     "prompt_price": p.info.prompt_price,
                     "tool_calling": p.info.supports_tools,
-                    "scores": dict(p.scores or {})}
+                    "scores": dict(p.scores or {}),
+                    "totale": _totale.get(p.info.id)}
                    for p in sorted(cat.models.values(), key=lambda m: m.info.id)]
             ignoti = 0
             conta = getattr(cat, "ignoti_sui_tool", None)

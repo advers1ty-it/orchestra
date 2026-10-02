@@ -1220,6 +1220,43 @@ function scegliModello() {
 
 on($("routing-go"), "click", scegliModello);
 
+// -------------------------------------------------------------- Prior
+// L'API /api/prior esisteva da prima ma nessuno la chiamava: la
+// chiave era nel .env, il bottone non c'era, e i 158 prior che
+// Orchestra scaricava non arrivavano a schermo da nessuna parte.
+//
+// Un dato scaricato e non mostrato non e' un dato: e' lavoro sprecato
+// e una promessa non mantenuta.
+on($("prior-go"), "click", async () => {
+  const out = $("prior-out"), cop = $("prior-copertura");
+  if (!out) return;
+  out.textContent = "scarico…";
+  if (cop) cop.replaceChildren();
+  try {
+    const r = await fetch("/api/prior");
+    const d = await r.json();
+    out.textContent = d.messaggio || "";
+    const c = d.copertura || {};
+    if (!cop) return;
+    const righe = [
+      ["prior scaricati", c.prior],
+      ["presenti in catalogo", c.nel_catalogo],
+      ["di cui gratuiti", c.gratuiti],
+      ["modelli in catalogo", c.catalogo],
+    ];
+    const t = el("table", "mini-table");
+    for (const [k, v] of righe) {
+      const tr = el("tr");
+      tr.appendChild(el("td", "dim", k));
+      tr.appendChild(el("td", "", String(v ?? "—")));
+      t.appendChild(tr);
+    }
+    cop.replaceChildren(t);
+  } catch (e) {
+    out.textContent = "non raggiungibile: " + e;
+  }
+});
+
 function aggiornaCatalogoUI(elenco, corrente) {
   tuttiModelli = elenco || [];
   disegnaModelli();

@@ -48,10 +48,22 @@ let scopeAttivo = "";
 // un numero: sarebbe una media di cose diverse. Con uno scope scelto, il
 // numero vero, e "—" quando quel modello non e' stato misurato li'.
 function punteggioPerScope(m, scope) {
-  if (!scope) return "";
   const s = m.scores || {};
-  const v = s[scope];
-  return (typeof v === "number") ? v.toFixed(2) : "—";
+  // Con uno scope scelto: il numero vero di QUELLA categoria, e "—"
+  // quando quel modello non e' stato misurato li'.
+  if (scope) {
+    const v = s[scope];
+    return (typeof v === "number") ? v.toFixed(2) : "—";
+  }
+  // Senza scope: il numero unico, che confronta tutto il benchmark.
+  //
+  // Prima qui si restituiva "" e il menu non mostrava nessun
+  // punteggio finche' non avevi scelto una categoria nel pannello
+  // Benchmark. Il numero c'era ed era giusto, ma solo a una condizione
+  // che nessuno sapeva — e il menu sembrava semplicemente muto.
+  const t = m.totale;
+  return (t && typeof t.punteggio === "number")
+    ? String(Math.round(t.punteggio)) : "";
 }
 
 let busy = false;
