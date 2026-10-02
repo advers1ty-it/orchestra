@@ -88,7 +88,7 @@ def numero(testo: str) -> float:
     dovrebbe passare, e il risultato e' fermare a guardare numeri che
     non hanno niente a che fare col prezzo.
     """
-    m = re.search(r"\d+(?:\.\d+)?", testo)
+    m = re.search(r"\d+(?:\.\d+)?(?:[eE][-+]?\d+)?", testo)
     return float(m.group(0)) if m else 0.0
 
 
@@ -142,8 +142,21 @@ for r, m in zip(risultati, modelli):
     # 4 decimali, quindi un arrotondamento a 4 cifre non e' un errore.
     # Verificare il numero arrotondato contro quello esatto con la
     # stessa precisione che si stampa e' la definizione di "uguale".
-    cifre = 4 if atteso < 0.01 else 2
-    arrotondato = float(f"{atteso:.{cifre}f}")
+    # Le cifre seguono la regola del codice, e la regola ne ha tre:
+    # sopra 0.01 due decimali, sopra 0.0001 cinque, sotto la
+    # notazione esponenziale.
+    #
+    # Qui prima c'era scritto "4 se sotto 0.01". Non era sbagliato —
+    # corrispondeva a quando il codice fermava a quattro — ma e' un
+    # numero magico che invecchia da solo: cambiando la formattazione
+    # il test menteva sul codice senza accorgersene. Qui la regola e'
+    # scritta per esteso, quindi se il codice cambia il test lo dice.
+    if atteso >= 0.01:
+        arrotondato = float(f"{atteso:.2f}")
+    elif atteso >= 0.0001:
+        arrotondato = float(f"{atteso:.5f}")
+    else:
+        arrotondato = float(f"{atteso:.1e}")
     if abs(n - arrotondato) > 1e-9:
         sbagliati.append((r["short"], r["costo"], round(atteso, 6)))
     elif abs(n - atteso) > max(1e-9, atteso * 0.02):

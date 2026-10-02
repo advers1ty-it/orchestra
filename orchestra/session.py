@@ -256,6 +256,8 @@ class Session:
         # esiste ma non ha niente da costruire, che e' la definizione
         # di un modulo che sembra fare un lavoro e non lo fa.
         self.registry = registry
+        self._catalogo_per_costo: Any = None
+        self._modello_delegato: str = ""
         self._fabbrica_figlio: Any = None
         self._delegatore: Any = None
 
@@ -339,6 +341,8 @@ class Session:
         self._delegatore = Delegatore(
             self._fabbrica_figlio,
             scegli_modello=self._scegli_primo,
+            tariffa=self._tariffa_delegato,
+            on_modello_usato=self._ricorda_modello_delegato,
         )
 
         def _delega(obiettivo: str, contesto: str = "") -> str:
@@ -391,6 +395,41 @@ class Session:
             handler=_delega,
         ))
         return True
+
+    def _ricorda_modello_delegato(self, modello: str) -> None:
+        """Il Delegatore dice quale modello ha usato davvero.
+
+        Serve al tariffario, che al momento della scelta non lo sapeva
+        ancora: il prezzo che conta e' quello del modello che ha fatto
+        il lavoro. Senza questo il costo tornerebbe sempre "non noto",
+        che e' la stessa cosa che non misurare niente.
+        """
+        self._modello_delegato = modello
+
+    def _tariffa_delegato(self, token: int) -> float | None:
+        """Costo di `token` token per il modello che il figlio usa.
+
+        Non sa quale modello sarà — quello lo sceglie il Delegatore
+        mentre lavora. E va bene così: il costo di una delega si
+        registra a posteriori, e il prezzo che conta è quello del
+        modello che l'ha fatta, non quello previsto.
+
+        Se il catalogo non c'è, o il modello non ha prezzi, torna
+        None e il resoconto dirà "costo non noto". Non torna zero: un
+        free-tier dà prezzo zero, che è una cosa vera, e non sapere è
+        un'altra.
+        """
+        cat = getattr(self, "_catalogo_per_costo", None)
+        mod = getattr(self, "_modello_delegato", None)
+        if cat is None or not mod:
+            return None
+        prof = cat.models.get(mod) if hasattr(cat, "models") else None
+        if prof is None:
+            return None
+        try:
+            return float(prof.info.estimate_cost(token, 0))
+        except Exception:  # noqa: BLE001
+            return None
 
     def resoconto_deleghe(self) -> str:
         """Quanto hanno costato i figli, o un avviso che non ce ne sono."""

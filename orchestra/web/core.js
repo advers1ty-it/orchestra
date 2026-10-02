@@ -490,7 +490,21 @@ function costo_stimato(m, token) {
 function costo_breve(m, token) {
   const c = costo_stimato(m, token);
   if (c === null) return "";
-  const testo = c < 0.01 ? c.toFixed(4) : "$" + c.toFixed(2);
+  // Le cifre seguono il numero, e non basta fermarsi a 4.
+  //
+  // Un modello a 0.0038 $/1M, su 10k token, costa 0.000038 $: con
+  // toFixed(4) diventava "0.0000", cioe' "gratis". Non e' un
+  // arrotondamento, e' un costo reale stampato come zero — che e' la
+  // cosa piu' dannosa che si possa fare con un prezzo, perche' il
+  // confronto fra due modelli parte gia' sbagliato.
+  //
+  // Meglio mostrare un numero che sembra piccolo che mentire sul
+  // piccolo: sotto 1e-04 si passa alla notazione esponenziale, che e'
+  // scomoda da leggere ma non mente.
+  let testo;
+  if (c >= 0.01) testo = "$" + c.toFixed(2);
+  else if (c >= 0.0001) testo = c.toFixed(5);
+  else testo = c.toExponential(1);
   return "  ·  ~" + testo + "/" + Math.round(token / 1000) + "k";
 }
 

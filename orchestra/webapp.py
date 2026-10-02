@@ -654,6 +654,9 @@ class OrchestraApp:
             )
 
         self.session._fabbrica_figlio = fabbrica
+        # il catalogo serve al tariffario del figlio: senza i prezzi del
+        # modello che ha lavorato, il costo di una delega resta sconosciuto
+        self.session._catalogo_per_costo = app.catalog
         self.delega_attiva = self.session.attiva_delega()
 
     @classmethod

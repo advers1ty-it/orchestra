@@ -124,15 +124,20 @@ def _risposta_finale(stato: Any) -> str:
 def _costo(stato: Any, tariffa: Any = None) -> float | None:
     """Quanto ha costato il figlio. None se non lo si sa.
 
-    `AgentState` non ha un campo `costo`: ha `total_tokens`. La
-    tariffa la sa il provider, quindi serve passarla dentro — e
-    quando non c'e' il risultato e' None, NON zero.
+    `AgentState` non ha un campo `costo`: ha `total_tokens`, e i token
+    non distinti fra input e output. La tariffa la sa il catalogo —
+    `ModelInfo.estimate_cost` — quindi serve passarla dentro, e quando
+    non c'e' il risultato e' None, NON zero.
 
     La differenza non e' accademica: `0.0000 USD` nel resoconto dice
     "questa delega e' stata gratis", e una delega gratuita che non lo
     e' stata si scopre dal conto, non dal log. Un numero falso in un
     posto che si presume sia misurato e' peggio di un campo vuoto,
     perche' il campo vuoto si nota.
+
+    Il tariffario riceve i soli `total_tokens` e li tratta tutti come
+    input: e' un'approssimazione in eccesso (l'output costa di piu' su
+    quasi tutti i modelli), e la si dichiara invece di nasconderla.
     """
     if tariffa is None:
         return None
@@ -154,11 +159,13 @@ class Delegatore:
 
     def __init__(self, fabbrica: Callable[[str], Any],
                  *, scegli_modello: Callable[[str], Any] | None = None,
-                                  tariffa: Callable[[int], float] | None = None,
-                                  profondita: int = 0, max_figli: int = 6):
+                 tariffa: Callable[[int], float] | None = None,
+                 profondita: int = 0, max_figli: int = 6,
+                 on_modello_usato: Callable[[str], None] | None = None):
         self._fabbrica = fabbrica          # obiettivo -> Agent
         self._scegli_modello = scegli_modello
         self._tariffa = tariffa
+        self.on_modello_usato = on_modello_usato
         self.profondita = profondita
         self.max_figli = max_figli
         self.n_figli = 0
@@ -234,6 +241,15 @@ class Delegatore:
             motivo = f"fermato: {fermo} (dopo {passi} passi)"
         elif not testo_out:
             esito, motivo = "errore", "nessuna risposta finale"
+
+        # Il modello usato serve al tariffario: il prezzo che conta
+        # e' quello del modello che ha fatto il lavoro, non quello
+        # previsto al momento della scelta.
+        if modello and self.on_modello_usato is not None:
+            try:
+                self.on_modello_usato(modello)
+            except Exception:  # noqa: BLE001
+                pass
 
         f = Figlio(esito, testo_out, passi=passi, modello=modello,
                    motivo=motivo, costo=costo)
