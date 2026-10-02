@@ -917,7 +917,7 @@ class Handler(BaseHTTPRequestHandler):
                 # descrivono un'altra harness.
                 try:
                     from . import prior as prior_mod
-                    priors, msg = prior_mod.scarica()
+                    priors, msg = prior_mod.scarica(catalogo=self.app.catalog.models)
                     self._json({"messaggio": msg,
                                 "copertura": prior_mod.copertura(priors, self.app.catalog.models)})
                 except Exception as e:  # noqa: BLE001

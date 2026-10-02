@@ -39,6 +39,22 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+from .providers import ambiente, load_env
+
+# Dove sta il .env: stessa regola del resto del progetto.
+#
+# Prima `chiave()` leggeva os.environ e basta, e questo modulo era
+# l'unico in tutto Orchestra che non passava da `ambiente()`. La
+# chiave c'era, scritta e corretta, nel .env — e per prior.py non
+# esisteva: il pannello diceva "nessuna ARTIFICIAL_ANALYSIS_KEY" con
+# la chiava a tre righe di distanza.
+#
+# Il sintomo e' peggiore di un crash: il server risponde, il pannello
+# si apre, e dice una cosa falsa. Un modulo che non trova la
+# configurazione dovrebbe dirlo guardando la stessa fonte da cui
+# gliela metti.
+_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+
 API_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
 CACHE_TTL = 24 * 3600  # un giorno: i punteggi muovono lentamente
 
@@ -91,7 +107,7 @@ def _normalizza(v: Any) -> float | None:
 
 
 def chiave() -> str:
-    return os.environ.get("ARTIFICIAL_ANALYSIS_KEY", "").strip()
+    return ambiente(_ENV_PATH).get("ARTIFICIAL_ANALYSIS_KEY", "").strip()
 
 
 def _cache_path() -> str:
@@ -121,24 +137,84 @@ def _scrivi_cache(priors: dict[str, Prior]) -> None:
     os.replace(tmp, p)
 
 
-def _match_id(nome_aa: str) -> str | None:
-    """Il loro nome sul nostro id OpenRouter.
+def _norm_id(s: str) -> str:
+    """Un id sul formato di OpenRouter, in minuscolo e senza extra.
 
-    'Claude 3.5 Sonnet' -> 'anthropic/claude-3.5-sonnet'. Non e' una
-    corrispondenza affidabile in generale, quindi l'unico caso in cui
-    ci fidiamo e' quando il nome contiene ':free' o coincide esatto:
-    altrimenti un modello sbagliato con un punteggio giusto e' peggio
-    di nessun punteggio.
+    `provider/modello`, `provider/modello:free`, `provider/modello:beta`
+    diventano la stessa cosa. Senza questo, lo stesso modello su tre
+    righe diverse del catalogo non viene riconosciuto e il prior
+    finisce scartato — che e' successo.
     """
-    s = (nome_aa or "").strip()
-    if not s:
+    s = (s or "").strip().lower()
+    if ":" in s:
+        s = s.split(":", 1)[0]
+    s = s.strip("/")
+        # Gli spazi diventano trattini: "DeepSeek V4.1 Flash" e
+        # "deepseek/deepseek-v4.1-flash" sono lo stesso nome scritto in due
+        # modi, e senza questo il match non aggancia niente.
+    s = s.replace(" ", "-").replace("_", "-")
+    return s.strip("-")
+
+
+def _togli_parentesi(s: str) -> str:
+    """Il nome loro senza la variante.
+
+    "GLM-5.3 (Max)" -> "glm-5.3". La variante sta fra parentesi e da
+    noi finisce dopo i due punti (`openai/gpt-5.4:xhigh`), quindi
+    toglierla non perde niente e rende confrontabile il resto.
+    """
+    s = s.split("(", 1)[0]
+    s = s.split("[", 1)[0]
+    return s.strip()
+
+
+def _match_id(nome_aa: str, catalogo: dict[str, Any] | None = None) -> str | None:
+    """Il loro nome sul nostro id del catalogo.
+
+    "GLM-5.3 (Max)" -> "z-ai/glm-5.3", "GPT-5.4 (Xhigh)" ->
+    "openai/gpt-5.4". La regola e' che il nostro id FINISCE col loro
+    nome ripulito: il provider sta prima della "/", il nome del
+    modello dopo, e coincide.
+
+    Perche' questa e non una somiglianza: una somiglianza trova anche
+    quello sbagliato, e un prior attaccato al modello sbagliato e'
+    peggio di nessun prior. Il prior e' un parere, quindi sbagliarlo
+    non e' una catastrofe — ma e' comunque una bug che si propaga
+    nelle scelte e da li' non si vede piu' nulla.
+
+    Prima accettava solo i nomi che contenevano gia' una "/", cioe'
+    nessuno di quelli che l'API restituisce: zero match, sempre. Il
+    modulo scaricava 689 modelli e ne teneva 0, senza dire perche'.
+
+    Se piu' di un id finisce collo stesso nome, non si sceglie: si
+    dichiara l'ambiguita'. Il prior manca, ma manca in modo che si
+    possa leggere.
+    """
+    s = _norm_id(_togli_parentesi(nome_aa))
+    if not s or not catalogo:
         return None
-    if "/" in s:  # gia' nel formato OpenRouter
-        return s
+
+    esatti = [m for m in catalogo if _norm_id(m) == s]
+    if len(esatti) == 1:
+        return esatti[0]
+
+    candidati = [m for m in catalogo if _norm_id(m).endswith(s)]
+    if len(candidati) == 1:
+        return candidati[0]
+    if len(candidati) > 1:
+        # Due id che finiscono con lo stesso nome non sono sempre due
+        # modelli diversi: openai/gpt-5.4 e openai/gpt-5.4:high sono
+        # lo stesso modello con due varianti, e il prior e' sul modello.
+        # Se normalizzati coincidono, non e' ambiguità: e' lo stesso
+        # nome due volte. Si prende il primo in ordine, cosi' la scelta
+        # e' sempre la stessa.
+        if len({_norm_id(m) for m in candidati}) == 1:
+            return sorted(candidati)[0]
+        return None
     return None
 
-
-def scarica(*, refresh: bool = False) -> tuple[dict[str, Prior], str]:
+def scarica(*, refresh: bool = False,
+            catalogo: dict[str, Any] | None = None) -> tuple[dict[str, Prior], str]:
     """Scarica i prior. Restituisce (prior, messaggio).
 
     Non solleva mai. Senza chiave o senza rete restituisce la cache, o
@@ -171,7 +247,7 @@ def scarica(*, refresh: bool = False) -> tuple[dict[str, Prior], str]:
 
     priors: dict[str, Prior] = {}
     for m in (dati.get("data") or []):
-        mid = _match_id(m.get("name", ""))
+        mid = _match_id(m.get("name", ""), catalogo)
         if not mid:
             continue
         scores: dict[str, float] = {}
