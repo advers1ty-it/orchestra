@@ -43,6 +43,7 @@ SUITES = [
     ("base-campionaria", "test_base_campionaria.py", True),
     ("verifica-codice", "test_verifica_codice.py", True),
     ("curva", "test_curva.py", True),
+    ("punteggio-unico", "test_punteggio_unico.py", True),
     ("skills", "test_skills.py", True),
     ("skill-tools", "test_skill_tools.py", True),
     ("e2e", "test_e2e.py", False),

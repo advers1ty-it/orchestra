@@ -456,7 +456,9 @@ class OrchestraApp:
                        "started": time.time(), "models": ids}
 
         def worker() -> None:
-            from .benchmark import render_table, run_task, summarize, tasks_for, perché
+            from .benchmark import (  # noqa: PLC0415
+                render_table, run_task, summarize, tasks_for, perché,
+            )
 
             tasks = tasks_for(category)
             if not tasks:

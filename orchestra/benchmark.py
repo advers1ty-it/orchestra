@@ -643,9 +643,14 @@ def summarize(results: list[RunResult]) -> dict[str, Any]:
         if rs:
             by_cat[c] = {m: score([x for x in rs if x.model == m]) for m in by_model}
 
+    from .punteggio import punteggio_unico
     return {"per_model": per_model, "by_category": by_cat,
             "unusable_models": unusable_models,
-            "n_results": len(results)}
+            "n_results": len(results),
+            # il numero unico, con dentro tutto quello che serve a
+            # dubitarne: base, prove, quanto e' stato tirato verso la
+            # media, e SE IL CONFRONTO TRA MODELLI VALE
+            "punteggio_unico": punteggio_unico(results)}
 
 
 def render_table(summary: dict[str, Any], catalog: Catalog | None = None) -> str:
