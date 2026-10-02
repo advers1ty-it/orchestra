@@ -703,13 +703,31 @@ def render_table(summary: dict[str, Any], catalog: Catalog | None = None) -> str
                 den += n
         return num / den if den else 0.0
 
-    head = (f"{'modello':<{w}} {'media':>6}  "
+    # Il numero unico: ogni categoria pesa uguale, dentro la categoria
+    # il livello moltiplica, e chi ha meno prove viene tirato verso la
+    # media degli altri. Va per PRIMO perche' e' la domanda — "quale
+    # scelgo" — e la media pesata resta accanto per chi vuole
+    # controllare, non per decidere.
+    punteggi = (summary.get("punteggio_unico") or {}).get("modelli") or {}
+
+    head = (f"{'modello':<{w}} {'valore':>6} {'prove':>6}  {'media':>6}  "
             + "  ".join(f"{c[:9]:>9}" for c in cats))
     lines = [head, "-" * len(head)]
 
-    for mid, data in sorted(per_model.items(),
-                            key=lambda kv: -_peso(kv[1])):
-        row = f"{short[mid]:<{w}} {_peso(data) * 100:>5.0f}%  "
+    def _ordine(kv):
+        p = punteggi.get(kv[0])
+        return -(p["punteggio"] if p else _peso(kv[1]) * 100)
+
+    for mid, data in sorted(per_model.items(), key=_ordine):
+        p = punteggi.get(mid) or {}
+        valore = p.get("punteggio")
+        prove = p.get("prove")
+        col_valore = f"{valore:>5.1f}%" if valore is not None else f"{'—':>6}"
+        # le prove sono il DENOMINATORE, non i task: con le ripetizioni
+        # un modello puo' avere 3 prove sullo stesso task, e mostrarlo
+        # come se fossero 3 task diversi e' un altro numero che mente
+        col_prove = f"{prove:>6.0f}" if prove is not None else f"{'—':>6}"
+        row = f"{short[mid]:<{w}} {col_valore} {col_prove}  {_peso(data) * 100:>5.0f}%  "
         for c in cats:
             d = (data.get("by_category") or {}).get(c)
             if isinstance(d, dict) and d.get("quanti"):
@@ -725,10 +743,29 @@ def render_table(summary: dict[str, Any], catalog: Catalog | None = None) -> str
     lines.append("(la frazione dice quanti test erano: 2/3 e 13/20 non sono")
     lines.append(" confrontabili anche se la percentuale coincide)")
     lines.append("")
-    lines.append("'media' e' una media pesata per numero di test. Serve per")
-    lines.append(" dare un ordine di grandezza, non per scegliere: per quello")
+    lines.append("'valore' e' IL numero per scegliere: ogni categoria pesa")
+    lines.append(" uguale, dentro la categoria il livello conta di piu' (facile")
+    lines.append(" x1, medio x1.5, difficile x2), e un modello con poche prove")
+    lines.append(" viene tirato verso la media degli altri invece di vincere")
+    lines.append(" solo perche' e' stato misurato meno. 'prove' e' il")
+    lines.append(" denominatore: con poche prove il numero resta un'indicazione.")
+    lines.append("")
+    lines.append("'media' e' una media pesata per numero di test: la cosa")
+    lines.append(" piu' semplice, e quella che avevamo prima. Se le due")
+    lines.append(" colonne dicono cose diverse, il modello e' instabile e la")
+    lines.append(" differenza sta nei task che lo separano dagli altri.")
     lines.append(" guarda la colonna della categoria che ti interessa.")
     lines.append("(n=1 per task: non e' statistico, e' un'indicazione)")
+    _conf = summary.get("punteggio_unico") or {}
+    if _conf and not _conf.get("confrontabili", True):
+        # Due modelli misurati su insiemi diversi sono due misure
+        # diverse: i numeri ci sono, ma il confronto non regge, e
+        # senza questa riga la tabella li metterebbe in fila come se
+        # avessero risposto alle stesse domande.
+        lines.append("")
+        lines.append(f"! CONFRONTO NON CONVALIDO: {_conf['motivo']}.")
+        lines.append("  Per confrontarli vanno misurati sugli stessi task.")
+
     if summary.get("unusable_models"):
         lines.append("")
         lines.append("NON MISURATI (il provider li riserva ad altri client, esclusi dal punteggio):")
