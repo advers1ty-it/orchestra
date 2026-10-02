@@ -249,6 +249,16 @@ class Session:
         # punteggi.
         self._routing_attivo: bool = False
 
+        # La delega. Il padre riceve il tool `delega`; il figlio NON
+        # lo riceve, e questo e' il tetto — non un contatore che
+        # qualcuno deve ricordare di rispettare. La fabbrica e' quella
+        # che sa costruire un agente: senza di lei il Delegatore
+        # esiste ma non ha niente da costruire, che e' la definizione
+        # di un modulo che sembra fare un lavoro e non lo fa.
+        self.registry = registry
+        self._fabbrica_figlio: Any = None
+        self._delegatore: Any = None
+
         self.agent = Agent(
             provider,
             registry,
@@ -307,6 +317,86 @@ class Session:
             )
 
     # -- esecuzione --------------------------------------------------------
+
+    def attiva_delega(self) -> bool:
+        """Registra il tool `delega` sul padre, se si puo'.
+
+        Resta un NO esplicito e non un errore quando la fabbrica non
+        c'e': la delega senza un modo di costruire un figlio e' un
+        pulsante che non fa niente, e un pulsante che non fa niente
+        e' peggio di un pulsante che non c'e' — l'utente lo preme e
+        aspetta un risultato che non arriva.
+
+        Il tool non viene MAI registrato sul registro del figlio: e'
+        li' che sta il tetto di profondita'.
+        """
+        from .delega import Delegatore
+        from .types import Tool
+
+        if self._fabbrica_figlio is None:
+            return False
+
+        self._delegatore = Delegatore(
+            self._fabbrica_figlio,
+            scegli_modello=self._scegli_primo,
+        )
+
+        def _delega(obiettivo: str, contesto: str = "") -> str:
+            if self._delegatore is None:
+                return "[delega non attiva]"
+            f = self._delegatore.delega(obiettivo, contesto)
+            # l'evento va al padre, non al figlio: e' cosi' che nella
+            # chat si vede che un figlio sta lavorando invece che il
+            # padre sembrare fermo
+            try:
+                self.bridge.emit("delega", {
+                    "obiettivo": obiettivo[:160],
+                    "esito": f.esito,
+                    "passi": f.passi,
+                    "modello": f.modello,
+                    "costo": f.costo,
+                })
+            except Exception:
+                pass
+            return f.per_il_padre()
+
+        self.registry.register(Tool(
+            name="delega",
+            description=("Affida un compito preciso e circoscritto a un "
+                         "sub-agente che parte con una finestra vuota. "
+                         "Torni solo la risposta finale, non il "
+                         "trascorso. Usarlo per cercare, contare, "
+                         "leggere in blocco o verificare un risultato. "
+                         "NON usarlo per chiedere un parere: quello lo "
+                         "sai rispondere da solo."),
+            schema={
+                "type": "object",
+                "properties": {
+                    "obiettivo": {"type": "string",
+                                  "description": ("Il compito, in una frase. "
+                                                  "Deve essere finito: "
+                                                  "'contare le righe di "
+                                                  "a.txt' e' un compito, "
+                                                  "'capire il progetto' no.")},
+                    "contesto": {"type": "string",
+                                 "description": ("Cosa deve sapere il figlio "
+                                                 "per farlo: il percorso, il "
+                                                 "formato atteso, la "
+                                                 "soglia. NON la "
+                                                 "conversazione: quello e' "
+                                                 "il punto della delega.")},
+                },
+                "required": ["obiettivo"],
+            },
+            handler=_delega,
+        ))
+        return True
+
+    def resoconto_deleghe(self) -> str:
+        """Quanto hanno costato i figli, o un avviso che non ce ne sono."""
+        if self._delegatore is None:
+            return "delega non attiva"
+        return self._delegatore.resoconto()
 
     def instradamento_attivo(self, attivo: bool = True) -> None:
         """Accende o spegne l'instradamento automatico.

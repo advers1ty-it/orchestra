@@ -14,3 +14,7 @@ _msg.txt
 nul*\ntests/_run_*.js
 _*.py
 _ext*.py
+
+# roba dei test: i file che il test di delega crea per far contare le righe
+_delega_prova/
+_m.txt

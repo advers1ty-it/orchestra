@@ -34,12 +34,15 @@ from typing import Any
 
 from . import __version__
 from .agent import LoopConfig
-from .providers import ProviderError, build_provider, load_env
+from .providers import (ProviderError, ambiente, build_provider,
+                         load_env)
+from .prompt_figlio import PROMPT_FIGLIO
 from .session import Session
 from .tools import SYSTEM_PROMPT, default_registry
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(HERE, ".env")
+
 UI_PATH = os.path.join(HERE, "web", "index.html")
 
 CARTELLA_CESTINO = ".cestino"
@@ -58,6 +61,8 @@ MAX_BODY = 64 * 1024  # un prompt non occupa 64KB: oltre e' un errore
 # che non protegge nessuno dei due.
 MAX_ALLEGATO = 20 * 1024 * 1024   # 20 MB: 12 di file + base64 + margine
 MAX_ALLEGATO_FILE_MB = 12         # il tetto che l'utente vede prima
+
+
 
 
 class OrchestraApp:
@@ -90,6 +95,7 @@ class OrchestraApp:
             env.get("ORCHESTRA_PROVIDER", "openrouter"),
             env.get("ORCHESTRA_MODEL", ""),
         )
+        self.delega_attiva = False
         self.ready = True
         self.error = ""
         # Gate dei permessi: l'unico posto dove l'utente puo' autorizzare
@@ -454,8 +460,7 @@ class OrchestraApp:
         from .providers import build_provider
 
         provider_name = self.env.get("ORCHESTRA_PROVIDER", "openrouter")
-        env = dict(os.environ)
-        env.update(load_env(ENV_PATH))
+        env = ambiente(ENV_PATH)
         prov = build_provider(provider_name, model=model_id, env=env)
         self.session.agent.provider = prov
         self.env["ORCHESTRA_MODEL"] = model_id
@@ -605,13 +610,58 @@ class OrchestraApp:
                               keep_recent=8),
         )
 
+    def _collega_delega(self) -> None:
+        """Costruisce la fabbrica del figlio e registra il tool.
+
+        Il figlio nasce QUI, non riusando l'agente del padre: ha il
+        proprio provider, il proprio registro e la propria finestra.
+        E il suo registro e' `default_registry()` rifatto da capo —
+        quello del padre ha `delega` dentro, e se riusassimo quello il
+        tetto di profondita' non esisterebbe. Difesa una: il registro
+        nuovo. Difesa due: nessun codice registra `delega` sul figlio.
+        Difesa tre: il Delegatore rifiuta comunque a profondita' 1.
+
+        Tre difese per un tetto, e sembra esagerato. Non lo e': e
+        l'unica cosa che tiene insieme un orchestratore che si
+        autogenera, e se una delle tre cade le altre due lo dicono
+        invece di lasciarlo andare.
+        """
+        app = self
+        nome_provider = self.env.get("ORCHESTRA_PROVIDER", "openrouter")
+        env_chiavi = ambiente(ENV_PATH)
+
+        def fabbrica(obiettivo: str):
+            # il modello del figlio lo sceglie il Delegatore, non qui:
+            # e' una decisione per compito, e farla qui la farebbe
+            # sbagliata perche' qui non si sa ancora qual e' il compito
+            modello = ""
+            if app.catalog is not None and getattr(app.catalog, "models", None):
+                try:
+                    from .routing import instrada as _instrada
+                    scelta = _instrada(app.catalog, obiettivo)
+                    modello = scelta.modello or ""
+                except Exception:
+                    modello = ""
+
+            from .agent import Agent, LoopConfig
+            return Agent(
+                build_provider(nome_provider, model=modello, env=env_chiavi),
+                default_registry(),          # NUOVO: senza 'delega'
+                PROMPT_FIGLIO,
+                LoopConfig(max_iterations=12, context_limit=60_000,
+                           keep_recent=6),
+                on_event=lambda kind, data: None,   # il figlio e' muto
+            )
+
+        self.session._fabbrica_figlio = fabbrica
+        self.delega_attiva = self.session.attiva_delega()
+
     @classmethod
     def create(cls) -> "OrchestraApp":
         """Costruisce l'app, o la mette in stato di errore se il provider
         non e' configurato. La UI deve poter mostrare l'errore invece di
         fallire all'avvio."""
-        env = dict(os.environ)
-        env.update(load_env(ENV_PATH))
+        env = ambiente(ENV_PATH)
         try:
             app = cls(
                 env,
@@ -621,6 +671,7 @@ class OrchestraApp:
                 ),
             )
             app._collega_recupero_tool()
+            app._collega_delega()
             app._ripara_modello_iniziale()
             return app
         except (ProviderError, KeyError) as e:

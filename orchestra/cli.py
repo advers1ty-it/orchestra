@@ -18,18 +18,30 @@ from typing import Any
 
 from . import __version__
 from .agent import Agent, LoopConfig
-from .providers import KNOWN_PROVIDERS, NO_KEY_PROVIDERS, base_url_for, ProviderError, build_provider, load_env
+from .providers import ambiente, KNOWN_PROVIDERS, NO_KEY_PROVIDERS, base_url_for, ProviderError, build_provider, load_env
 from .tools import SYSTEM_PROMPT, default_registry
 
 ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 
-
 def _env() -> dict[str, str]:
-    """Le chiavi del .env vincono sull'ambiente: è il file di config del
-    progetto e deve poter sovrascrivere senza rompere la shell."""
-    merged = dict(os.environ)
-    merged.update(load_env(ENV_PATH))
-    return merged
+    """Chiavi di configurazione: l'ambiente vince sul .env.
+
+    Prima era il contrario, e la ragione era scritta li': «il file di
+    config del progetto deve poter sovrascrivere senza rompere la
+    shell». Era una buona intenzione, ma faceva una cosa che costa
+    piu' di quanto proteggeva: non si poteva cambiare provider ne'
+    modello per un comando solo, senza editare il file.
+
+    E' successo: un test voleva provare la delega su Groq perche'
+    OpenRouter rispondeva 429, e non ci e' riuscito perche' il .env
+    decideva al suo posto. Non si puo' correggere da terminale una cosa
+    che dipende da un file.
+
+    Una variabile esportata per sbaglio e' un evento raro, e si vede
+    subito. Il bisogno di un comando diverso dal default e' un evento
+    continuo, e senza questo non c'e' modo di soddisfarlo.
+    """
+    return ambiente(ENV_PATH)
 
 
 def _config(env: dict[str, str]) -> LoopConfig:

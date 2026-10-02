@@ -443,3 +443,24 @@ def build_provider(
         model=model or default_model,
         name=name,
     )
+
+def ambiente(path: str) -> dict[str, str]:
+    """Le chiavi per costruire un provider: .env + ambiente di sistema.
+
+    Il .env riempie quello che manca; l'ambiente esplicito vince.
+
+    Prima era il contrario — `dict(os.environ)` seguito da
+    `update(load_env(...))` — e rendeva impossibile cambiare provider o
+    modello dalla riga di comando senza editare il file. E' utile solo
+    finche' non serve esattamente quello: e' servito a un test che
+    voleva provare la delega su un provider diverso e non c'e' riuscito
+    perche' il .env decideva al suo posto.
+
+    Nota che le chiavi dei provider NON sono un caso speciale. Se
+    qualcuno esporta una chiave volutamente, quella e' quella giusta:
+    un .env con dentro una chiave scaduta non deve vincere su una
+    chiave messa a posto per questa esecuzione.
+    """
+    merged = dict(load_env(path))
+    merged.update(os.environ)
+    return merged

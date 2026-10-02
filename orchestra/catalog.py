@@ -385,8 +385,17 @@ class Catalog:
         dicendo che il modello non regge, e trattare il silenzio come
         un no farebbe sparire interi cataloghi (Groq non dichiara
         niente, e costerebbe tutto anche i suoi modelli migliori).
+
+        E si escludono i NON agenti: modelli che rispondono su
+        /chat/completions ma non generano testo — whisper, i
+        classificatori di injection, gli embedding. Su quei provider
+        nessuno dichiara `supports_tools: false`, perche' non e' che
+        non reggano i tool: e' che non sono modelli di testo. Vedi
+        `non_agenti.py`.
         """
-        return [p for p in self.models.values() if p.info.supports_tools is not False]
+        from .non_agenti import e_agent
+        return [p for p in self.models.values()
+                if p.info.supports_tools is not False and e_agent(p.info.id)]
 
     def agent_capable(self, p: ModelProfile) -> bool:
         """Questo profilo puo' fare il lavoro di Orchestra?
