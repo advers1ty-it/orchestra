@@ -21,7 +21,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import orchestra.benchmark as B  # noqa: E402
 import orchestra.catalog as C  # noqa: E402
-from orchestra.webapp import salva_punteggi  # noqa: E402
+# salva_punteggi sta in benchmark.py e non in webapp.py: scrive i
+# punteggi del summary, e un modulo HTTP non è il posto giusto per una
+# funzione che la riga di comando usa ugualmente. Prima stava dove la
+# trovava solo chi guardava il server, e la CLI ne aveva una copia —
+# che è come è nato il crash col nome `cat`.
+from orchestra.benchmark import salva_punteggi  # noqa: E402
 
 PASS, FAIL = [], []
 

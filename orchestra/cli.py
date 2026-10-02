@@ -397,7 +397,23 @@ def cmd_bench(args: argparse.Namespace) -> int:
         print("nessun modello da testare", file=sys.stderr)
         return 1
 
+
     tasks = tasks_for(args.category)
+    if getattr(args, 'tasks', None):
+        voluti = [t.strip() for t in args.tasks.split(',') if t.strip()]
+        # un nome che non esiste viene detto, non ignorato: un
+        # --tasks con un refuso sembrerebbe un confronto fatto su
+        # meno task di quanti chiesti, e i due numeri del
+        # riepilogo non corrisponderebbero a quello che ho scritto
+        per_id = {t.id: t for t in tasks}
+        mancanti = [v for v in voluti if v not in per_id]
+        if mancanti:
+            print('task inesistenti: ' + ', '.join(mancanti))
+            print('disponibili: ' + ', '.join(sorted(per_id)[:12])
+                  + ' (' + str(len(per_id)) + ' in tutto)')
+            sys.exit(1)
+        tasks = [per_id[v] for v in voluti]
+
     if not tasks:
         print(f"categoria sconosciuta: {args.category}", file=sys.stderr)
         return 1
@@ -567,6 +583,9 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--throttle", type=float, default=3.0,
                    help="secondi di pausa fra i run (default 3, evita i 429)")
     b.add_argument("--provider")
+    b.add_argument("--tasks",
+                   help="solo questi task, separati da virgola: serve a "
+                        "ripetere solo quelli che gia' discriminano")
     b.add_argument("--show", action="store_true", help="mostra i task senza eseguirli")
     b.add_argument("--json", action="store_true", help="salva i risultati in JSON")
     b.add_argument("--no-save", action="store_true", help="non salvare le misurazioni")

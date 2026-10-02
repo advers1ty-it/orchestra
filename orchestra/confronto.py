@@ -93,7 +93,10 @@ def confronta(risultati: list, ripetizioni_attese: int = 1) -> dict[str, Any]:
             "discriminanti": len(discriminanti),
             "tasso": round(passati / len(discriminanti) * 100, 1)
             if discriminanti else 0.0,
+            # i RUN, non i task distinti: col denominatore sui task e
+            # il numeratore sui run la tabella mostrava 48/16
             "task_totali": len(per_modello[m]),
+            "run_totali": sum(len(v) for v in per_modello[m].values()),
             "passati_su_tutti": sum(sum(v) for v in per_modello[m].values()),
             "tasso_su_tutti": round(
                 sum(sum(v) for v in per_modello[m].values())
@@ -154,14 +157,14 @@ def tabella_confronto(esito: dict[str, Any]) -> str:
     righe.append(f"task su cui i modelli differiscono: "
                  f"{esito['n_discriminanti']} su {esito['n_task']}")
     righe.append("")
-    righe.append(f"{'modello':38} {'sui discriminanti':>18} {'su tutti':>12}")
+    righe.append(f"{'modello':38} {'sui discriminanti':>18} {'su tutti i run':>16}")
     righe.append("-" * 70)
     for c in esito["classifica"]:
         nome = c["modello"][:38]
         righe.append(
-            f"{nome:38} {c['su_discriminanti']:>8}/{c['discriminanti']:<3} "
+            f"{nome:38} {c['su_discriminanti']:>8.1f}/{c['discriminanti']:<3} "
             f"{c['tasso']:>5.1f}% {c['passati_su_tutti']:>5}/"
-            f"{c['task_totali']:<4} {c['tasso_su_tutti']:>5.1f}%")
+            f"{c['run_totali']:<4} {c['tasso_su_tutti']:>5.1f}%")
     if esito["discriminanti"]:
         righe.append("")
         righe.append("dove differiscono:")

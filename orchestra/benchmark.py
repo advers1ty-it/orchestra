@@ -803,3 +803,44 @@ def per_livello(risultati: list["RunResult"]) -> dict[str, dict[str, Any]]:
         for liv, v in m["per_livello"].items():
             v["score"] = (v["passati"] / v["totali"]) if v["totali"] else 0.0
     return out
+
+
+
+
+def salva_punteggi(cat, summary: dict[str, Any]) -> int:
+    """Scrive i punteggi misurati sul catalogo. Ritorna quanti modelli.
+
+    `by_category[categoria]` e' un dizionario — score, passati, quanti —
+    e non un numero. Prima che il campo della frazione esistesse era
+    un numero, e due posti hanno continuato a farci `v > 0`: il primo
+    crashava il benchmark DOPO aver eseguito tutti i task, e il secondo
+    usava `cat` come nome della variabile del ciclo — ma `cat` e' il
+    catalogo, e dichiarare una locale con quel nome la rende locale per
+    tutto il corpo, anche per le righe precedenti. Da li':
+    "UnboundLocalError: cannot access local variable 'cat'".
+
+    Tre sintomi, una causa: il formato e' cambiato e non si e' cercato
+    chi lo leggeva. Questa funzione sta fuori dal handler perche' una
+    riga che nessun test puo' chiamare e' una riga che l'unico a
+    eseguire e' l'utente, dopo tre minuti di benchmark.
+    """
+    if cat is None:
+        return 0
+    n = 0
+    for mid, data in (summary.get("per_model") or {}).items():
+        prof = cat.models.get(mid)
+        if not prof:
+            continue
+        prof.scores = {}
+        prof.frazioni = {}
+        prof.task_per_cat = {}
+        for categoria, d in (data.get("by_category") or {}).items():
+            v = d.get("score", 0) if isinstance(d, dict) else d
+            if v > 0:
+                prof.scores[categoria] = v
+            if isinstance(d, dict):
+                prof.frazioni[categoria] = d.get("passati", 0)
+                prof.task_per_cat[categoria] = d.get("quanti", 0)
+        prof.last_measured = time.time()
+        n += 1
+    return n
