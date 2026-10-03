@@ -36,6 +36,10 @@ const log = $("log"), main = $("main"), input = $("input");
 const btnSend = $("btn-send"), btnCancel = $("btn-cancel"), btnReset = $("btn-reset");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
 const modelPick = $("model-pick");
+// id -> modello. Il popup del selettore serve il punteggio di una
+// riga, e cercarlo rileggendo le option sarebbe una ricerca fra 400
+// elementi per ognuna.
+let modelliPerId = {};
 
 // Lo scope attivo e' la categoria di lavoro scelta nell'header. Vive qui
 // perche' loadModels() la usa per scrivere il punteggio dentro ogni
@@ -403,6 +407,13 @@ async function loadModels() {
     // pensarci, e sono la maggior parte di quello che c'è
     const sorted = (d.models || []).slice().sort((a, b) =>
       (a.free === b.free) ? a.id.localeCompare(b.id) : (a.free ? -1 : 1));
+    // Indicizzati per id: il popup del selettore cerca il punteggio di
+    // una riga, e rileggere il testo dell'option per ognuna significa
+    // cercare fra 400 elementi 400 volte. Una mappa costa una riga e
+    // toglie 160.000 confronti ogni volta che si apre il menu.
+    modelliPerId = {};
+    for (const m of sorted) modelliPerId[m.id] = m;
+
     for (const m of sorted) {
       // new Option(...) invece di createElement("option"): costruisce
       // un <option> vero, con value e testo impostati nel modo giusto.

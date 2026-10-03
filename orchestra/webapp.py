@@ -43,6 +43,11 @@ from .tools import SYSTEM_PROMPT, default_registry
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(HERE, ".env")
 
+# Quanti minuti un catalogo puo' invecchiare prima di essere
+# ricaricato. Non e' un dettaglio: senza, un modello che esce
+# dal provider resta nel menu fino al riavvio.
+CATALOGO_TTL_SECONDS = 15 * 60
+
 UI_PATH = os.path.join(HERE, "web", "index.html")
 
 CARTELLA_CESTINO = ".cestino"
@@ -108,6 +113,7 @@ class OrchestraApp:
         # ogni start, anche quando l'utente vuole solo chattare.
         self._catalog: Any = None
         self._catalog_tried = False
+        self._catalog_at = None
         self._catalog_error: str = ""
         # stato del benchmark lanciato dalla UI
         self._bench: dict[str, Any] = {"running": False, "log": [], "result": None}
@@ -163,19 +169,71 @@ class OrchestraApp:
         from .tools import _root
         return _root()
 
-    @property
-    def catalog(self) -> Any:
-        """Catalogo dei modelli, caricato alla prima richiesta."""
-        if not self._catalog_tried:
-            self._catalog_tried = True
+    def _carica_catalogo(self, forza: bool) -> Any:
+        """Il lavoro vero. La property `catalog` e' il-wrapper.
+
+        Due metodi invece di uno con un parametro, perche' una property
+        non accetta argomenti: `catalog(forza=True)` su una property
+        solleva TypeError, e l'errore dice solo "non e' un oggetto
+        chiamabile" — che non dice nulla su cosa sia andato storto.
+        """
+
+        """Catalogo dei modelli, ricaricato quando invecchia.
+
+        PRIMA c'era un flag, `_catalog_tried`, che a true non tornava
+        piu' indietro: la prima richiesta scaricava e tutte le altre
+        leggevano la stessa copia per sempre. Un modello che esce da
+        OpenRouter restava nel menu fino al riavvio del server, e uno
+        nuovo non compariva mai senza riavviare.
+
+        Ora la copia invecchia. Quindici minuti sono un compromesso:
+        abbastanza corta da non mostrare un catalogo di ieri, abbastanza
+        lunga da non scaricare a ogni passaggio fra i pannelli.
+
+        Il ricaricamento NON perde i punteggi: quelli stanno su disco, in
+        `load_measurements`, e vengono riapplicati a ogni fetch. Percio'
+        un catalogo fresco non e' un catalogo con i numeri azzerati —
+        quello sarebbe un difetto che si vede solo al secondo giorno.
+
+        `forza=True` serve al cambio provider e allo switch del
+        modello: li' la risposta deve essere quella di adesso.
+        """
+        import time as _t
+
+        scaduta = ((self._catalog_at is None)
+                   or (_t.time() - self._catalog_at > CATALOGO_TTL_SECONDS))
+        if forza or scaduta:
             try:
                 from .catalog import Catalog
 
-                self._catalog = Catalog.fetch(self.env.get("ORCHESTRA_PROVIDER", "openrouter"))
+                self._catalog = Catalog.fetch(
+                    self.env.get("ORCHESTRA_PROVIDER", "openrouter"))
+                self._catalog_at = _t.time()
+                self._catalog_tried = True
+                self._catalog_error = ""
             except Exception as e:  # noqa: BLE001 - l'UI mostra l'errore
-                self._catalog = None
+                # Un errore NON cancella il catalogo che c'era gia'.
+                # Togliendolo, un provider che per un momento non
+                # risponde lascia il menu vuoto e sembra che non ci
+                # siano piu' modelli: il peggiore dei due errori, perche'
+                # fa sparire informazione vera.
+                if not self._catalog_tried:
+                    self._catalog = None
                 self._catalog_error = str(e)
         return self._catalog
+
+    @property
+    def catalog(self) -> Any:
+        """Catalogo dei modelli, ricaricato quando invecchia."""
+        return self._carica_catalogo(forza=False)
+
+    def catalogo_ora(self) -> Any:
+        """Il catalogo ricaricato adesso, scartando la copia invecchiata.
+
+        Lo usa il cambio provider e il cambio modello: li' la risposta
+        deve essere quella di adesso, non quella di quindici minuti fa.
+        """
+        return self._carica_catalogo(forza=True)
 
     def switch_provider(self, provider_name: str) -> None:
         """Cambia il provider predefinito e ricarica il catalogo.
@@ -202,6 +260,11 @@ class OrchestraApp:
         # mostrerebbe i modelli sbagliati nella select
         self._catalog = None
         self._catalog_tried = False
+        # Anche l'orario: senza azzerarlo, il catalogo del provider
+        # nuovo sembrerebbe fresco e la TTL aspetterebbe quindici
+        # minuti prima di ricaricarlo — con un menu che mostra i
+        # modelli del provider sbagliato per tutto quel tempo.
+        self._catalog_at = None
         from . import keys as keys_mod
         keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider_name)
         # l'indirizzo viene risolto qui: se il provider e' valido ma
@@ -724,7 +787,7 @@ class Handler(BaseHTTPRequestHandler):
     # resta testabile da solo. Al browser arrivano in uno, perche' piu'
     # richieste significa piu' modi in cui la pagina resta a meta' — e con
     # un solo script inline (la versione monolitica) funzionava.
-    BUNDLE_ORDER = ("core.js", "panels.js", "main.js")
+    BUNDLE_ORDER = ("core.js", "panels.js", "modelpick.js", "main.js")
 
     def _bundle(self) -> None:
         parts = []

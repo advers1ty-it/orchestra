@@ -124,6 +124,11 @@ app = webapp.OrchestraApp(
 # il catalogo finto, iniettato come farebbe il lazy load
 app._catalog = FakeCatalog(measured={"vendor/modello-1:free": {"code": 0.9, "reasoning": 0.4}})
 app._catalog_tried = True
+# Anche l'orario: la property `catalog` ha una TTL di quindici minuti, e
+# con `_catalog_at` a None la scadenza e' sempre vera — quindi il
+# catalogo finto verrebbe sostituito da quello vero al primo accesso, e
+# il test finirebbe per provare OpenRouter invece di quello che voleva.
+app._catalog_at = time.time()
 webapp.Handler.app = app
 
 PORT = free_port()

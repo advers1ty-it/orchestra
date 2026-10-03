@@ -88,13 +88,13 @@ check("un solo script esterno", len(scripts) == 1 and scripts[0] == "/app.js",
 # L'HTML dichiara un solo script (/app.js, assemblato dal server), ma
 # i sorgenti restano tre file su disco. Li leggiamo nell'ordine con cui il
 # server li concatena: e' l'ordine in cui il browser li esegue.
-BUNDLE_ORDER = ("core.js", "panels.js", "main.js")
+BUNDLE_ORDER = ("core.js", "panels.js", "modelpick.js", "main.js")
 
 sources = {}
 for name in BUNDLE_ORDER:
     with open(os.path.join(WEB, name), encoding="utf-8") as fh:
         sources[name] = fh.read()
-check("i tre sorgenti esistono", len(sources) == 3, str(list(sources)))
+check("i sorgenti esistono", len(sources) == 4, str(list(sources)))
 check("ogni sorgente si annuncia", all(
     "__diagFiles" in src for src in sources.values()),
     "un file non ha il marcatore: non si puo' sapere se e' partito")

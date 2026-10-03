@@ -695,3 +695,55 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 @media (max-width: 560px) {
   .skill-griglia { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+/* ---------- popup del selettore modello ----------
+   Il <select> nativo resta nel DOM: conserva il cambio col tastierino,
+   il submit e il value. Questo e' il pannello che si apre sopra, con
+   il cercatore.
+
+   La regola che decide tutto il resto: il native NON si nasconde, si
+   copre. Se si mettesse display:none, il browser non mette piu' il
+   focus sul campo, Tab salterebbe la select, e il form non saprebbe
+   piu' quale modello e' scelto — perche' il value letto da /api/models
+   arriverebbe da un campo che l'utente non puo' ne' vedere ne'
+   toccare. Un menu che funziona ma che non si puo' usare col
+   tastierino e' peggio di un menu che non si puo' cliccare: il primo
+   si vede subito, il secondo no. */
+.mp-pop {
+  position: absolute; z-index: 40; min-width: 340px; max-width: 560px;
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  padding: 6px; display: none;
+}
+.mp-pop.aperta { display: block; }
+.mp-cerca {
+  width: 100%; padding: 8px 10px; margin-bottom: 4px;
+  background: var(--bg-2, rgba(255,255,255,.03));
+  border: 1px solid var(--border); border-radius: 7px;
+  color: var(--fg); font-family: var(--mono); font-size: 13px;
+}
+.mp-cerca:focus { outline: none; border-color: var(--accent-dim); }
+.mp-lista { max-height: 320px; overflow-y: auto; }
+.mp-voce {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.mp-voce:hover, .mp-voce.cursore { background: rgba(255,255,255,.06); }
+.mp-voce.corrente { outline: 1px solid var(--accent-dim); }
+.mp-nome { flex: 1; font-family: var(--mono); min-width: 0;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Il punteggio e' un numero, e un numero senza etichetta sembra
+   parte del nome. Il badge dice da dove viene e in che scala e'. */
+.mp-bench {
+  font-family: var(--mono); font-size: 11px; padding: 1px 6px;
+  border-radius: 5px; white-space: nowrap;
+  background: rgba(255,255,255,.06); color: var(--muted);
+}
+.mp-bench.buono { background: rgba(80,200,120,.16); color: #7fd6a0; }
+.mp-bench.medio  { background: rgba(220,180,60,.16); color: #e0c070; }
+.mp-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.mp-vuoto { padding: 14px; text-align: center; color: var(--muted); font-size: 12.5px; }
+.mp-piede {
+  border-top: 1px solid var(--border); margin-top: 4px; padding: 6px 10px 2px;
+  color: var(--muted); font-size: 11px;
+}
