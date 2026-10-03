@@ -322,6 +322,16 @@ KNOWN_PROVIDERS: dict[str, tuple[str, str, str]] = {
     "nvidia": ("https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", ""),
     "together": ("https://api.together.xyz/v1", "TOGETHER_API_KEY", ""),
     "cerebras": ("https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", ""),
+    # Hugging Face: l'Inference API e' OpenAI-compatible e il free tier
+    # con token e' il piu' generoso in numero di richieste fra i
+    # provider che accettano una carta. Funziona anche senza account
+    # con crediti, quindi resta raggiungibile quando gli altri no.
+    "huggingface": ("https://router.huggingface.co/v1", "HF_TOKEN", ""),
+    # Google AI Studio: Gemini su un endpoint OpenAI-compatible.
+    # Non confonderlo con Vertex AI, che e' un'altra cosa e ha bisogno
+    # di un progetto GCP. Qui si parla solo di aistudio.
+    "google": ("https://generativelanguage.googleapis.com/v1beta/openai",
+               "GEMINI_API_KEY", "gemini-2.0-flash"),
     "mistral": ("https://api.mistral.ai/v1", "MISTRAL_API_KEY", ""),
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4o-mini"),
     # --- locali, senza chiave ---

@@ -709,13 +709,21 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
    toccare. Un menu che funziona ma che non si puo' usare col
    tastierino e' peggio di un menu che non si puo' cliccare: il primo
    si vede subito, il secondo no. */
+/* Niente display:none, e niente classe "aperta".
+   Il pannello viene creato solo quando si apre e tolto quando si
+   chiude: uno stato in cui esiste gia' e' aperto. Con `display:none`
+   serviva una classe per mostrarlo — e il JavaScript non la metteva
+   mai, perche' nella riscrittura l'avevo dimenticata. Il pannello
+   esisteva, era costruito tutto, e restava invisibile per sempre.
+
+   Un elemento che si crea e si toglie non ha bisogno di essere
+   nascosto: la sua esistenza e' gia' lo stato. */
 .mp-pop {
   position: absolute; z-index: 40; min-width: 340px; max-width: 560px;
   background: var(--bg-1); border: 1px solid var(--border);
   border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
-  padding: 6px; display: none;
+  padding: 6px;
 }
-.mp-pop.aperta { display: block; }
 .mp-cerca {
   width: 100%; padding: 8px 10px; margin-bottom: 4px;
   background: var(--bg-2, rgba(255,255,255,.03));
@@ -746,4 +754,36 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .mp-piede {
   border-top: 1px solid var(--border); margin-top: 4px; padding: 6px 10px 2px;
   color: var(--muted); font-size: 11px;
+}
+
+/* ---------- il selettore custom ----------
+   Tre pezzi, e il terzo e' quello che mancava.
+
+   1. mp-wrap fa da containing block: senza position:relative, il
+      posizionamento del pannello e' relativo alla PAGINA, e il
+      pannello finisce nell'angolo in alto a sinistra invece che sotto
+      il bottone. Il CSS del pannello c'era, ma senza questa riga non
+      aveva nessun riferimento.
+   2. mp-nascosto tiene il select fuori dalla vista ma NON fuori dal
+      tabulamento: display:none farebbe sparire il campo dal percorso
+      di tabulazione, e il value che porta al server verrebbe da un
+      campo che l'utente non puo' raggiungere.
+   3. mp-btn e' l'unica cosa visibile, e sembra un select. */
+.mp-wrap { position: relative; display: inline-block; }
+.mp-nascosto {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.mp-btn {
+  font: inherit; font-family: var(--mono); font-size: 13px;
+  background: var(--bg-2, rgba(255,255,255,.03)); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 6px 11px; cursor: pointer; max-width: 260px;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.mp-btn:hover:not(:disabled) { border-color: var(--accent-dim); }
+.mp-btn:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
+.mp-btn:disabled { opacity: .5; cursor: not-allowed; }
+.mp-btn #model-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }

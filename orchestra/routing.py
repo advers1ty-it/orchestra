@@ -189,15 +189,29 @@ def instrada(cat: Catalog, richiesta: str, *,
             scartati)
 
     if senza_punteggio:
-        # Nessuno misurato in questa categoria. Si prende il primo che
-        # supporta i tool e si DICE che è una scelta per mancanza di
-        # dati, non perché sia il migliore: è la differenza fra
-        # " Orchestra sa" e " Orchestra ha scelto a caso".
-        scelto = senza_punteggio[0]
+        # Nessuno misurato in questa categoria. Si prende il modello in
+        # uso e basta — NON se ne sceglie uno.
+        #
+        # Prima qui si faceva `senza_punteggio[0]`: il primo
+        # alfabeticamente. Su OpenRouter regge, perche' e' un elenco
+        # di modelli vivi; su NVIDIA no, e' un elenco di 80 nomi di cui
+        # 6 rispondono e gli altri sono ritirati. `senza_punteggio[0]`
+        # e' `01-ai/yi-large`, che risponde 404 con l'UUID di una
+        # funzione NVIDIA morta — e l'instradamento SOVRASCRIVEVA la
+        # scelta dell'utente con quel modello.
+        #
+        # Il sintomo e' il peggiore possibile: l'utente sceglie GLM dal
+        # menu, e la chat risponde con l'errore di yi-large. Non sembra
+        # un errore di misurazione, sembra che GLM sia rotto.
+        #
+        # Senza dati non c'e' niente da scegliere: si lascia il modello
+        # che c'e' gia' e si dichiara che la scelta e' stata lasciata
+        # com'e'. L'unica cosa che l'instradamento puo' fare senza
+        # misurazioni e' non peggiorare la situazione.
         return Scelta(
-            scelto.info.id, cat_id, None, None,
-            f"nessuno misurato in {cat_id}: scelto il primo disponibile, "
-            f"non perché sia il migliore",
+            None, cat_id, None, None,
+            f"nessuno misurato in {cat_id}: scelta lasciata com'e', "
+            f"perche' nessun modello e' stato provato",
             scartati)
 
     return Scelta(

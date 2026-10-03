@@ -74,7 +74,29 @@ except Exception as e:  # noqa: BLE001
     sys.exit(2)
 
 modelli = dati.get("models") or []
-check("il catalogo c'e'", len(modelli) > 100, f"{len(modelli)} modelli")
+
+# Il numero di modelli dipende dal provider attivo, e su alcuni servizi
+# e' bassissimo: Groq ne ha 11, NVIDIA 80 (di cui 6 rispondono davvero),
+# OpenRouter 398. Un check che pretende "piu' di 100" senza dire perche'
+# fallisce su un server avviato con --provider groq, e il messaggio
+# ("5 modelli") non dice nulla di utile: si mette a cercare un problema
+# nel catalogo che non c'e'.
+#
+# Quindi: il requisito diventa esplicito, e il fallimento dice cosa fare.
+# Non e' un test piu' permissivo — e' un test che, quando fallisce,
+# ti dice la causa invece di lasciartela indovinare.
+MINIMO = 100
+if len(modelli) < MINIMO:
+    print(f"  Il catalogo ha {len(modelli)} modelli, ne servono almeno {MINIMO}.")
+    print("  Non e' un difetto: questo test guarda i PREZZI, e i prezzi")
+    print("  li dichiara solo OpenRouter. Su Groq (11 modelli), NVIDIA (80)")
+    print("  o Mistral non ci sarebbero, e il test fallirebbe per il")
+    print("  motivo sbagliato.")
+    print()
+    print("  Riavvia il server su OpenRouter e rilancia:")
+    print("    ORCHESTRA_PROVIDER=openrouter python3 -m orchestra.cli web --no-browser")
+    sys.exit(3)
+check("il catalogo c'e'", len(modelli) >= MINIMO, f"{len(modelli)} modelli")
 
 tmp = os.path.join(os.environ.get("TEMP", "."), "_cat.json")
 with open(tmp, "w", encoding="utf-8") as f:

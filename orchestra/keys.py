@@ -46,6 +46,8 @@ WRITABLE: dict[str, str] = {
     "TOGETHER_API_KEY": "Together",
     "CEREBRAS_API_KEY": "Cerebras",
     "MISTRAL_API_KEY": "Mistral",
+    "HF_TOKEN": "Hugging Face",
+    "GEMINI_API_KEY": "Google AI Studio",
     "OPENAI_API_KEY": "OpenAI",
     "ARTIFICIAL_ANALYSIS_KEY": "Artificial Analysis",
     "ORCHESTRA_PROVIDER": "Provider predefinito",
@@ -58,51 +60,37 @@ WRITABLE: dict[str, str] = {
 # vengono da quello che dicono loro, e sono l'unica parte di questo file
 # che invecchia: per questo la data e' esplicita e va aggiornata.
 FREE_SERVICES: list[dict[str, Any]] = [
+    # ---- senza chiave, funzionano subito ----
     {
         "id": "ollama",
-        "nome": "Ollama (sul tuo computer)",
-        "costo": "gratis, sempre",
+        "nome": "Ollama",
+        "costo": "gratis, sul tuo computer",
         "chiave": False,
-        "cosa": "Modelli locali. Nessun account, nessun rate limit, funziona offline.",
-        "requisiti": "8 GB di RAM per un modello da 7B. Sotto Q4_K_M le chiamate ai tool diventano inaffidabili.",
-        "come": " Scaricalo da ollama.com, poi: ollama pull qwen2.5-coder:7b",
+        "cosa": "Modelli locali. Nessuna richiesta esce dal computer e nessun costo: il limite e' la tua GPU.",
+        "requisiti": "Ollama installato e un modello scaricato.",
+        "come": " ollama.com",
     },
     {
         "id": "lmstudio",
         "nome": "LM Studio",
-        "costo": "gratis, sempre",
+        "costo": "gratis, sul tuo computer",
         "chiave": False,
-        "cosa": "Come Ollama, con un'interfaccia grafica per scegliere e scaricare i modelli.",
-        "requisiti": "Come Ollama.",
-        "come": " lmstudio.com — scarica un modello e avvia il server locale",
+        "cosa": "Come Ollama, con un'interfaccia. Lo stesso motore, lo stesso nessun costo.",
+        "requisiti": "LM Studio installato.",
+        "come": " lmstudio.ai",
     },
-    {
-        "id": "groq",
-        "nome": "Groq",
-        "costo": "gratis senza carta",
-        "chiave": True,
-        "cosa": "L'inferenza piu' veloce in assoluto. Limiti generosi, quindi ottimo per il free.",
-        "requisiti": "Account. Serve una chiave.",
-        "come": " console.groq.com/keys",
-    },
-    {
-        "id": "cerebras",
-        "nome": "Cerebras",
-        "costo": "gratis senza carta",
-        "chiave": True,
-        "cosa": "Gratis illimitato nei limiti d'uso. Modelli forti sul free tier.",
-        "requisiti": "Account. Serve una chiave.",
-        "come": " cloud.cerebras.ai",
-    },
-    {
-        "id": "google",
-        "nome": "Google AI Studio",
-        "costo": "gratis senza carta",
-        "chiave": True,
-        "cosa": "Gemini. Il free tier che non scade piu' nel tempo.",
-        "requisiti": "Account Google. Serve una chiave.",
-        "come": " aistudio.google.com/apikey",
-    },
+
+    # ---- con chiave, e un piano gratis ----
+    #
+    # Qui sotto la lista era scritta a mano e non coincideva piu' con
+    # quella vera: consigliava Google e Hugging Face, che Orchestra NON
+    # supporta — la chiave che mettevi non sarebbe mai stata usata —
+    # e non citava NVIDIA e Together, che sono due dei servizi che
+    # funzionano. Nove provider supportati, sette citati, due inventati.
+    #
+    # Un servizio consigliato che Orchestra non supporta e' la peggiore
+    # delle due direzioni: si fa una chiave, la si mette, e non capita
+    # niente, senza che nessuno dica perche'.
     {
         "id": "openrouter",
         "nome": "OpenRouter",
@@ -114,18 +102,88 @@ FREE_SERVICES: list[dict[str, Any]] = [
         "avvertenza": "I :free sono limitati a 20 richieste al minuto e 50 al giorno senza accredito; 1000 al giorno dopo 10 dollari di credito. Ecco perche' i benchmark si fermano con HTTP 429.",
     },
     {
-        "id": "huggingface",
-        "nome": "Hugging Face Inference",
+        "id": "nvidia",
+        "nome": "NVIDIA Build",
+        "costo": "gratis con chiave",
+        "chiave": True,
+        "cosa": "Il free tier piu' generoso in numero di modelli, e modelli di punta recenti. Utile per il benchmark.",
+        "requisiti": "Account NVIDIA Developer. Serve una chiave.",
+        "come": " build.nvidia.com",
+        "avvertenza": "L'elenco contiene molti modelli ritirati: su 80, solo 6 rispondono davvero. Se un modello ti da' 404 o 410 e' quello, non Orchestra.",
+    },
+    {
+        "id": "together",
+        "nome": "Together AI",
+        "costo": "gratis con chiave, con limiti",
+        "chiave": True,
+        "cosa": "Buona selezione di modelli open, con un piano gratis limitato per la ricerca.",
+        "requisiti": "Account. Serve una chiave.",
+        "come": " api.together.ai/settings/api-keys",
+    },
+    {
+        "id": "groq",
+        "nome": "Groq",
         "costo": "gratis con limiti",
         "chiave": True,
-        "cosa": "Ospita modelli open che altrove non trovi.",
+        "cosa": "I piu' veloci in assoluto sui modelli che serve. Quattro modelli dichiarano di non fare tool-calling e vengono esclusi.",
         "requisiti": "Account. Serve una chiave.",
+        "come": " console.groq.com/keys",
+    },
+    {
+        "id": "cerebras",
+        "nome": "Cerebras",
+        "costo": "gratis con limiti",
+        "chiave": True,
+        "cosa": "Molto veloce, catalogo piccolo e mirato.",
+        "requisiti": "Account. Serve una chiave.",
+        "come": " cloud.cerebras.ai",
+    },
+    {
+        "id": "mistral",
+        "nome": "Mistral",
+        "costo": "gratis con limiti",
+        "chiave": True,
+        "cosa": "I modelli del produttore stesso, con un piano gratis limitato.",
+        "requisiti": "Account. Serve una chiave.",
+        "come": " console.mistral.ai",
+    },
+    {
+        "id": "huggingface",
+        "nome": "Hugging Face",
+        "costo": "gratis con token, con limiti",
+        "chiave": True,
+        "cosa": "Inferenza su migliaia di modelli open, con un free tier fra i piu' generosi in numero di richieste. Resta raggiungibile anche quando gli altri servizi ti bloccano.",
+        "requisiti": "Account Hugging Face. Serve un token.",
         "come": " huggingface.co/settings/tokens",
+        "avvertenza": "L'API e' condivisa: quando e' carica risponde 'models are overloaded'. Non e' un modello scarso, e' una coda.",
+    },
+    {
+        "id": "google",
+        "nome": "Google AI Studio",
+        "costo": "gratis con chiave, con limiti",
+        "chiave": True,
+        "cosa": "Gemini. Il piano gratis con quota giornaliera, senza carta.",
+        "requisiti": "Account Google. Serve una chiave.",
+        "come": " aistudio.google.com/apikey",
+        "avvertenza": "Non e' Vertex AI: quello chiede un progetto GCP e una carta. Qui si parla solo di AI Studio.",
+    },
+    {
+        "id": "openai",
+        "nome": "OpenAI",
+        "costo": "a pagamento",
+        "chiave": True,
+        "cosa": "Per confronto: quanto paghi davvero quando un modello non basta. Non c'e' piano gratis.",
+        "requisiti": "Account con carta. Serve una chiave.",
+        "come": " platform.openai.com/api-keys",
     },
 ]
 
+
 NOTA_FREE = ("Rilevato il 30 settembre 2026. I free tier cambiano spesso: "
-             "prima di basarci un prodotto, ricontrolla la pagina del servizio.")
+             "prima di basarci un prodotto, ricontrolla la pagina del "
+             "servizio. 'Gratis' vuol dire 'un piano gratis con limiti': "
+             "fuori Ollama e LM Studio, tutti gli altri chiedono una "
+             "chiave, e alcuni una carta.")
 
 
 def _leggi_righe(path: str) -> list[str]:

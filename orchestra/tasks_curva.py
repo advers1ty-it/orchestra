@@ -283,18 +283,42 @@ REASON_L2 = Task(
 # Il conto su cinque eventi: l'errore tipico e' scordare un'occorrenza,
 # e non si vede nella risposta se non si controllano i tre campi uno per
 # uno. Un conteggio in prosa non e' confrontabile.
+# IL TASK ERA SBAGLIATO, E IL SUO ESEMPIO PURE.
+#
+# La sequenza e' "Ada fa A, Bo fa B, Ada fa C, Cy fa A, Bo fa C".
+# Il conteggio vero e' Ada 1 0 1 (fa A una volta, mai B, C una
+# volta), Bo 0 1 1, Cy 1 0 0.
+#
+# Il task si aspettava Ada "2 1 0" e Bo "1 1 1": entrambi sbagliati,
+# e non poco — non un off-by-one, un conteggio rifatto su un'altra
+# sequenza. Il prompt portava lo stesso "2 1 0" come ESEMPIO di
+# come si scrive il risultato, quindi un modello che copiava
+# l'esempio passava il primo campo e falliva il resto.
+#
+# Il sintomo: due modelli diversi sbagliavano lo stesso task
+# identico, e uno dei due aveva risposto giusto. Due modelli che
+# sbagliano uguale non e' normale: e' il segnale che il task e'
+# rotto. Ed e' quello che e' successo — il modello che ha
+# risposto "Ada: 1 0 1, Bo: 0 1 1" aveva il risultato esatto ed
+# e' stato bocciato.
+#
+# Ora l'esempio non contiene numeri: spiega solo il FORMATO. Un
+# esempio con numeri veri e' una seconda risposta da indovinare, e
+# un modello non deve poter passare un campo perche' lo ha letto.
 REASON_L3 = Task(
     id="reason_l3", category="reasoning",
-    prompt="Da questa sequenza:\n"
-            "  Ada fa A, Bo fa B, Ada fa C, Cy fa A, Bo fa C\n"
-            "conta quante volte ciascuno fa A, quante B, quante C.\n"
-            "Scrivi in risultato.json un oggetto con tre chiavi, una per "
-            "persona. Il valore di ogni chiave e' una stringa con i tre "
-            "numeri separati da uno spazio, nell'ordine A B C: per Ada "
-            "\"2 1 0\" significa 2 volte A, 1 volta B, 0 volte C.\n"
-            "Solo il file JSON, senza spiegazioni.",
+    prompt="Da questa sequenza di cinque azioni:\n"
+           "  Ada fa A, Bo fa B, Ada fa C, Cy fa A, Bo fa C\n"
+           "conta quante volte ciascuno fa A, quante B, quante C.\n"
+           "Scrivi in risultato.json un oggetto con tre chiavi: Ada, Bo "
+           "e Cy. Il valore di ogni chiave e' una stringa con i tre "
+           "numeri separati da uno spazio, nell'ordine A B C — quindi "
+           "\"un numero per A, uno per B, uno per C\", e chi non ha "
+           "mai fatto un'azione ha zero. Nessun esempio con numeri "
+           "veri: i numeri li conti tu.\n"
+           "Solo il file JSON, senza spiegazioni.",
     verify=v_json("risultato.json", {
-        "Ada": "2 1 0", "Bo": "1 1 1", "Cy": "1 0 0",
+        "Ada": "1 0 1", "Bo": "0 1 1", "Cy": "1 0 0",
     }),
 )
 
@@ -341,8 +365,11 @@ EXTRACT_L3 = Task(
             "{\"esito\": \"coerente\"} e nient'altro.\n"
             "Se la differenza e' oltre 0.02, il conto e' sbagliato: in "
             "reporting.json scrivi {\"differenza\": numero, \"riga\": numero}, dove "
-            "\"riga\" e' il numero progressivo della riga di dettaglio che spiega "
-            "lo scarto, contando dall'inizio del documento.\n"
+            "\"riga\" e' il numero progressivo della riga che spiega lo "
+            "scarto, contando TUTTE le righe del file a partire dalla "
+            "prima: la riga 1 e' l'intestazione. Quindi la riga di un "
+            "dettaglio non e' il suo numero fra i dettagli, ma la sua "
+            "posizione nel file.\n"
             "Solo il file JSON.",
     setup=lambda w: _scrivi(w, "conto.csv",
                             "voce;importo\n"
@@ -350,10 +377,22 @@ EXTRACT_L3 = Task(
                             "dettaglio;40,00\n"
                             "dettaglio;60,03\n"),
     # 40,00 + 60,03 = 100,03 contro un totale di 100,00: scarto 0,03,
-    # oltre la soglia. La riga che spiega lo scarto e' la seconda
-    # riga di dettaglio, che e' la terza riga del documento contando
-    # l'intestazione.
-    verify=v_json("reporting.json", {"differenza": 0.03, "riga": 3}),
+    # oltre la soglia. La riga che spiega lo scarto e' l'ultima riga
+    # del file — la seconda di dettaglio — perche' e' lei che
+    # contiene il 60,03, senza il quale il conto tornerebbe.
+    #
+    # Il numero 3 e' stato quello atteso per mesi, e il prompt diceva
+    # gia' "la riga che spiega lo scarto": i due non concordavano. Il
+    # 3 e' la posizione del PRIMO dettaglio, che non c'entra con lo
+    # scarto. Un modello che rispondeva 4 aveva ragione e veniva
+    # bocciato — il benchmark misurava la lettura frettolosa.
+    #
+    # Nota: anche il modo di contare era ambiguo (intestazione dentro o
+    # no), e il modello che numerava solo i dettagli dava 2. Ora il
+    # prompt lo dice: dalla prima riga del file, intestazione inclusa.
+    # Nessuna delle due convenzioni e' sbagliata in assoluto — quello
+    # che conta e' che il prompt le dichiari tutte e due.
+    verify=v_json("reporting.json", {"differenza": 0.03, "riga": 4}),
 )
 
 # ==========================================================================

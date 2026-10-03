@@ -18,3 +18,10 @@ _ext*.py
 # roba dei test: i file che il test di delega crea per far contare le righe
 _delega_prova/
 _m.txt
+
+# Spazzatura dei test: il cestino delle skill e la cartella di prova
+# vengono creati dal vivo quando i test scrivono e cancellano skill.
+# Sono id generati (numeri), e committarli riempie il diff di robba
+# che nessuno vuole vedere e che nessuno rimuove.
+skills/.cestino/
+skills/percorso/prova/

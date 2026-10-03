@@ -66,7 +66,8 @@ check("i tre file JS sono dichiarati", len(re.findall(r"<script[^>]*src=", testo
 
 print("\n[3] Ogni elemento che il frontend cerca deve esistere")
 bundle = ""
-for nome in ("core.js", "panels.js", "main.js"):
+from _ordine import ORDER  # noqa: E402
+for nome in ORDER:
     p = os.path.join(ROOT, "orchestra", "web", nome)
     if os.path.exists(p):
         bundle += open(p, encoding="utf-8").read()

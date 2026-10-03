@@ -40,6 +40,10 @@ const modelPick = $("model-pick");
 // riga, e cercarlo rileggendo le option sarebbe una ricerca fra 400
 // elementi per ognuna.
 let modelliPerId = {};
+// Il servizio dichiara il tool-calling? Li' calcolato in
+// loadModels, letto anche dal popup del selettore.
+let servizioDichiaraTool = true;
+let servizioTace = false;
 
 // Lo scope attivo e' la categoria di lavoro scelta nell'header. Vive qui
 // perche' loadModels() la usa per scrivere il punteggio dentro ogni
@@ -113,6 +117,15 @@ function setBusy(v) {
   }
   btnCancel.disabled = !v;
   $("btn-reset").disabled = v;
+  // Il bottone del modello segue il select: senza, durante un turno
+  // resterebbe cliccabile mentre il select e' disabilitato, e si
+  // potrebbe aprire un pannello su un catalogo che il server sta
+  // ricaricando.
+  const mpB = document.getElementById("model-btn");
+  if (mpB) mpB.disabled = v || modelPick.disabled;
+  if (typeof mpSincronizzaEtichetta === "function") {
+    mpSincronizzaEtichetta();
+  }
 }
 
 function renderStats(s) {
@@ -405,7 +418,20 @@ async function loadModels() {
     modelPick.replaceChildren();
     // i gratuiti per primi: sono quelli che si possono provare senza
     // pensarci, e sono la maggior parte di quello che c'è
-    const sorted = (d.models || []).slice().sort((a, b) =>
+    // Il servizio dichiara il tool-calling? Vera se ALMENO UN modello
+    // lo dichiara: su OpenRouter tutti, su NVIDIA nessuno, su Groq
+    // nessuno. E li' la differenza la fa solo se qualcuno dichiara
+    // qualcosa — altrimenti non c'e' niente da distinguere e il
+    // "forse" sarebbe identico su tutte le righe.
+    const _tutti = d.models || [];
+    const _dichiarati = _tutti.filter(
+      (m) => m.tool_calling !== null && m.tool_calling !== undefined).length;
+    servizioDichiaraTool = _dichiarati > 0;
+    // Se il servizio NON dichiara niente, il piede del menu lo dice
+    // una volta sola. E' l'unica parte che un utente deve leggere
+    // prima di scegliere un modello su quel servizio.
+    servizioTace = _tutti.length > 0 && _dichiarati === 0;
+    const sorted = _tutti.slice().sort((a, b) =>
       (a.free === b.free) ? a.id.localeCompare(b.id) : (a.free ? -1 : 1));
     // Indicizzati per id: il popup del selettore cerca il punteggio di
     // una riga, e rileggere il testo dell'option per ognuna significa
@@ -430,8 +456,23 @@ async function loadModels() {
       // non si fa affidamento — ma non si nasconde nemmeno, perche' un
       // modello che nasconde le sue carte peggio di uno che ammette di
       // non sapere.
+      // Tool: tre stati, e uno solo si ripete.
+      //
+      // "tool?" dice "non lo so". Su NVIDIA lo dicevano 80 righe su 80, e
+      // su Groq 8 su 11: un'etichetta identica ovunque non distingue niente,
+      // e insegnava a leggerla senza leggerla. Il dubbio è onesto su una
+      // riga e rumore su ottanta.
+      //
+      // Quindi: il "forse" resta SOLO dove qualche modello lo dichiara e
+      // qualche altro no — li' distingue davvero. Se il servizio non
+      // dichiara niente, non si mette niente, e si dice UNA volta cosa
+      // significa, nel piede del menu.
+      //
+      // "[niente tool]" invece resta su ogni riga: è un no definitivo e un
+      // modello senza tool-calling non è Orchestra.
       const tc = m.tool_calling;
-      const tool = tc === true ? "" : (tc === false ? "  [niente tool]" : "  [tool?]");
+      const tool = tc === true ? ""
+        : (tc === false ? "  [niente tool]" : (servizioDichiaraTool ? "  [tool?]" : ""));
       const punteggio = punteggioPerScope(m, scopeAttivo);
       // Il costo per 10k token va nell'opzione insieme al prezzo per
       // milione. Sono due numeri che dicono cose diverse: $0.01/1M e
@@ -466,6 +507,7 @@ async function loadModels() {
       }
     }
     modelPick.disabled = false;
+    mpSincronizzaEtichetta();
     // le liste del pannello benchmark e della prova manuale usano lo
     // stesso catalogo. Popolarle qui evita un secondo fetch e fa si'
     // che i tre selettori non possano contraddirsi.
@@ -487,6 +529,7 @@ async function loadModels() {
     modelPick.replaceChildren();
     modelPick.appendChild(new Option("modelli non disponibili", ""));
     modelPick.disabled = true;
+    mpSincronizzaEtichetta();
   }
 }
 
@@ -564,8 +607,10 @@ function costo_breve(m, token) {
 
 on(modelPick, "change", async () => {
   const id = modelPick.value;
+  mpSincronizzaEtichetta();
   if (!id || busy) return;
   modelPick.disabled = true;
+  mpSincronizzaEtichetta();
   try {
     const r = await fetch("/api/model", {
       method: "POST",
@@ -581,5 +626,6 @@ on(modelPick, "change", async () => {
     addText("error", String(e));
   } finally {
     modelPick.disabled = false;
+    mpSincronizzaEtichetta();
   }
 });

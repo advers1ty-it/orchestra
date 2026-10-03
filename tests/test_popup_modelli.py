@@ -72,7 +72,12 @@ class El {
   closest() { return null; }
   getBoundingClientRect() { return { left: 0, top: 0, bottom: 20, right: 100 }; }
   addEventListener(ev, fn) { (this._ev = this._ev || {})[ev] = fn; }
-  fire(ev, arg) { if (this._ev && this._ev[ev]) this._ev[ev](arg || {}); }
+  fire(ev, init) {
+    if (!this._ev || !this._ev[ev]) return;
+    const e = Object.assign({ type: ev, preventDefault() {},
+                             stopPropagation() {} }, init || {});
+    this._ev[ev](e);
+  }
   dispatchEvent(ev) { if (this._ev && this._ev[ev.type]) this._ev[ev.type](ev); return true; }
   focus() {}
   scrollIntoView() {}
@@ -122,6 +127,14 @@ select.disabled = false;
 let changeCount = 0;
 select._ev = {};
 elementi["model-pick"] = select;
+// Il bottone e l'etichetta: ora il popup nasce da un bottone, non dal
+// select. E il test deve esistere anche per quelli, altrimenti il
+// "custom vero" viene verificato solo a meta'.
+const bottone = new El("button");
+bottone.disabled = false;
+bottone.setAttribute = () => {};
+elementi["model-btn"] = bottone;
+elementi["model-label"] = new El("span");
 global.modelPick = select;   // il popup lo cerca per nome
 
 // punteggi: solo due dei quattro sono misurati

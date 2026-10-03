@@ -81,10 +81,20 @@
     <option value="">servizio…</option>
   </select>
   <span id="provider-note" class="provider-note"></span>
+    <!-- Il select porta solo il value al server: un select
+         visibile aprirebbe il proprio menu, del sistema, sopra
+         il pannello. Il perche' e' in modelpick.js. -->
   <div class="mp-wrap">
-    <select id="model-pick" title="Modello in uso" disabled>
+
+      <select id="model-pick" class="mp-nascosto" title="Modello in uso"
+              aria-hidden="true" tabindex="-1" disabled>
         <option value="">modello…</option>
       </select>
+      <button id="model-btn" class="mp-btn" type="button"
+              title="Modello in uso" aria-haspopup="listbox"
+              aria-expanded="false" disabled>
+        <span id="model-label">modello…</span>
+      </button>
     </div>
   <span id="scope-note" class="scope-note"></span>
 

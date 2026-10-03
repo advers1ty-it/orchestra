@@ -116,7 +116,15 @@ class OrchestraApp:
         self._catalog_at = None
         self._catalog_error: str = ""
         # stato del benchmark lanciato dalla UI
-        self._bench: dict[str, Any] = {"running": False, "log": [], "result": None}
+        self._bench: dict[str, Any] = {"running": False, "log": [],
+                                       "result": None, "last_progress": 0.0,
+                                       # quanti run sono FINITI. Lo conta
+                                       # il server, perche' il log che
+                                       # manda al frontend e' troncato:
+                                       # contarlo li' dava un numero che
+                                       # non poteva superare 60 e sembrava
+                                       # un benchmark fermo.
+                                       "finiti": 0, "modelli": []}
 
     def _make_gate(self) -> Any:
         """Il gate che chiede all'utente, collegato agli eventi SSE.
@@ -570,8 +578,15 @@ class OrchestraApp:
                        "started": time.time(), "models": ids}
 
         def worker() -> None:
-            from .benchmark import  (  # noqa: PLC0415, salva_punteggi
+            # salva_punteggi DEVE stare qui dentro. Prima finiva nel
+            # commento noqa, che sembrava una lista di codici da
+            # ignorare: non veniva importata, e la chiamata alla fine
+            # del benchmark sollevava NameError — dopo due ore di
+            # chiamate. Il benchmark finiva, e i risultati non
+            # venivano salvati.
+            from .benchmark import (  # noqa: PLC0415
                 render_table, run_task, summarize, tasks_for, perché,
+                salva_punteggi,
             )
 
             tasks = tasks_for(category)
@@ -582,11 +597,20 @@ class OrchestraApp:
             results = []
             stop = False
             try:
+                # riparte da zero: il conteggio e' di QUESTO
+                # benchmark. Senza, un secondo giro ripartirebbe
+                # dal numero del primo e si annuncerebbe a
+                # meta' prima di aver fatto una riga.
+                self._bench["finiti"] = 0
+                self._bench["modelli"] = []
                 for mid in ids:
                     if stop:
                         break
                     name = cat.models[mid].info.short if mid in cat.models else mid
                     self._bench["log"].append(f"== {name} ==")
+                    if name not in self._bench["modelli"]:
+                        self._bench["modelli"].append(name)
+                    self._bench["last_progress"] = time.monotonic()
                     for t in tasks:
                         r = run_task(t, provider_name=self.env.get("ORCHESTRA_PROVIDER", "openrouter"),
                                      model=mid, env=dict(os.environ, **self.env),
@@ -603,8 +627,16 @@ class OrchestraApp:
                             f"  {t.id}: {state}"
                             + (f" — {perché(r)}" if not r.passed else "")
                         )
+                        self._bench["finiti"] += 1
+                        self._bench["last_progress"] = time.monotonic()
                         if throttle:
                             time.sleep(throttle)
+                # L'ultimo progresso, in secondi dall'avvio. Il pannello
+                # lo usa per dire "bloccato" invece di "in corso": non
+                # possiamo sapere se un run sara' lento o fermo, ma
+                # sappiamo che se il log non cresce da due minuti, il
+                # worker non sta lavorando.
+                self._bench["last_progress"] = time.monotonic()
                 summary = summarize(results)
                 # salva_punteggi scrive i punteggi sul catalogo.
                 # Sta in una funzione perche' qui dentro non era
@@ -970,9 +1002,21 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/bench/status":
             self._json({
                 "running": self.app._bench["running"],
+                # il log si puo' troncare: e' roba da leggere. I
+                # numeri no: sono il conto, e troncarli trasforma
+                # "sta lavorando" in "fermo" senza che nulla sia
+                # fermo.
                 "log": self.app._bench["log"][-60:],
+                "finiti": self.app._bench.get("finiti", 0),
+                "modelli_visti": self.app._bench.get("modelli", []),
                 "result": self.app._bench["result"],
                 "models": self.app._bench.get("models", []),
+                                # secondi dall'ultimo passo, non dall'avvio: e' quello
+                                # che distingue "sta lavorando" da "e' bloccato". Un
+                                # benchmark lento e uno fermo hanno la stessa identica
+                                # UI per sempre, e uno dei due ti fa aspettare inutilmente.
+                                "fermo_da": round(time.monotonic()
+                                                  - self.app._bench.get("last_progress", 0.0)),
             })
         elif path == "/api/prior":
                 # Copertura del prior esterno. Non e' il benchmark: e' un

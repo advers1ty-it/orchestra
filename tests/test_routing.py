@@ -94,11 +94,15 @@ check("il non misurato non vince", s2.modello != "nonmisurato/code", str(s2.mode
 print("\n[5] Se nessuno è misurato, si sceglie — e si dice che è a caso")
 vuoto = Cat([Prof("solo1/code"), Prof("solo2/code")])
 s3 = instrada(vuoto, "fammi una funzione")
-check("sceglie comunque", s3.modello in ("solo1/code", "solo2/code"), str(s3.modello))
+# NON deve scegliere. Il caso reale: su NVIDIA il catalogo elenca 80
+# modelli di cui 6 rispondono, e il primo alfabeticamente
+# (01-ai/yi-large) risponde 404. L'utente sceglieva GLM dal menu e
+# l'instradamento glielo sovrascriveva con un modello morto: nessuna
+# misurazione non autorizza a scegliere.
+check("NON sceglie nessun modello", s3.modello is None, str(s3.modello))
 check("ma non dichiara un punteggio", s3.punteggio is None, str(s3.punteggio))
-check("e il motivo lo dice chiaramente",
-      "non perché sia il migliore" in s3.motivo or "per mancanza" in s3.motivo,
-      s3.motivo)
+check("e il motivo lo dichiara",
+      "nessuno misurato" in s3.motivo, s3.motivo)
 
 print("\n[6] Poche prove: si sceglie, ma dichiarando che è poco")
 # 2 prove e un 100%: il numero dice poco, e scegliere come se dicesse

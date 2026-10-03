@@ -14,7 +14,7 @@ import sys
 
 RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(RADICE, "orchestra", "web")
-ORDER = ["core.js", "panels.js", "main.js"]
+from _ordine import ORDER  # noqa: E402
 PASS, FAIL = [], []
 
 

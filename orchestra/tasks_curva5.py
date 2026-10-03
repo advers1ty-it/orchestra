@@ -286,6 +286,16 @@ APP_L1 = Task(
 # L2: lo stato. Il valore iniziale viene dalla prop ma poi cambia da
 # solo, e i due non possono stare nello stesso posto: senza stato, il
 # click non cambia niente.
+#
+# Il prompt nomina `setValore` perche' il verificatore lo cerca. Prima
+# non lo nominava: diceva solo "un button che lo aumenta", e ogni
+# modello che scriveva `setContatore` o `setNumero` — cioe' chiunque
+# avesse risolto il problema nel modo naturale — veniva bocciato per un
+# nome che nessuno gli aveva chiesto.
+#
+# La regola e' che il prompt specifica TUTTO quello che il verificatore
+# controlla. Un verificatore che cerca una parola che il prompt non
+# contiene non misura il modello: misura se ha indovinato.
 APP_L2 = Task(
     id="app_l2", category="app",
     prompt="Crea il file Contatore.jsx con un componente React di funzione "
@@ -293,7 +303,9 @@ APP_L2 = Task(
             "Il numero parte da `iniziale` e c'è un `<button>` che lo aumenta di "
             "1 a ogni click.\n"
             "Serve `useState` per poterlo cambiare: la prop non si può "
-            "modificare.",
+            "modificare. Chiama lo setter `setValore`.\n"
+            "Esattamente questi nomi: il componente `Contatore`, la prop "
+            "`iniziale`, lo setter `setValore`, e un `<button>`.",
     verify=v_testo("Contatore.jsx",
                    deve=("useState", "setValore", "<button", "iniziale")),
 )

@@ -57,9 +57,11 @@ SBAGLIATE = {
             "risposta.txt": "Cy\n",
         },
     "reason_l3": {
-        # conta Cy come se avesse fatto B
-        "risultato.json": '{"Ada": "2 1 0", "Bo": "1 1 1", "Cy": "0 1 0"}\n',
-    },
+            # Ada conta C come se fosse B: due azioni su tre sbagliate, e
+            # proprio l'errore che il vecchio prompt induceva, perche'
+            # portava "2 1 0" come esempio del formato.
+            "risultato.json": '{"Ada": "1 1 1", "Bo": "0 1 1", "Cy": "1 0 0"}\n',
+        },
     "extract_l2": {
         # divide sul separatore e perde i decimali con la virgola
         "totale.json": '{"somma": 120.5}\n',
@@ -104,8 +106,11 @@ GIUSTE = {
     # si dimentica che Ada ha gia' preso C.
     "reason_l2": {"risposta.txt": "Bo\n"},
     "reason_l3": {
-        "risultato.json": '{"Ada": "2 1 0", "Bo": "1 1 1", "Cy": "1 0 0"}\n',
-    },
+            # Il conteggio vero di "Ada fa A, Bo fa B, Ada fa C, Cy fa A,
+            # Bo fa C": Ada fa A una volta, MAI B, e C una volta. Bo fa B e
+            # C, mai A.
+            "risultato.json": '{"Ada": "1 0 1", "Bo": "0 1 1", "Cy": "1 0 0"}\n',
+        },
     "extract_l2": {
         "ordini.csv": ("cliente;totale;data\n"
                        '"Rossi, Mario";120,50;2026-01-15\n'

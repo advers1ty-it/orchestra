@@ -51,6 +51,13 @@ SUITES = [
     ("curva5", "test_curva5.py", True),
     ("skills", "test_skills.py", True),
     ("skill-tools", "test_skill_tools.py", True),
+    # Era scritto e non girava: nel runner non c'era, e senza un
+    # test che passa sembra che copra quello che copre.
+    ("skill-ui", "test_skill_ui.py", True),
+    ("bench-fermo", "test_bench_fermo.py", True),
+    ("task-leggibili", "test_task_leggibili.py", True),
+    ("tool-etichetta", "test_tool_etichetta.py", True),
+    ("lista-provider", "test_lista_provider.py", True),
     ("e2e", "test_e2e.py", False),
 ]
 

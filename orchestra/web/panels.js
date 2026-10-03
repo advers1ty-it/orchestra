@@ -299,20 +299,39 @@ function statoBench(testo, classe) {
   benchStatus.className = "bench-status " + (classe || "");
 }
 
-function contaAvanzamento(log) {
+// Il testo dell'avanzamento, senza mostrarlo. Serve a chi deve
+// aggiungere qualcosa: il ramo "fermo da 30 secondi" scrive
+// "59/88 run · attento, fermo da 44s", e per farlo deve poter
+// leggere il conto invece di ricalcolarlo.
+//
+// contaAvanzamento non tornava niente — scriveva dentro e basta — e
+// usarla come valore dentro una stringa stampava "undefined". Che su
+// un pannello e' peggio di non stampare niente: sembra un dato.
+function testoAvanzamento(log, finiti, modelliVisti) {
+  // Il conto lo da' il server. Prima contavamo le righe di log
+  // visibili, ma il server manda solo gli ultimi 60: con 88 run le
+  // prime ~28 non arrivavano mai, e il numero non poteva superare
+  // 60. Mostrava "59/88" quando in realta' era a meta' — non un
+  // benchmark fermo, un contatore che non sapeva contare.
+  //
+  // Il fallback sul log serve solo se il server e' vecchio: senza, la
+  // funzione restituirebbe zero e il pannello direbbe "0/88" su un
+  // benchmark che sta funzionando.
+  const n = (typeof finiti === "number") ? finiti
+    : (log || []).filter((l) => /^\s{2}\S+:\s/.test(l)).length;
+  const visti = (modelliVisti || []).length;
+  const modelli = visti || new Set((log || []).filter((l) => /^== /.test(l))
+    .map((l) => l.slice(3, -3))).size;
+  if (!attesaTotale) return "in corso…";
+  const pct = Math.min(100, Math.round((n / attesaTotale) * 100));
+  return modelli + " modelli · " + n + "/" + attesaTotale +
+    " run · " + pct + "%";
+}
+
+function contaAvanzamento(log, finiti, modelliVisti) {
   // una riga per run finito: "== modello ==" segna l'inizio, "  task:"
   // segna un risultato. Contiamo i risultati.
-  const finiti = (log || []).filter((l) => /^\s{2}\S+:\s/.test(l)).length;
-  const modelli = new Set((log || [])
-    .filter((l) => /^== /.test(l))
-    .map((l) => l.slice(3, -3)));
-  if (attesaTotale) {
-    const pct = Math.min(100, Math.round((finiti / attesaTotale) * 100));
-    statoBench("in corso — " + modelli.size + " modelli · " +
-               finiti + "/" + attesaTotale + " run · " + pct + "%", "on");
-  } else {
-    statoBench("in corso…", "on");
-  }
+  statoBench("in corso — " + testoAvanzamento(log, finiti, modelliVisti), "on");
 }
 
 function pollBench() {
@@ -336,8 +355,29 @@ function pollBench() {
       benchLog.textContent = (d.log || []).join("\n");
       benchLog.scrollTop = benchLog.scrollHeight;
       if (d.running) {
-        contaAvanzamento(d.log);
-      } else {
+              contaAvanzamento(d.log, d.finiti, d.modelli_visti);
+              // Il conto può essere giusto e il lavoro fermo lo stesso: un
+              // run è una chiamata a un servizio esterno, e se quella
+              // chiamata si blocca il finally non arriva mai. Il pannello
+              // continuerebbe a dire "in corso" all'infinito, e 59/88 non
+              // distingue "ci manca un pezzo" da "manterrà così".
+              //
+              // La soglia è generosa: un modello lento (GLM risponde in
+              // 43-55 secondi) è lento, non fermo. Due minuti senza un
+              // passo solo non passano per un modello che sta pensando.
+              const fermo = d.fermo_da || 0;
+              if (fermo > 120) {
+                statoBench("fermo da " + Math.floor(fermo / 60) + " min " +
+                           (fermo % 60) + "s — non avanza. Riavvia il benchmark.",
+                           "ko");
+                addText("warn", "nessun passo da " + fermo + " secondi");
+              } else if (fermo > 30) {
+                statoBench(testoAvanzamento(d.log, d.finiti, d.modelli_visti) + " · attento, fermo da " +
+                           fermo + "s", "on");
+              } else {
+                statoBench(testoAvanzamento(d.log, d.finiti, d.modelli_visti), "on");
+              }
+            } else {
         clearInterval(benchTimer);
         benchTimer = null;
         renderBenchResult(d.result);

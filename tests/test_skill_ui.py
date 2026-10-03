@@ -88,6 +88,7 @@ check("cancellare una inesistente è rifiutata", stato4 == 400, f"HTTP {stato4}"
 
 print("\n[4] Importare da uno store")
 import shutil
+import re
 import tempfile
 store = tempfile.mkdtemp(prefix="store-ui-")
 for n, cat in (("prova-ui-una", "alpha"), ("prova-ui-due", "beta")):
@@ -160,11 +161,13 @@ print("\n[7] Il DOM: il pannello esiste e si disegna")
 # vuole trovare -- una funzione definita e mai chiamata, che si vede
 # solo quando tutto il bundle e' insieme.
 import tempfile
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _ordine import ORDER  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 joined = "\n;\n".join(
     open(os.path.join(ROOT, "orchestra", "web", n), encoding="utf-8").read()
-    for n in ("core.js", "panels.js", "main.js"))
+    for n in ORDER)
 harness = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "_dom_provider.js"), encoding="utf-8").read()
 
@@ -176,7 +179,7 @@ probe = """
   // fidarsi del testo del sorgente.
   OUT.agganciati = [];
   for (const id of ["skill-ricarica", "skill-importa", "skill-filtro",
-                    "opz-tab-modelo", "opz-tab-skill", "opz-tab-servizi",
+                    "opz-tab-modello", "opz-tab-skill", "opz-tab-servizi",
                     "opz-tab-permessi", "opz-tab-gratis", "opzioni-nav"]) {
     const e = document.getElementById(id);
     OUT.agganciati.push([id, !!(e && e._handlers &&
@@ -244,7 +247,7 @@ probe = """
     const e = document.getElementById("opz-sez-" + n);
     return e ? e.getAttribute("hidden") === null : null;
   };
-  OUT.sezioni = ["modelo", "skill", "servizi", "permessi", "gratis"]
+  OUT.sezioni = ["modello", "skill", "servizi", "permessi", "gratis"]
     .map((n) => [n, visibile(n)]);
 
   const attiva = () => {
@@ -267,7 +270,7 @@ probe = """
   // una sezione inesistente non deve lasciare tutto nascosto
   try {
     mostraSezione("non-esiste");
-    OUT.dopoInesistente = ["modelo", "skill", "permessi"].map(visibile);
+    OUT.dopoInesistente = ["modello", "skill", "permessi"].map(visibile);
   } catch (e) { OUT.erroreInesistente = String(e); }
 
   console.log("SKILLUI" + JSON.stringify(OUT));
@@ -317,10 +320,10 @@ else:
         sez = dict(o.get("sezioni") or [])
         check("una sezione per voce", len(sez) == 5, str(o.get("sezioni")))
         check("all'inizio e' visibile solo Modello",
-              sez.get("modelo") is True and sez.get("skill") is False
+              sez.get("modello") is True and sez.get("skill") is False
               and sez.get("gratis") is False, str(sez))
         check("la tab attiva e' quella giusta",
-              o.get("attivaAllInizio") == "opz-tab-modelo",
+              o.get("attivaAllInizio") == "opz-tab-modello",
               str(o.get("attivaAllInizio")))
         d = o.get("dopoClickSkill") or []
         check("il click apre la sezione giusta",
@@ -336,6 +339,31 @@ else:
         ini = o.get("dopoInesistente") or []
         check("una sezione inesistente non nasconde tutto",
               any(v is True for v in ini), str(ini))
+
+# I nomi che questo test usa devono esistere nell'HTML vero.
+#
+# Il pannello Opzioni si e' rotto due volte per un nome scritto a mano:
+# `opz-tab-modelo` invece di `opz-tab-modello`, e la sezione `modelo`
+# invece di `modello`. In entrambi i casi tredici check fallivano
+# insieme e sembrava un problema di logica delle tab: era una lettera,
+# in tre punti, in due file, e nessuno dei due lo dichiarava.
+#
+# Adesso i nomi si leggono dall'HTML, e questo check fallisce se un
+# domani ne sposta uno senza aggiornare i test: il messaggio dice
+# quale, e quale c'era.
+print("\n[9] I nomi che il test usa esistono nell'HTML")
+_html = open(os.path.join(ROOT, "orchestra", "web", "index.html"),
+              encoding="utf-8").read()
+_nomi_usati = ("modello", "skill", "servizi", "permessi", "gratis", "cestino")
+for _n in _nomi_usati:
+    check(f"data-sez=\"{_n}\" esiste nell'HTML",
+          f'data-sez="{_n}"' in _html,
+          "il test lo cerca e l'HTML non lo ha: o il nome e' cambiato "
+          "dall'ultimo aggiornamento, o il test indovina")
+check("l'id della tab modello e' opz-tab-modello",
+      'id="opz-tab-modello"' in _html,
+      "usato dai check come opz-tab-modello: se qui c'e' un altro "
+      "nome, i tredici check del pannello falliscono senza dire perche'")
 
 print("\n[8] Gli elementi del pannello sono nell'HTML")
 html = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -368,13 +396,37 @@ check("e anche collegaSezioni", "collegaSezioni();" in js_src,
       "definita ma mai chiamata")
 # la barra laterale: cinque voci, tutte con id e data-sez, altrimenti
 # il DOM finto non le trova e il test misurerebbe un pannello vuoto
-for sez in ("modello", "skill", "servizi", "permessi", "gratis"):
+# L'elenco delle sezioni viene letto dall'HTML, non scritto a mano.
+# Erano cinque scritte a mano, e sono sei: c'è anche il cestino, che
+# nessun check copriva. Poteva sparire e il test sarebbe rimasto
+# verde — che è il difetto peggiore di un test: mente sul suo
+# stesso oggetto.
+SEZIONI = re.findall(r'<section id="opz-sez-([a-z]+)"', html)
+TABS = re.findall(r'<button id="opz-tab-([a-z]+)"', html)
+check("l'elenco delle sezioni non e' vuoto", SEZIONI, str(SEZIONI))
+check("tab e sezioni sono gli stessi, nello stesso ordine",
+      SEZIONI == TABS,
+      f"sezioni {SEZIONI} / tab {TABS}: una tab senza sezione e' un "
+      "pulsante che non apre niente")
+
+for sez in SEZIONI:
     check(f"tab {sez} con id e data-sez",
-          f'id="opz-tab-{sez}"' in html and f'data-sez="{sez}"' in html,
-          sez)
+          f'id="opz-tab-{sez}"' in html and f'data-sez="{sez}"' in html, sez)
     check(f"sezione {sez} con id", f'id="opz-sez-{sez}"' in html, sez)
+    # data-sez deve combaciare con l'id: e' il ponte fra la tab e la
+    # sezione, e se i due nomi divergono il click apre la sezione
+    # sbagliata — o nessuna.
+    check(f"sezione {sez}: id e data-sez combaciano",
+          re.search(r'<section id="opz-sez-%s"[^>]*data-sez="%s"'
+                    % (sez, sez), html) is not None, sez)
+
+# "una sola sezione aperta all'inizio": si conta l'attributo hidden
+# nelle sezioni vere, non le occorrenze di una stringa nel file. Il
+# primo — e solo il primo — deve essere senza hidden.
+_aperte = re.findall(r'<section id="opz-sez-([a-z]+)"(?![^>]*hidden)', html)
 check("una sola sezione aperta all'inizio",
-      html.count("class=\"opz-sez\"") == 5, "il conteggio delle sezioni")
+      _aperte == [SEZIONI[0]] if SEZIONI else False,
+      f"aperte: {_aperte}, la prima dovrebbe essere {SEZIONI[:1]}")
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
