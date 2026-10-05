@@ -76,8 +76,28 @@ echo   Attendere il caricamento del catalogo, puo' durare qualche
 echo   secondo: sono centinaia di modelli da scaricare e misurare.
 echo.
 
-rem  Si parte in una finestra nuova, altrimenti questo script non
-rem  finisce mai e non puoi fermare il server.
+rem  Il log e' di una sessione sola, non di tutte. Con `>>` il file
+rem  cresceva a ogni riavvio, e dopo qualche decina di volte
+rem  `Orchestra.cmd log` — il comando che serve quando qualcosa non
+rem  va diventava illeggibile proprio quando serve leggerlo.
+rem
+rem  Perche' non si cancella e basta: azzerandolo, si perde il log del
+rem  server che e' MORTO, che e' esattamente quello che si vuole
+rem  guardare quando si riviavia per capire perche'. Quindi la
+rem  sessione precedente viene conservata in orchestra.log.1, e il
+rem  comando log la mostra sotto quella di adesso.
+rem
+rem  Il file si cancella sempre perche' si arriva qui DOPO che
+rem  `riavvia` ha fermato il server: era il server a tenerlo aperto.
+rem  Se resta aperto, `del` fallisce in silenzio e il log si
+rem  continuerebbe a crescere — quindi l'esito si dice, perche'
+rem  altrimenti il file si riempirebbe e nessuno saprebbe perche'.
+if exist "%LOGFILE%" (
+    move /y "%LOGFILE%" "%LOGFILE%.1" >nul 2>&1
+    if exist "%LOGFILE%.1" echo   Il log di prima e' in orchestra.log.1
+)
+if not exist "%LOGFILE%" echo   > "%LOGFILE%"
+
 rem  Si parte in un processo separato, altrimenti questo script non
 rem  finisce mai e non puoi fermare il server.
 rem
@@ -206,7 +226,14 @@ echo   ---- contenuto del log ----
 type "%LOGFILE%"
 echo.
 echo.
-echo   Il file e' orchestra.log, apribile con Blocco Note.
+if exist "%LOGFILE%.1" (
+    echo   ---- sessione precedente, in orchestra.log.1 ----
+    type "%LOGFILE%.1"
+    echo.
+)
+echo   Il log continua a scrivere. Per guardarlo in un editor apribile,
+echo   aspetta che il server sia fermo, oppure apri una copia.
+echo.
 exit /b 0
 
 
