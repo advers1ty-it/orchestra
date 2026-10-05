@@ -48,7 +48,35 @@ check("e non coperte da una const locale",
       and "const servizioTace" not in core,
       "una const dentro loadModels nasconde quella globale, e il popup "
       "legge un nome che non aggiorna mai")
-check("il popup le usa", "servizioTace" in popup)
+check("il popup usa la bandiera", "servizioTace" in popup)
+# Il difetto vero, e la ragione di questo test: il popup LEGGEVA
+# `servizioTace`, che e' definita in core.js. Nell'app funziona — i
+# file sono concatenati in uno scope solo e core.js viene prima — ma e'
+# una dipendenza invisibile: se l'ordine dei file cambia, il popup
+# muore con ReferenceError e il menu non si apre piu'.
+#
+# Il check di sopra dice solo che la parola c'e' nel popup, e ci sta
+# sia se la legge sia se la passa. Percio' questo: il popup non deve
+# dipendere da una variabile che non possiede. Il dato gli arriva come
+# parametro, e chi non ce l'ha dice "non lo so" invece di morire.
+check("il popup NON legge una bandiera di un altro file",
+      not re.search(r"if \(servizioTace\)", popup),
+      "il popup legge servizioTace come globale: funziona solo finche' "
+      "core.js viene prima, e un test che carica il popup da solo lo "
+      "scopre subito")
+check("e la riceve come parametro",
+      re.search(r"function mpApri\(servizioTaceArrivato\)", popup)
+      is not None,
+      "il dato deve arrivare da chi conosce il servizio, non andare a "
+      "cercarlo in un altro file")
+check("la variabile locale ha un nome suo",
+      "const servizioNonDichiaraTool" in popup,
+      "con lo stesso nome della globale, nessun check puo' distinguerle "
+      "senza conoscere la differenza: il nome deve dirlo da solo")
+check("i chiamanti lo passano",
+      popup.count("mpApri(sa)") >= 2,
+      "senza passare il dato, il parametro vale undefined e il messaggio "
+      "non compare mai")
 
 print("\n[2] La regola e' quella giusta")
 m = re.search(r"const tc = m\.tool_calling;.*?;", core, re.S)
@@ -130,7 +158,7 @@ if ris:
 
 print("\n[5] E il popup dice la cosa UNA volta")
 check("il piede ha il messaggio", "non dichiara il supporto tool" in popup)
-check("e solo se il servizio tace", "if (servizioTace)" in popup)
+check("e solo se il servizio tace", "if (servizioNonDichiaraTool)" in popup)
 # Conta le VOLTE che il messaggio entra nel piede, non quante volte
 # la parola compare nel file: se sta in un commento, il conteggio
 # menteva. E comunque deve essere uno solo — il piede e' una riga.

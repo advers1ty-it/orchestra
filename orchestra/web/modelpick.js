@@ -45,7 +45,14 @@ function mpChiudi() {
   if (mpBtn) mpBtn.setAttribute("aria-expanded", "false");
 }
 
-function mpApri() {
+// `servizioTaceArrivato` dice se il servizio non dichiara il supporto
+// tool. Va PASSATO, non letto da un altro file: il popup non ha un
+// catalogo suo, e andare a prenderlo da core.js funziona solo finche'
+// i file restano concatenati in quest'ordine. Il default e' false
+// perche' il silenzio e' il caso normale: un servizio che non dice
+// niente non deve interrompere il menu con un avviso che non serve.
+function mpApri(servizioTaceArrivato) {
+  const servizioNonDichiaraTool = servizioTaceArrivato === true;
   if (mpAperto || modelPick.disabled) return;
   mpAperto = true;
   if (mpBtn) mpBtn.setAttribute("aria-expanded", "true");
@@ -90,7 +97,7 @@ function mpApri() {
     // volta sola. Lo stesso ragionamento del menu: se il dubbio è
     // identico su ogni riga, non è un'informazione per riga — è
     // un'informazione sul servizio, e va detta una volta.
-    if (servizioTace) {
+    if (servizioNonDichiaraTool) {
       piede.textContent += " · questo servizio non dichiara il supporto tool: "
         + "non lo sappiamo, e lo scopriamo dal benchmark";
     }
@@ -222,7 +229,12 @@ function metaDiOpzione(testo) {
 // Il bottone al posto del select.
 on(mpBtn, "click", (ev) => {
   ev.stopPropagation();
-  if (mpAperto) mpChiudi(); else mpApri();
+  // `typeof servizioTace === "undefined"` invece di leggerlo e basta:
+  // il bundle mette questo file DOPO core.js, ma un test puo' caricare
+  // solo questo, e un ReferenceError qui significa che il menu non si
+  // apre piu' — il difetto peggiore possibile per un selettore.
+  const sa = (typeof servizioTace !== "undefined") ? servizioTace : false;
+  if (mpAperto) mpChiudi(); else mpApri(sa);
 });
 
 // La tastiera sul bottone chiuso: giu'/Invio apre. Sul select nativo e'
@@ -232,7 +244,8 @@ on(mpBtn, "keydown", (ev) => {
   if (mpAperto) return;
   if (ev.key === "ArrowDown" || ev.key === "Enter" || ev.key === " ") {
     ev.preventDefault();
-    mpApri();
+    const sa = (typeof servizioTace !== "undefined") ? servizioTace : false;
+    mpApri(sa);
   }
 });
 
