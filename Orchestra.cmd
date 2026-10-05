@@ -23,6 +23,7 @@ setlocal
 
 set "PORTA=8737"
 set "ROOT=%~dp0"
+set "LOGFILE=%~dp0orchestra.log"
 set "PY=python"
 
 rem --- quale python? ----------------------------------------------------
@@ -51,6 +52,7 @@ if /i "%~1"=="ferma"   goto :ferma
 if /i "%~1"=="stop"    goto :ferma
 if /i "%~1"=="riavvia" goto :riavvia
 if /i "%~1"=="restart" goto :riavvia
+if /i "%~1"=="log"     goto :vedilog
 
 goto :menu
 
@@ -76,7 +78,21 @@ echo.
 
 rem  Si parte in una finestra nuova, altrimenti questo script non
 rem  finisce mai e non puoi fermare il server.
-start "Orchestra" /min %PY% -m orchestra.cli web --port %PORTA%
+rem  Si parte in un processo separato, altrimenti questo script non
+rem  finisce mai e non puoi fermare il server.
+rem
+rem  `/b` e non `/min`: la finestra del server non deve stare nella
+rem  taskbar. Ma nascosta non vuol dire muta, quindi tutto quello che
+rem  scrive va su file, e si legge con `Orchestra.cmd log`.
+rem
+rem  Con `--no-browser` perche' senza, il server apre il browser da
+rem  solo E questo script lo riapre: due tab, e sembra un difetto.
+rem
+rem  Start-Process con -WindowStyle Hidden non funziona qui: con
+rem  PY uguale a "py -3", il -3 veniva letto come argomento
+rem  posizionale di Start-Process, che si rifiutava di accettarlo.
+rem  `start` di cmd e' quello che c'e' gia' e non ha il problema.
+start "Orchestra" /b %PY% -m orchestra.cli web --port %PORTA% --no-browser >> "%LOGFILE%" 2>&1
 
 rem  Poi si aspetta che la porta risponda davvero, e si apre il
 rem  browser solo allora. Aprirlo subito mostrerebbe "connessione
@@ -155,6 +171,46 @@ goto :avvia
 
 
 rem ===================================================================
+rem  Log
+rem ===================================================================
+:vedilog
+rem  Il server gira senza finestra, e una cosa senza voce non serve a
+rem  niente quando qualcosa va storto. Il log e' su file e si apre
+rem  solo quando lo chiedi.
+rem
+rem  Piatta, senza blocchi. In cmd una parentesi chiusa dentro un
+rem  blocco lo chiude, e quello che segue viene letto come un
+rem  comando a caso: l'errore che esce parla d'altro e non del posto
+rem  che si era chiuso per sbaglio. Nessuna sequenza di sostituzione
+rem  nei commenti per lo stesso motivo: una rem che contiene una
+rem  variabile di percorso viene valutata, e se quella variabile non
+rem  esiste si ferma tutto.
+echo.
+
+if exist "%LOGFILE%" goto :log_ce
+
+echo   Ancora nessun log: il server non e' mai partito da qui,
+echo   oppure non ha scritto ancora niente.
+echo.
+pause
+exit /b 0
+
+:log_ce
+rem  Dimensione e data le chiede `dir`, che le dà già in una riga
+rem  sola. Il tentativo con le variabili di percorso dentro un for
+rem  finiva con il testo della variabile non risolto stampato sulla
+rem  riga — peggio che non stampare niente, perché sembrava un dato.
+dir /-c "%LOGFILE%"
+echo.
+echo   ---- contenuto del log ----
+type "%LOGFILE%"
+echo.
+echo.
+echo   Il file e' orchestra.log, apribile con Blocco Note.
+exit /b 0
+
+
+rem ===================================================================
 rem  Menu
 rem ===================================================================
 :menu
@@ -164,13 +220,15 @@ echo.
 echo     1  avvia     apre il browser e avvia il server
 echo     2  ferma     chiude il server
 echo     3  riavvia   ferma e riapre
+echo     4  log       apre il log del server
 echo.
 set "SCELTA="
-set /p "SCELTA=Scegli 1, 2 o 3 e premi Invio: "
+set /p "SCELTA=Scegli da 1 a 4 e premi Invio: "
 
 if "%SCELTA%"=="1" goto :avvia
 if "%SCELTA%"=="2" goto :ferma
 if "%SCELTA%"=="3" goto :riavvia
+if "%SCELTA%"=="4" goto :vedilog
 if "%SCELTA%"=="" goto :menu
 
 echo.
