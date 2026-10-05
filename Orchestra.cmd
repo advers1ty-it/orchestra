@@ -96,7 +96,12 @@ if exist "%LOGFILE%" (
     move /y "%LOGFILE%" "%LOGFILE%.1" >nul 2>&1
     if exist "%LOGFILE%.1" echo   Il log di prima e' in orchestra.log.1
 )
-if not exist "%LOGFILE%" echo   > "%LOGFILE%"
+rem  `type nul > file` e non `echo > file`: in cmd, `echo` senza testo
+rem  dentro un redirect NON crea il file, e scrive invece "ECHO e'
+rem  disattivato" sullo standard output — che finiva nel log con una
+rem  parola in mezzo che non significava niente. `type nul` crea un
+rem  file vuoto, che e' quello che serve.
+type nul > "%LOGFILE%"
 
 rem  Si parte in un processo separato, altrimenti questo script non
 rem  finisce mai e non puoi fermare il server.

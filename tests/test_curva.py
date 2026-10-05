@@ -124,7 +124,7 @@ GIUSTE = {
                       "totale;100,00\n"
                       "dettaglio;40,00\n"
                       "dettaglio;60,03\n"),
-        "reporting.json": '{"differenza": 0.03, "riga": 3}\n',
+        "reporting.json": '{"differenza": 0.03, "riga": 4}\n',
     },
     "write_l2": {
         "avviso.md": ("## Cosa e' successo\nUn tubo si e' rotto.\n\n"

@@ -793,6 +793,36 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         pass
 
+    def handle_error(self, request, client_address) -> None:
+        """Silenzia il rumore di connessione, tieni il resto.
+
+        Un browser che chiude una scheda, o una scheda che viene
+        ricaricata, lascia la connessione a meta': il server vede
+        WinError 10053 e stampa uno stack trace di dieci righe per
+        niente. In un log che si legge quando qualcosa non va, quel
+        rumore copre le poche righe che contano.
+
+        Non e' una cosa da tacere sempre: un errore vero in `do_GET`
+        arriva come 500 e va visto. Qui si distingue solo quello che
+        arriva dalla rete, e si registra in una riga.
+        """
+        import sys as _sys
+
+        exc = _sys.exc_info()[1]
+        rumore = isinstance(exc, (ConnectionAbortedError,
+                                  ConnectionResetError,
+                                  BrokenPipeError))
+        if rumore:
+            print(f"  connessione chiusa dal browser "
+                  f"({client_address[0]}) — normale, non un errore",
+                  flush=True)
+            return
+        # tutto il resto: si lascia com'e'. Il default di http.server
+        # stampa lo stack trace e va lasciato andare, perche' un
+        # errore che non si vede non si corregge.
+        _sys.stderr.write(f"  errore serving {client_address[0]}: {exc!r}\n")
+        _sys.stderr.flush()
+
     # -- helper ------------------------------------------------------------
 
     def _send_bytes(self, code: int, body: bytes, content_type: str) -> None:
