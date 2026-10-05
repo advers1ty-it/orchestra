@@ -24,6 +24,7 @@ setlocal
 set "PORTA=8737"
 set "ROOT=%~dp0"
 set "LOGFILE=%~dp0orchestra.log"
+set "LOGERR=%~dp0orchestra.err.log"
 set "PY=python"
 
 rem --- quale python? ----------------------------------------------------
@@ -96,6 +97,10 @@ if exist "%LOGFILE%" (
     move /y "%LOGFILE%" "%LOGFILE%.1" >nul 2>&1
     if exist "%LOGFILE%.1" echo   Il log di prima e' in orchestra.log.1
 )
+rem  Anche l'errore ruota: su Start-Process stdout e stderr NON possono
+rem  andare sullo stesso file ("sono uguali"), quindi sono due. E se
+rem  il server non parte, il motivo e' quasi sempre li'.
+if exist "%LOGERR%" move /y "%LOGERR%" "%LOGERR%.1" >nul 2>&1
 rem  `type nul > file` e non `echo > file`: in cmd, `echo` senza testo
 rem  dentro un redirect NON crea il file, e scrive invece "ECHO e'
 rem  disattivato" sullo standard output — che finiva nel log con una
@@ -103,21 +108,48 @@ rem  parola in mezzo che non significava niente. `type nul` crea un
 rem  file vuoto, che e' quello che serve.
 type nul > "%LOGFILE%"
 
-rem  Si parte in un processo separato, altrimenti questo script non
-rem  finisce mai e non puoi fermare il server.
+rem  Si avvia un processo INDIPENDENTE, che resta vivo anche se
+rem  questa finestra si chiude.
 rem
-rem  `/b` e non `/min`: la finestra del server non deve stare nella
-rem  taskbar. Ma nascosta non vuol dire muta, quindi tutto quello che
-rem  scrive va su file, e si legge con `Orchestra.cmd log`.
+rem  `-WindowStyle Hidden` con Start-Process e' la strada giusta, e
+rem  prima falliva per una ragione precisa: `%PY%` era "py -3", e
+rem  Start-Process leggeva il -3 come argomento posizionale di se
+rem  stesso. Si risolve alla fonte: `-FilePath` vuole UN eseguibile,
+rem  quindi `-3` glielo si passa in ArgumentList, dove e' un argomento
+rem  del launcher e non dello Start-Process.
 rem
-rem  Con `--no-browser` perche' senza, il server apre il browser da
-rem  solo E questo script lo riapre: due tab, e sembra un difetto.
+rem  Perche' non `start /b`: `/b` vuol dire "nessuna finestra NUOVA", e
+rem  il processo condivida la console di questa. Chiudendo il cmd,
+rem  il server muore con lui — ed e' esattamente il difetto che
+rem  avevo creato io quando ho sostituito `/min` con `/b` per togliere
+rem  la finestra dalla taskbar. Si puo' nascondere la finestra senza
+rem  legare le vite: sono due cose diverse.
+rem  %PY1% e' l'eseguibile, %PY2% l'eventuale argomento. Due variabili
+rem  e non una sola con dentro "py -3": Start-Process vuole UN nome di
+rem  eseguibile in -FilePath, e il resto va in ArgumentList. Con
+rem  "py -3" dentro -FilePath, il -3 diventava argomento posizionale di
+rem  Start-Process, che si rifiutava di accettarlo.
+set "PY1="
+set "PY2="
+where py >nul 2>&1
+if not errorlevel 1 (
+    set "PY1=py"
+    set "PY2=-3"
+)
+if "%PY1%"=="" (
+    where python >nul 2>&1
+    if not errorlevel 1 set "PY1=python"
+)
+if "%PY1%"=="" goto :no_python
+
+rem  Il redirect lo mette Start-Process: il log continua a funzionare
+rem  anche con la finestra nascosta, che e' il punto.
 rem
-rem  Start-Process con -WindowStyle Hidden non funziona qui: con
-rem  PY uguale a "py -3", il -3 veniva letto come argomento
-rem  posizionale di Start-Process, che si rifiutava di accettarlo.
-rem  `start` di cmd e' quello che c'e' gia' e non ha il problema.
-start "Orchestra" /b %PY% -m orchestra.cli web --port %PORTA% --no-browser >> "%LOGFILE%" 2>&1
+rem  Tutto su UNA riga e senza variabili PowerShell: `$` dentro cmd
+rem  viene passato a PowerShell, ma `%` viene espanso dal cmd, e i due
+rem  linguaggi sulla stessa riga sbagliano. Senza variabili, niente
+rem  da espandere.
+powershell -NoProfile -Command "Start-Process -FilePath '%PY1%' -ArgumentList @('%PY2%','-m','orchestra.cli','web','--port','%PORTA%','--no-browser') -WindowStyle Hidden -RedirectStandardOutput '%LOGFILE%' -RedirectStandardError '%LOGERR%'"
 
 rem  Poi si aspetta che la porta risponda davvero, e si apre il
 rem  browser solo allora. Aprirlo subito mostrerebbe "connessione
@@ -186,7 +218,7 @@ if errorlevel 1 (
 )
 echo   Riavvio: fermo quello che c'e' e riparto pulito.
 echo   Lo faccio perche' un riavvio a meta' — processo nuovo, vecchio
-echo   ancora in ascolto — e' il caso peggiore: due server che si
+echo   ancora in ascolto e' il caso peggiore: due server che si
 echo   contendono la stessa porta e il primo che arriva risponde.
 echo.
 call :uccidi %PORTA%
@@ -234,6 +266,19 @@ echo.
 if exist "%LOGFILE%.1" (
     echo   ---- sessione precedente, in orchestra.log.1 ----
     type "%LOGFILE%.1"
+    echo.
+)
+rem  L'errore sta in un file a parte, e viene PRIMO: se il server non
+rem  e' partito, la ragione e' li' e non nel log normale. Cercarlo
+rem  dopo venti righe di output normale e' come non cercarlo.
+if exist "%LOGERR%" (
+    echo   ---- errori ----
+    type "%LOGERR%"
+    echo.
+)
+if exist "%LOGERR%.1" (
+    echo   ---- errori della sessione precedente ----
+    type "%LOGERR%.1"
     echo.
 )
 echo   Il log continua a scrivere. Per guardarlo in un editor apribile,

@@ -260,6 +260,17 @@ class Agent:
             self._maybe_compact()
 
             # --- chiamata al modello, con retry su errori transitori
+            #
+            # L'evento va PRIMA della chiamata, non dopo. Una chiamata
+            # che ragiona puo' durare 40 secondi — e quei 40 secondi
+            # erano la cosa piu' lunga e piu' vuota dello schermo: la
+            # UI non sapeva niente, il pulsante non si muoveva, e
+            # sembrava che Orchestra avesse smesso di funzionare.
+            #
+            # Il messaggio dice cosa sta per succedere, non cosa è
+            # successo: e' l'unica informazione utile durante
+            # un'attesa.
+            self._emit("thinking", iteration=self.state.iterations)
             resp = self._call_model_with_retry()
             self.state.total_tokens += resp.total_tokens
             self.state.usage_by_model[resp.model] = (

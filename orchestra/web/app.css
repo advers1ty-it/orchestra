@@ -787,3 +787,30 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .mp-btn #model-label {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* L'attesa: una riga che pulsa.
+
+   Il colore e' quello del testo secondario, non un colore nuovo:
+   e' un'informazione, non un avviso. La pulsazione dice "vivo" senza
+   occupare spazio e senza dover dire niente.
+
+   Con prefers-reduced-motion la pulsazione sparisce e la riga resta:
+   chi ha chiesto di non avere animazioni vuole comunque sapere che
+   il modello sta lavorando, e togliere la riga insieme all'animazione
+   lascerebbe lo schermo vuoto — che e' proprio il difetto che questa
+   cosa doveva risolvere. */
+.attesa {
+  color: var(--muted);
+  font-style: italic;
+  padding: 2px 0;
+  animation: attesa-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes attesa-pulse {
+  0%, 100% { opacity: .45; }
+  50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attesa { animation: none; opacity: .8; }
+}

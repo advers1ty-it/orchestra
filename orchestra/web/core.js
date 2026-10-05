@@ -173,6 +173,52 @@ function addNote(text) {
   scrollDown();
 }
 
+// L'attesa: una riga sola che pulsa e sparisce quando arriva qualcosa.
+//
+// Il motivo di una riga sola invece di una per iterazione: dopo cinque
+// tool in un turno il pannello avrebbe cinque righe "sto pensando",
+// e cioe' cinque righe che dicono la stessa cosa e coprono quello che
+// e' successo davvero. E' lo stesso difetto del [tool?] su ottanta
+// righe: un'etichetta ripetuta smette di essere un'informazione.
+const FRASI_ATTESA = [
+  "sto ragionando…",
+  "sto ragionando, e' un modello lento",
+  "ci sto mettendo, questo richiede piu' passaggi",
+];
+let attesaNodo = null;
+let attesaGiro = 0;
+let attesaTimer = 0;
+
+function mostraAttesa() {
+  if (!attesaNodo) {
+    attesaNodo = el("div", "attesa");
+    log.appendChild(attesaNodo);
+  }
+  attesaGiro += 1;
+  const i = Math.min(attesaGiro - 1, FRASI_ATTESA.length - 1);
+  attesaNodo.textContent = FRASI_ATTESA[i];
+  // Il ronzio: i puntini che si muovono dicono "vivo" senza dire
+  // nulla. Dopo quattro secondi il messaggio si fa piu' esplicito,
+  // perche' a quel punto non e' piu' un'attesa ma e' un'attesa lunga.
+  if (!attesaTimer) {
+    attesaTimer = setInterval(() => {
+      if (attesaNodo && !attesaNodo.textContent.endsWith("…")) {
+        attesaNodo.textContent = "sto ragionando…  (" + attesaGiro + ")";
+      }
+    }, 4000);
+  }
+  scrollDown();
+}
+
+function togliAttesa() {
+  if (attesaTimer) { clearInterval(attesaTimer); attesaTimer = 0; }
+  if (attesaNodo && attesaNodo.parentNode) {
+    attesaNodo.parentNode.removeChild(attesaNodo);
+  }
+  attesaNodo = null;
+  attesaGiro = 0;
+}
+
 // Tool: intestazione cliccabile + output richiudibile.
 const openTools = new Set();
 
@@ -317,7 +363,21 @@ function handle(kind, d) {
     case "user_message":
       addText("user", d.text);
       break;
+    case "thinking": {
+      // Il tempo piu' lungo e piu' vuoto dello schermo era quello
+      // fra "invio" e "prima risposta": 40 secondi per un modello che
+      // ragiona, e a schermo non succedeva niente. Sembrava che
+      // Orchestra avesse smesso di funzionare.
+      //
+      // UNA riga sola, che si aggiorna e sparisce: se ogni iterazione
+      // lasciasse un segnaposto, dopo cinque tool ci sarebbero cinque
+      // righe "sto pensando" e il pannello diventerebbe illeggibile —
+      // che e' il difetto che il [tool?] aveva.
+      mostraAttesa();
+      break;
+    }
     case "assistant": {
+      togliAttesa();
       if (d.content) {
         addText("assistant", d.content);
       }
@@ -329,6 +389,7 @@ function handle(kind, d) {
       break;
     }
     case "tool_end": {
+      togliAttesa();
       // abbiniamo per id, non "l'ultimo tool". Con due tool nello stesso
       // turno il risultato finiva sempre sulla stessa riga e l'altro
       // restava appeso su "..." per sempre. I tool vivono in `log`, non in
@@ -343,6 +404,7 @@ function handle(kind, d) {
       break;
     }
     case "tool_error":
+      togliAttesa();
       addNote(`errore tool ${d.tool}: ${d.error}`);
       break;
     case "compaction":
