@@ -18,6 +18,7 @@ import urllib.error
 from typing import Any
 
 from .types import LLMResponse, Message, ToolCall, new_id
+from .reasoning import build_reasoning_payload
 
 
 class ProviderError(RuntimeError):
@@ -187,28 +188,33 @@ class OpenAICompatAdapter:
     # -- API pubblica ------------------------------------------------------
 
     def chat(
-        self,
-        messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        stop: list[str] | None = None,
-    ) -> LLMResponse:
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": [m.to_api() for m in messages],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        if tools:
-            payload["tools"] = tools
-            payload["tool_choice"] = "auto"
-        if stop:
-            payload["stop"] = stop
+            self,
+            messages: list[Message],
+            tools: list[dict[str, Any]] | None = None,
+            *,
+            temperature: float = 0.7,
+            max_tokens: int = 4096,
+            stop: list[str] | None = None,
+            reasoning_level: str | None = None,
+        ) -> LLMResponse:
+            payload: dict[str, Any] = {
+                "model": self.model,
+                "messages": [m.to_api() for m in messages],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            # Provider-specific reasoning payload (no-op if unsupported)
+            reasoning_payload = build_reasoning_payload(self.name, self.model, reasoning_level)
+            if reasoning_payload:
+                payload.update(reasoning_payload)
+            if tools:
+                payload["tools"] = tools
+                payload["tool_choice"] = "auto"
+            if stop:
+                payload["stop"] = stop
 
-        data = self._post("/chat/completions", payload)
-        return self._normalize(data)
+            data = self._post("/chat/completions", payload)
+            return self._normalize(data)
 
     def _normalize(self, data: dict[str, Any]) -> LLMResponse:
         # Gatekeeper: alcuni gateway (OpenRouter incluso) rispondono HTTP 200

@@ -43,6 +43,9 @@ class LoopConfig:
     # quanti errori consecutivi tolleriamo prima di mollare: oltre, il
     # modello sta girando in tondo e continuare costa soldi senza avanzare
     max_consecutive_errors: int = 3
+    # reasoning effort: none | minimal | low | medium | high | xhigh | max
+    # None = usa default per provider/category
+    reasoning_level: str | None = None
 
 
 @dataclass
@@ -354,43 +357,44 @@ class Agent:
         return self.state
 
     def _call_model_with_retry(self) -> LLMResponse:
-        """Retry sui soli errori transitori (429/5xx/rete).
+            """Retry sui soli errori transitori (429/5xx/rete).
 
-        Non ritentiamo sui 4xx di autenticazione: quelli non passano col tempo,
-        e insistere su una chiave invalida è solo rumore nei log.
+            Non ritentiamo sui 4xx di autenticazione: quelli non passano col tempo,
+            e insistere su una chiave invalida è solo rumore nei log.
 
-        4 tentativi con backoff esponenziale: i gateway pubblici come
-        OpenRouter restituiscono 502 «provider unavailable» anche per decine
-        di secondi, e con 2 tentativi finiamo spesso per fallire un compito
-        che sarebbe andato a buon fine. Ogni tentativo costa un round-trip,
-        che è molto meno di una risposta persa.
-        """
-        last: ProviderError | None = None
-        for attempt in range(4):
-            try:
-                return self.provider.chat(
-                    self.state.messages,
-                    self.registry.api_payload(),
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
-                )
-            except ProviderError as e:
-                last = e
-                if not e.retryable or attempt == 3:
-                    raise
-                import time
+            4 tentativi con backoff esponenziale: i gateway pubblici come
+            OpenRouter restituiscono 502 «provider unavailable» anche per decine
+            di secondi, e con 2 tentativi finiamo spesso per fallire un compito
+            che sarebbe andato a buon fine. Ogni tentativo costa un round-trip,
+            che è molto meno di una risposta persa.
+            """
+            last: ProviderError | None = None
+            for attempt in range(4):
+                try:
+                    return self.provider.chat(
+                        self.state.messages,
+                        self.registry.api_payload(),
+                        temperature=self.config.temperature,
+                        max_tokens=self.config.max_tokens,
+                        reasoning_level=self.config.reasoning_level,
+                    )
+                except ProviderError as e:
+                    last = e
+                    if not e.retryable or attempt == 3:
+                        raise
+                    import time
 
-                # quanto aspettare: prima si chiede al server, e il
-                # backoff e' il minimo quando non risponde. Su un 429
-                # il provider scrive quanto aspettare; noi lo
-                # ignoravamo e ripartivamo dentro la sua finestra.
-                attesa = min(max(getattr(e, "retry_after", 0.0),
-                                 2.0 ** attempt * 0.5), 120.0)
-                self._emit("retry", attempt=attempt + 1,
-                           error=str(e), attesa=attesa)
-                time.sleep(attesa)
-        assert last is not None
-        raise last
+                    # quanto aspettare: prima si chiede al server, e il
+                    # backoff e' il minimo quando non risponde. Su un 429
+                    # il provider scrive quanto aspettare; noi lo
+                    # ignoravamo e ripartivamo dentro la sua finestra.
+                    attesa = min(max(getattr(e, "retry_after", 0.0),
+                                     2.0 ** attempt * 0.5), 120.0)
+                    self._emit("retry", attempt=attempt + 1,
+                               error=str(e), attesa=attesa)
+                    time.sleep(attesa)
+            assert last is not None
+            raise last
 
     # -- output ------------------------------------------------------------
 

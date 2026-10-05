@@ -697,13 +697,14 @@ class OrchestraApp:
         # con NameError, presentato come un crash in create() — che e'
         # dove guardavo, e non dove era.
         return Session(
-            provider=build_provider(provider_name, model=model,
-                                    env=load_env(ENV_PATH) | os.environ),
-            registry=default_registry(),
-            system_prompt=SYSTEM_PROMPT,
-            config=LoopConfig(max_iterations=12, context_limit=120_000,
-                              keep_recent=8),
-        )
+                    provider=build_provider(provider_name, model=model,
+                                            env=load_env(ENV_PATH) | os.environ),
+                    registry=default_registry(),
+                    system_prompt=SYSTEM_PROMPT,
+                    config=LoopConfig(max_iterations=12, context_limit=120_000,
+                                      keep_recent=8,
+                                      reasoning_level=os.environ.get("ORCHESTRA_REASONING", None)),
+                )
 
     def _collega_delega(self) -> None:
         """Costruisce la fabbrica del figlio e registra il tool.
