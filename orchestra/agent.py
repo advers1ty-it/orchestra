@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import traceback
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -30,6 +31,7 @@ from .fallback import (
     ChainEntry, FallbackState, FallbackReason,
     get_chain_for_provider, should_fallback
 )
+from .budget import budget_guard, BudgetLimits
 from .types import LLMResponse, Message, ToolRegistry
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,6 +56,8 @@ class LoopConfig:
     # reasoning effort: none | minimal | low | medium | high | xhigh | max
     # None = usa default per provider/category
     reasoning_level: str | None = None
+    # Budget limits per questa run (None = usa default)
+    budget_limits: BudgetLimits | None = None
 
 
 @dataclass
@@ -118,8 +122,13 @@ class Agent:
             else:
                 self.fallback_chain = fallback_chain or []
             self._fallback_state: FallbackState | None = None
+            # Budget guard
+            self._budget_state = None
+            if self.config.budget_limits:
+                session_id = f"{provider.name}_{getattr(provider, 'model', 'unknown')}_{int(datetime.now().timestamp())}"
+                self._budget_state = budget_guard().get_or_create_session(session_id, self.config.budget_limits)
 
-    # -- utility interne ---------------------------------------------------
+            # -- utility interne ---------------------------------------------------
 
     def _emit(self, kind: str, **data: Any) -> None:
         self.on_event(kind, data)
@@ -281,6 +290,12 @@ class Agent:
         # e la lezione si impara da quello che succede con i doppi.
         self._aggiorna_prompt()
 
+        if self._budget_state:
+            self._budget_state.reset_task()
+
+        if self._budget_state:
+            self._budget_state.reset_task()
+
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):
                 self.state.stopped_because = "canceled_da_should_continue"
@@ -327,6 +342,21 @@ class Agent:
                 ],
                 tokens=resp.total_tokens,
             )
+
+            # Budget: record usage after each model call
+            if self._budget_state and resp.total_tokens > 0:
+                prompt_tokens = getattr(resp, 'prompt_tokens', 0)
+                completion_tokens = getattr(resp, 'completion_tokens', 0)
+                if prompt_tokens == 0 and completion_tokens == 0:
+                    prompt_tokens = resp.total_tokens // 2
+                    completion_tokens = resp.total_tokens - prompt_tokens
+                cost_usd = (prompt_tokens + completion_tokens) / 1000 * 0.001
+                self._budget_state.add_usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost_usd=cost_usd, model=resp.model, category="")
+                violations = self._budget_state.check_limits()
+                if violations:
+                    self._emit("budget_violation", violations=violations)
+                    self.state.stopped_because = "budget_exceeded"
+                    return self.state
 
             # --- caso 1: il modello ha chiesto tool -> esegui e continua
             if resp.wants_tools:
