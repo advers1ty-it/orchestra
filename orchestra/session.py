@@ -562,7 +562,7 @@ class Session:
         """Se l'instradamento automatico e' acceso adesso."""
         return bool(self._routing_attivo)
 
-    def send(self, user_input: str, allegati: list | None = None) -> bool:
+    def send(self, user_input: str, allegati: list | None = None, scope: str | None = None) -> bool:
         """Invia un messaggio all'agente. Non blocca.
 
         Restituisce False se la sessione e' gia' occupata: rifiutiamo il
@@ -576,6 +576,9 @@ class Session:
         l'istruzione senza l'allegato, o il contrario.
 
         Un PDF con testo non viaggia come immagine: finisce nel testo
+         è la categoria di lavoro scelta nell'header (code, extraction,
+        reasoning, ecc.). Se fornito, guida l'instradamento automatico
+        invece di lasciarlo indovinare dalle parole chiave.
         del messaggio. Costa zero token ed e' esatto, mentre renderlo
         in immagini costerebbe 1100 token a pagina per un risultato
         peggiore.
@@ -593,7 +596,7 @@ class Session:
                 and not self._busy:
             scelto = None
             try:
-                scelto = self._scegli_primo(user_input)
+                scelto = self._scegli_primo(user_input, scope=scope)
             except Exception:  # noqa: BLE001
                 # Una scelta che fallisce non puo' far fallire il
                 # turno: si continua col modello che si ha. Ma si dice

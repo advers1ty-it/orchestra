@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Il motore di instradamento: quale modello, e perché.
 
 Tutta la materia prima c'era già — `Catalog.select`, `best_for`,
@@ -128,14 +130,19 @@ class Scelta:
 def instrada(cat: Catalog, richiesta: str, *,
              solo_gratis: bool = False,
              escluso: str | None = None,
-             provider: str = "openrouter") -> Scelta:
+             provider: str = "openrouter",
+             scope: str | None = None) -> Scelta:
     """Sceglie il modello per questa richiesta. Ritorna sempre una Scelta.
 
     Anche quando non trova niente: una decisione che non c'è non si
     distingue da un classifier che non ha girato, e la prima fa
     fallire il turno mentre la seconda passa inosservata.
     """
-    cat_id = categoria(richiesta)
+    # Se scope e' fornito, usa quello come categoria
+    if scope and scope in [c[0] for c in CATEGORIE]:
+        cat_id = scope
+    else:
+        cat_id = categoria(richiesta)
     candidati = cat.with_tools()
 
     # prima il punteggio, poi il filtro per costo

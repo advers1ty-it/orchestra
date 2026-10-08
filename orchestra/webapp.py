@@ -413,10 +413,17 @@ class OrchestraApp:
             except (ValueError, RuntimeError, ProviderError, KeyError):
                 return False
 
-        def instrada(prima_richiesta: str) -> str | None:
+        def instrada(prima_richiesta: str, scope: str | None = None) -> str | None:
             """Il PRIMO modello, scelto sui punteggi. None se non si puo'.
 
             Chiama routing.instrada, che non conosce la Sessione: il
+              motore di scelta e'uno solo e testato da solo, e la
+              Sessione gli passa solo la richiesta. Se la scelta fosse
+              dentro questa funzione, il classifier non si potrebbe
+              verificare senza una sessione viva — che e'esattamente
+              come i punteggi hanno finito per non essere usati da
+              nessuno. Se scope e' fornito, lo usa come categoria
+              invece di dedurla dal testo.
             motore di scelta e' uno solo e testato da solo, e la
             Sessione gli passa solo la richiesta. Se la scelta fosse
             dentro questa funzione, il classifier non si potrebbe
@@ -428,7 +435,7 @@ class OrchestraApp:
             cat = self.catalog
             if cat is None or not getattr(cat, "models", None):
                 return None
-            scelta = _instrada(cat, prima_richiesta)
+            scelta = _instrada(cat, prima_richiesta, scope=scope)
             # la scelta si scrive SEMPRE, anche quando coincide con
             # quello che gia' si usa: "perche' ha scelto questo" e' la
             # domanda che si fa davanti a un instradamento, e senza
@@ -1599,6 +1606,7 @@ class Handler(BaseHTTPRequestHandler):
             self._allega(s, body)
         elif path == "/api/send":
             text = (body.get("text") or "").strip()
+            scope = (body.get("scope") or "").strip() or None
             allegati, problema = self._dal_registro(
                 body.get("allegati") or [])
             if problema:
@@ -1607,7 +1615,7 @@ class Handler(BaseHTTPRequestHandler):
             if not text and not allegati:
                 self._json({"error": "messaggio vuoto"}, 400)
                 return
-            ok = s.send(text, allegati)
+            ok = s.send(text, allegati, scope=scope)
             if ok:
                 # Gli allegati vivono per un messaggio. Senza questo,
                 # premendo Invio due volte la stessa foto parte due

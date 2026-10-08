@@ -27,11 +27,12 @@ async function send() {
       // campo, perche' altrimenti perdi un file da 40.000 token
       // premendo due volte per errore.
       body: JSON.stringify({
-        text,
-        // Solo gli id: il file e' gia' al server, che lo ha validato
-        // quando e' stato caricato.
-        allegati: daMando.map((a) => a.id).filter(Boolean),
-      }),
+              text,
+              // Solo gli id: il file e' gia' al server, che lo ha validato
+              // quando e' stato caricato.
+              allegati: daMando.map((a) => a.id).filter(Boolean),
+              scope: scopeAttivo || null,
+            }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
