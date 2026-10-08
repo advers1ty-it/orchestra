@@ -86,17 +86,27 @@
          il pannello. Il perche' e' in modelpick.js. -->
   <div class="mp-wrap">
 
-      <select id="model-pick" class="mp-nascosto" title="Modello in uso"
-              aria-hidden="true" tabindex="-1" disabled>
-        <option value="">modello…</option>
+        <select id="model-pick" class="mp-nascosto" title="Modello in uso"
+                aria-hidden="true" tabindex="-1" disabled>
+          <option value="">modello…</option>
+        </select>
+        <button id="model-btn" class="mp-btn" type="button"
+                title="Modello in uso" aria-haspopup="listbox"
+                aria-expanded="false" disabled>
+          <span id="model-label">modello…</span>
+        </button>
+      </div>
+      <select id="reasoning-pick" title="Livello reasoning" disabled>
+        <option value="">auto</option>
+        <option value="none">none</option>
+        <option value="minimal">minimal</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+        <option value="xhigh">xhigh</option>
+        <option value="max">max</option>
       </select>
-      <button id="model-btn" class="mp-btn" type="button"
-              title="Modello in uso" aria-haspopup="listbox"
-              aria-expanded="false" disabled>
-        <span id="model-label">modello…</span>
-      </button>
-    </div>
-  <span id="scope-note" class="scope-note"></span>
+    <span id="scope-note" class="scope-note"></span>
 
   <div class="dot" id="dot"></div>
   <button id="btn-cancel" disabled>Annulla</button>
@@ -185,14 +195,26 @@
                fallisce solo alla prima chiamata, con un errore che
                sembra di rete. Un menu non puo' sbagliare. -->
           <div class="opzioni-selezione">
-            <label>Servizio
-              <select id="opt-provider" disabled></select>
-            </label>
-            <label>Modello
-              <select id="opt-model" disabled></select>
-            </label>
-            <span id="opt-provider-msg" class="small dim"></span>
-          </div>
+                      <label>Servizio
+                        <select id="opt-provider" disabled></select>
+                      </label>
+                      <label>Modello
+                        <select id="opt-model" disabled></select>
+                      </label>
+                      <label>Reasoning
+                        <select id="opt-reasoning" disabled>
+                          <option value="">auto (per categoria)</option>
+                          <option value="none">none</option>
+                          <option value="minimal">minimal</option>
+                          <option value="low">low</option>
+                          <option value="medium">medium</option>
+                          <option value="high">high</option>
+                          <option value="xhigh">xhigh</option>
+                          <option value="max">max</option>
+                        </select>
+                      </label>
+                      <span id="opt-provider-msg" class="small dim"></span>
+                    </div>
           <p class="opzioni-nota">La stessa scelta e' anche nei menu in
             alto, sopra la chat. Qui la trovi insieme a tutto il resto.</p>
         </section>

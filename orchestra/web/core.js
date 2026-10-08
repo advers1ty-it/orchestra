@@ -36,6 +36,7 @@ const log = $("log"), main = $("main"), input = $("input");
 const btnSend = $("btn-send"), btnCancel = $("btn-cancel"), btnReset = $("btn-reset");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
 const modelPick = $("model-pick");
+const reasoningPick = $("reasoning-pick");
 // id -> modello. Il popup del selettore serve il punteggio di una
 // riga, e cercarlo rileggendo le option sarebbe una ricerca fra 400
 // elementi per ognuna.

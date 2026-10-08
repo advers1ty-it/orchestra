@@ -37,7 +37,7 @@ from typing import Any
 # pannello le espone come menu a tendina. Se comparissero anche nella
 # lista delle chiavi, ci sarebbero due modi per cambiarle e divergerebbero
 # senza che nessuno se ne accorga.
-SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL")
+SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL", "ORCHESTRA_REASONING")
 
 WRITABLE: dict[str, str] = {
     "OPENROUTER_API_KEY": "OpenRouter",
@@ -52,6 +52,7 @@ WRITABLE: dict[str, str] = {
     "ARTIFICIAL_ANALYSIS_KEY": "Artificial Analysis",
     "ORCHESTRA_PROVIDER": "Provider predefinito",
     "ORCHESTRA_MODEL": "Modello predefinito",
+    "ORCHESTRA_REASONING": "Livello reasoning",
     "ORCHESTRA_OLLAMA_URL": "Indirizzo Ollama",
     "ORCHESTRA_LMSTUDIO_URL": "Indirizzo LM Studio",
 }

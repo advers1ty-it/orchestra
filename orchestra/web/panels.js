@@ -463,6 +463,7 @@ on(opzioniPanel, "click", (e) => { if (e.target === opzioniPanel) chiudiOpzioni(
 // non hanno bisogno di chiave e sono l'unica via senza account.
 const optProvider = $("opt-provider");
 const optModel = $("opt-model");
+const optReasoning = $("opt-reasoning");
 const optMsg = $("opt-provider-msg");
 
 const NOME_PROVIDER = {
@@ -531,18 +532,31 @@ function disegnaProvider(d) {
     s.disabled = false;
   }
   const segnalato = [optMsg, $("provider-note")].filter(Boolean);
-  for (const m of segnalato) {
-    // Solo quando qualcosa non torna. "ora: <nome>" e' il menu
-    // a tendina con un altro livello di affidabilita', e quando il
-    // servizio e' regolare la riga resta vuota.
-    m.textContent = utili.length
-      ? (utili.includes(corrente)
-          ? ""
-          : "servizio attuale non piu' disponibile")
-      : "nessuna chiave API configurata";
-    m.className = "small " + (utili.includes(corrente) ? "verde" : "rosso");
-  }
-}
+    for (const m of segnalato) {
+      // Solo quando qualcosa non torna. "ora: <nome>" e' il menu
+      // a tendina con un altro livello di affidabilita', e quando il
+      // servizio e' regolare la riga resta vuota.
+      m.textContent = utili.length
+        ? (utili.includes(corrente)
+            ? ""
+            : "servizio attuale non piu' disponibile")
+        : "nessuna chiave API configurata";
+      m.className = "small " + (utili.includes(corrente) ? "verde" : "rosso");
+    }
+      // Reasoning level from server state
+      if (optReasoning) {
+        const r = d.reasoning || "";
+        optReasoning.value = r;
+        optReasoning.disabled = false;
+      }
+      // Header reasoning pick
+      const hdrReasoning = $("reasoning-pick");
+      if (hdrReasoning) {
+        const r = d.reasoning || "";
+        hdrReasoning.value = r;
+        hdrReasoning.disabled = false;
+      }
+    }
 
 async function caricaModelli(prov, preseleziona) {
   optModel.replaceChildren();
@@ -668,8 +682,55 @@ async function cambiaServizio(p) {
 // quindi qui basta passargli quello che c'e'.
 on($("opt-provider"), "change", (e) => cambiaServizio(e.target.value));
 
+on(optReasoning, "change", async () => {
+  const r = optReasoning.value;
+  optMsg.textContent = "cambio reasoning…";
+  try {
+    const resp = await fetch("/api/reasoning", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reasoning: r }),
+    });
+    const d = await resp.json();
+    if (!resp.ok) {
+      optMsg.textContent = d.error || ("errore " + resp.status);
+      optMsg.className = "small rosso";
+      // ripristina il valore precedente
+      await caricaOpzioni();
+      return;
+    }
+    optMsg.textContent = "";
+    optMsg.className = "small verde";
+  } catch (e) {
+    optMsg.textContent = "cambio fallito: " + e;
+    optMsg.className = "small rosso";
+    await caricaOpzioni();
+  }
+});
+
+// Header reasoning pick
+const hdrReasoning = $("reasoning-pick");
+on(hdrReasoning, "change", async () => {
+  const r = hdrReasoning.value;
+  try {
+    const resp = await fetch("/api/reasoning", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reasoning: r }),
+    });
+    const d = await resp.json();
+    if (!resp.ok) {
+      // ripristina
+      await caricaOpzioni();
+      return;
+    }
+  } catch (e) {
+    await caricaOpzioni();
+  }
+});
+
 // Lo stesso gesto, nella chat. Il modello segue il servizio: e' quello
-// che ti aspetteresti, e senza questa sincronizzazione scegli un
+// che ti aspetti, e senza questa sincronizzazione scegli un
 // modello su un servizio e lo scambi su un altro.
 on($("provider-pick"), "change", (e) => cambiaServizio(e.target.value));
 

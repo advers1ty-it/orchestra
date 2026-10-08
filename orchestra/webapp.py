@@ -1126,6 +1126,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
                 "motori": sorted(NO_KEY_PROVIDERS),
                 "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
+                "reasoning": self.app.env.get("ORCHESTRA_REASONING", ""),
             })
         elif path == "/api/locali":
             # Separato perche' e' lento per costruzione: si interrogano
