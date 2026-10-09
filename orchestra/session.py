@@ -742,6 +742,39 @@ class Session:
             if now_free:
                 self.bridge.emit("idle", {"busy": False})
 
+    def _nuova_sessione_db(self) -> int:
+        """Crea una riga nello storico e ne torna l'id."""
+        try:
+            return storico().nuova_sessione(modello=self.modello_in_uso())
+        except Exception:
+            return -1
+
+    def carica_sessione(self, sessione_id: int) -> bool:
+        """Ripristina una conversazione dal disco.
+
+        Sostituisce lo stato in memoria, non lo accoda: i messaggi di
+        adesso appartengono a un'altra chat, e mischiare le due darebbe
+        una conversazione che non è mai esistita.
+        """
+        if self._busy:
+            raise RuntimeError("sessione occupata: attendi o annulla prima")
+        try:
+            messaggi = storico().messaggi(sessione_id)
+        except Exception:
+            return False
+        with self._lock:
+            self._sessione_id = sessione_id
+            ricostruiti = [Message(role="system",
+                                   content=self.agent.system_prompt)]
+            for m in messaggi:
+                if m["ruolo"] in ("user", "assistant") and m["contenuto"].strip():
+                    ricostruiti.append(Message(role=m["ruolo"],
+                                               content=m["contenuto"],
+                                               name=m.get("nome")))
+            self.agent.state.messages = ricostruiti
+        self.bridge.emit("sessione_caricata", {"id": sessione_id})
+        return True
+
     def _salva_su_disco(self) -> None:
         """Scrive i messaggi del turno nello storico.
 
@@ -860,6 +893,12 @@ class Session:
             self.agent.state.compactions = 0
             self.agent.state.stopped_because = ""
             self.agent.state.usage_by_model = {}
+            # Nuova conversazione = nuova riga nello storico, non la
+            # vecchia svuotata. Senza questo, "nuova chat" cancella la
+            # conversazione di ieri e ci scrive sopra: l'utente crede di
+            # averne aperta una e ha perso l'altra.
+            if self._sessione_id is not None:
+                self._sessione_id = self._nuova_sessione_db()
         self.bridge.emit("reset", {})
 
     def wait(self, timeout: float | None = None) -> bool:
