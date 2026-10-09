@@ -1248,3 +1248,26 @@ body.side-trascina { user-select: none; cursor: col-resize; }
   flex-shrink: 0;
   margin-right: 2px;
 }
+
+
+/* ---------- la sezione Skill non deve mai sparire ----------
+   Le tre sezioni hanno quote di altezza: cronologia 40vh, memoria 22vh,
+   skill 22vh. La sidebar è overflow:hidden, e con 104 skill la lista
+   sforava la sua quota e spingeva FUORI l'intera sezione — titolo,
+   bottone "Apri tutte le capacità" e lista. Il bottante non era
+   "sparito": era sotto il bordo, invisibile.
+
+   `flex-shrink: 0` sulla sezione dice che non si comprime; lo scroll
+   interno della lista assorbe il troppo. */
+.side-sez {
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+/* E la lista delle skill, se ha troppe righe, scrolla invece di
+   allargarsi: senza `overflow` esplicito la <ul> cresce e butta fuori
+   quello che viene dopo. */
+#side-skill {
+  overflow-y: auto;
+  min-height: 0;
+}
