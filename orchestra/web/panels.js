@@ -879,6 +879,9 @@ on(optModel, "change", async () => {
     optMsg.textContent = "";
     optMsg.className = "small verde";
     loadModels();
+    // Stesso motivo di core.js: il limite segue il modello, e la nota
+    // va riletta o mostra il valore di prima.
+    await caricaOpzioni();
   } catch (e) {
     optMsg.textContent = "cambio fallito: " + e;
     optMsg.className = "small rosso";
