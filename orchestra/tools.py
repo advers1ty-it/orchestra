@@ -534,6 +534,12 @@ def default_registry() -> ToolRegistry:
     r.register(tool_list_dir())
     r.register(tool_run_shell())
     r.register(tool_calculate())
+    # La memoria. Strumento e non iniezione: iniettare tutta la memoria
+    # a ogni turno costa token in proporzione a quanto ricordi, e una
+    # memoria che cresce per mesi avvelena il contesto di ogni richiesta.
+    # Adesso l'agente cerca quello che gli serve e paga solo per quello.
+    from .memoria_tools import tool_memoria
+    r.register(tool_memoria())
     # Le skill vengono dopo: i loro tool hanno senso solo se l'indice
     # sa di cosa parla, e l'indice si riempie con skill_importa. Ma
     # sono attivi subito — un tool che si accende solo dopo che
