@@ -869,8 +869,9 @@ on(optModel, "change", async () => {
     if (!r.ok) {
       // Il select torna al modello vero: dopo un rifiuto restava
       // quello nuovo, e il menu mentiva su quello che l'agente
-      // avrebbe usato davvero.
-      await caricaModelli(d.provider || optProvider.value, null);
+      // avrebbe usato davvero. `caricaOpzioni` preseleziona il modello
+      // del server, quindi è lei a rimettere quello giusto.
+      await caricaOpzioni();
       optMsg.textContent = d.error || ("errore " + r.status);
       optMsg.className = "small rosso";
       return;
@@ -1128,7 +1129,11 @@ async function caricaOpzioni() {
 
     // provider e modello: due menu in alto, non due righe di chiavi
     disegnaProvider(d);
-    caricaModelli(d.provider || optProvider.value, null);
+    // Il modello vero preselezionato, non il primo free: senza, aprire
+    // il pannello (o ricaricarlo dopo un cambio) rimette il menu sul
+    // primo free e sembra che il cambio non abbia funzionato — mentre
+    // il server ha già cambiato e risponde col modello nuovo.
+    caricaModelli(d.provider || optProvider.value, d.model || null);
 
     // i motori locali arrivano in una richiesta separata: sono una
     // domanda di rete a localhost e possono costare un timeout. Se

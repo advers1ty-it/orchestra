@@ -1329,6 +1329,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
                 "motori": sorted(NO_KEY_PROVIDERS),
                 "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
+                "model": self.app.env.get("ORCHESTRA_MODEL", ""),
                 "reasoning": self.app.env.get("ORCHESTRA_REASONING", ""),
                 "budget": _budget_per_pannello(self.app.env),
                 "max_iterations": self.app.session.agent.config.max_iterations,
