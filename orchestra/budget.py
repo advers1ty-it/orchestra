@@ -158,29 +158,29 @@ class BudgetState:
         violations: list[str] = []
         with self._lock:
             # Limiti sessione
-            if self.session_total_tokens > self.limits.max_tokens_per_session:
+            if self.limits.max_tokens_per_session and self.session_total_tokens > self.limits.max_tokens_per_session:
                 violations.append(
                     f"Token sessione: {self.session_total_tokens:,} > "
                     f"{self.limits.max_tokens_per_session:,}")
-            if self.session_cost_usd > self.limits.max_cost_usd_per_session:
+            if self.limits.max_cost_usd_per_session and self.session_cost_usd > self.limits.max_cost_usd_per_session:
                 violations.append(
                     f"Costo sessione: ${self.session_cost_usd:.2f} > "
                     f"${self.limits.max_cost_usd_per_session:.2f}")
-            if self.session_requests > self.limits.max_requests_per_session:
+            if self.limits.max_requests_per_session and self.session_requests > self.limits.max_requests_per_session:
                 violations.append(
                     f"Richieste sessione: {self.session_requests} > "
                     f"{self.limits.max_requests_per_session}")
 
             # Limiti task
-            if self.task_total_tokens > self.limits.max_tokens_per_task:
+            if self.limits.max_tokens_per_task and self.task_total_tokens > self.limits.max_tokens_per_task:
                 violations.append(
                     f"Token task: {self.task_total_tokens:,} > "
                     f"{self.limits.max_tokens_per_task:,}")
-            if self.task_cost_usd > self.limits.max_cost_usd_per_task:
+            if self.limits.max_cost_usd_per_task and self.task_cost_usd > self.limits.max_cost_usd_per_task:
                 violations.append(
                     f"Costo task: ${self.task_cost_usd:.2f} > "
                     f"${self.limits.max_cost_usd_per_task:.2f}")
-            if self.task_iterations > self.limits.max_iterations_per_task:
+            if self.limits.max_iterations_per_task and self.task_iterations > self.limits.max_iterations_per_task:
                 violations.append(
                     f"Iterazioni task: {self.task_iterations} > "
                     f"{self.limits.max_iterations_per_task}")
@@ -190,11 +190,11 @@ class BudgetState:
             # renderebbe il messaggio "Speso oggi: $0.00 > $0.00", che non
             # dice niente -- ed è proprio lì che si lavora quando si
             # sperimentano i tetti.
-            if giorno > self.limits.max_cost_usd_per_day:
+            if self.limits.max_cost_usd_per_day and giorno > self.limits.max_cost_usd_per_day:
                 violations.append(
                     f"Speso oggi: ${giorno:.4f} > "
                     f"${self.limits.max_cost_usd_per_day:.4f}")
-            if mese > self.limits.max_cost_usd_per_month:
+            if self.limits.max_cost_usd_per_month and mese > self.limits.max_cost_usd_per_month:
                 violations.append(
                     f"Speso questo mese: ${mese:.4f} > "
                     f"${self.limits.max_cost_usd_per_month:.4f}")

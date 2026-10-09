@@ -1435,3 +1435,25 @@ select:disabled {
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+
+/* ---------- il ragionamento, mentre accade ----------
+   Distinto dalla risposta ma non nascosto: se fosse grigio e piccolo non
+   si leggerebbe, se fosse uguale alla risposta non si capirebbe quale
+   delle due è la risposta. */
+.ragionamento {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--panel-2);
+  border-left: 2px solid var(--border);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 11px;
+  margin: 6px 0 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ragionamento[hidden] { display: none; }

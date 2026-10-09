@@ -42,7 +42,7 @@ ENV_PATH = os.path.join(HERE, ".env")
 class LoopConfig:
     """Parametri del loop. I default sono scelti, non arbitrari."""
 
-    max_iterations: int = 12
+    max_iterations: int = 20
     context_limit: int = 120_000
     keep_recent: int = 8
     temperature: float = 0.7
@@ -138,6 +138,27 @@ class Agent:
 
     def _emit(self, kind: str, **data: Any) -> None:
         self.on_event(kind, data)
+
+    def _on_stream(self, kind: str, data: dict[str, Any]) -> None:
+        """Un pezzo di ragionamento o di contenuto, mentre arriva.
+
+        Eventi separati da `thinking`: `thinking` dice "ho cominciato",
+        questi dicono cosa sta uscendo. Uno solo dei due sarebbe stato o
+        muto all'inizio o ripetitivo dopo.
+
+        Non si accumula in un campo dell'agente: il ragionamento completo
+        è già in `LLMResponse.reasoning`, che torna da `chat_stream`. Un
+        secondo accumulo sarebbe la stessa informazione in due posti, e
+        quello dell'agente si sbaglia — provato, teneva 40 caratteri su
+        105 eventi perché lo azzeravo a ogni iterazione del loop.
+        """
+        testo = data.get("testo") or ""
+        if not testo:
+            return
+        if kind == "ragionamento":
+            self._emit("ragionamento", testo=testo)
+        elif kind == "contenuto":
+            self._emit("contenuto", testo=testo)
 
     def _maybe_compact(self) -> None:
         report = fit_context(
@@ -467,6 +488,24 @@ class Agent:
                 # Retry loop per questo provider
                 for attempt in range(entry.max_retries + 1):
                     try:
+                        # Lo streaming: i pezzi del ragionamento arrivano
+                        # mentre il modello li scrive. Verificato — 2240
+                        # eventi e 14068 caratteri su una domanda di fisica,
+                        # tutti buttati prima perché `chat()` prendeva la
+                        # risposta in blocco.
+                        #
+                        # Il fallback sul metodo in blocco è dentro
+                        # `chat_stream`, quindi un provider che non lo fa
+                        # non rompe niente.
+                        if hasattr(provider, "chat_stream"):
+                            return provider.chat_stream(
+                                self.state.messages,
+                                self.registry.api_payload(),
+                                temperature=entry.temperature,
+                                max_tokens=entry.max_tokens,
+                                reasoning_level=self.config.reasoning_level,
+                                on_event=self._on_stream,
+                            )
                         return provider.chat(
                             self.state.messages,
                             self.registry.api_payload(),

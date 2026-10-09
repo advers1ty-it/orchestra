@@ -190,6 +190,10 @@ let attesaNodo = null;
 let attesaGiro = 0;
 let attesaTimer = 0;
 
+// Se la riga del ragionamento è aperta. Senza questo segno, ogni pezzo
+// riaprirebbe il blocco e il testo ricomincerebbe da capo.
+let ragionamentoVisibile = false;
+
 function mostraAttesa() {
   if (!attesaNodo) {
     attesaNodo = el("div", "attesa");
@@ -377,7 +381,21 @@ function handle(kind, d) {
       mostraAttesa();
       break;
     }
+    case "ragionamento": {
+      // Il ragionamento arriva a pezzi. La riga d'attesa sparisce al primo
+      // pezzo: da lì in poi c'è qualcosa da leggere, e tenerle tutte e due
+      // direbbe due volte la stessa cosa.
+      togliAttesa();
+      if (!ragionamentoVisibile) {
+        ragionamentoVisibile = true;
+        ragionamentoApri();
+      }
+      ragionamentoAggiungi(d.testo || "");
+      break;
+    }
     case "assistant": {
+      ragionamentoVisibile = false;
+      ragionamentoChiudi();
       togliAttesa();
       if (d.content) {
         addText("assistant", d.content);
