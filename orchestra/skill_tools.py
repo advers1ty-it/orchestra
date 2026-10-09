@@ -69,8 +69,11 @@ def _testo(testo: str, *, limite: int = 30000) -> str:
 
 
 def tool_skill_cerca() -> Tool:
-    async def handler(args: dict[str, Any]) -> str:
-        parole = args.get("parole") or ""
+    # La firma è a keyword, non un dict: l'agent chiama `handler(**args)`,
+    # e con `args: dict` ogni chiamata moriva con "unexpected keyword
+    # argument". Tutti e quattro i tool di questo file avevano lo stesso
+    # difetto.
+    async def handler(parole: str = "", limite: int = 8) -> str:
         if isinstance(parole, list):
             parole = " ".join(str(p) for p in parole)
         parole = str(parole).strip()
@@ -81,7 +84,11 @@ def tool_skill_cerca() -> Tool:
         if not i.tutte():
             return ("Non c'e' nessuna skill. Importane una con skill_importa, "
                     "oppure fai il compito e poi usa skill_genera.")
-        trovate = i.cerca(parole.split(), limite=int(args.get("limite") or 8))
+        try:
+            limite = max(1, min(int(limite or 8), 50))
+        except (TypeError, ValueError):
+            limite = 8
+        trovate = i.cerca(parole.split(), limite=limite)
         if not trovate:
             return (f"Nessuna skill su {len(i.tutte())} parla di {parole!r}. "
                     f"Procedi senza, e se il tuo metodo funziona valuta "
@@ -115,8 +122,8 @@ def tool_skill_cerca() -> Tool:
 
 
 def tool_skill_leggi() -> Tool:
-    async def handler(args: dict[str, Any]) -> str:
-        nome = str(args.get("nome") or "").strip()
+    async def handler(nome: str = "") -> str:
+        nome = str(nome or "").strip()
         if not nome:
             return "Che skill? Passa il nome esatto."
         i = _indice()
@@ -150,11 +157,12 @@ def tool_skill_leggi() -> Tool:
 
 
 def tool_skill_genera() -> Tool:
-    async def handler(args: dict[str, Any]) -> str:
-        nome = str(args.get("nome") or "").strip()
-        descrizione = str(args.get("descrizione") or "").strip()
-        corpo = str(args.get("procedura") or "").strip()
-        obiettivo = str(args.get("obiettivo") or "").strip()
+    async def handler(nome: str = "", descrizione: str = "",
+                      procedura: str = "", obiettivo: str = "") -> str:
+        nome = str(nome or "").strip()
+        descrizione = str(descrizione or "").strip()
+        corpo = str(procedura or "").strip()
+        obiettivo = str(obiettivo or "").strip()
         if not nome or not corpo:
             return ("Servono nome e procedura. La procedura e' cosa hai fatto, "
                     "passo passo, con i comandi esatti: non un riassunto, un "
@@ -210,12 +218,12 @@ def tool_skill_genera() -> Tool:
 
 
 def tool_skill_importa() -> Tool:
-    async def handler(args: dict[str, Any]) -> str:
-        sorgente = str(args.get("cartella") or "").strip()
+    async def handler(cartella: str = "", categoria: str = "") -> str:
+        sorgente = str(cartella or "").strip()
         if not sorgente:
             return "Che cartella? Il percorso di uno store con dentro le cartelle delle skill."
         i = _indice()
-        n, nomi = i.importa(sorgente, categoria=str(args.get("categoria") or "").strip())
+        n, nomi = i.importa(sorgente, categoria=str(categoria or "").strip())
         if not n:
             return (f"Nessuna skill importata da {sorgente}: dentro non ci sono "
                     f"cartelle con un SKILL.md.")

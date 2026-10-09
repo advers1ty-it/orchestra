@@ -213,6 +213,14 @@ class LLMResponse:
     completion_tokens: int = 0
     finish_reason: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
+    # Il ragionamento, se il modello lo manda. OpenRouter lo mette in
+    # `delta.reasoning` durante lo streaming e in `message.reasoning` alla
+    # fine: 328 chunk e 2044 caratteri su una domanda di fisica, TUTTI
+    # prima del primo carattere di contenuto.
+    #
+    # Questo campo è il vuoto che l'utente vedeva: 18 secondi di niente,
+    # mentre il modello stava lavorando e non lo potevamo dire.
+    reasoning: str = ""
 
     @property
     def total_tokens(self) -> int:

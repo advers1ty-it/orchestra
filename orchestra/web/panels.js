@@ -464,6 +464,8 @@ on(opzioniPanel, "click", (e) => { if (e.target === opzioniPanel) chiudiOpzioni(
 const optProvider = $("opt-provider");
 const optModel = $("opt-model");
 const optReasoning = $("opt-reasoning");
+const optMaxIters = $("opt-max-iters");
+const optContextNote = $("opt-context-note");
 const optBudgetTaskTokens = $("budget-task-tokens");
 const optBudgetTaskCost = $("budget-task-cost");
 const optBudgetTaskIters = $("budget-task-iters");
@@ -560,6 +562,18 @@ function disegnaProvider(d) {
         const r = d.reasoning || "";
         optReasoning.value = r;
         optReasoning.disabled = false;
+      }
+      // Max iterazioni + limite contesto corrente. Il limite è calcolato
+      // dal modello in uso (75% della sua finestra): si mostra, non si
+      // imposta — cambiarlo a mano litigherebbe con l'allineamento
+      // automatico al cambio modello.
+      if (optMaxIters) {
+        optMaxIters.value = d.max_iterations || "";
+        optMaxIters.disabled = false;
+      }
+      if (optContextNote && typeof d.context_limit === "number") {
+        const k = Math.round(d.context_limit / 1000);
+        optContextNote.textContent = `compattazione oltre ~${k}k token (75% della finestra del modello)`;
       }
       // Header reasoning pick
       const hdrReasoning = $("reasoning-pick");
@@ -721,6 +735,35 @@ on(optReasoning, "change", async () => {
       optMsg.textContent = d.error || ("errore " + resp.status);
       optMsg.className = "small rosso";
       // ripristina il valore precedente
+      await caricaOpzioni();
+      return;
+    }
+    optMsg.textContent = "";
+    optMsg.className = "small verde";
+  } catch (e) {
+    optMsg.textContent = "cambio fallito: " + e;
+    optMsg.className = "small rosso";
+    await caricaOpzioni();
+  }
+});
+
+on(optMaxIters, "change", async () => {
+  const n = parseInt(optMaxIters.value, 10);
+  if (!n || n < 1) {
+    await caricaOpzioni();
+    return;
+  }
+  optMsg.textContent = "cambio iterazioni…";
+  try {
+    const resp = await fetch("/api/iterazioni", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ max_iterations: n }),
+    });
+    const d = await resp.json();
+    if (!resp.ok) {
+      optMsg.textContent = d.error || ("errore " + resp.status);
+      optMsg.className = "small rosso";
       await caricaOpzioni();
       return;
     }
@@ -2975,4 +3018,36 @@ if (sideCerca) {
       caricaSideSessioni();
     }
   });
+}
+
+// ------------------------------------------------- streaming del ragionamento
+
+function ragionamentoNodo() {
+  let n = document.getElementById("ragionamento");
+  if (!n) {
+    n = document.createElement("div");
+    n.id = "ragionamento";
+    n.className = "ragionamento";
+    n.setAttribute("hidden", "");
+    log.appendChild(n);
+  }
+  return n;
+}
+
+function ragionamentoApri() {
+  const n = ragionamentoNodo();
+  n.textContent = "";
+  n.removeAttribute("hidden");
+  scrollDown();
+}
+
+function ragionamentoAggiungi(testo) {
+  const n = ragionamentoNodo();
+  n.textContent += testo;
+  scrollDown();
+}
+
+function ragionamentoChiudi() {
+  const n = document.getElementById("ragionamento");
+  if (n) n.setAttribute("hidden", "");
 }

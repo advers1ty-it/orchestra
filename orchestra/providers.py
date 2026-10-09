@@ -61,6 +61,15 @@ class ProviderError(RuntimeError):
 # Status che valgono la pena ritentare: rete intasata o quota esaurita.
 RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
 
+
+class _StreamNonSupportato(Exception):
+    """Il provider non fa lo streaming su questo modello.
+
+    Non è un errore: è una capacità che non c'è. Distinguerla serve a
+    tornare alla richiesta in blocco invece di propagare un'eccezione che
+    sembra un guasto di rete.
+    """
+
 def _retry_after(corpo: str, headers=None) -> float:
     """Quanti secondi chiede il server di aspettare. Zero se non lo dice.
 
@@ -215,6 +224,201 @@ class OpenAICompatAdapter:
 
             data = self._post("/chat/completions", payload)
             return self._normalize(data)
+
+    def chat_stream(
+            self,
+            messages: list[Message],
+            tools: list[dict[str, Any]] | None = None,
+            *,
+            temperature: float = 0.7,
+            max_tokens: int = 4096,
+            stop: list[str] | None = None,
+            reasoning_level: str | None = None,
+            on_event=None,
+    ) -> LLMResponse:
+        """Come `chat`, ma i pezzi arrivano man mano che il modello li scrive.
+
+        Metodo SEPARATO, e non un flag su `chat`: l'agent loop, il
+        benchmark e la delega ragionano su `LLMResponse` completo — token
+        totali, durata, `finish_reason`. Aggiungere lo streaming lì
+        significava toccare tutti quelli, e un rialzo di costo in cambio
+        di niente.
+
+        Qui serve una cosa sola: mostrare il ragionamento mentre accade.
+        Verificato su un modello gratuito con `reasoning: high` — 328
+        chunk, 2044 caratteri, tutti prima del primo carattere di
+        contenuto. È quel vuoto che l'utente guardava senza sapere se
+        fosse rotto.
+
+        `on_event(kind, data)` riceve `ragionamento` e `contenuto`. Se
+        manca, lo streaming degrada a `chat` con una richiesta in blocco.
+        """
+        def emetti(kind: str, data: dict) -> None:
+            if on_event is None:
+                return
+            try:
+                on_event(kind, data)
+            except Exception:
+                # La UI non deve poter far cadere una risposta già pagata.
+                pass
+
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [m.to_api() for m in messages],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        # Con lo streaming si chiedono anche gli usage: senza, i token
+        # totali non arrivano nei chunk e il budget di spesa non li vede.
+        payload["stream_options"] = {"include_usage": True}
+        reasoning_payload = build_reasoning_payload(self.name, self.model,
+                                                    reasoning_level)
+        if reasoning_payload:
+            payload.update(reasoning_payload)
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        if stop:
+            payload["stop"] = stop
+
+        # Se il provider rifiuta lo streaming si torna al blocco: la
+        # risposta giusta conta più del modo in cui arriva.
+        try:
+            return self._post_stream("/chat/completions", payload, emetti)
+        except _StreamNonSupportato:
+            payload.pop("stream", None)
+            payload.pop("stream_options", None)
+            data = self._post("/chat/completions", payload)
+            risposta = self._normalize(data)
+            if risposta.reasoning:
+                emetti("ragionamento", {"testo": risposta.reasoning})
+            if risposta.content:
+                emetti("contenuto", {"testo": risposta.content})
+            return risposta
+
+    def _post_stream(self, path: str, payload: dict[str, Any],
+                     emetti) -> LLMResponse:
+        """Fa la chiamata in streaming e ricompone la risposta.
+
+        I chunk arrivano come `data: {...}` e finiscono con `data: [DONE]`.
+        I tool call arrivano a pezzi, per indice: vanno accumulati e non
+        presi uno per uno, o una chiamata con tre argomenti diventa tre
+        chiamate con un argomento ciascuna.
+        """
+        import urllib.request
+        url = self.base_url.rstrip("/") + path
+        corpo = json.dumps(payload).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(url, data=corpo, headers=headers,
+                                     method="POST")
+        try:
+            resp = urllib.request.urlopen(req, timeout=self.timeout)
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8")[:500]
+            except Exception:
+                pass
+            # Un 400 che parla di `stream` vuol dire "non lo faccio": si
+            # torna al blocco invece di morire su una capacità che il
+            # provider non ha.
+            if e.code == 400 and "stream" in (detail or "").lower():
+                raise _StreamNonSupportato(detail)
+            raise ProviderError(
+                f"{self.name}: HTTP {e.code} — {detail or e.reason}",
+                retryable=e.code in RETRYABLE_STATUS,
+                status=e.code,
+                retry_after=_retry_after(detail or "", getattr(e, "headers", None)),
+            )
+
+        contenuto: list[str] = []
+        ragionamento: list[str] = []
+        tool_per_indice: dict[int, dict[str, Any]] = {}
+        modello = payload.get("model", "")
+        finish = ""
+        uso: dict[str, Any] = {}
+
+        with resp:
+            grezzo = resp.readline()
+            while grezzo:
+                riga = grezzo.decode("utf-8", "replace").strip()
+                grezzo = resp.readline()
+                if not riga or not riga.startswith("data:"):
+                    continue
+                dati = riga[5:].strip()
+                if dati == "[DONE]":
+                    break
+                try:
+                    d = json.loads(dati)
+                except Exception:
+                    continue
+                if d.get("error"):
+                    msg = d["error"]
+                    if isinstance(msg, dict):
+                        msg = msg.get("message") or json.dumps(msg)[:300]
+                    raise ProviderError(f"{self.name}: {msg}", retryable=True)
+                if d.get("model"):
+                    modello = d["model"]
+                if d.get("usage"):
+                    uso = d["usage"]
+                scelte = d.get("choices") or []
+                if not scelte:
+                    continue
+                delta = scelte[0].get("delta") or {}
+                # Il ragionamento arriva in `reasoning` (OpenRouter) o in
+                # `reasoning_details` (altri gateway): si guardano tutti e
+                # due, o su metà dei provider il vuoto resta.
+                pezzo = delta.get("reasoning")
+                if not pezzo:
+                    dettagli = delta.get("reasoning_details")
+                    if isinstance(dettagli, list):
+                        pezzo = "".join(
+                            str(x.get("text") or x.get("summary") or "")
+                            for x in dettagli if isinstance(x, dict))
+                if pezzo:
+                    ragionamento.append(pezzo)
+                    emetti("ragionamento", {"testo": pezzo})
+                testo = delta.get("content")
+                if testo:
+                    contenuto.append(testo)
+                    emetti("contenuto", {"testo": testo})
+                for tc in (delta.get("tool_calls") or []):
+                    i = tc.get("index", 0)
+                    acc = tool_per_indice.setdefault(
+                        i, {"id": "", "name": "", "arguments": ""})
+                    if tc.get("id"):
+                        acc["id"] = tc["id"]
+                    fun = tc.get("function") or {}
+                    if fun.get("name"):
+                        acc["name"] += fun["name"]
+                    if fun.get("arguments"):
+                        acc["arguments"] += fun["arguments"]
+                if scelte[0].get("finish_reason"):
+                    finish = scelte[0]["finish_reason"]
+
+        tool_calls = []
+        for i in sorted(tool_per_indice):
+            t = tool_per_indice[i]
+            if t["name"]:
+                tool_calls.append(ToolCall(
+                    id=t["id"] or f"call_{i}",
+                    name=t["name"],
+                    arguments=t["arguments"] or "{}",
+                ))
+
+        return LLMResponse(
+            content="".join(contenuto),
+            tool_calls=tool_calls,
+            model=modello,
+            prompt_tokens=int(uso.get("prompt_tokens") or 0),
+            completion_tokens=int(uso.get("completion_tokens") or 0),
+            finish_reason=finish,
+            reasoning="".join(ragionamento),
+            raw={"streamed": True},
+        )
 
     def _normalize(self, data: dict[str, Any]) -> LLMResponse:
         # Gatekeeper: alcuni gateway (OpenRouter incluso) rispondono HTTP 200

@@ -572,6 +572,43 @@ class OrchestraApp:
         prov = build_provider(provider_name, model=model_id, env=env)
         self.session.agent.provider = prov
         self.env["ORCHESTRA_MODEL"] = model_id
+        # La finestra segue il modello: se cambia il modello e resta il
+        # limite vecchio, un modello da 1M di token viene compattato a
+        # 120k — e uno da 32k non viene compattato finché non è troppo
+        # tardi. Entrambi i versi sbagliano, e nessuno dei due avvisa.
+        self.allinea_finestra(model_id)
+
+    def allinea_finestra(self, model_id: str | None = None) -> int:
+        """Mette `context_limit` al 75% della finestra del modello.
+
+        Torna il limite applicato. Se il modello non è nel catalogo o il
+        catalogo non si apre, resta 120_000: un default prudente batte un
+        crash all'avvio, e un modello sconosciuto con un limite piccolo
+        spreca contesto invece di perdere messaggi.
+
+        75% e non 100%: sopra resta spazio per la risposta che sta
+        arrivando, i tool e il system prompt. Compattare al 100% della
+        finestra è come riempire una valigia fino all'orlo e poi sedercisi
+        sopra per chiuderla.
+        """
+        # 120_000 è lo stesso default di LoopConfig: se il catalogo non
+        # sa rispondere, il comportamento è quello di prima. Nessun nuovo
+        # numero magico, solo lo stesso in due posti.
+        limite = 120_000
+        try:
+            modello = model_id or self.env.get("ORCHESTRA_MODEL", "")
+            cat = self.catalog
+            prof = cat.models.get(modello) if cat is not None else None
+            finestra = prof.info.context_length if prof is not None else 0
+            if finestra and finestra > 0:
+                limite = int(finestra * 0.75)
+        except Exception:
+            pass
+        try:
+            self.session.agent.config.context_limit = limite
+        except Exception:
+            pass
+        return limite
 
     def start_benchmark(self, *, sample: int = 3, category: str | None = None,
                         throttle: float = 3.0,
@@ -759,7 +796,8 @@ class OrchestraApp:
                                             env=load_env(ENV_PATH) | os.environ),
                     registry=default_registry(),
                     system_prompt=prompt_con_memoria,
-                    config=LoopConfig(max_iterations=12, context_limit=120_000,
+                    config=LoopConfig(max_iterations=num("ORCHESTRA_MAX_ITERS", 20),
+                                      context_limit=num("ORCHESTRA_CONTEXT_LIMIT", 120_000),
                                       keep_recent=8,
                                       reasoning_level=os.environ.get("ORCHESTRA_REASONING", None)),
                 )
@@ -858,6 +896,14 @@ class OrchestraApp:
             app._collega_recupero_tool()
             app._collega_delega()
             app._ripara_modello_iniziale()
+            # La finestra del modello attivo, se il catalogo lo conosce.
+            # In try separato: se il catalogo non si apre, l'app parte
+            # comunque col default di 120k. Un limite prudente batte un
+            # avvio che muore per un'impostazione.
+            try:
+                app.allinea_finestra()
+            except Exception:
+                pass
             return app
         except (ProviderError, KeyError) as e:
             # l'app esiste anche senza sessione: /api/state deve poter
@@ -1285,6 +1331,8 @@ class Handler(BaseHTTPRequestHandler):
                 "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
                 "reasoning": self.app.env.get("ORCHESTRA_REASONING", ""),
                 "budget": _budget_per_pannello(self.app.env),
+                "max_iterations": self.app.session.agent.config.max_iterations,
+                "context_limit": self.app.session.agent.config.context_limit,
             })
         elif path == "/api/locali":
             # Separato perche' e' lento per costruzione: si interrogano
@@ -2140,6 +2188,54 @@ class Handler(BaseHTTPRequestHandler):
             # la risposta porta solo lo stato, mai il valore
             self._json({"ok": True, "messaggio": msg,
                         "chiavi": keys_mod.stato(ENV_PATH, self.app.env)})
+        elif path == "/api/reasoning":
+            # Livello di reasoning dall'UI. L'endpoint era sparito in un
+            # `git checkout` di emergenza e non era mai stato committato:
+            # il pannello mandava POST che tornavano 404, e la select
+            # sembrava rotta. Ricreato qui, da zero.
+            #
+            # Non si ricrea la sessione: `agent.config.reasoning_level` è
+            # letto a ogni chiamata nel retry loop, quindi basta
+            # aggiornarlo. Ricreare la sessione rischiava la conversazione
+            # per un'impostazione che è solo un parametro per chiamata.
+            from .reasoning import REASONING_LEVELS
+            r = (body.get("reasoning") or "").strip()
+            if r and r not in REASONING_LEVELS:
+                self._json({"error": f"livello sconosciuto: {r}. "
+                                     f"Validi: {', '.join(REASONING_LEVELS)}"}, 400)
+                return
+            if self.app.session.busy:
+                self._json({"error": "l'agente sta lavorando: "
+                                     "attendi o annulla prima"}, 409)
+                return
+            from . import keys as keys_mod
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_REASONING", r)
+            self.app.env["ORCHESTRA_REASONING"] = r
+            self.app.session.agent.config.reasoning_level = r or None
+            self._json({"ok": True, "reasoning": r})
+
+        elif path == "/api/iterazioni":
+            # Max iterazioni del loop, dall'UI. Stesso schema di
+            # /api/reasoning: valida, persiste, applica live.
+            # Minimo 1 — sotto non ha senso — massimo 200, oltre il quale
+            # un loop che non ha finito non finirà: sta girando in tondo,
+            # e il tetto giusto è il breaker degli errori, non questo.
+            try:
+                n = int(body.get("max_iterations"))
+            except (TypeError, ValueError):
+                self._json({"error": "numero non valido"}, 400)
+                return
+            n = max(1, min(n, 200))
+            if self.app.session.busy:
+                self._json({"error": "l'agente sta lavorando: "
+                                     "attendi o annulla prima"}, 409)
+                return
+            from . import keys as keys_mod
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MAX_ITERS", str(n))
+            self.app.env["ORCHESTRA_MAX_ITERS"] = str(n)
+            self.app.session.agent.config.max_iterations = n
+            self._json({"ok": True, "max_iterations": n})
+
         elif path == "/api/budget":
             # Salva configurazione budget. Persiste in .env come JSON:
             # senza, il limite valeva fino al riavvio e poi si perdeva --
@@ -2147,11 +2243,26 @@ class Handler(BaseHTTPRequestHandler):
             import json as _json_mod
             from .budget import budget_guard, BudgetLimits
 
+            # I limiti sono tutti e sette OBBLIGATORI: se il pannello ne
+            # manda uno a zero o vuoto — e zero vuol dire "nessun limite",
+            # che è quello che l'utente ha scritto — il campo arrivava
+            # None e `check_limits` faceva `int > None`, che è il TypeError
+            # che si vedeva in chat.
+            #
+            # Zero non è "non detto": è "illimitato", ed è una scelta
+            # legittima. Per questo i campi tornano 0 e non None — e
+            # `check_limits` salta il confronto quando il limite è zero.
             def parse_int(v):
-                return int(v) if v not in (None, "", 0) else None
+                try:
+                    return max(0, int(v))
+                except (TypeError, ValueError):
+                    return 0
 
             def parse_float(v):
-                return float(v) if v not in (None, "", 0.0) else None
+                try:
+                    return max(0.0, float(v))
+                except (TypeError, ValueError):
+                    return 0.0
 
             limiti = BudgetLimits(
                 max_tokens_per_task=parse_int(body.get("task_tokens")),
