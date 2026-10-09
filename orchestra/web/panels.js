@@ -2467,6 +2467,21 @@ const sideMemElenco = $("side-mem-elenco");
 const sideMemInput = $("side-mem-input");
 const sideMemAggiungi = $("side-mem-aggiungi");
 const sideMemPercorso = $("side-mem-percorso");
+const sideMemCerca = $("side-mem-cerca");
+const sideMemStat = $("side-mem-stat");
+
+function _memStatTesto(d) {
+  // I fatti mai usati sono il numero che conta: dopo un mese a zero
+  // vuol dire che non servono. Mostrarli e' il motivo per cui l'indice
+  // esiste.
+  const ind = d.indice;
+  if (!ind || ind.errore) return "";
+  const kb = Math.round((ind.byte_file || 0) / 1024);
+  let s = `${ind.totale} fatti indicizzati`;
+  if (kb) s += ` · ${kb} KB`;
+  if (ind.mai_usati) s += ` · ${ind.mai_usati} mai cercati`;
+  return s;
+}
 
 async function caricaSideMemoria() {
   if (!sideMemElenco) return;
@@ -2478,6 +2493,7 @@ async function caricaSideMemoria() {
       return;
     }
     if (sideMemPercorso && d.percorso) sideMemPercorso.textContent = d.percorso;
+    if (sideMemStat) sideMemStat.textContent = _memStatTesto(d);
     sideMemElenco.replaceChildren();
     const fatti = d.fatti || [];
     if (!fatti.length) {
@@ -2552,6 +2568,85 @@ if (sideMemAggiungi) sideMemAggiungi.addEventListener("click", sideMemRicorda);
 if (sideMemInput) {
   sideMemInput.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") sideMemRicorda();
+  });
+}
+
+// La ricerca nella memoria. FTS5 dal server, con debounce: senza, una
+// ricerca a ogni tasto su 5000 fatti e' una richiesta per carattere.
+let _memTimer = null;
+async function sideMemRicerca() {
+  if (!sideMemElenco) return;
+  const q = (sideMemCerca.value || "").trim();
+  if (!q) { await caricaSideMemoria(); return; }
+  try {
+    const r = await fetch("/api/memoria/cerca", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q, limite: 30 }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
+      return;
+    }
+    if (sideMemStat) sideMemStat.textContent = _memStatTesto(d);
+    sideMemElenco.replaceChildren();
+    const trovati = d.risultati || [];
+    if (!trovati.length) {
+      const li = document.createElement("li");
+      li.className = "small dim side-mem-vuoto";
+      li.textContent = "Nessun fatto trovato.";
+      sideMemElenco.appendChild(li);
+      return;
+    }
+    for (const x of trovati) {
+      const li = document.createElement("li");
+      li.className = "side-mem-riga";
+      const testo = document.createElement("span");
+      testo.className = "side-mem-fatto";
+      testo.textContent = x.testo;
+      if (x.importante) {
+        const segno = document.createElement("span");
+        segno.className = "side-mem-imp";
+        segno.textContent = "★";
+        segno.title = "nel prompt di ogni conversazione";
+        li.appendChild(segno);
+      }
+      li.appendChild(testo);
+      const via = document.createElement("button");
+      via.className = "side-mem-via";
+      via.textContent = "×";
+      via.title = "Dimentica";
+      via.addEventListener("click", async () => {
+        try {
+          const rr = await fetch("/api/memoria/elimina", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fatto: x.testo }),
+          });
+          if (!rr.ok) return;
+          await sideMemRicerca();
+        } catch (e) { /* la ricerca resta com'è */ }
+      });
+      li.appendChild(via);
+      sideMemElenco.appendChild(li);
+    }
+  } catch (e) {
+    if (sideMsg) { sideMsg.textContent = "ricerca fallita: " + e; sideMsg.className = "small rosso side-msg"; }
+  }
+}
+
+if (sideMemCerca) {
+  sideMemCerca.addEventListener("input", () => {
+    if (_memTimer) clearTimeout(_memTimer);
+    _memTimer = setTimeout(sideMemRicerca, 250);
+  });
+  sideMemCerca.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); sideMemRicerca(); }
+    if (ev.key === "Escape") {
+      sideMemCerca.value = "";
+      caricaSideMemoria();
+    }
   });
 }
 

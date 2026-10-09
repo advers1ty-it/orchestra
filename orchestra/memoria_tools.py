@@ -22,7 +22,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from .memoria import memoria
+from .memoria import memoria as _memoria_file
+from .memoria_indice import indice_memoria
+
+
+def memoria():
+    """La memoria con l'indice FTS5, se c'è; altrimenti il file.
+
+    L'indice è uno strato SOPRA il file, non un sostituto: se il database
+    non si può aprire si torna al file e la memoria funziona lo stesso,
+    solo con la ricerca per sottostringa. Un'indisponibilità dell'indice
+    non deve far perdere i fatti.
+    """
+    try:
+        return indice_memoria()
+    except Exception:
+        return _memoria_file()
+
+
 from .types import Tool
 
 # Quanto entra nel system prompt senza che nessuno chieda niente.
