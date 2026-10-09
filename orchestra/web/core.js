@@ -99,10 +99,16 @@ function el(tag, cls, text) {
   return e;
 }
 
+function seiInFondo() {
+  // Il predicato da solo, perché a `tool_end` serve sapere DOVE era
+  // l'utente quando il tool è partito, non dove sta adesso che il
+  // risultato ha allungato il log di trecento righe.
+  return main.scrollHeight - main.scrollTop - main.clientHeight < 140;
+}
+
 function scrollDown() {
   // solo se l'utente è già in fondo: scrollare mentre legge sopra è irritante
-  const near = main.scrollHeight - main.scrollTop - main.clientHeight < 140;
-  if (near) main.scrollTop = main.scrollHeight;
+  if (seiInFondo()) main.scrollTop = main.scrollHeight;
 }
 
 function setBusy(v) {
@@ -320,6 +326,11 @@ function addTool(name, args, key) {
   t.appendChild(head);
   t.appendChild(out);
   log.appendChild(t);
+  // Si registra DOVE sta l'utente adesso: a `tool_end` il risultato avrà
+  // allungato il log e il controllo "sei in fondo" direbbe sempre no —
+  // ed è per quello che dopo un tool lungo la risposta arrivava senza
+  // che nessuno scrollasse, e toccava farlo a mano.
+  t._segui = seiInFondo();
   tieniRagionamentoInFondo();
   scrollDown();
   return { root: t, status: st, out };
@@ -462,6 +473,13 @@ function handle(kind, d) {
         st.className = "tool-status " + (d.ok ? "ok" : "err");
         st.textContent = d.ok ? "ok" : "errore";
         node.querySelector(".tool-out").textContent = d.result || "";
+        // Il risultato ha allungato il log anche di centinaia di righe.
+        // Se l'utente stava seguendo (registrato a `tool_start`), lo si
+        // riporta in fondo: senza, il controllo di `scrollDown` direbbe
+        // "non sei in fondo" da qui in poi — risposta finale inclusa — e
+        // toccherebbe scrollare a mano. Se aveva scrollato su da solo, il
+        // flag è falso e nessuno lo disturba.
+        if (node._segui) main.scrollTop = main.scrollHeight;
       }
       break;
     }
@@ -746,6 +764,10 @@ on(modelPick, "change", async () => {
     // la conversazione continua, ma annotiamo il cambio: senza, domani non
     // si sa che metà della chat l'ha scritta un modello diverso
     addText("system", `modello → ${id}`);
+    // Il limite di compattazione segue il modello (75% della sua
+    // finestra): senza ricaricare, la nota nelle Opzioni mostra il
+    // valore vecchio e sembra che il cambio non faccia niente.
+    if (typeof caricaOpzioni === "function") caricaOpzioni();
   } catch (e) {
     addText("error", String(e));
   } finally {
