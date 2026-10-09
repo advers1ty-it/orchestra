@@ -359,13 +359,41 @@ function handle(kind, d) {
       loadModels();
       // ricostruisci la conversazione
       log.innerHTML = "";
+      // I risultati dei tool, indicizzati per id: le chiamate (dentro i
+      // messaggi assistant) arrivano prima dei risultati (messaggi
+      // role="tool"), ma raccoglierli prima rende il rendering immune
+      // all'ordine. Stessa regola del live: si abbina per id, non
+      // "l'ultimo tool".
+      const risultatiTool = {};
+      (d.messages || []).forEach((m) => {
+        if (m && m.role === "tool" && m.tool_call_id) {
+          risultatiTool[m.tool_call_id] = m;
+        }
+      });
       (d.messages || []).forEach((m) => {
         // `m.content` puo' essere null o mancante: `.trim()` su undefined
         // solleva e blocca TUTTO il rendering della snapshot, lasciando la
         // chat vuota senza alcun errore in console. Difesa esplicita.
         const text = (m && m.content != null) ? String(m.content) : "";
         if (m.role === "user") addText("user", text);
-        else if (m.role === "assistant" && text.trim()) addText("assistant", text);
+        else if (m.role === "assistant") {
+          // Solo testo, niente riga bianca: un assistant con sole tool
+          // call non ha niente da dire, e il suo contenuto sono i tool
+          // sotto. La riga bianca era il motivo per cui questi messaggi
+          // venivano omessi dallo snapshot.
+          if (text.trim()) addText("assistant", text);
+          (m.tool_calls || []).forEach((tc) => {
+            const creato = addTool(tc.name, tc.arguments, tc.id);
+            const ris = risultatiTool[tc.id];
+            if (ris) {
+              const male = String(ris.content || "").startsWith("ERRORE");
+              const st = creato.root.querySelector(".tool-status");
+              st.className = "tool-status " + (male ? "err" : "ok");
+              st.textContent = male ? "errore" : "ok";
+              creato.root.querySelector(".tool-out").textContent = ris.content || "";
+            }
+          });
+        }
       });
       setBusy(!!d.busy);
       scrollDown();
