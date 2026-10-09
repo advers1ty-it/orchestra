@@ -995,8 +995,12 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   min-height: 0;
 }
 
-.side-elenco { flex: 1 1 auto; }
-.side-skill { flex: 0 0 auto; max-height: 30vh; }
+/* Nessuna delle tre liste si prende tutto lo spazio: la sidebar è un flex
+   column, e con `flex: 1 1 auto` la cronologia schiaccia a zero pixel
+   quelle sotto. La lista dei fatti restava piena ma invisibile. */
+.side-elenco { flex: 1 1 40%; max-height: 40vh; }
+.side-skill { flex: 0 1 auto; max-height: 22vh; }
+.side-sez { flex: 0 0 auto; }
 
 .side-sez {
   border-top: 1px solid var(--border);
@@ -1158,8 +1162,8 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 
 .side-mem-elenco {
   list-style: none; margin: 0; padding: 0 6px;
-  overflow-y: auto; flex: 1 1 auto; min-height: 0;
-  max-height: 26vh;
+  overflow-y: auto; flex: 1 1 auto; min-height: 40px;
+  max-height: 22vh;
 }
 
 .side-mem-riga {
