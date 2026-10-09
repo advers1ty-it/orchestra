@@ -63,7 +63,10 @@
   <div class="logo">Orches<span>tra</span></div>
   <span class="ver" id="ver" title="versione della interfaccia">·</span>
   <span class="stamp" id="stamp">UI-4</span>
+  <button id="btn-side" class="ghost" title="Cronologia e skill (Ctrl+B)"
+          aria-label="Apri il pannello laterale">&#9776;</button>
   <div class="grow"></div>
+  <button id="btn-capacita" class="ghost" title="Skill e strumenti">Capacit&agrave;</button>
   <button id="btn-opzioni" class="ghost" title="Chiavi API e servizi gratuiti">Opzioni</button>
   <button id="btn-bench" class="ghost">Benchmark</button>
 
@@ -264,6 +267,8 @@
                   </div>
                 </section>
 
+                
+                
                 <section id="opz-sez-skill" class="opz-sez" data-sez="skill" hidden>
           <!-- Le skill stanno per prime: sono la cosa che si consulta
                di rado e per cui vale la pena venire apposta. Le
@@ -444,6 +449,56 @@
       </div>
     </div>
     <pre id="prova-out" class="prova-out"></pre>
+  </div>
+</div>
+
+  <aside id="sidebar" hidden>
+    <div class="side-testa">
+      <span class="side-titolo">Cronologia</span>
+      <button id="side-riduci" class="ghost side-x" title="Riduci il pannello"
+              aria-label="Riduci il pannello">&minus;</button>
+    </div>
+
+    <div class="side-azioni">
+      <button id="side-nuova" class="primary">Nuova</button>
+      <button id="side-ricarica" class="ghost" title="Ricarica">&#8635;</button>
+    </div>
+
+    <ul id="side-elenco" class="side-elenco"></ul>
+
+    <div class="side-sez">
+      <span class="side-titolo">Skill</span>
+      <button id="side-cap" class="side-cap-btn">Apri tutte le capacit&agrave;</button>
+      <ul id="side-skill" class="side-skill"></ul>
+    </div>
+
+    <div class="side-sez">
+      <span class="side-titolo">Memoria</span>
+      <div class="side-mem-campi">
+        <input id="side-mem-input" type="text" placeholder="Fatto da ricordare..." />
+        <button id="side-mem-aggiungi" class="primary">+</button>
+      </div>
+      <ul id="side-mem-elenco" class="side-mem-elenco"></ul>
+      <p class="small dim side-mem-percorso" id="side-mem-percorso"></p>
+    </div>
+
+    <p id="side-msg" class="small dim side-msg"></p>
+  </aside>
+
+<div id="capacita" class="panel hidden">
+  <div class="panel-box capacita-box">
+    <div class="panel-head">
+      <div><b>Capacit&agrave;</b> <span class="dim">&mdash; quello che so fare</span></div>
+      <button id="capacita-close" class="ghost">Chiudi</button>
+    </div>
+    <nav class="capacita-nav">
+      <button id="cap-tab-skill" class="cap-tab attiva" data-tab="skill">Skill</button>
+      <button id="cap-tab-tool" class="cap-tab" data-tab="tool">Strumenti</button>
+    </nav>
+    <input id="cap-filtro" type="text" class="cap-filtro"
+           placeholder="Filtra per nome o descrizione..." spellcheck="false" />
+    <div id="cap-lista" class="cap-lista"></div>
+    <p id="cap-msg" class="small dim"></p>
   </div>
 </div>
 

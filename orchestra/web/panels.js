@@ -1923,6 +1923,12 @@ function mostraSezione(nome) {
     sezioneSkillCaricata = true;
     caricaSkill();
   }
+  // Storico e memoria idem: si caricano quando si aprono, non
+  // all'avvio. Caricarli sempre aggiungerebbe due richieste a ogni
+  // apertura del pannello Opzioni, anche quando si va a cambiare solo
+  // il modello.
+  if (nome === "storico") caricaStorico();
+  if (nome === "memoria") caricaMemoria();
 }
 
 function collegaSezioni() {
@@ -1952,3 +1958,815 @@ function collegaSezioni() {
 }
 
 collegaSezioni();
+
+// ------------------------------------------------------------------ storico
+// Le conversazioni salvate su disco. Il pannello si ricarica da sé quando
+// si apre, non ha un pulsante "applica": quello che c'è è già applicato.
+
+const storicoElenco = $("storico-elenco");
+const storicoMsg = $("storico-msg");
+const storicoNuova = $("storico-nuova");
+const storicoRicarica = $("storico-ricarica");
+
+function _storico_data(d) {
+  try {
+    return new Date(d * 1000).toLocaleString("it-IT", {
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    });
+  } catch (e) { return ""; }
+}
+
+async function caricaStorico() {
+  if (!storicoElenco) return;
+  storicoMsg.textContent = "caricamento...";
+  storicoMsg.className = "small dim";
+  try {
+    const resp = await fetch("/api/storico");
+    const d = await resp.json();
+    if (!resp.ok) {
+      storicoMsg.textContent = d.error || ("errore " + resp.status);
+      storicoMsg.className = "small rosso";
+      return;
+    }
+    storicoElenco.replaceChildren();
+    const sessioni = d.sessioni || [];
+    if (!sessioni.length) {
+      const li = document.createElement("li");
+      li.className = "small dim";
+      li.textContent = "Nessuna conversazione salvata.";
+      storicoElenco.appendChild(li);
+      storicoMsg.textContent = "";
+      return;
+    }
+    for (const s of sessioni) {
+      const li = document.createElement("li");
+      li.className = "storico-riga" + (s.id === d.attiva ? " attiva" : "");
+
+      const info = document.createElement("div");
+      info.className = "storico-info";
+      const titolo = document.createElement("span");
+      titolo.className = "storico-titolo";
+      titolo.textContent = s.titolo || "(senza titolo)";
+      const meta = document.createElement("span");
+      meta.className = "small dim";
+      meta.textContent = `${_storico_data(s.aggiornata)} · ${s.n_messaggi} msg · ${s.modello || "?"}`;
+      info.appendChild(titolo);
+      info.appendChild(meta);
+      li.appendChild(info);
+
+      const bottoni = document.createElement("div");
+      bottoni.className = "storico-bottoni";
+
+      const apri = document.createElement("button");
+      apri.textContent = s.id === d.attiva ? "Aperta" : "Apri";
+      apri.disabled = s.id === d.attiva;
+      apri.className = s.id === d.attiva ? "" : "primary";
+      apri.addEventListener("click", async () => {
+        storicoMsg.textContent = "apertura...";
+        try {
+          const r = await fetch("/api/storico/apri", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: s.id }),
+          });
+          const rd = await r.json();
+          if (!r.ok) {
+            storicoMsg.textContent = rd.error || ("errore " + r.status);
+            storicoMsg.className = "small rosso";
+            return;
+          }
+          // La conversazione cambia in chat: si ricarica lo snapshot
+          // dalla stessa risposta, così non si legge uno stato vecchio.
+          if (rd.snapshot) handle("snapshot", rd.snapshot);
+          storicoMsg.textContent = "conversazione aperta";
+          storicoMsg.className = "small verde";
+          await caricaStorico();
+        } catch (e) {
+          storicoMsg.textContent = "apertura fallita: " + e;
+          storicoMsg.className = "small rosso";
+        }
+      });
+      bottoni.appendChild(apri);
+
+      const elimina = document.createElement("button");
+      elimina.textContent = "Elimina";
+      elimina.addEventListener("click", async () => {
+        if (!confirm("Eliminare questa conversazione? Non si recupera.")) return;
+        try {
+          const r = await fetch("/api/storico/elimina", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: s.id }),
+          });
+          const rd = await r.json();
+          if (!r.ok) {
+            storicoMsg.textContent = rd.error || ("errore " + r.status);
+            storicoMsg.className = "small rosso";
+            return;
+          }
+          if (rd.snapshot) handle("snapshot", rd.snapshot);
+          storicoMsg.textContent = "eliminata";
+          storicoMsg.className = "small verde";
+          await caricaStorico();
+        } catch (e) {
+          storicoMsg.textContent = "eliminazione fallita: " + e;
+          storicoMsg.className = "small rosso";
+        }
+      });
+      bottoni.appendChild(elimina);
+
+      li.appendChild(bottoni);
+      storicoElenco.appendChild(li);
+    }
+    storicoMsg.textContent = "";
+  } catch (e) {
+    storicoMsg.textContent = "caricamento fallito: " + e;
+    storicoMsg.className = "small rosso";
+  }
+}
+
+if (storicoNuova) {
+  storicoNuova.addEventListener("click", async () => {
+    try {
+      const r = await fetch("/api/storico/nuova", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) {
+        storicoMsg.textContent = d.error || ("errore " + r.status);
+        storicoMsg.className = "small rosso";
+        return;
+      }
+      if (d.snapshot) handle("snapshot", d.snapshot);
+      storicoMsg.textContent = "nuova conversazione";
+      storicoMsg.className = "small verde";
+      await caricaStorico();
+    } catch (e) {
+      storicoMsg.textContent = "non riesco: " + e;
+      storicoMsg.className = "small rosso";
+    }
+  });
+}
+
+if (storicoRicarica) {
+  storicoRicarica.addEventListener("click", caricaStorico);
+}
+
+// ------------------------------------------------------------------- memoria
+
+const memoriaElenco = $("memoria-elenco");
+const memoriaMsg = $("memoria-msg");
+const memoriaNuovo = $("memoria-nuovo");
+const memoriaAggiungi = $("memoria-aggiungi");
+const memoriaPercorso = $("memoria-percorso");
+
+async function caricaMemoria() {
+  if (!memoriaElenco) return;
+  try {
+    const resp = await fetch("/api/memoria");
+    const d = await resp.json();
+    if (!resp.ok) {
+      memoriaMsg.textContent = d.error || ("errore " + resp.status);
+      memoriaMsg.className = "small rosso";
+      return;
+    }
+    if (memoriaPercorso && d.percorso) {
+      memoriaPercorso.textContent = d.percorso;
+    }
+    memoriaElenco.replaceChildren();
+    const fatti = d.fatti || [];
+    if (!fatti.length) {
+      const li = document.createElement("li");
+      li.className = "small dim";
+      li.textContent = "Nessun fatto ricordato.";
+      memoriaElenco.appendChild(li);
+      memoriaMsg.textContent = "";
+      return;
+    }
+    for (const fatto of fatti) {
+      const li = document.createElement("li");
+      li.className = "memoria-riga";
+
+      const testo = document.createElement("span");
+      testo.className = "memoria-fatto";
+      testo.textContent = fatto;
+      li.appendChild(testo);
+
+      const via = document.createElement("button");
+      via.textContent = "Dimentica";
+      via.addEventListener("click", async () => {
+        try {
+          const r = await fetch("/api/memoria/elimina", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fatto: fatto }),
+          });
+          const rd = await r.json();
+          if (!r.ok) {
+            memoriaMsg.textContent = rd.error || ("errore " + r.status);
+            memoriaMsg.className = "small rosso";
+            return;
+          }
+          memoriaMsg.textContent = rd.tolto ? "dimenticato" : "non era in memoria";
+          memoriaMsg.className = rd.tolto ? "small verde" : "small dim";
+          await caricaMemoria();
+        } catch (e) {
+          memoriaMsg.textContent = "non riesco: " + e;
+          memoriaMsg.className = "small rosso";
+        }
+      });
+      li.appendChild(via);
+      memoriaElenco.appendChild(li);
+    }
+    memoriaMsg.textContent = "";
+  } catch (e) {
+    memoriaMsg.textContent = "caricamento fallito: " + e;
+    memoriaMsg.className = "small rosso";
+  }
+}
+
+if (memoriaAggiungi) {
+  memoriaAggiungi.addEventListener("click", async () => {
+    const fatto = (memoriaNuovo.value || "").trim();
+    if (!fatto) {
+      memoriaMsg.textContent = "scrivi qualcosa da ricordare";
+      memoriaMsg.className = "small dim";
+      return;
+    }
+    try {
+      const r = await fetch("/api/memoria/aggiungi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fatto: fatto }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        memoriaMsg.textContent = d.error || ("errore " + r.status);
+        memoriaMsg.className = "small rosso";
+        return;
+      }
+      memoriaNuovo.value = "";
+      memoriaMsg.textContent = d.nuovo ? "ricordato" : "era gi\u00e0 in memoria";
+      memoriaMsg.className = "small verde";
+      await caricaMemoria();
+    } catch (e) {
+      memoriaMsg.textContent = "non riesco: " + e;
+      memoriaMsg.className = "small rosso";
+    }
+  });
+}
+
+if (memoriaNuovo) {
+  memoriaNuovo.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && memoriaAggiungi) memoriaAggiungi.click();
+  });
+}
+
+// --------------------------------------------------------- pannello laterale
+//
+// Flex-item del body, non overlay: la chat si restringe e resta leggibile.
+// Un modale coprirebbe la conversazione proprio mentre la si sfoglia.
+
+const sidebar = $("sidebar");
+const sideElenco = $("side-elenco");
+const sideSkill = $("side-skill");
+const sideMsg = $("side-msg");
+const sideBtn = $("btn-side");
+
+function sideAperta() {
+  return !!sidebar && !sidebar.hasAttribute("hidden");
+}
+
+function apriSide(aperta) {
+  if (!sidebar) return;
+  if (aperta === undefined) aperta = !sideAperta();
+  if (aperta) sidebar.removeAttribute("hidden");
+  else sidebar.setAttribute("hidden", "");
+  if (aperta) {
+    caricaSide();
+    caricaSideMemoria();
+    sideBtn.classList.add("attivo");
+  } else {
+    sideBtn.classList.remove("attivo");
+  }
+}
+
+if (sideBtn) sideBtn.addEventListener("click", () => apriSide());
+
+// La X non c'è più: il bottone RIDUCE a una striscia invece di chiudere.
+// La cronologia serve troppo spesso per costare due clic.
+const sideRiduci = $("side-riduci");
+if (sideRiduci) sideRiduci.addEventListener("click", riduciSide);
+
+// Ctrl+B, come gli editor: è il gesto che le persone già hanno in mano.
+document.addEventListener("keydown", (ev) => {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "b") {
+    ev.preventDefault();
+    apriSide();
+  }
+});
+
+function _sideData(ts) {
+  try {
+    const d = new Date(ts * 1000);
+    const oggi = new Date();
+    const stessoGiorno = d.toDateString() === oggi.toDateString();
+    return d.toLocaleString("it-IT", stessoGiorno
+      ? { hour: "2-digit", minute: "2-digit" }
+      : { day: "2-digit", month: "2-digit" });
+  } catch (e) { return ""; }
+}
+
+async function caricaSide() {
+  if (!sideElenco) return;
+  if (sideMsg) { sideMsg.textContent = "caricamento..."; sideMsg.className = "small dim side-msg"; }
+  await Promise.all([caricaSideSessioni(), caricaSideSkill()]);
+  if (sideMsg) { sideMsg.textContent = ""; sideMsg.className = "small dim side-msg"; }
+}
+
+async function caricaSideSessioni() {
+  try {
+    const resp = await fetch("/api/storico");
+    const d = await resp.json();
+    if (!resp.ok) {
+      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + resp.status); sideMsg.className = "small rosso side-msg"; }
+      return;
+    }
+    const sessioni = d.sessioni || [];
+    const pinnate = new Set(JSON.parse(localStorage.getItem("orchestra.pin") || "[]"));
+    // Le pinnate in cima: sono quelle che servono tutti i giorni, e
+    // cercarsele in fondo a quaranta righe è il modo per non usarle.
+    const ordinate = [...sessioni].sort((a, b) => {
+      const pa = pinnate.has(String(a.id)) ? 0 : 1;
+      const pb = pinnate.has(String(b.id)) ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return (b.aggiornata || 0) - (a.aggiornata || 0);
+    });
+
+    sideElenco.replaceChildren();
+    if (!sessioni.length) {
+      const li = document.createElement("li");
+      li.className = "small dim";
+      li.style.padding = "6px";
+      li.textContent = "Nessuna conversazione salvata.";
+      sideElenco.appendChild(li);
+      return;
+    }
+
+    for (const s of ordinate) {
+      const li = document.createElement("li");
+      li.className = "side-riga" + (s.id === d.attiva ? " attiva" : "");
+
+      const apri = document.createElement("button");
+      apri.className = "side-apri";
+      apri.title = s.titolo || "(senza titolo)";
+      const testo = document.createElement("span");
+      testo.className = "side-testo";
+      testo.textContent = s.titolo || "(senza titolo)";
+      const meta = document.createElement("span");
+      meta.className = "side-meta";
+      meta.textContent = `${_sideData(s.aggiornata)} · ${s.n_messaggi} msg`;
+      apri.appendChild(testo);
+      apri.appendChild(meta);
+      apri.addEventListener("click", async () => {
+        try {
+          const r = await fetch("/api/storico/apri", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: s.id }),
+          });
+          const rd = await r.json();
+          if (!r.ok) {
+            if (sideMsg) { sideMsg.textContent = rd.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
+            return;
+          }
+          if (rd.snapshot) handle("snapshot", rd.snapshot);
+          await caricaSideSessioni();
+        } catch (e) {
+          if (sideMsg) { sideMsg.textContent = "apertura fallita: " + e; sideMsg.className = "small rosso side-msg"; }
+        }
+      });
+      li.appendChild(apri);
+
+      const pin = document.createElement("button");
+      const ePinnata = pinnate.has(String(s.id));
+      pin.className = "side-pin" + (ePinnata ? " pinnato" : "");
+      pin.textContent = ePinnata ? "\u2605" : "\u2606";
+      pin.title = ePinnata ? "Togli dai preferiti" : "Metti nei preferiti";
+      pin.addEventListener("click", () => {
+        const attuali = new Set(JSON.parse(localStorage.getItem("orchestra.pin") || "[]"));
+        const chiave = String(s.id);
+        if (attuali.has(chiave)) attuali.delete(chiave); else attuali.add(chiave);
+        localStorage.setItem("orchestra.pin", JSON.stringify([...attuali]));
+        caricaSideSessioni();
+      });
+      li.appendChild(pin);
+
+      sideElenco.appendChild(li);
+    }
+  } catch (e) {
+    if (sideMsg) { sideMsg.textContent = "caricamento fallito: " + e; sideMsg.className = "small rosso side-msg"; }
+  }
+}
+
+async function caricaSideSkill() {
+  if (!sideSkill) return;
+  try {
+    const d = await skillPost({ azione: "elenca" });
+    if (!d || d.error) return;
+    const lista = [...(d.lista_scaricate || []), ...(d.lista_generate || [])]
+      .filter(s => s && s.nome)
+      .slice(0, 24);
+    sideSkill.replaceChildren();
+    if (!lista.length) {
+      const li = document.createElement("li");
+      li.className = "small dim";
+      li.style.padding = "4px 6px";
+      li.textContent = "Nessuna skill installata.";
+      sideSkill.appendChild(li);
+      return;
+    }
+    for (const s of lista) {
+      const li = document.createElement("li");
+      li.className = "side-skill-riga";
+      const nome = document.createElement("span");
+      nome.className = "side-skill-nome";
+      nome.textContent = s.nome;
+      nome.title = s.descrizione || "";
+      const apri = document.createElement("button");
+      apri.className = "side-apri-pagina";
+      apri.textContent = "apri";
+      apri.title = "Apri la pagina della skill";
+      apri.addEventListener("click", () => apriPaginaSkill(s.nome));
+      li.appendChild(nome);
+      li.appendChild(apri);
+      sideSkill.appendChild(li);
+    }
+  } catch (e) {
+    // Le skill non sono un requisito: la cronologia resta il pezzo
+    // principale, e un errore qui non deve svuotarla.
+  }
+}
+
+function apriPaginaSkill(nome) {
+  // Pagina dedicata costruita col DOM. Il testo di una skill arriva da un
+  // file: scriverlo dentro una stringa concatenata lo farebbe interpretare
+  // come markup, mentre textContent lo mostra e basta.
+  fetch("/api/skill/file?nome=" + encodeURIComponent(nome))
+    .then(r => r.text())
+    .then(testo => {
+      const w = window.open("", "_blank", "width=820,height=640");
+      if (!w) {
+        if (sideMsg) { sideMsg.textContent = "il browser ha bloccato la finestra"; sideMsg.className = "small rosso side-msg"; }
+        return;
+      }
+      w.document.title = nome;
+      const h = w.document.createElement("h1");
+      h.textContent = nome;
+      const pre = w.document.createElement("pre");
+      pre.textContent = testo;
+      pre.style.whiteSpace = "pre-wrap";
+      w.document.body.replaceChildren(h, pre);
+    })
+    .catch(e => {
+      if (sideMsg) { sideMsg.textContent = "non riesco ad aprire la skill: " + e; sideMsg.className = "small rosso side-msg"; }
+    });
+}
+
+const sideNuova = $("side-nuova");
+if (sideNuova) {
+  sideNuova.addEventListener("click", async () => {
+    try {
+      const r = await fetch("/api/storico/nuova", { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) {
+        if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
+        return;
+      }
+      if (d.snapshot) handle("snapshot", d.snapshot);
+      await caricaSideSessioni();
+    } catch (e) {
+      if (sideMsg) { sideMsg.textContent = "non riesco: " + e; sideMsg.className = "small rosso side-msg"; }
+    }
+  });
+}
+
+const sideRicarica = $("side-ricarica");
+if (sideRicarica) sideRicarica.addEventListener("click", caricaSide);
+
+// ------------------------------------------------- memoria, dentro la sidebar
+//
+// Stessa logica del vecchio pannello in Opzioni, altri elementi. Opzioni
+// è un posto da CONFIGURAZIONE; la memoria è contenuto, e stare accanto
+// alla cronologia è dove si guarda.
+
+const sideMemElenco = $("side-mem-elenco");
+const sideMemInput = $("side-mem-input");
+const sideMemAggiungi = $("side-mem-aggiungi");
+const sideMemPercorso = $("side-mem-percorso");
+
+async function caricaSideMemoria() {
+  if (!sideMemElenco) return;
+  try {
+    const resp = await fetch("/api/memoria");
+    const d = await resp.json();
+    if (!resp.ok) {
+      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + resp.status); sideMsg.className = "small rosso side-msg"; }
+      return;
+    }
+    if (sideMemPercorso && d.percorso) sideMemPercorso.textContent = d.percorso;
+    sideMemElenco.replaceChildren();
+    const fatti = d.fatti || [];
+    if (!fatti.length) {
+      const li = document.createElement("li");
+      li.className = "small dim side-mem-vuoto";
+      li.textContent = "Nessun fatto ricordato.";
+      sideMemElenco.appendChild(li);
+      return;
+    }
+    for (const fatto of fatti) {
+      const li = document.createElement("li");
+      li.className = "side-mem-riga";
+
+      const testo = document.createElement("span");
+      testo.className = "side-mem-fatto";
+      testo.textContent = fatto;
+      li.appendChild(testo);
+
+      const via = document.createElement("button");
+      via.className = "side-mem-via";
+      via.textContent = "\u00d7";
+      via.title = "Dimentica";
+      via.addEventListener("click", async () => {
+        try {
+          const r = await fetch("/api/memoria/elimina", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fatto: fatto }),
+          });
+          const rd = await r.json();
+          if (!r.ok) {
+            if (sideMsg) { sideMsg.textContent = rd.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
+            return;
+          }
+          if (sideMsg) { sideMsg.textContent = rd.tolto ? "dimenticato" : "non era in memoria"; sideMsg.className = "small dim side-msg"; }
+          await caricaSideMemoria();
+        } catch (e) {
+          if (sideMsg) { sideMsg.textContent = "non riesco: " + e; sideMsg.className = "small rosso side-msg"; }
+        }
+      });
+      li.appendChild(via);
+      sideMemElenco.appendChild(li);
+    }
+  } catch (e) {
+    if (sideMsg) { sideMsg.textContent = "memoria non raggiungibile: " + e; sideMsg.className = "small rosso side-msg"; }
+  }
+}
+
+async function sideMemRicorda() {
+  const fatto = (sideMemInput.value || "").trim();
+  if (!fatto) return;
+  try {
+    const r = await fetch("/api/memoria/aggiungi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fatto: fatto }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
+      return;
+    }
+    sideMemInput.value = "";
+    if (sideMsg) { sideMsg.textContent = d.nuovo ? "ricordato" : "era gi\u00e0 in memoria"; sideMsg.className = "small dim side-msg"; }
+    await caricaSideMemoria();
+  } catch (e) {
+    if (sideMsg) { sideMsg.textContent = "non riesco: " + e; sideMsg.className = "small rosso side-msg"; }
+  }
+}
+
+if (sideMemAggiungi) sideMemAggiungi.addEventListener("click", sideMemRicorda);
+if (sideMemInput) {
+  sideMemInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") sideMemRicorda();
+  });
+}
+
+// ------------------------------------------------------ pagina Capacità
+//
+// Modale, non pannello laterale: è un posto dove si VA a guardare e da
+// cui si esce. Due tab, skill e strumenti, dallo stesso endpoint.
+
+const capacita = $("capacita");
+const capLista = $("cap-lista");
+const capFiltro = $("cap-filtro");
+const capMsg = $("cap-msg");
+let capTab = "skill";
+let capDati = { skill: [], tool: [] };
+
+function apriCapacita() {
+  if (!capacita) return;
+  capacita.classList.remove("hidden");
+  if (!capDati.skill.length && !capDati.tool.length) caricaCapacita();
+}
+
+function chiudiCapacita() {
+  if (capacita) capacita.classList.add("hidden");
+}
+
+const btnCapacita = $("btn-capacita");
+if (btnCapacita) btnCapacita.addEventListener("click", apriCapacita);
+
+const capClose = $("capacita-close");
+if (capClose) capClose.addEventListener("click", chiudiCapacita);
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && capacita && !capacita.classList.contains("hidden")) {
+    chiudiCapacita();
+  }
+});
+
+// Click sullo sfondo chiude: è il gesto che ci si aspetta da un modale.
+if (capacita) {
+  capacita.addEventListener("click", (ev) => {
+    if (ev.target === capacita) chiudiCapacita();
+  });
+}
+
+for (const t of document.querySelectorAll(".cap-tab")) {
+  t.addEventListener("click", () => {
+    capTab = t.dataset.tab;
+    for (const o of document.querySelectorAll(".cap-tab")) {
+      o.classList.toggle("attiva", o.dataset.tab === capTab);
+    }
+    disegnaCapacita();
+  });
+}
+
+if (capFiltro) capFiltro.addEventListener("input", disegnaCapacita);
+
+async function caricaCapacita() {
+  if (capMsg) { capMsg.textContent = "caricamento..."; capMsg.className = "small dim"; }
+  try {
+    const r = await fetch("/api/capacita");
+    const d = await r.json();
+    if (!r.ok) {
+      if (capMsg) { capMsg.textContent = d.error || ("errore " + r.status); capMsg.className = "small rosso"; }
+      return;
+    }
+    capDati = { skill: d.skill || [], tool: d.tool || [] };
+    disegnaCapacita();
+    if (capMsg) {
+      capMsg.textContent = `${capDati.skill.length} skill, ${capDati.tool.length} strumenti`;
+      capMsg.className = "small dim";
+    }
+  } catch (e) {
+    if (capMsg) { capMsg.textContent = "non raggiungibile: " + e; capMsg.className = "small rosso"; }
+  }
+}
+
+function disegnaCapacita() {
+  if (!capLista) return;
+  const q = ((capFiltro && capFiltro.value) || "").toLowerCase().trim();
+  const tutti = capDati[capTab] || [];
+  const visti = q
+    ? tutti.filter(x => (x.nome || "").toLowerCase().includes(q)
+                   || (x.descrizione || "").toLowerCase().includes(q))
+    : tutti;
+
+  capLista.replaceChildren();
+  if (!visti.length) {
+    const p = document.createElement("p");
+    p.className = "cap-vuoto";
+    p.textContent = q ? "Nessun risultato per questo filtro." : "Non c'è niente da mostrare.";
+    capLista.appendChild(p);
+    return;
+  }
+
+  for (const x of visti) {
+    const riga = document.createElement("div");
+    riga.className = "cap-riga";
+
+    const corpo = document.createElement("div");
+    corpo.className = "cap-corpo";
+    const nome = document.createElement("div");
+    nome.className = "cap-nome";
+    nome.textContent = x.nome || "(senza nome)";
+    if (x.categoria) {
+      const cat = document.createElement("span");
+      cat.className = "cap-cat";
+      cat.textContent = x.categoria;
+      nome.appendChild(cat);
+    }
+    corpo.appendChild(nome);
+    if (x.descrizione) {
+      const desc = document.createElement("div");
+      desc.className = "cap-desc";
+      desc.textContent = x.descrizione;
+      corpo.appendChild(desc);
+    }
+    riga.appendChild(corpo);
+
+    // Solo le skill hanno una pagina da aprire: un tool è una funzione
+    // che chiama l'agente, non un documento da leggere.
+    if (capTab === "skill") {
+      const apri = document.createElement("button");
+      apri.className = "cap-apri";
+      apri.textContent = "apri";
+      apri.addEventListener("click", () => apriPaginaSkill(x.nome));
+      riga.appendChild(apri);
+    }
+
+    capLista.appendChild(riga);
+  }
+}
+
+// Dalla sidebar si apre la stessa pagina, non una seconda finestra.
+const sideCap = $("side-cap");
+if (sideCap) sideCap.addEventListener("click", () => apriCapacita());
+
+// ------------------------------------------- sidebar: riduci, non chiudere
+//
+// La X chiudeva del tutto e si perdeva la larghezza scelta. Adesso si
+// riduce a una striscia: riaprirla è un clic e la larghezza resta.
+
+const MIN_LARGHEZZA = 180;
+const MAX_LARGHEZZA = 520;
+const LARGHEZZA_RIDOTTA = 60;
+
+function larghezzaSide() {
+  const w = parseInt(localStorage.getItem("orchestra.side.w") || "", 10);
+  return (w >= MIN_LARGHEZZA && w <= MAX_LARGHEZZA) ? w : 268;
+}
+
+function riduciSide() {
+  if (!sidebar) return;
+  sidebar.style.width = LARGHEZZA_RIDOTTA + "px";
+  sidebar.style.flexBasis = LARGHEZZA_RIDOTTA + "px";
+  sidebar.classList.add("ridotta");
+  localStorage.setItem("orchestra.side.ridotta", "1");
+}
+
+function allargaSide() {
+  if (!sidebar) return;
+  const w = larghezzaSide();
+  sidebar.style.width = w + "px";
+  sidebar.style.flexBasis = w + "px";
+  sidebar.classList.remove("ridotta");
+  localStorage.removeItem("orchestra.side.ridotta");
+}
+
+// Aperta all'avvio, sempre. La cronologia è il pezzo che dà senso a una
+// conversazione che sopravvive al riavvio: nasconderla di default vuol
+// dire aver costruito la persistenza e non farla vedere.
+sidebar.removeAttribute("hidden");
+
+// Il bottone alterna aperta/ridotta. Non chiude: la cronologia serve
+// troppo spesso per costare due clic.
+if (sideBtn) {
+  sideBtn.addEventListener("click", () => {
+    if (sidebar && sidebar.classList.contains("ridotta")) allargaSide();
+    else riduciSide();
+  });
+}
+
+// Trascinamento del bordo. La larghezza si salva: sceglierla a ogni
+// avvio è il modo per non sceglierla mai.
+(function attivaResize() {
+  if (!sidebar) return;
+  const maniglia = document.createElement("div");
+  maniglia.className = "side-maniglia";
+  maniglia.title = "Trascina per ridimensionare";
+  sidebar.appendChild(maniglia);
+
+  let partenza = 0, larghezzaPartenza = 0;
+
+  maniglia.addEventListener("mousedown", (ev) => {
+    partenza = ev.clientX;
+    larghezzaPartenza = sidebar.getBoundingClientRect().width;
+    document.body.classList.add("side-trascina");
+    ev.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (ev) => {
+    if (!document.body.classList.contains("side-trascina")) return;
+    const nuova = larghezzaPartenza + (ev.clientX - partenza);
+    const limitata = Math.max(MIN_LARGHEZZA, Math.min(MAX_LARGHEZZA, nuova));
+    sidebar.style.width = limitata + "px";
+    sidebar.style.flexBasis = limitata + "px";
+    sidebar.classList.remove("ridotta");
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!document.body.classList.contains("side-trascina")) return;
+    document.body.classList.remove("side-trascina");
+    const w = Math.round(sidebar.getBoundingClientRect().width);
+    localStorage.setItem("orchestra.side.w", String(w));
+    localStorage.removeItem("orchestra.side.ridotta");
+  });
+})();
+
+// All'avvio: la larghezza di prima, e ridotta se lo era.
+(function ripristinaSide() {
+  if (!sidebar) return;
+  if (localStorage.getItem("orchestra.side.ridotta")) riduciSide();
+  else allargaSide();
+})();

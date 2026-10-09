@@ -122,6 +122,14 @@ class OrchestraApp:
             env.get("ORCHESTRA_PROVIDER", "openrouter"),
             env.get("ORCHESTRA_MODEL", ""),
         )
+        # Lo storico. La sessione appena creata non ha ancora un id: o è
+        # nuova, o deve caricare l'ultima conversazione da disco.
+        #
+        # Senza questo il salvataggio è morto — `_salva_su_disco` esce
+        # subito se `_sessione_id` è None, ed è lì che si vede se il
+        # pezzo è agganciato o è solo un modulo che funziona da solo.
+        self._storico: Any = None
+        self._aggancia_storico()
         self.delega_attiva = False
         self.ready = True
         self.error = ""
@@ -801,6 +809,34 @@ class OrchestraApp:
         self.session._catalogo_per_costo = app.catalog
         self.delega_attiva = self.session.attiva_delega()
 
+    def _aggancia_storico(self) -> None:
+        """Collega la sessione allo storico su disco.
+
+        All'avvio si riapre l'ULTIMA conversazione, non se ne crea una
+        nuova: l'utente chiude il browser e lo riapre aspettandosi di
+        ritrovare quello che stava facendo, non una pagina bianca con la
+        chat di ieri sparita da qualche parte.
+
+        Se il DB non si può aprire, si continua senza storico invece di
+        fermare l'avvio: una chat che funziona e non salva è un difetto,
+        una chat che non parte è un blocco.
+        """
+        try:
+            from .storico import storico
+            self._storico = storico()
+            ultima = self._storico.elenco(limite=1)
+            if ultima:
+                sid = int(ultima[0]["id"])
+                if self.session.carica_sessione(sid):
+                    return
+            # niente da riaprire: si crea la riga, così il primo turno
+            # ha già dove scrivere
+            self.session._sessione_id = self._storico.nuova_sessione(
+                modello=self.env.get("ORCHESTRA_MODEL", ""),
+                provider=self.env.get("ORCHESTRA_PROVIDER", ""))
+        except Exception:
+            self._storico = None
+
     @classmethod
     def create(cls) -> "OrchestraApp":
         """Costruisce l'app, o la mette in stato di errore se il provider
@@ -1072,6 +1108,61 @@ class Handler(BaseHTTPRequestHandler):
             snap["model"] = self.app.env.get("ORCHESTRA_MODEL", "")
             snap["provider"] = self.app.env.get("ORCHESTRA_PROVIDER", "")
             self._json(snap)
+        elif path == "/api/storico":
+            # In GET perche' e' una lettura: il pannello lo carica da
+            # solo quando si apre. Registrata solo fra i POST rispondeva
+            # 404 a una richiesta che il browser faceva in GET -- e il
+            # sintomo era "il pannello resta vuoto", che non dice niente
+            # del motivo.
+            try:
+                elenco = (self.app._storico.elenco(limite=200)
+                          if self.app._storico else [])
+                self._json({
+                    "sessioni": elenco,
+                    "attiva": getattr(self.app.session, "_sessione_id", None),
+                })
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+
+        elif path == "/api/memoria":
+            from .memoria import stato as stato_memoria
+            self._json(stato_memoria())
+
+        elif path == "/api/capacita":
+            # Skill e tool insieme, normalizzati. Due tab nella stessa
+            # pagina, ma due moduli diversi: il frontend non deve saperlo.
+            fuori: dict[str, Any] = {"skill": [], "tool": []}
+            try:
+                import orchestra.skills as sk
+                d = _skill_elenco(sk.Indice())
+                if d and not d.get("error"):
+                    lista = list(d.get("lista_scaricate") or [])
+                    lista += list(d.get("lista_generate") or [])
+                    for s in lista:
+                        if not isinstance(s, dict):
+                            continue
+                        fuori["skill"].append({
+                            "nome": s.get("nome", ""),
+                            "descrizione": s.get("descrizione", ""),
+                            "categoria": s.get("categoria", ""),
+                            "tipo": "skill",
+                        })
+            except Exception:
+                # Le skill non sono un requisito: senza, la pagina
+                # mostra la tab dei tool e non una pagina vuota.
+                pass
+            try:
+                for tool in (self.app.session.registry.active or []):
+                    fuori["tool"].append({
+                        "nome": getattr(tool, "name", ""),
+                        "descrizione": getattr(tool, "description", "") or "",
+                        "categoria": "strumento",
+                        "tipo": "tool",
+                    })
+            except Exception:
+                pass
+            self._json(fuori)
+
         elif path == "/api/stream":
             self._sse()
         elif path == "/api/models":
@@ -1689,6 +1780,87 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif path == "/api/cancel":
             self._json({"ok": s.cancel()})
+        elif path == "/api/storico":
+            # Elenco delle conversazioni. Solo GET: la lista si scrive
+            # da sola a fine turno, non c'e' niente da mandare.
+            try:
+                elenco = self._storico.elenco(limite=200) if self._storico else []
+                self._json({
+                    "sessioni": elenco,
+                    "attiva": getattr(self.session, "_sessione_id", None),
+                })
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
+
+        elif path == "/api/storico/apri":
+            # Apre una conversazione: sostituisce lo stato, non lo
+            # accoda. 409 se il turno precedente sta ancora girando.
+            try:
+                sid = int(body.get("id"))
+            except (TypeError, ValueError):
+                self._json({"error": "id mancante o non valido"}, 400)
+                return
+            try:
+                ok = self.session.carica_sessione(sid)
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            if not ok:
+                self._json({"error": "sessione non trovata"}, 404)
+                return
+            self._json({"ok": True, "snapshot": self.session.snapshot()})
+
+        elif path == "/api/storico/elimina":
+            try:
+                sid = int(body.get("id"))
+            except (TypeError, ValueError):
+                self._json({"error": "id mancante o non valido"}, 400)
+                return
+            attiva = getattr(self.session, "_sessione_id", None)
+            if self._storico is not None:
+                self._storico.elimina(sid)
+            # Se era quella aperta, si riparte da una vuota: lasciarla
+            # significherebbe scrivere su una riga che non esiste piu'.
+            if sid == attiva:
+                self.session.reset()
+                self.session._sessione_id = self._storico.nuova_sessione(
+                    modello=self.env.get("ORCHESTRA_MODEL", ""),
+                    provider=self.env.get("ORCHESTRA_PROVIDER", "")) if self._storico else None
+            self._json({"ok": True, "snapshot": self.session.snapshot()})
+
+        elif path == "/api/storico/nuova":
+            # Nuova conversazione, senza toccare le vecchie.
+            try:
+                self.session.reset()
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            self._json({"ok": True, "snapshot": self.session.snapshot()})
+
+        elif path == "/api/memoria":
+            from .memoria import stato as stato_memoria
+            self._json(stato_memoria())
+
+        elif path == "/api/memoria/aggiungi":
+            from .memoria import memoria
+            fatto = (body.get("fatto") or "").strip()
+            if not fatto:
+                self._json({"error": "fatto vuoto"}, 400)
+                return
+            nuovo = memoria().aggiungi(fatto, origine="manuale")
+            from .memoria import stato as stato_memoria
+            self._json({"ok": True, "nuovo": nuovo, **stato_memoria()})
+
+        elif path == "/api/memoria/elimina":
+            from .memoria import memoria
+            fatto = (body.get("fatto") or "").strip()
+            if not fatto:
+                self._json({"error": "fatto vuoto"}, 400)
+                return
+            tolto = memoria().elimina(fatto)
+            from .memoria import stato as stato_memoria
+            self._json({"ok": True, "tolto": tolto, **stato_memoria()})
+
         elif path == "/api/reset":
             try:
                 s.reset()
