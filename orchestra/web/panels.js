@@ -2238,18 +2238,23 @@ function sideAperta() {
 function apriSide(aperta) {
   if (!sidebar) return;
   if (aperta === undefined) aperta = !sideAperta();
-  if (aperta) sidebar.removeAttribute("hidden");
-  else sidebar.setAttribute("hidden", "");
   if (aperta) {
+    sidebar.removeAttribute("hidden");
     caricaSide();
     caricaSideMemoria();
-    sideBtn.classList.add("attivo");
   } else {
-    sideBtn.classList.remove("attivo");
+    sidebar.setAttribute("hidden", "");
   }
 }
 
-if (sideBtn) sideBtn.addEventListener("click", () => apriSide());
+// All'avvio si carica, sempre: la sidebar è aperta di default, e senza
+// questa chiamata la cronologia restava vuota fino al primo Ctrl+B.
+// Il bottone dell'header chiama riduciSide(), che non carica — solo
+// Ctrl+B passava da qui, ed è per questo che "la prima volta non c'è".
+if (sidebar && !sidebar.hasAttribute("hidden")) {
+  caricaSide();
+  caricaSideMemoria();
+}
 
 // La X non c'è più: il bottone RIDUCE a una striscia invece di chiudere.
 // La cronologia serve troppo spesso per costare due clic.
