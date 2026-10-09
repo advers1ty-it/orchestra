@@ -177,14 +177,86 @@ function tieniRagionamentoInFondo() {
   scrollDown();
 }
 
-function addText(role, text) {
+function addText(role, text, markdown) {
   const m = el("div", "msg " + role);
   m.appendChild(el("div", "role", role));
-  m.appendChild(el("div", "body", text));
+  const corpo = el("div", "body");
+  if (markdown) {
+    // Il modello parla markdown (`**grassetto**`, liste, codice): senza
+    // rendering si vedono gli asterischi crudi, come segnalato in uso.
+    // Solo i messaggi assistant: quelli user restano letterali (li hai
+    // scritti tu e si mostrano come li hai scritti), e gli output dei
+    // tool restano testo (potrebbero contenere `**` che non c'entrano).
+    corpo.innerHTML = renderMarkdown(text);
+  } else {
+    corpo.textContent = text;
+  }
+  m.appendChild(corpo);
   log.appendChild(m);
   tieniRagionamentoInFondo();
   scrollDown();
   return m;
+}
+
+// Markdown minimo per i messaggi del modello. Regola d'ordine: prima
+// si scappa l'HTML (l'output del modello non è fidato: un `<script>`
+// dentro una risposta non deve eseguirsi), POI si applica il markdown.
+// Il codice viene estratto prima di tutto, o gli asterischi dentro un
+// blocco ``` verrebbero letti come grassetto.
+function renderMarkdown(text) {
+  let h = String(text == null ? "" : text)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const pezzi = [];
+  const accantona = (html) => "\u0000" + (pezzi.push(html) - 1) + "\u0000";
+  h = h.replace(/```(\w*)\n?([\s\S]*?)(?:```|$)/g,
+    (_, lang, cod) => accantona("blocco:" + "<pre><code>" + cod.replace(/\n$/, "") + "</code></pre>"));
+  h = h.replace(/`[^`\n]+`/g,
+    (m) => accantona("inline:" + "<code>" + m.slice(1, -1) + "</code>"));
+  // evita che http://... diventi corsivo sugli slash: i link prima.
+  // L'URL esclude le virgolette: senza, un `"` dentro l'URL chiuderebbe
+  // l'href e il resto diventerebbe attributo — classica via d'uscita.
+  h = h.replace(/\[([^\]]+)\]\((https?:[^)"'\s]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/(^|[\s(>])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  const righe = h.split("\n");
+  let fuori = [], lista = null;
+  const chiudiLista = () => {
+    if (lista) { fuori.push((lista === "ul" ? "<ul>" : "<ol>") + listaHtml + (lista === "ul" ? "</ul>" : "</ol>")); lista = null; listaHtml = ""; }
+  };
+  let listaHtml = "";
+  for (const r of righe) {
+    let m;
+    if (/^\u0000\d+\u0000$/.test(r.trim()) && pezzi[+r.trim().slice(1, -1)].startsWith("blocco:")) {
+      chiudiLista();
+      fuori.push(pezzi[+r.trim().slice(1, -1)].slice(7));
+    } else if ((m = r.match(/^(#{1,3})\s+(.*)/))) {
+      chiudiLista();
+      fuori.push(`<div class="md-h${m[1].length}">${m[2]}</div>`);
+    } else if ((m = r.match(/^\s*---+\s*$/))) {
+      chiudiLista();
+      fuori.push("<hr>");
+    } else if ((m = r.match(/^\s*[-*]\s+(.*)/))) {
+      if (lista !== "ul") { chiudiLista(); lista = "ul"; }
+      listaHtml += "<li>" + m[1] + "</li>";
+    } else if ((m = r.match(/^\s*\d+[.)]\s+(.*)/))) {
+      if (lista !== "ol") { chiudiLista(); lista = "ol"; }
+      listaHtml += "<li>" + m[1] + "</li>";
+    } else if (/^\s*$/.test(r)) {
+      chiudiLista();
+    } else {
+      chiudiLista();
+      fuori.push("<p>" + r + "</p>");
+    }
+  }
+  chiudiLista();
+  h = fuori.join("\n");
+  // i pezzi inline restano dentro i <p>: si rimettono al loro posto
+  h = h.replace(/\u0000(\d+)\u0000/g, (_, n) => {
+    const p = pezzi[+n];
+    return p.startsWith("blocco:") ? p.slice(7) : p.slice(7);
+  });
+  return h;
 }
 
 function addNote(text) {
@@ -392,7 +464,7 @@ function handle(kind, d) {
           // call non ha niente da dire, e il suo contenuto sono i tool
           // sotto. La riga bianca era il motivo per cui questi messaggi
           // venivano omessi dallo snapshot.
-          if (text.trim()) addText("assistant", text);
+          if (text.trim()) addText("assistant", text, true);
           (m.tool_calls || []).forEach((tc) => {
             const creato = addTool(tc.name, tc.arguments, tc.id);
             const ris = risultatiTool[tc.id];
@@ -452,7 +524,7 @@ function handle(kind, d) {
       ragionamentoChiudi();
       togliAttesa();
       if (d.content) {
-        addText("assistant", d.content);
+        addText("assistant", d.content, true);
       }
       (d.tool_calls || []).forEach((tc) => {
         // chiave basata sull'id del tool call: `tool_end` lo cerca cosi' e

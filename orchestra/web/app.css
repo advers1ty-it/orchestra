@@ -1457,3 +1457,32 @@ select:disabled {
 }
 
 .ragionamento[hidden] { display: none; }
+
+/* Markdown dei messaggi assistant: sobrio, nelle dimensioni del testo.
+   Niente librerie esterne: bastano grassetto, liste, codice e titoli
+   piccoli — il 95% di quello che un modello scrive davvero. */
+.msg .body p { margin: 0.3em 0; }
+.msg .body p:first-child { margin-top: 0; }
+.msg .body p:last-child { margin-bottom: 0; }
+.msg .body ul, .msg .body ol { margin: 0.3em 0; padding-left: 1.4em; }
+.msg .body li { margin: 0.15em 0; }
+.msg .body code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+  background: rgba(127, 127, 127, 0.15);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+}
+.msg .body pre {
+  background: rgba(127, 127, 127, 0.12);
+  padding: 0.5em 0.7em;
+  border-radius: 5px;
+  overflow-x: auto;
+  font-size: 0.9em;
+}
+.msg .body pre code { background: none; padding: 0; }
+.msg .body a { color: var(--accent, #4a9eff); }
+.msg .body hr { border: none; border-top: 1px solid var(--border, #444); margin: 0.5em 0; }
+.md-h1 { font-size: 1.15em; font-weight: 700; margin: 0.4em 0 0.2em; }
+.md-h2 { font-size: 1.08em; font-weight: 700; margin: 0.4em 0 0.2em; }
+.md-h3 { font-size: 1em; font-weight: 700; margin: 0.3em 0 0.15em; }
