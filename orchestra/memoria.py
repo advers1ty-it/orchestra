@@ -123,8 +123,16 @@ class Memoria:
             self._ultimo_mtime = os.path.getmtime(self.percorso)
             self._ultima_lettura = time.time()
 
-    def aggiungi(self, fatto: str, origine: str = "") -> bool:
+    def aggiungi(self, fatto: str, origine: str = "",
+                 importante: bool = False) -> bool:
         """Aggiunge un fatto. Mai sovrascrive.
+
+        `importante` lo mette nella sezione `## Importanti`, che è quella
+        che finisce nel system prompt. La separazione è per POSIZIONE e non
+        per marcatura: una marcatura dentro la riga va pulita, e togliere
+        `[alta]` senza mangiare il fatto è un gioco di regex che si perde —
+        provato due volte, con il marcatore che finiva dentro il testo o
+        veniva mangiato dalla pulizia della fonte.
 
         Ritorna False se il fatto c'era già: duplicare la memoria la fa
         crescere senza che diventi più precisa, e un fatto ripetuto tre
@@ -146,17 +154,52 @@ class Memoria:
             if origine:
                 riga_nuova += f"  _{origine}_"
             riga_nuova += f"  <!-- {time.strftime('%Y-%m-%d')} -->\n"
-            if testo.rstrip().endswith("## Fatti"):
+
+            sezione = "## Importanti" if importante else "## Fatti"
+            if sezione not in testo:
+                # la sezione non c'è: si crea in fondo. `## Importanti`
+                # va PRIMA di `## Fatti` perché è quella che si legge.
+                if importante and "## Fatti" in testo:
+                    parti = testo.split("## Fatti", 1)
+                    nuovo = (parti[0] + "## Importanti\n\n" + riga_nuova
+                             + "\n## Fatti" + parti[1])
+                else:
+                    nuovo = testo.rstrip() + f"\n\n{sezione}\n\n" + riga_nuova
+            elif testo.rstrip().endswith(sezione):
                 nuovo = testo.rstrip() + "\n\n" + riga_nuova
-            elif "## Fatti" in testo:
-                # la sezione c'è: si appende subito dopo l'intestazione
-                parti = testo.split("## Fatti", 1)
-                nuovo = (parti[0] + "## Fatti\n"
-                         + riga_nuova + parti[1].lstrip("\n"))
             else:
-                nuovo = testo.rstrip() + "\n\n## Fatti\n\n" + riga_nuova
+                parti = testo.split(sezione, 1)
+                nuovo = parti[0] + sezione + "\n" + riga_nuova + parti[1].lstrip("\n")
             self.scrivi(nuovo)
             return True
+
+    def importanti(self) -> list[str]:
+        """I fatti della sezione `## Importanti`: quelli nel prompt."""
+        return self._fatti_della("## Importanti")
+
+    def _fatti_della(self, sezione: str) -> list[str]:
+        """I fatti di UNA sezione, senza la marcatura."""
+        with self._lock:
+            testo = self.leggi()
+        if sezione not in testo:
+            return []
+        parti = testo.split(sezione, 1)[1]
+        # la sezione finisce alla prossima intestazione di livello 2
+        for altra in ("\n## ",):
+            i = parti.find(altra)
+            if i >= 0:
+                parti = parti[:i]
+        fuori = []
+        for riga in parti.splitlines():
+            r = riga.strip()
+            if not r.startswith("-"):
+                continue
+            corpo = r.lstrip("-").strip()
+            corpo = re.sub(r"\s*<!--.*?-->\s*$", "", corpo)
+            corpo = re.sub(r"\s*_[^_]+_\s*$", "", corpo)
+            if corpo:
+                fuori.append(corpo)
+        return fuori
 
     def elimina(self, fatto: str) -> bool:
         with self._lock:
@@ -190,6 +233,11 @@ class Memoria:
             # toglie il commento HTML con la data e la fonte
             corpo = re.sub(r"\s*<!--.*?-->\s*$", "", corpo)
             corpo = re.sub(r"\s*_[^_]+_\s*$", "", corpo)
+            # e la marcatura di priorità. Se resta qui finisce dentro il
+            # testo del fatto: il confronto anti-duplicato di `aggiungi`
+            # non trova corrispondenza e il duplicato viene scritto lo
+            # stesso — provato, "Ricordato" su un fatto già presente.
+            corpo = re.sub(r"\s*\[alta\]\s*$", "", corpo, flags=re.IGNORECASE)
             if corpo:
                 fuori.append(corpo)
         return fuori

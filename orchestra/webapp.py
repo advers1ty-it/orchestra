@@ -733,23 +733,27 @@ class OrchestraApp:
         # Chiamare un metodo dell'app da qui faceva saltare ogni avvio
         # con NameError, presentato come un crash in create() — che e'
         # dove guardavo, e non dove era.
-        # La memoria entra nel system prompt, non in un messaggio a parte.
-        # Un messaggio "ricorda che..." dopo dieci minuti di chat è una
-        # riga qualsiasi; le istruzioni di sistema sono lette sempre.
-        # Se non c'è niente da ricordare non si aggiunge niente: una
-        # sezione vuota insegna al modello a parlare della memoria
-        # invece di usarla.
-        from .memoria import contesto_memoria
+        # Nel system prompt entra SOLO il poco che deve essere vero
+        # sempre — la sezione `## Importanti`. Il resto lo cerca l'agente
+        # col tool `memoria`.
+        #
+        # Il motivo è il costo: iniettare la memoria intera la paga a ogni
+        # turno, e il prezzo cresce con quanto ricordi. Dopo qualche mese
+        # di uso avvelena il contesto di ogni richiesta, comprese quelle
+        # che non c'entrano niente con quello che c'è salvato. Il tool
+        # costa solo quando si usa.
+        from .memoria_tools import blocco_prompt
         prompt_con_memoria = SYSTEM_PROMPT
-        ricordi = contesto_memoria()
-        if ricordi:
+        importanti = blocco_prompt()
+        if importanti:
             prompt_con_memoria = (
                 f"{SYSTEM_PROMPT}\n\n"
                 f"---\n"
-                f"Quello che sai di chi ti parla, dalle conversazioni "
-                f"precedenti. Non ripeterlo se non serve, e non dire "
-                f"\"dalla memoria\" — sai e basta:\n\n"
-                f"{ricordi}")
+                f"Cose che valgono in ogni conversazione. Non ripeterle "
+                f"se non servono. Per tutto il resto hai il tool "
+                f"`memoria`: cerca quello che ti serve invece di "
+                f"assumere di non saperlo.\n\n"
+                f"{importanti}")
         return Session(
                     provider=build_provider(provider_name, model=model,
                                             env=load_env(ENV_PATH) | os.environ),
