@@ -177,13 +177,14 @@
          finirebbe svuotato a ogni passaggio. -->
     <div class="opzioni-corpo">
       <nav class="opzioni-nav" aria-label="sezioni">
-        <button id="opz-tab-modello" class="opzioni-tab attiva" data-sez="modello">Modello</button>
-        <button id="opz-tab-skill" class="opzioni-tab" data-sez="skill">Skill</button>
-        <button id="opz-tab-cestino" class="opzioni-tab" data-sez="cestino">Cestino</button>
-        <button id="opz-tab-servizi" class="opzioni-tab" data-sez="servizi">Servizi</button>
-        <button id="opz-tab-permessi" class="opzioni-tab" data-sez="permessi">Permessi</button>
-        <button id="opz-tab-gratis" class="opzioni-tab" data-sez="gratis">Gratis</button>
-      </nav>
+              <button id="opz-tab-modello" class="opzioni-tab attiva" data-sez="modello">Modello</button>
+              <button id="opz-tab-budget" class="opzioni-tab" data-sez="budget">Budget</button>
+              <button id="opz-tab-skill" class="opzioni-tab" data-sez="skill">Skill</button>
+              <button id="opz-tab-cestino" class="opzioni-tab" data-sez="cestino">Cestino</button>
+              <button id="opz-tab-servizi" class="opzioni-tab" data-sez="servizi">Servizi</button>
+              <button id="opz-tab-permessi" class="opzioni-tab" data-sez="permessi">Permessi</button>
+              <button id="opz-tab-gratis" class="opzioni-tab" data-sez="gratis">Gratis</button>
+            </nav>
 
       <div class="opzioni-pannelli">
 
@@ -219,7 +220,51 @@
             alto, sopra la chat. Qui la trovi insieme a tutto il resto.</p>
         </section>
 
-        <section id="opz-sez-skill" class="opz-sez" data-sez="skill" hidden>
+                <section id="opz-sez-budget" class="opz-sez" data-sez="budget" hidden>
+                  <div class="opzioni-budget">
+                    <b>Limiti di spesa</b>
+                    <span class="dim">token e costo per task e sessione. Zero = nessun limite.</span>
+                    <div class="budget-campi">
+                      <label>Task — max token
+                        <input id="budget-task-tokens" type="number" min="0" step="1000" placeholder="es. 10000">
+                      </label>
+                      <label>Task — max costo ($)
+                        <input id="budget-task-cost" type="number" min="0" step="0.1" placeholder="es. 1.0">
+                      </label>
+                      <label>Task — max iterazioni
+                        <input id="budget-task-iters" type="number" min="0" step="1" placeholder="es. 50">
+                      </label>
+                      <label>Sessione — max token
+                        <input id="budget-sess-tokens" type="number" min="0" step="1000" placeholder="es. 50000">
+                      </label>
+                      <label>Sessione — max costo ($)
+                        <input id="budget-sess-cost" type="number" min="0" step="0.1" placeholder="es. 5.0">
+                      </label>
+                      <label>Sessione — max richieste
+                        <input id="budget-sess-reqs" type="number" min="0" step="1" placeholder="es. 500">
+                      </label>
+                    </div>
+                    <div class="opzioni-budget-azioni">
+                      <button id="budget-salva" class="primary">Salva</button>
+                      <button id="budget-reset" class="ghost">Reset a default</button>
+                    </div>
+                    <span id="budget-msg" class="small dim"></span>
+                    <details class="budget-globali">
+                      <summary>Budget globali (giorno/mese)</summary>
+                      <div class="budget-globali-valori">
+                        <label>Giorno — max costo ($)
+                          <input id="budget-day-cost" type="number" min="0" step="1" placeholder="es. 50">
+                        </label>
+                        <label>Mese — max costo ($)
+                          <input id="budget-month-cost" type="number" min="0" step="1" placeholder="es. 200">
+                        </label>
+                      </div>
+                      <span id="budget-global-msg" class="small dim"></span>
+                    </details>
+                  </div>
+                </section>
+
+                <section id="opz-sez-skill" class="opz-sez" data-sez="skill" hidden>
           <!-- Le skill stanno per prime: sono la cosa che si consulta
                di rado e per cui vale la pena venire apposta. Le
                generate hanno una colonna in piu' perche' non hanno la
