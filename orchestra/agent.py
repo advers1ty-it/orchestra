@@ -122,15 +122,17 @@ class Agent:
             else:
                 self.fallback_chain = fallback_chain or []
             self._fallback_state: FallbackState | None = None
-            # Budget guard. Lo stato si crea SEMPRE, anche senza limiti
-            # espliciti: i limiti possono arrivare da ORCHESTRA_BUDGET nel
-            # .env, e saltare la creazione perche' "non mi hanno passato
-            # niente" faceva leggere il .env a BudgetGuard senza che nessuno
-            # gli chiedesse niente — il limite era salvato, stampato nel
+            # Budget. Lo stato si crea SEMPRE, anche senza limiti espliciti:
+            # saltare la creazione perche' "non mi hanno passato niente"
+            # faceva leggere il .env a BudgetGuard senza che nessuno gli
+            # chiedesse niente -- il limite era salvato, mostrato nel
             # pannello, e non applicato da nessuna parte.
-            session_id = f"{provider.name}_{getattr(provider, 'model', 'unknown')}_{int(datetime.now().timestamp())}"
+            #
+            # Lo stato e' uno solo, trasversale a tutti i modelli: il tetto
+            # risponde a "quanto ho speso", e la bolletta non distingue.
+            # `session_id` non serve piu' a niente, resta per la firma.
             self._budget_state = budget_guard().get_or_create_session(
-                session_id, self.config.budget_limits)
+                self.config.budget_limits)
 
             # -- utility interne ---------------------------------------------------
 
@@ -347,7 +349,10 @@ class Agent:
                 tokens=resp.total_tokens,
             )
 
-            # Budget: record usage after each model call
+            # Budget: passa da record_usage, non da add_usage diretto.
+            # record_usage aggiorna anche i contatori giorno/mese, che
+            # vivono fuori dallo stato e su disco: sommandoli qui restavano
+            # a zero e il tetto giornaliero non veniva mai applicato.
             if self._budget_state and resp.total_tokens > 0:
                 prompt_tokens = getattr(resp, 'prompt_tokens', 0)
                 completion_tokens = getattr(resp, 'completion_tokens', 0)
@@ -355,8 +360,13 @@ class Agent:
                     prompt_tokens = resp.total_tokens // 2
                     completion_tokens = resp.total_tokens - prompt_tokens
                 cost_usd = (prompt_tokens + completion_tokens) / 1000 * 0.001
-                self._budget_state.add_usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost_usd=cost_usd, model=resp.model, category="")
-                violations = self._budget_state.check_limits()
+                violations = budget_guard().record_usage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=cost_usd,
+                    model=resp.model,
+                    category="",
+                )
                 if violations:
                     self._emit("budget_violation", violations=violations)
                     self.state.stopped_because = "budget_exceeded"
