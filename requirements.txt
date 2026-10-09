@@ -1,0 +1,6 @@
+# Dipendenze di Orchestra.
+#
+# `ddgs` è l'unica che porta funzioni nuove (la ricerca sul web senza
+# chiave). Il resto è standard library. Se manca, Orchestra funziona
+# comunque: i tool del web lo dicono invece di morire.
+ddgs>=9.0

@@ -540,6 +540,17 @@ def default_registry() -> ToolRegistry:
     # Adesso l'agente cerca quello che gli serve e paga solo per quello.
     from .memoria_tools import tool_memoria
     r.register(tool_memoria())
+    # Il web. I dieci tool che c'erano facevano tutti la stessa cosa:
+    # leggere e scrivere sul disco. Non uno cercava niente, quindi una
+    # domanda che dipende da fatti esterni non aveva risposta — non
+    # perché il modello non lo sapesse, ma perché non poteva saperlo.
+    #
+    # DuckDuckGo senza chiave: coerente col resto, che è gratis e gira
+    # in locale. Se `ddgs` non è installata il tool lo dice e Orchestra
+    # resta esattamente quella di prima.
+    from .web_tools import tool_web_cerca, tool_web_leggi
+    r.register(tool_web_cerca())
+    r.register(tool_web_leggi())
     # Le skill vengono dopo: i loro tool hanno senso solo se l'indice
     # sa di cosa parla, e l'indice si riempie con skill_importa. Ma
     # sono attivi subito — un tool che si accende solo dopo che
@@ -557,6 +568,17 @@ Come lavori:
 - Preferisci `list_dir` e `read_file` a indovinare il contenuto di un file.
 - Rispondi in modo conciso. Niente preamboli, niente ripetizioni di quello che hai già detto.
 - Quando hai finito, dì in una riga cosa hai fatto e dove sta il risultato.
+
+Quando cercare sul web:
+- La tua conoscenza ha una data di taglio. Se la domanda dipende da un fatto
+  che può essere cambiato dopo — prezzi, versioni, notizie, documentazione,
+  chi è in carica oggi — cerca con `web_cerca` invece di rispondere a memoria.
+- Se rispondi a memoria su una cosa che puoi verificare, dillo: "questo lo so
+  fino a <data>, se vuoi te lo verifico". Non presentare un ricordo come un
+  fatto attuale.
+- `web_cerca` dà titoli e riassunti; `web_leggi` apre la pagina. Se il
+  riassunto non basta, apri il risultato invece di indovinare dal titolo.
+- Cerca solo quando serve: per cose che sai già, cercare è rumore e costa tempo.
 
 Fuori dalla cartella di lavoro:
 - Gli strumenti accettano percorsi ASSOLUTI, non solo relativi. Puoi quindi
