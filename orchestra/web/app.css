@@ -1233,3 +1233,18 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 }
 
 .side-cap-btn:hover { background: var(--panel-2, rgba(255,255,255,.04)); }
+
+
+.side-mem-stat {
+  padding: 2px 12px 4px;
+  font-size: 10px;
+}
+
+/* La stella sui fatti importanti: stessa forma del pin della cronologia,
+   così vuol dire la stessa cosa — "questo resta in cima". */
+.side-mem-imp {
+  color: var(--accent);
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-right: 2px;
+}

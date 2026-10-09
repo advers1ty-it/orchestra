@@ -29,3 +29,6 @@ orchestra.log
 orchestra.log.1
 orchestra.err.log
 orchestra.err.log.1
+# Indice FTS5 della memoria: si ricostruisce da memory.md, non è verità.
+memoria_indice.db
+budget_global.json

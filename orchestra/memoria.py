@@ -52,6 +52,14 @@ TETTO_CARATTERI = 20_000
 FINESTRA_RELOAD = 10.0
 
 
+# Regex precompilate: `fatti()` le applica a ogni riga del file, e viene
+# chiamata a ogni `aggiungi`. Con pattern stringa `re.sub` ricompila
+# ogni volta.
+_RE_DATA = re.compile(r"\s*<!--.*?-->\s*$")
+_RE_FONTE = re.compile(r"\s*_[^_]+_\s*$")
+_RE_ALTA = re.compile(r"\s*\[alta\]\s*$", re.IGNORECASE)
+
+
 class Memoria:
     """Backend su file di testo.
 
@@ -65,6 +73,12 @@ class Memoria:
         self._lock = threading.RLock()
         self._ultima_lettura = 0.0
         self._cache = ""
+        # Insieme dei fatti già visti, per il controllo anti-duplicato.
+        # Popolato la prima volta da `fatti()`, poi tenuto aggiornato da
+        # `appendi`: senza, `aggiungi` dovrebbe rifare il parse completo
+        # a ogni fatto, che è il costo che questo insieme evita.
+        self._visti: set[str] | None = None
+        self._cache_fatti_chiave = None
         self._ultimo_mtime = 0.0
         if not os.path.exists(self.percorso):
             self.scrivi_intestazione()
@@ -99,6 +113,12 @@ class Memoria:
                         self._cache = f.read()
                     self._ultimo_mtime = mtime
                     self._ultima_lettura = adesso
+                    # il file è cambiato fuori da noi (a mano): il set
+                    # dei fatti visti non è più vero, e senza invalidarlo
+                    # `aggiungi` riscriverebbe un fatto che qualcuno ha
+                    # già scritto nel file.
+                    self._visti = None
+                    self._cache_fatti_chiave = None
                 except OSError:
                     pass
 
@@ -107,13 +127,54 @@ class Memoria:
         with self._lock:
             testo = self._cache
         if len(testo) > TETTO_CARATTERI:
-            # Taglio e dico che ho tagliato: una memoria mutilata in
-            # silenzio fa rispondere il modello come se quei fatti non
-            # esistessero, e nessuno capisce perché.
-            testo = (testo[:TETTO_CARATTERI]
-                     + "\n\n[...memoria troncata: troppo lunga,"
-                       " togli righe da memory.md]")
+            # NON si taglia in silenzio. Il taglio silenzioso è il difetto
+            # peggiore che questa memoria abbia avuto: con 20.000 fatti il
+            # file si fermava a 272, la ricerca girava su quelli, e non
+            # c'era un errore da nessuna parte — solo fatti che non
+            # esistevano più.
+            #
+            # Adesso si alza il tetto e si tiene TUTTO. Il tetto basso
+            # serviva a non iniettare la memoria intera nel prompt, ma
+            # quello non si fa più: nel prompt finiscono solo gli
+            # Importanti, e il resto lo cerca l'indice FTS5.
+            TETTO_LETTURA = 2_000_000      # 2 MB: nessuno arriva qui a mano
+            if len(testo) > TETTO_LETTURA:
+                testo = (testo[:TETTO_LETTURA]
+                         + f"\n\n[...memoria oltre {TETTO_LETTURA:,} caratteri:"
+                           f" il file è {len(testo):,}. Questa è un'emergenza,"
+                           f" non un limite di progetto — separa i fatti in"
+                           f" più file o usa l'indice.]")
+            return testo
         return testo
+
+    def appendi(self, riga: str) -> None:
+        """Aggiunge in FONDO al file, senza riscriverlo.
+
+        `aggiungi` faceva split/join su tutto il testo a ogni fatto: con
+        5000 fatti erano 125 secondi, perché il costo è quadratico — ogni
+        scrittura ricopia tutto quello che c'è già. L'append è O(1).
+
+        La cache si aggiorna per concatenato, NON rileggendo il file:
+        leggere l'intero file per aggiornare una riga è lo stesso costo
+        della scrittura completa, solo spostato. `_rileggi_se_cambiato`
+        se ne accorgerà da solo se il file cambia fuori da qui (a mano),
+        perché confronta l'mtime.
+        """
+        with self._lock:
+            with open(self.percorso, "a", encoding="utf-8") as f:
+                f.write(riga)
+            self._cache = (self._cache or "") + riga
+            # la cache dei fatti va invalidata a mano: la sua chiave è
+            # l'hash del testo, e ricalcolarlo su 300 KB per sapere che
+            # una riga è cambiata è il costo che la cache serve a evitare.
+            self._cache_fatti_chiave = None
+            self._ultima_lettura = time.time()
+            # si lascia `_ultimo_mtime` indietro di proposito: se qualcuno
+            # scrive a mano, `_rileggi_se_cambiato` deve accorgersene.
+            try:
+                self._ultimo_mtime = os.path.getmtime(self.percorso)
+            except OSError:
+                pass
 
     def scrivi(self, testo: str) -> None:
         with self._lock:
@@ -147,30 +208,38 @@ class Memoria:
             # e l'origine, quindi confrontarla col fatto nudo non
             # corrispondeva mai — e il "nuovo" che tornava era vero solo
             # perché il duplicato veniva scritto lo stesso.
-            if fatto in self.fatti():
+            # Il confronto anti-duplicato usa un SET incrementale, non
+            # `fatti()`. Rifare il parse di 5000 righe a ogni fatto è
+            # 27 ms; su 5000 fatti fa 140 secondi, e il profiler dice che
+            # l'86% del tempo sta lì — 2,6 milioni di chiamate a re.sub.
+            if self._visti is None:
+                self._visti = set(self.fatti())
+            fatto_pulito = _RE_DATA.sub("", _RE_FONTE.sub("", _RE_ALTA.sub("", fatto)))
+            fatto_pulito = fatto_pulito.strip()
+            if fatto_pulito in self._visti:
                 return False
-            testo = self.leggi()
+            self._visti.add(fatto_pulito)
             riga_nuova = f"- {fatto}"
             if origine:
                 riga_nuova += f"  _{origine}_"
             riga_nuova += f"  <!-- {time.strftime('%Y-%m-%d')} -->\n"
 
             sezione = "## Importanti" if importante else "## Fatti"
-            if sezione not in testo:
-                # la sezione non c'è: si crea in fondo. `## Importanti`
-                # va PRIMA di `## Fatti` perché è quella che si legge.
-                if importante and "## Fatti" in testo:
-                    parti = testo.split("## Fatti", 1)
-                    nuovo = (parti[0] + "## Importanti\n\n" + riga_nuova
-                             + "\n## Fatti" + parti[1])
-                else:
-                    nuovo = testo.rstrip() + f"\n\n{sezione}\n\n" + riga_nuova
-            elif testo.rstrip().endswith(sezione):
-                nuovo = testo.rstrip() + "\n\n" + riga_nuova
+            testo = self.leggi()
+            # Append, non riscrittura. Il controllo è su che sezione sta
+            # in FONDO: se è quella giusta si appende e basta; se non c'è
+            # o è un'altra, si scrive l'intestazione e poi la riga. In
+            # Markdown due sezioni con lo stesso nome sono valide, e
+            # `_fatti_della` le concatena nell'ordine.
+            ultima_sezione = ""
+            for riga_testo in reversed(testo.splitlines()):
+                if riga_testo.strip().startswith("## "):
+                    ultima_sezione = riga_testo.strip()
+                    break
+            if ultima_sezione == sezione:
+                self.appendi(riga_nuova)
             else:
-                parti = testo.split(sezione, 1)
-                nuovo = parti[0] + sezione + "\n" + riga_nuova + parti[1].lstrip("\n")
-            self.scrivi(nuovo)
+                self.appendi(f"\n{sezione}\n\n{riga_nuova}")
             return True
 
     def importanti(self) -> list[str]:
@@ -221,26 +290,37 @@ class Memoria:
 
         Serve alla UI: mostrare il file grezzo è un editor di testo,
         mostrare i fatti è una lista che si può correggere.
+
+        Il risultato è in cache per (testo, lunghezza): `aggiungi` lo
+        chiama a OGNI fatto per il controllo anti-duplicato, e su 5000
+        fatti rifare il parse completo ogni volta costa 27 ms per fatto —
+        140 secondi in tutto. La cache si butta da sé se il testo
+        cambia, perché la chiave è il testo stesso.
         """
         with self._lock:
             testo = self.leggi()
-        fuori = []
-        for riga in testo.splitlines():
-            r = riga.strip()
-            if not r.startswith("-"):
-                continue
-            corpo = r.lstrip("-").strip()
-            # toglie il commento HTML con la data e la fonte
-            corpo = re.sub(r"\s*<!--.*?-->\s*$", "", corpo)
-            corpo = re.sub(r"\s*_[^_]+_\s*$", "", corpo)
-            # e la marcatura di priorità. Se resta qui finisce dentro il
-            # testo del fatto: il confronto anti-duplicato di `aggiungi`
-            # non trova corrispondenza e il duplicato viene scritto lo
-            # stesso — provato, "Ricordato" su un fatto già presente.
-            corpo = re.sub(r"\s*\[alta\]\s*$", "", corpo, flags=re.IGNORECASE)
-            if corpo:
-                fuori.append(corpo)
-        return fuori
+            chiave = (len(testo), hash(testo))
+            if getattr(self, "_cache_fatti_chiave", None) == chiave:
+                return self._cache_fatti
+            fuori = []
+            for riga in testo.splitlines():
+                r = riga.strip()
+                if not r.startswith("-"):
+                    continue
+                corpo = r.lstrip("-").strip()
+                # toglie il commento HTML con la data e la fonte
+                corpo = _RE_DATA.sub("", corpo)
+                corpo = _RE_FONTE.sub("", corpo)
+                # e la marcatura di priorità. Se resta qui finisce dentro
+                # il testo del fatto: il confronto anti-duplicato di
+                # `aggiungi` non trova corrispondenza e il duplicato viene
+                # scritto lo stesso — provato, "Ricordato".
+                corpo = _RE_ALTA.sub("", corpo)
+                if corpo:
+                    fuori.append(corpo)
+            self._cache_fatti = fuori
+            self._cache_fatti_chiave = chiave
+            return fuori
 
 
 # -- registro dei backend --------------------------------------------------

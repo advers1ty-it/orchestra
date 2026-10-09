@@ -1130,7 +1130,23 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/memoria":
             from .memoria import stato as stato_memoria
-            self._json(stato_memoria())
+            fuori = stato_memoria()
+            # Le statistiche dell'indice: quanti fatti sono morti. Sono il
+            # motivo per cui l'indice esiste — non la velocità, che è
+            # rumore, ma sapere cosa non serve più.
+            try:
+                from .memoria_indice import indice_memoria
+                st = indice_memoria().statistiche()
+                fuori["indice"] = {
+                    "totale": st["totale"],
+                    "mai_usati": st["mai_usati"],
+                    "in_scadenza": [x["testo"] for x in st["in_scadenza"]],
+                    "piu_usati": st["piu_usati"],
+                    "byte_file": st["byte_file"],
+                }
+            except Exception as e:
+                fuori["indice"] = {"errore": str(e)}
+            self._json(fuori)
 
         elif path == "/api/capacita":
             # Skill e tool insieme, normalizzati. Due tab nella stessa
@@ -1840,6 +1856,37 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(e)}, 409)
                 return
             self._json({"ok": True, "snapshot": self.session.snapshot()})
+
+        elif path == "/api/memoria/cerca":
+            # Ricerca FTS5 dalla UI. `conta_usi=False`: cercare per
+            # controllare non vuol dire che il fatto serva, e contarlo
+            # inquinerebbe la statistica che dice cosa è morto.
+            from .memoria_tools import memoria as mem
+            from .memoria import stato as stato_memoria
+            q = (body.get("query") or "").strip()
+            m = mem()
+            fuori: dict[str, Any] = {"query": q}
+            try:
+                righe = m.cerca(q, limite=int(body.get("limite") or 20),
+                                conta_usi=False)
+                fuori["risultati"] = [
+                    {"testo": r["testo"], "usi": r["usi"],
+                     "importante": bool(r["importante"])} for r in righe]
+                st = m.statistiche()
+                fuori["indice"] = {"totale": st["totale"],
+                                   "mai_usati": st["mai_usati"],
+                                   "byte_file": st["byte_file"]}
+            except Exception:
+                # il backend a file non ha `cerca`: si torna al filtro per
+                # sottostringa, che è quello che faceva prima dell'indice
+                tutti = m.fatti() + m.importanti()
+                ql = q.lower()
+                fuori["risultati"] = [
+                    {"testo": f, "usi": 0, "importante": f in m.importanti()}
+                    for f in tutti if ql in f.lower()][:20]
+                fuori["nota"] = "ricerca per sottostringa (indice non disponibile)"
+            fuori.update(stato_memoria())
+            self._json(fuori)
 
         elif path == "/api/memoria":
             from .memoria import stato as stato_memoria
