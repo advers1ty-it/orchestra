@@ -47,6 +47,7 @@ class DemoProvider:
 
     def __init__(self, hold=0.0):
         self.n = 0
+        self.name = "demo"
         self.model = "demo-model"
         self.hold = hold  # secondi di attesa per ogni chiamata
 

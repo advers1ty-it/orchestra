@@ -113,6 +113,7 @@ class ChattyProvider:
 
     def __init__(self):
         self.turn = 0
+        self.name = "chatty"
         self.model = "m"
         self.seen_token_counts = []
 
@@ -179,6 +180,7 @@ class LoopingProvider:
 
     def __init__(self):
         self.turn = 0
+        self.name = "looping"
         self.model = "m"
 
     def chat(self, messages, tools=None, **kw):
@@ -291,8 +293,13 @@ except ProviderError as e:
 
 # e il loop deve effettivamente recoverare da quel 502
 class Nested502Provider:
+    """Un provider finto. Deve avere .name e .model, altrimenti la
+    fallback chain non si costruisce e l'agente non lo chiama mai."""
+
     def __init__(self):
         self.t = 0
+        self.name = "nested"
+        self.model = "m"
 
     def chat(self, messages, tools=None, **kw):
         self.t += 1

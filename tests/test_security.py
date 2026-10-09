@@ -115,6 +115,7 @@ class EvilProvider:
 
     def __init__(self):
         self.t = 0
+        self.name = "evil"
         self.model = "m"
 
     def chat(self, messages, tools=None, **kw):

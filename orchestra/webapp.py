@@ -725,11 +725,28 @@ class OrchestraApp:
         # Chiamare un metodo dell'app da qui faceva saltare ogni avvio
         # con NameError, presentato come un crash in create() — che e'
         # dove guardavo, e non dove era.
+        # La memoria entra nel system prompt, non in un messaggio a parte.
+        # Un messaggio "ricorda che..." dopo dieci minuti di chat è una
+        # riga qualsiasi; le istruzioni di sistema sono lette sempre.
+        # Se non c'è niente da ricordare non si aggiunge niente: una
+        # sezione vuota insegna al modello a parlare della memoria
+        # invece di usarla.
+        from .memoria import contesto_memoria
+        prompt_con_memoria = SYSTEM_PROMPT
+        ricordi = contesto_memoria()
+        if ricordi:
+            prompt_con_memoria = (
+                f"{SYSTEM_PROMPT}\n\n"
+                f"---\n"
+                f"Quello che sai di chi ti parla, dalle conversazioni "
+                f"precedenti. Non ripeterlo se non serve, e non dire "
+                f"\"dalla memoria\" — sai e basta:\n\n"
+                f"{ricordi}")
         return Session(
                     provider=build_provider(provider_name, model=model,
                                             env=load_env(ENV_PATH) | os.environ),
                     registry=default_registry(),
-                    system_prompt=SYSTEM_PROMPT,
+                    system_prompt=prompt_con_memoria,
                     config=LoopConfig(max_iterations=12, context_limit=120_000,
                                       keep_recent=8,
                                       reasoning_level=os.environ.get("ORCHESTRA_REASONING", None)),

@@ -32,8 +32,13 @@ VEDI = []
 
 
 class Provider:
-    """Risponde con testo e basta: il caso piu' semplice possibile."""
+    """Risponde con testo e basta: il caso piu' semplice possibile.
 
+    `name` serve alla fallback chain: senza, l'agente non chiama mai
+    questo provider e il test misura il niente.
+    """
+
+    name = "fake"
     model = "fake/modello"
 
     def chat(self, messages, tools=None, **kw):
@@ -55,8 +60,10 @@ def ascolta():
     for ev in bridge.stream(timeout=2.0):
         if ev["kind"] != "keepalive":
             raccolti.append(ev)
-            if len(raccolti) >= 2:
-                return
+    # niente return anticipato: ci si ferma solo a stream finito.
+    # Fermarsi al secondo evento era una corsa -- `user_message` e
+    # `thinking` arrivano prima di `assistant`, e il test concludeva che
+    # l'assistant non c'era. Dipendeva da quanto era veloce il thread.
 
 
 t = threading.Thread(target=ascolta, daemon=True)

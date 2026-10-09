@@ -44,6 +44,7 @@ class SlowProvider:
     def __init__(self, delay=0.02):
         self.delay = delay
         self.t = 0
+        self.name = "slow"
         self.model = "m"
         self.calls = 0
         self._lock = threading.Lock()
@@ -262,6 +263,8 @@ check("contesto preservato dopo l'update",
 print("\n[8] Errori del provider non lasciano la sessione appesa")
 class BrokenProvider:
     model = "m"
+    name = "broken"
+
     def chat(self, messages, tools=None, **kw):
         raise RuntimeError("provider esploso")
 
@@ -335,6 +338,7 @@ class ToolThenText:
     con testo. Serve a produrre esattamente un assistant senza contenuto."""
     def __init__(self):
         self.n = 0
+        self.name = "tool_then_text"
         self.model = "m"
 
     def chat(self, messages, tools=None, **kw):

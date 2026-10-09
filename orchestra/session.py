@@ -24,6 +24,7 @@ import time
 from typing import Any, Iterator
 
 from .agent import Agent, AgentState, LoopConfig
+from .storico import storico
 from .types import Message, ToolRegistry
 
 
@@ -264,6 +265,10 @@ class Session:
         self._modello_delegato: str = ""
         self._fabbrica_figlio: Any = None
         self._delegatore: Any = None
+        # Id della sessione nello storico su disco. None = non si salva
+        # (le prove costruiscono Session senza storico, e salvarle
+        # riempirebbe il DB di conversazioni finte).
+        self._sessione_id: int | None = None
 
         self.agent = Agent(
             provider,
@@ -717,6 +722,16 @@ class Session:
                 {"message": f"{type(e).__name__}: {e}"},
             )
         finally:
+            # Persistenza a fine turno, nel `finally`: un turno annullato
+            # o caduto per errore ha già prodotto domanda e risposta
+            # parziale, e buttarle via vuol dire ripetere la domanda per
+            # riavere la risposta che il modello aveva già scritto.
+            #
+            # Si salva qui e non a ogni messaggio: un turno interrotto a
+            # metà risposta non deve lasciare su disco una risposta
+            # completa che non lo era. `stopped_because` dice com'è
+            # andata, e resta nel DB accanto ai messaggi.
+            self._salva_su_disco()
             # `busy` va azzerato PRIMA di emettere `idle`, non dopo: la UI
             # usa `idle` come segnale per riabilitare l'input, e se arrivasse
             # prima dello stato reale accetterebbe un messaggio che il server
@@ -726,6 +741,35 @@ class Session:
                 now_free = True
             if now_free:
                 self.bridge.emit("idle", {"busy": False})
+
+    def _salva_su_disco(self) -> None:
+        """Scrive i messaggi del turno nello storico.
+
+        Silenziosa per scelta: un errore del DB non deve uccidere un
+        turno che è già riuscito. La conversazione è in memoria, l'utente
+        l'ha vista — perdere il salvataggio è un difetto da segnalare, non
+        da far diventare un errore in chat.
+        """
+        if self._sessione_id is None:
+            return
+        try:
+            st = self.agent.state
+            messaggi = [
+                {"ruolo": m.role, "contenuto": m.content, "nome": m.name}
+                for m in st.messages
+                if m.role in ("user", "assistant") and m.content.strip()
+            ]
+            storico().salva_turno(self._sessione_id, messaggi,
+                                  modello=self.modello_in_uso())
+            # Il titolo si prende dal primo messaggio dell'utente: una
+            # sessione si apre prima che si scriva, quindi all'inizio non
+            # c'è niente da metterci.
+            primo = next((m["contenuto"] for m in messaggi
+                          if m["ruolo"] == "user"), "")
+            if primo:
+                storico().titolo_se_vuoto(self._sessione_id, primo)
+        except Exception:
+            pass
 
     def _should_continue(self, state: AgentState) -> bool:
         return not self._cancel.is_set()
