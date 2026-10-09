@@ -46,7 +46,50 @@ CREATE TABLE IF NOT EXISTS messaggi (
 
 CREATE INDEX IF NOT EXISTS idx_messaggi_sessione
     ON messaggi(sessione_id, id);
+
+-- Indice di ricerca sul CONTENUTO, non solo per sessione. Senza, l'unico
+-- modo di trovare "quella cosa che avevamo detto" era aprire le
+-- conversazioni una a una — e lo storico su disco serviva a conservare,
+-- non a ritrovare.
+--
+-- Speculare, come nella memoria: la tabella FTS5 copia `contenuto` e si
+-- può buttare e ricostruire da `messaggi` senza perdere niente.
+CREATE VIRTUAL TABLE IF NOT EXISTS messaggi_fts USING fts5(
+    contenuto, content='messaggi', content_rowid='id', tokenize='unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS messaggi_ai AFTER INSERT ON messaggi BEGIN
+    INSERT INTO messaggi_fts(rowid, contenuto) VALUES (new.id, new.contenuto);
+END;
+CREATE TRIGGER IF NOT EXISTS messaggi_ad AFTER DELETE ON messaggi BEGIN
+    INSERT INTO messaggi_fts(messaggi_fts, rowid, contenuto)
+        VALUES ('delete', old.id, old.contenuto);
+END;
+CREATE TRIGGER IF NOT EXISTS messaggi_au AFTER UPDATE ON messaggi BEGIN
+    INSERT INTO messaggi_fts(messaggi_fts, rowid, contenuto)
+        VALUES ('delete', old.id, old.contenuto);
+    INSERT INTO messaggi_fts(rowid, contenuto) VALUES (new.id, new.contenuto);
+END;
 """
+
+
+def _frammento(testo: str, parola: str, intorno: int = 180) -> str:
+    """Il pezzo di messaggio intorno alla parola cercata.
+
+    Un messaggio lungo restituito per intero è rumore: la parte che serve
+    sta dove la parola appare, e il resto spinge fuori gli altri risultati.
+    Se la parola non c'è (ricerca per sottostringa su più parole), si prende
+    l'inizio, che è dove di solito sta il senso.
+    """
+    t = " ".join((testo or "").split())
+    if len(t) <= intorno * 2:
+        return t
+    i = t.lower().find((parola or "").lower())
+    if i < 0:
+        return t[:intorno * 2] + "…"
+    a = max(0, i - intorno)
+    b = min(len(t), i + intorno)
+    return ("…" if a > 0 else "") + t[a:b] + ("…" if b < len(t) else "")
 
 
 def percorso_db() -> str:
@@ -216,6 +259,95 @@ class Storico:
                     d["tool"] = None
             fuori.append(d)
         return fuori
+
+    def cerca(self, query: str, limite: int = 20) -> list[dict[str, Any]]:
+        """Cerca nel contenuto delle conversazioni passate.
+
+        FTS5, non sottostringa. Ma il risultato non è la riga nuda: un
+        frammento senza sapere di quale conversazione è non si può riaprire,
+        e ritrovare una cosa che non si può riaprire è un modo raffinato di
+        perderla. Per questo ogni risultato porta il titolo e l'id della
+        sessione.
+
+        Se l'indice è vuoto e i messaggi no, l'indice si rifà da sé. Un DB
+        creato prima che l'FTS esistesse ha i messaggi e l'indice vuoto:
+        senza questa riga la ricerca tornerebbe zero per sempre, e chi
+        aggiorna non ha modo di sapere che deve ricostruire a mano.
+
+        Le parole si quotano: una query con un apostrofo fa fallire la
+        sintassi MATCH, e la ricerca tornerebbe vuota invece di dire che
+        non ha trovato niente.
+        """
+        q = (query or "").strip()
+        if not q:
+            return []
+        with self._lock:
+            self._ripara_fts_se_vuoto()
+        parole = [p for p in q.split() if p]
+        if not parole:
+            return []
+        frase = " AND ".join(f'"{p}"' for p in parole)
+        with self._lock:
+            try:
+                righe = self._conn.execute(
+                    "SELECT m.id AS msg_id, m.ruolo, m.contenuto,"
+                    "       m.creata, s.id AS sessione_id, s.titolo,"
+                    "       s.aggiornata, s.modello"
+                    " FROM messaggi_fts"
+                    " JOIN messaggi m ON m.id = messaggi_fts.rowid"
+                    " JOIN sessioni s ON s.id = m.sessione_id"
+                    " WHERE messaggi_fts MATCH ?"
+                    " ORDER BY rank, m.creata DESC LIMIT ?",
+                    (frase, max(1, min(int(limite or 20), 50)))).fetchall()
+            except Exception:
+                # indice FTS mancante o DB vecchio: si torna al filtro su
+                # contenuto, che è quello che faceva prima. Meglio lento che
+                # muto.
+                righe = self._conn.execute(
+                    "SELECT m.id AS msg_id, m.ruolo, m.contenuto, m.creata,"
+                    "       s.id AS sessione_id, s.titolo, s.aggiornata, s.modello"
+                    " FROM messaggi m JOIN sessioni s ON s.id = m.sessione_id"
+                    " WHERE LOWER(m.contenuto) LIKE ?"
+                    " ORDER BY m.creata DESC LIMIT ?",
+                    (f"%{q.lower()}%", max(1, min(int(limite or 20), 50)))).fetchall()
+        fuori = []
+        for r in righe:
+            d = dict(r)
+            testo = (d.get("contenuto") or "").strip()
+            # Il frammento è tagliato intorno alla prima parola cercata:
+            # un messaggio lungo restituito per intero è rumore, e la parte
+            # che serve sta dove la parola appare.
+            d["frammento"] = _frammento(testo, parole[0])
+            fuori.append(d)
+        return fuori
+
+    def _ripara_fts_se_vuoto(self) -> None:
+        """Se l'indice FTS è vuoto e i messaggi no, lo rifà.
+
+        Da chiamare col lock già preso. Un DB nato prima che l'FTS
+        esistesse ha i messaggi e l'indice vuoto: senza, la ricerca
+        tornerebbe zero per sempre e non ci sarebbe modo di accorgersene.
+        """
+        try:
+            n_fts = self._conn.execute(
+                "SELECT COUNT(*) c FROM messaggi_fts").fetchone()["c"]
+            n_msg = self._conn.execute(
+                "SELECT COUNT(*) c FROM messaggi").fetchone()["c"]
+            if n_fts == 0 and n_msg > 0:
+                self._conn.execute(
+                    "INSERT INTO messaggi_fts(messaggi_fts) VALUES ('rebuild')")
+                self._conn.commit()
+        except Exception:
+            pass
+
+    def ricostruisci_fts(self) -> int:
+        """Rifa l'indice di ricerca dai messaggi. Torna quanti."""
+        with self._lock:
+            self._conn.execute("INSERT INTO messaggi_fts(messaggi_fts)"
+                               " VALUES ('rebuild')")
+            self._conn.commit()
+            n = self._conn.execute("SELECT COUNT(*) c FROM messaggi").fetchone()["c"]
+        return n
 
     def salva_turno(self, sessione_id: int, messaggi: list[dict[str, Any]],
                     modello: str = "", provider: str = "") -> None:

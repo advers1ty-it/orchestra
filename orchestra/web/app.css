@@ -1308,3 +1308,130 @@ body.side-trascina { user-select: none; cursor: col-resize; }
   overflow-y: auto;
   min-height: 0;
 }
+
+
+.side-cerca-campi {
+  padding: 0 10px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-cerca-campi input {
+  width: 100%;
+  font-size: 12px;
+}
+
+/* Il frammento cercato: due righe al massimo, così in mezzo alla lista
+   non apre una voragine. */
+.side-frammento {
+  display: block;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.35;
+  margin-top: 1px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+
+/* ---------- campi di scrittura ----------
+   Prima non avevano stile proprio: ereditavano dal browser, e su un tema
+   scuro un input bianco con l'ombra interna stonava contro tutto il resto.
+   Una regola sola per tutti, e le eccezioni sotto. */
+
+input[type="text"],
+input[type="search"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  background: var(--panel-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+
+/* Il segno che il campo è attivo. Senza, su fondo scuro non si capisce
+   dove sta scrivendo — l'anello usa l'accento invece di un bordo più
+   spesso, che taglia il layout. */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(91, 140, 255, .18);
+}
+
+/* Il testo segnaposto: `--muted` è per il testo normale, troppo chiaro
+   per una cosa che deve suggerire e non dichiarare. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: .65;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* I campi della sidebar e del filtro Capacità ereditano la base: gli
+   resta solo la dimensione, che è una scelta loro. */
+.side-mem-campi input,
+.side-cerca-campi input {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.side-mem-campi input { flex: 1; min-width: 0; }
+
+/* ---------- barre di scorrimento ----------
+   Non c'era una riga su di loro: su un tema scuro venivano chiare, con
+   l'angolo grigio di Windows, e in tre punti (cronologia, chat, lista
+   capacità) erano l'unica cosa che non era del tema.
+
+   `color-scheme: dark` è la mette che conta: dice al browser di disegnare
+   i suoi controlli per fondo scuro. Poi le regole per WebKit/Blinker
+   aggiustano quello che resta, e Firefox prende `scrollbar-color`. */
+:root {
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* L'angolo in basso a destra, dove due scrollbar si incontrano: se non
+   si tocca resta del colore di sistema. */
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

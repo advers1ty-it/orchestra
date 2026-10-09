@@ -2876,3 +2876,103 @@ if (sidebar && !sidebar.hasAttribute("hidden")) {
   caricaSide();
   caricaSideMemoria();
 }
+
+// --------------------------------------------- cercare nelle conversazioni
+//
+// Il campo sta SOTTO la lista: cercare sostituisce quello che c'era, e
+// svuotandolo si torna alla lista. Non è una seconda lista.
+
+const sideCerca = $("side-cerca");
+let _cercaTimer = null;
+
+async function sideRicerca() {
+  if (!sideElenco) return;
+  const q = (sideCerca.value || "").trim();
+  try {
+    const r = await fetch("/api/storico/cerca", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q, limite: 30 }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
+      return;
+    }
+    sideElenco.replaceChildren();
+
+    if (!q) {
+      // lista normale
+      caricaSideSessioni();
+      return;
+    }
+
+    const trovati = d.risultati || [];
+    if (!trovati.length) {
+      const li = document.createElement("li");
+      li.className = "small dim";
+      li.style.padding = "6px";
+      li.textContent = "Nessuna conversazione trovata.";
+      sideElenco.appendChild(li);
+      return;
+    }
+
+    for (const x of trovati) {
+      const li = document.createElement("li");
+      li.className = "side-riga";
+
+      const apri = document.createElement("button");
+      apri.className = "side-apri";
+      apri.title = x.titolo || "(senza titolo)";
+      const testo = document.createElement("span");
+      testo.className = "side-testo";
+      testo.textContent = x.titolo || "(senza titolo)";
+      const meta = document.createElement("span");
+      meta.className = "side-meta";
+      meta.textContent = x.ruolo;
+      const framm = document.createElement("span");
+      framm.className = "side-frammento";
+      framm.textContent = x.frammento || "";
+      apri.appendChild(testo);
+      apri.appendChild(meta);
+      apri.appendChild(framm);
+      apri.addEventListener("click", async () => {
+        // si apre la conversazione da cui viene il pezzo
+        try {
+          const rr = await fetch("/api/storico/apri", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: x.sessione_id }),
+          });
+          const rd = await rr.json();
+          if (!rr.ok) {
+            if (sideMsg) { sideMsg.textContent = rd.error || ("errore " + rr.status); sideMsg.className = "small rosso side-msg"; }
+            return;
+          }
+          if (rd.snapshot) handle("snapshot", rd.snapshot);
+          if (sideCerca) { sideCerca.value = ""; }
+          await caricaSideSessioni();
+        } catch (e) {
+          if (sideMsg) { sideMsg.textContent = "apertura fallita: " + e; sideMsg.className = "small rosso side-msg"; }
+        }
+      });
+      li.appendChild(apri);
+      sideElenco.appendChild(li);
+    }
+  } catch (e) {
+    if (sideMsg) { sideMsg.textContent = "ricerca fallita: " + e; sideMsg.className = "small rosso side-msg"; }
+  }
+}
+
+if (sideCerca) {
+  sideCerca.addEventListener("input", () => {
+    if (_cercaTimer) clearTimeout(_cercaTimer);
+    _cercaTimer = setTimeout(sideRicerca, 250);
+  });
+  sideCerca.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      sideCerca.value = "";
+      caricaSideSessioni();
+    }
+  });
+}

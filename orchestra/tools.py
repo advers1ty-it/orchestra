@@ -551,6 +551,12 @@ def default_registry() -> ToolRegistry:
     from .web_tools import tool_web_cerca, tool_web_leggi
     r.register(tool_web_cerca())
     r.register(tool_web_leggi())
+    # Cercare nelle conversazioni passate. Lo storico conservava e non
+    # faceva ritrovare: l'unico modo era aprire le chat una a una, e
+    # l'indice che c'era era per sessione, non per contenuto. Lo stesso
+    # difetto della memoria, con l'indice FTS5 già scritto e non collegato.
+    from .storico_tools import tool_storico_cerca
+    r.register(tool_storico_cerca())
     # Le skill vengono dopo: i loro tool hanno senso solo se l'indice
     # sa di cosa parla, e l'indice si riempie con skill_importa. Ma
     # sono attivi subito — un tool che si accende solo dopo che
