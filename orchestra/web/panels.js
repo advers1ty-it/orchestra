@@ -464,6 +464,18 @@ on(opzioniPanel, "click", (e) => { if (e.target === opzioniPanel) chiudiOpzioni(
 const optProvider = $("opt-provider");
 const optModel = $("opt-model");
 const optReasoning = $("opt-reasoning");
+const optBudgetTaskTokens = $("budget-task-tokens");
+const optBudgetTaskCost = $("budget-task-cost");
+const optBudgetTaskIters = $("budget-task-iters");
+const optBudgetSessTokens = $("budget-sess-tokens");
+const optBudgetSessCost = $("budget-sess-cost");
+const optBudgetSessReqs = $("budget-sess-reqs");
+const optBudgetDayCost = $("budget-day-cost");
+const optBudgetMonthCost = $("budget-month-cost");
+const optBudgetSalva = $("budget-salva");
+const optBudgetReset = $("budget-reset");
+const optBudgetMsg = $("budget-msg");
+const optBudgetGlobalMsg = $("budget-global-msg");
 const optMsg = $("opt-provider-msg");
 
 const NOME_PROVIDER = {
@@ -555,6 +567,19 @@ function disegnaProvider(d) {
         const r = d.reasoning || "";
         hdrReasoning.value = r;
         hdrReasoning.disabled = false;
+      }
+
+      // Budget: populate fields from server state
+      if (d.budget) {
+        const b = d.budget;
+        optBudgetTaskTokens.value = b.task_tokens || "";
+        optBudgetTaskCost.value = b.task_cost || "";
+        optBudgetTaskIters.value = b.task_iters || "";
+        optBudgetSessTokens.value = b.sess_tokens || "";
+        optBudgetSessCost.value = b.sess_cost || "";
+        optBudgetSessReqs.value = b.sess_reqs || "";
+        optBudgetDayCost.value = b.day_cost || "";
+        optBudgetMonthCost.value = b.month_cost || "";
       }
     }
 
@@ -726,6 +751,59 @@ on(hdrReasoning, "change", async () => {
     }
   } catch (e) {
     await caricaOpzioni();
+  }
+});
+
+// Budget save
+on(optBudgetSalva, "click", async () => {
+  const body = {
+    task_tokens: optBudgetTaskTokens.value ? parseInt(optBudgetTaskTokens.value) : 0,
+    task_cost: optBudgetTaskCost.value ? parseFloat(optBudgetTaskCost.value) : 0,
+    task_iters: optBudgetTaskIters.value ? parseInt(optBudgetTaskIters.value) : 0,
+    sess_tokens: optBudgetSessTokens.value ? parseInt(optBudgetSessTokens.value) : 0,
+    sess_cost: optBudgetSessCost.value ? parseFloat(optBudgetSessCost.value) : 0,
+    sess_reqs: optBudgetSessReqs.value ? parseInt(optBudgetSessReqs.value) : 0,
+    day_cost: optBudgetDayCost.value ? parseFloat(optBudgetDayCost.value) : 0,
+    month_cost: optBudgetMonthCost.value ? parseFloat(optBudgetMonthCost.value) : 0,
+  };
+  optBudgetMsg.textContent = "salvataggio...";
+  try {
+    const resp = await fetch("/api/budget", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await resp.json();
+    if (!resp.ok) {
+      optBudgetMsg.textContent = d.error || ("errore " + resp.status);
+      optBudgetMsg.className = "small rosso";
+      return;
+    }
+    optBudgetMsg.textContent = "salvato";
+    optBudgetMsg.className = "small verde";
+  } catch (e) {
+    optBudgetMsg.textContent = "salvataggio fallito: " + e;
+    optBudgetMsg.className = "small rosso";
+  }
+});
+
+// Budget reset
+on(optBudgetReset, "click", async () => {
+  optBudgetMsg.textContent = "reset...";
+  try {
+    const resp = await fetch("/api/budget/reset", { method: "POST" });
+    const d = await resp.json();
+    if (!resp.ok) {
+      optBudgetMsg.textContent = d.error || ("errore " + resp.status);
+      optBudgetMsg.className = "small rosso";
+      return;
+    }
+    optBudgetMsg.textContent = "reset completato";
+    optBudgetMsg.className = "small verde";
+    await caricaOpzioni();
+  } catch (e) {
+    optBudgetMsg.textContent = "reset fallito: " + e;
+    optBudgetMsg.className = "small rosso";
   }
 });
 

@@ -122,11 +122,15 @@ class Agent:
             else:
                 self.fallback_chain = fallback_chain or []
             self._fallback_state: FallbackState | None = None
-            # Budget guard
-            self._budget_state = None
-            if self.config.budget_limits:
-                session_id = f"{provider.name}_{getattr(provider, 'model', 'unknown')}_{int(datetime.now().timestamp())}"
-                self._budget_state = budget_guard().get_or_create_session(session_id, self.config.budget_limits)
+            # Budget guard. Lo stato si crea SEMPRE, anche senza limiti
+            # espliciti: i limiti possono arrivare da ORCHESTRA_BUDGET nel
+            # .env, e saltare la creazione perche' "non mi hanno passato
+            # niente" faceva leggere il .env a BudgetGuard senza che nessuno
+            # gli chiedesse niente — il limite era salvato, stampato nel
+            # pannello, e non applicato da nessuna parte.
+            session_id = f"{provider.name}_{getattr(provider, 'model', 'unknown')}_{int(datetime.now().timestamp())}"
+            self._budget_state = budget_guard().get_or_create_session(
+                session_id, self.config.budget_limits)
 
             # -- utility interne ---------------------------------------------------
 

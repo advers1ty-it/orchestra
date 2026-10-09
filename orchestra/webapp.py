@@ -68,6 +68,28 @@ MAX_ALLEGATO = 20 * 1024 * 1024   # 20 MB: 12 di file + base64 + margine
 MAX_ALLEGATO_FILE_MB = 12         # il tetto che l'utente vede prima
 
 
+def _budget_per_pannello(env: dict[str, str]) -> dict[str, Any]:
+    """I limiti salvati, con i nomi che il pannello Budget usa.
+
+    Separata da /api/budget perche' il pannello deve mostrare quello che
+    c'e' adesso, non quello che si sta per salvare. Se non c'e' niente di
+    configurato torna tutti None: i campi restano vuoti, che e' la verita',
+    invece di mostrare i valori di default come se fossero stati scelti.
+    """
+    import json as _json
+    raw = (env.get("ORCHESTRA_BUDGET") or "").strip()
+    vuoto = {"task_tokens": None, "task_cost": None, "task_iters": None,
+             "sess_tokens": None, "sess_cost": None, "sess_reqs": None,
+             "day_cost": None, "month_cost": None}
+    if not raw:
+        return vuoto
+    try:
+        d = _json.loads(raw)
+    except ValueError:
+        return vuoto
+    return {k: d.get(k) for k in vuoto}
+
+
 
 
 class OrchestraApp:
@@ -1134,6 +1156,7 @@ class Handler(BaseHTTPRequestHandler):
                 "motori": sorted(NO_KEY_PROVIDERS),
                 "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
                 "reasoning": self.app.env.get("ORCHESTRA_REASONING", ""),
+                "budget": _budget_per_pannello(self.app.env),
             })
         elif path == "/api/locali":
             # Separato perche' e' lento per costruzione: si interrogano
@@ -1852,6 +1875,54 @@ class Handler(BaseHTTPRequestHandler):
             # la risposta porta solo lo stato, mai il valore
             self._json({"ok": True, "messaggio": msg,
                         "chiavi": keys_mod.stato(ENV_PATH, self.app.env)})
+        elif path == "/api/budget":
+            # Salva configurazione budget. Persiste in .env come JSON:
+            # senza, il limite valeva fino al riavvio e poi si perdeva --
+            # che per un limite di spesa e' il contrario di un limite.
+            import json as _json_mod
+            from .budget import budget_guard, BudgetLimits
+
+            def parse_int(v):
+                return int(v) if v not in (None, "", 0) else None
+
+            def parse_float(v):
+                return float(v) if v not in (None, "", 0.0) else None
+
+            limiti = BudgetLimits(
+                max_tokens_per_task=parse_int(body.get("task_tokens")),
+                max_cost_usd_per_task=parse_float(body.get("task_cost")),
+                max_iterations_per_task=parse_int(body.get("task_iters")),
+                max_tokens_per_session=parse_int(body.get("sess_tokens")),
+                max_cost_usd_per_session=parse_float(body.get("sess_cost")),
+                max_requests_per_session=parse_int(body.get("sess_reqs")),
+                max_cost_usd_per_day=parse_float(body.get("day_cost")),
+                max_cost_usd_per_month=parse_float(body.get("month_cost")),
+            )
+            session_id = (self.app.env.get("ORCHESTRA_PROVIDER", "openrouter")
+                          + "_" + self.app.env.get("ORCHESTRA_MODEL", "unknown"))
+            budget_guard().get_or_create_session(session_id, limiti)
+
+            budget_json = _json_mod.dumps({
+                "task_tokens": limiti.max_tokens_per_task,
+                "task_cost": limiti.max_cost_usd_per_task,
+                "task_iters": limiti.max_iterations_per_task,
+                "sess_tokens": limiti.max_tokens_per_session,
+                "sess_cost": limiti.max_cost_usd_per_session,
+                "sess_reqs": limiti.max_requests_per_session,
+                "day_cost": limiti.max_cost_usd_per_day,
+                "month_cost": limiti.max_cost_usd_per_month,
+            })
+            from . import keys as keys_mod
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_BUDGET", budget_json)
+            self.app.env["ORCHESTRA_BUDGET"] = budget_json
+            self._json({"ok": True, "messaggio": "Budget salvato"})
+        elif path == "/api/budget/reset":
+            from .budget import budget_guard
+            from . import keys as keys_mod
+            budget_guard()._instance = None
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_BUDGET", "")
+            self.app.env.pop("ORCHESTRA_BUDGET", None)
+            self._json({"ok": True, "messaggio": "Budget riportato ai valori di default"})
         elif path == "/api/prova":
             # Prova manuale: un prompt, un modello, tutta la trascrizione.
             # Diversa dal benchmark: qui non c'e' un punteggio, c'e' la

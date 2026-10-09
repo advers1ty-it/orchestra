@@ -235,17 +235,52 @@ class BudgetGuard:
             self._last_month = this_month
 
     def get_or_create_session(self, session_id: str, limits: BudgetLimits | None = None) -> BudgetState:
-        """Ottiene o crea lo stato budget per una sessione."""
+        """Ottiene o crea lo stato budget per una sessione.
+
+        Se `limits` e' None e la sessione non esiste, i limiti vengono letti da
+        `ORCHESTRA_BUDGET` nel .env: senza, un limite salvato dal pannello
+        Opzioni sopravviveva al riavvio su disco ma non veniva mai applicato --
+        il valore c'era e l'agente non lo guardava, che e' il difetto peggiore
+        possibile perche' sembra che il limite sia attivo.
+        """
         with self._lock:
             if session_id not in self.states:
                 self.states[session_id] = BudgetState(
                     session_id=session_id,
                     started_at=datetime.now().isoformat(),
-                    limits=limits or BudgetLimits(),
+                    limits=limits or self._limits_da_env(),
                 )
             elif limits:
                 self.states[session_id].limits = limits
             return self.states[session_id]
+
+    def _limits_da_env(self) -> BudgetLimits:
+        """Legge i limiti da ORCHESTRA_BUDGET (.env, JSON).
+
+        Chiamata solo da get_or_create_session, quando non arriva un
+        BudgetLimits esplicito. Se la chiave non c'e' o e' vuota, torna i
+        limiti di default: nessun limite e' una scelta possibile, e se uno
+        non ha configurato niente non e' un errore.
+        """
+        from .providers import load_env
+        try:
+            env = load_env(os.path.join(os.path.dirname(__file__), ".env"))
+            raw = (env.get("ORCHESTRA_BUDGET") or "").strip()
+            if not raw:
+                return BudgetLimits()
+            d = json.loads(raw)
+            return BudgetLimits(
+                max_tokens_per_task=d.get("task_tokens") or 1_000_000,
+                max_cost_usd_per_task=d.get("task_cost") or 10.0,
+                max_iterations_per_task=d.get("task_iters") or 50,
+                max_tokens_per_session=d.get("sess_tokens") or 1_000_000,
+                max_cost_usd_per_session=d.get("sess_cost") or 10.0,
+                max_requests_per_session=d.get("sess_reqs") or 500,
+                max_cost_usd_per_day=d.get("day_cost") or 50.0,
+                max_cost_usd_per_month=d.get("month_cost") or 200.0,
+            )
+        except Exception:
+            return BudgetLimits()
 
     def remove_session(self, session_id: str) -> None:
         """Rimuove una sessione (es. alla fine)."""
