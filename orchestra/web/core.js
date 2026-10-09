@@ -160,17 +160,30 @@ function renderStats(s) {
 // che arriva PRIMA di `user_message`: finiva cosi' un contenitore vuoto
 // sopra il messaggio dell'utente, con la risposta dentro. Sembrava che
 // l'agente rispondesse "sopra". In una chat l'ordine e' tutto.
+// Se il ragionamento è visibile, resta in fondo: ogni cosa che arriva
+// dopo (tool, testo, attesa) lo spingerebbe su, e dopo tre tool non si
+// vedrebbe più. `appendChild` su un nodo che esiste già lo SPOSTA, non
+// lo duplica — quindi questa è un'operazione sicura da chiamare sempre.
+function tieniRagionamentoInFondo() {
+  if (typeof ragionamentoVisibile === "undefined" || !ragionamentoVisibile) return;
+  const n = document.getElementById("ragionamento");
+  if (n && n.parentNode === log) log.appendChild(n);
+  scrollDown();
+}
+
 function addText(role, text) {
   const m = el("div", "msg " + role);
   m.appendChild(el("div", "role", role));
   m.appendChild(el("div", "body", text));
   log.appendChild(m);
+  tieniRagionamentoInFondo();
   scrollDown();
   return m;
 }
 
 function addNote(text) {
   log.appendChild(el("div", "sysnote", text));
+  tieniRagionamentoInFondo();
   scrollDown();
 }
 
@@ -199,6 +212,7 @@ function mostraAttesa() {
     attesaNodo = el("div", "attesa");
     log.appendChild(attesaNodo);
   }
+  tieniRagionamentoInFondo();
   attesaGiro += 1;
   const i = Math.min(attesaGiro - 1, FRASI_ATTESA.length - 1);
   attesaNodo.textContent = FRASI_ATTESA[i];
@@ -306,6 +320,7 @@ function addTool(name, args, key) {
   t.appendChild(head);
   t.appendChild(out);
   log.appendChild(t);
+  tieniRagionamentoInFondo();
   scrollDown();
   return { root: t, status: st, out };
 }
