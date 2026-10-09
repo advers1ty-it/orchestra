@@ -54,6 +54,7 @@ class SlowProvider:
     def __init__(self, delay=0.3):
         self.delay = delay
         self.n = 0
+        self.name = "slow"
         self.model = "fake-model"
 
     def chat(self, messages, tools=None, **kw):

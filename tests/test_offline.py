@@ -291,6 +291,7 @@ big_reg.register(Tool(name="big", description="x", schema={"type": "object", "pr
 
 class Chatty2(FakeProvider):
     def __init__(self):
+        super().__init__([], name="chatty2")
         self.t = 0
 
     def chat(self, messages, tools=None, **kw):
