@@ -452,7 +452,29 @@
   </div>
 </div>
 
-  <aside id="sidebar" hidden>
+  
+
+<div id="capacita" class="panel hidden">
+  <div class="panel-box capacita-box">
+    <div class="panel-head">
+      <div><b>Capacit&agrave;</b> <span class="dim">&mdash; quello che so fare</span></div>
+      <button id="capacita-close" class="ghost">Chiudi</button>
+    </div>
+    <nav class="capacita-nav">
+      <button id="cap-tab-skill" class="cap-tab attiva" data-tab="skill">Skill</button>
+      <button id="cap-tab-tool" class="cap-tab" data-tab="tool">Strumenti</button>
+    </nav>
+    <input id="cap-filtro" type="text" class="cap-filtro"
+           placeholder="Filtra per nome o descrizione..." spellcheck="false" />
+    <div id="cap-lista" class="cap-lista"></div>
+    <p id="cap-msg" class="small dim"></p>
+  </div>
+</div>
+
+
+
+  <div class="centro">
+<aside id="sidebar" hidden>
     <div class="side-testa">
       <span class="side-titolo">Cronologia</span>
       <button id="side-riduci" class="ghost side-x" title="Riduci il pannello"
@@ -488,29 +510,12 @@
 
     <p id="side-msg" class="small dim side-msg"></p>
   </aside>
-
-<div id="capacita" class="panel hidden">
-  <div class="panel-box capacita-box">
-    <div class="panel-head">
-      <div><b>Capacit&agrave;</b> <span class="dim">&mdash; quello che so fare</span></div>
-      <button id="capacita-close" class="ghost">Chiudi</button>
-    </div>
-    <nav class="capacita-nav">
-      <button id="cap-tab-skill" class="cap-tab attiva" data-tab="skill">Skill</button>
-      <button id="cap-tab-tool" class="cap-tab" data-tab="tool">Strumenti</button>
-    </nav>
-    <input id="cap-filtro" type="text" class="cap-filtro"
-           placeholder="Filtra per nome o descrizione..." spellcheck="false" />
-    <div id="cap-lista" class="cap-lista"></div>
-    <p id="cap-msg" class="small dim"></p>
-  </div>
-</div>
-
-<main id="main">
+  <main id="main">
   <div class="wrap" id="log"></div>
 </main>
+  </div>
 
-<footer>
+  <footer>
   <div class="cwrap">
     <div class="row">
       <button id="btn-allega" class="ghost" title="Allega una foto, un PDF o un file di testo" disabled>

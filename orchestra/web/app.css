@@ -954,14 +954,39 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
    Un overlay coprirebbe la conversazione proprio mentre la si sfoglia,
    ed è il difetto classico di una sidebar fatta male. */
 
+/* Il body è `flex-direction: column`, quindi sidebar e chat si impilano
+   VERTICALMENTE. Avevo progettato la sidebar come se stesse ACCANTO alla
+   chat, e `flex: 0 0 268px` in un contenitore column fissa l'ALTEZZA a
+   268px, non la larghezza: la sidebar restava alta 268px e il resto
+   finiva sotto il bordo — misurato nel browser, bottone Capacità a 448px
+   su una sidebar che chiude a 323.
+
+   Serve un contenitore ROW intorno a sidebar e main. */
 #sidebar {
   width: 268px;
   flex: 0 0 268px;
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border-right: 1px solid var(--border);
+  border-right: 1px var(--border) solid;
+  border-bottom: 1px var(--border) solid;
   overflow: hidden;
+  min-height: 0;
+}
+
+/* Il corpo centrale: sidebar a sinistra, chat a destra, ognuna alta
+   quanto la finestra meno l'header. */
+.centro {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.centro main {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -998,9 +1023,22 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 /* Nessuna delle tre liste si prende tutto lo spazio: la sidebar è un flex
    column, e con `flex: 1 1 auto` la cronologia schiaccia a zero pixel
    quelle sotto. La lista dei fatti restava piena ma invisibile. */
-.side-elenco { flex: 1 1 40%; max-height: 40vh; }
-.side-skill { flex: 0 1 auto; max-height: 22vh; }
-.side-sez { flex: 0 0 auto; }
+/* Le quote sono in FRAZIONI di flex, non in vh: in vh si sommano fra
+   loro e alle teste fisse, e sforavano la finestra (84vh + ~170px di
+   titoli e campi). Su 900px erano 928px — 28px di troppo, e con 104
+   skill la lista ne voleva 2704. */
+/* Le tre liste si spartiscono lo spazio avanzato in parti uguali. Ma la
+   SEZIONE della memoria era `flex: 0 0 auto`, cioè alta quanto il suo
+   contenuto: con i campi di ricerca e le statistiche prendeva 185px e
+   spingeva la sezione Skill fuori dal bordo (misurato: sfora di 10px con
+   la lista delle skill ancora VUOTA, quindi non era la lista).
+
+   Da qui: anche le sezioni si spartiscono lo spazio, e dentro ognuna la
+   propria lista scorre. */
+.side-elenco { flex: 1 1 0; min-height: 60px; }
+.side-skill { flex: 1 1 0; min-height: 50px; }
+.side-mem-elenco { flex: 1 1 0; min-height: 40px; }
+.side-sez { flex: 1 1 0; min-height: 0; }
 
 .side-sez {
   border-top: 1px solid var(--border);
@@ -1162,8 +1200,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 
 .side-mem-elenco {
   list-style: none; margin: 0; padding: 0 6px;
-  overflow-y: auto; flex: 1 1 auto; min-height: 40px;
-  max-height: 22vh;
+  overflow-y: auto; flex: 1 1 0; min-height: 40px;
 }
 
 .side-mem-riga {

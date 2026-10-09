@@ -2251,11 +2251,6 @@ function apriSide(aperta) {
 // questa chiamata la cronologia restava vuota fino al primo Ctrl+B.
 // Il bottone dell'header chiama riduciSide(), che non carica — solo
 // Ctrl+B passava da qui, ed è per questo che "la prima volta non c'è".
-if (sidebar && !sidebar.hasAttribute("hidden")) {
-  caricaSide();
-  caricaSideMemoria();
-}
-
 // La X non c'è più: il bottone RIDUCE a una striscia invece di chiudere.
 // La cronologia serve troppo spesso per costare due clic.
 const sideRiduci = $("side-riduci");
@@ -2870,3 +2865,14 @@ if (sideBtn) {
   if (localStorage.getItem("orchestra.side.ridotta")) riduciSide();
   else allargaSide();
 })();
+
+// Caricamento all'avvio, in FONDO di proposito. Stava subito dopo la
+// dichiarazione di `sidebar`, ma `caricaSide` tocca `sideSkill`,
+// `sideElenco` e `sideMemElenco`, che sono `const` dichiarate più sotto:
+// in temporal dead zone il riferimento lancia e le liste restano vuote
+// — senza errori in console, perché la funzione è hoisted e sembra
+// chiamabile.
+if (sidebar && !sidebar.hasAttribute("hidden")) {
+  caricaSide();
+  caricaSideMemoria();
+}
