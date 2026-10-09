@@ -1812,6 +1812,31 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": str(e)}, 500)
 
+        elif path == "/api/storico/cerca":
+            # Ricerca full-text nelle conversazioni passate. `sessioni` è
+            # sempre presente, vuoto se non c'è query: la UI distingue
+            # "sto cercando" da "sto guardando la lista".
+            storico_db = self.app._storico
+            q = (body.get("query") or "").strip()
+            fuori: dict[str, Any] = {"query": q, "risultati": [], "sessioni": []}
+            if q and storico_db is not None:
+                try:
+                    fuori["risultati"] = storico_db.cerca(
+                        q, limite=int(body.get("limite") or 30))
+                except Exception as e:
+                    self._json({"error": str(e)}, 500)
+                    return
+            else:
+                try:
+                    fuori["sessioni"] = (storico_db.elenco(limite=200)
+                                         if storico_db else [])
+                    fuori["attiva"] = getattr(self.app.session,
+                                              "_sessione_id", None)
+                except Exception as e:
+                    self._json({"error": str(e)}, 500)
+                    return
+            self._json(fuori)
+
         elif path == "/api/storico/apri":
             # Apre una conversazione: sostituisce lo stato, non lo
             # accoda. 409 se il turno precedente sta ancora girando.
