@@ -291,9 +291,37 @@ class Session:
         I messaggi assistant senza testo vengono omessi: sono i turni in cui
         il modello ha solo emesso tool call, e mostrarli come messaggi vuoti
         fa righe bianche nella cronologia. Il loro contenuto si vede dai tool.
+
+        I tool CI sono, invece: chiamate e risultati viaggiano nello
+        snapshot, o al refresh spariscono dallo schermo. Sono già nel
+        contesto del modello — mostrarli non costa un token in più,
+        perché i token li paga chi li MANDA al modello, non chi li
+        mostra nel browser. Nasconderli risparmierebbe zero e toglierebbe
+        la storia di cosa ha fatto.
         """
         with self._lock:
             st: AgentState = self.agent.state
+            messaggi = []
+            for m in st.messages:
+                if m.role == "user":
+                    messaggi.append({"role": m.role, "content": m.content,
+                                     "name": m.name})
+                elif m.role == "assistant" and (
+                        m.content.strip() or m.tool_calls):
+                    item: dict[str, Any] = {"role": m.role,
+                                            "content": m.content,
+                                            "name": m.name}
+                    if m.tool_calls:
+                        item["tool_calls"] = [
+                            {"id": tc.id, "name": tc.name,
+                             "arguments": tc.arguments}
+                            for tc in m.tool_calls
+                        ]
+                    messaggi.append(item)
+                elif m.role == "tool":
+                    messaggi.append({"role": m.role, "content": m.content,
+                                     "name": m.name,
+                                     "tool_call_id": m.tool_call_id})
             return {
                 "busy": self._busy,
                 "iterations": st.iterations,
@@ -303,12 +331,7 @@ class Session:
                 "compactions": st.compactions,
                 "stopped_because": st.stopped_because,
                 "usage_by_model": dict(st.usage_by_model),
-                "messages": [
-                    {"role": m.role, "content": m.content, "name": m.name}
-                    for m in st.messages
-                    if m.role == "user"
-                    or (m.role == "assistant" and m.content.strip())
-                ],
+                "messages": messaggi,
             }
 
     def set_system_prompt(self, prompt: str) -> None:
