@@ -530,6 +530,9 @@
       <button id="btn-allega" class="ghost" title="Allega una foto, un PDF o un file di testo" disabled>
         <span aria-hidden="true">📎</span><span class="sr">Allega un file</span>
       </button>
+      <button id="btn-verifica" class="ghost" title="Verifica il lavoro: controlla il risultato in modo oggettivo e, se non torna, rimanda indietro" disabled>
+        <span aria-hidden="true">✓</span><span class="sr">Verifica</span>
+      </button>
       <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
       <button class="primary" id="btn-send" disabled>Invia</button>
     </div>
@@ -554,6 +557,33 @@
     </div>
   </div>
 </footer>
+
+<!-- Popover della verifica. Nascosto, si apre col toggle ✓ accanto alla
+     graffetta. Scegli CHE COSA controllare e su QUALE file: senza sapere
+     i nomi delle funzioni Python, solo cosa deve essere vero del
+     risultato. Il principio resta: controlli OGGETTIVI, mai un modello
+     che giudica un modello. -->
+<div id="verifica-pop" hidden>
+  <div class="verifica-titolo">Verifica il lavoro</div>
+  <label class="verifica-riga">
+    <span>Tipo di controllo</span>
+    <select id="verifica-tipo">
+      <option value="testo_presente">Il file esiste e non è vuoto</option>
+      <option value="testo_lungo">Il file ha una lunghezza minima</option>
+      <option value="testo_contiene">Il testo contiene dei pezzi</option>
+      <option value="json_campi">Il JSON ha certi campi</option>
+      <option value="json_somma">La somma di un campo torna</option>
+    </select>
+  </label>
+  <label class="verifica-riga">
+    <span>File da controllare</span>
+    <input id="verifica-file" type="text" placeholder="es. out.json">
+  </label>
+  <div class="verifica-nota small dim">
+    Se il controllo non passa, Orchestra rimanda il modello indietro con il
+    motivo esatto, fino a 3 volte. Controlli oggettivi sul risultato.
+  </div>
+</div>
 
 </body>
 </html>

@@ -32,6 +32,10 @@ async function send() {
               // quando e' stato caricato.
               allegati: daMando.map((a) => a.id).filter(Boolean),
               scope: scopeAttivo || null,
+              // Self-correzione: se il toggle ✓ e' attivo e c'e' un file da
+              // controllare, si chiede al server di verificare il lavoro prima
+              // di accettarlo. Lista vuota = nessuna verifica, come prima.
+              verifica: verificaPayload(),
             }),
     });
     if (!r.ok) {
@@ -265,6 +269,53 @@ on(document, "paste", async (e) => {
 });
 
 on(input, "input", autoGrow);
+
+// ------------------------------------------------- verifica del lavoro
+// Toggle ✓ accanto alla graffetta. Quando è attivo, il prossimo invio
+// chiede al server di verificare OGGETTIVAMENTE il risultato e, se non
+// torna, rimandare il modello indietro col motivo. Mai un modello che
+// giudica un modello: si controlla il file, il JSON, la somma.
+let verificaAttiva = false;
+
+function verificaPayload() {
+  // Attivo solo con un file indicato: senza file non c'è niente da
+  // controllare, e mandare una verifica vuota sarebbe rumore.
+  if (!verificaAttiva) return [];
+  const file = ($("verifica-file").value || "").trim();
+  if (!file) return [];
+  const tipo = $("verifica-tipo").value;
+  const spec = { tipo, file };
+  // I parametri extra dipendono dal tipo: senza, il server li ignora e
+  // usa default ragionevoli, ma per "somma" e "contiene" servono.
+  if (tipo === "testo_lungo") spec.minimo = 1;
+  if (tipo === "testo_contiene") spec.frammenti = [];
+  return [spec];
+}
+
+const btnVerifica = $("btn-verifica");
+const verificaPop = $("verifica-pop");
+
+function apriChiudiVerifica() {
+  verificaPop.hidden = !verificaPop.hidden;
+}
+
+if (btnVerifica && verificaPop) {
+  // Il toggle riflette SUBITO lo stato: il ✓ acceso dice "la prossima
+  // verifica", spento dice "gira normale". Se non si accendesse, non si
+  // saprebbe se è attivo finché non parte il turno.
+  btnVerifica.addEventListener("click", () => {
+    verificaAttiva = !verificaAttiva;
+    btnVerifica.classList.toggle("acceso", verificaAttiva);
+    apriChiudiVerifica();
+    if (verificaAttiva && !($("verifica-file").value || "").trim()) {
+      $("verifica-file").focus();
+    }
+  });
+  // Cambiare tipo o file chiude il popover: la scelta è fatta, e
+  // lasciarlo aperto copre il campo di scrittura.
+  $("verifica-tipo").addEventListener("change", apriChiudiVerifica);
+  $("verifica-file").addEventListener("change", apriChiudiVerifica);
+}
 on(input, "keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
