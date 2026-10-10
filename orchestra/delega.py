@@ -91,7 +91,12 @@ class Figlio:
         if self.esito == "risposto":
             return self.testo
         if self.esito == "esaurito":
-            return (f"[il figlio ha finito i {PASSI_MAX} passi senza "
+            # `self.passi` è il numero VERO di passi di questo figlio, non
+            # la costante PASSI_MAX: se il tetto è configurabile (lo è, dal
+            # padre), la costante nel messaggio mentirebbe. "ha finito i 16
+            # passi" con passi=16 è la verità; con passi=12 sarebbe un
+            # numero inventato.
+            return (f"[il figlio ha finito i {self.passi} passi senza "
                     f"rispondere — non e' un risultato]\n{self.testo}")
         return (f"[il figlio e' andato in errore: {self.motivo} — "
                 f"non e' un risultato]\n{self.testo}")
@@ -119,6 +124,41 @@ def _risposta_finale(stato: Any) -> str:
         if getattr(m, "role", "") == "assistant":
             return (getattr(m, "content", "") or "").strip()
     return ""
+
+
+def _ultimo_progresso(stato: Any) -> str:
+    """L'ultimo pezzo di lavoro concreto, quando non c'e' risposta finale.
+
+    Un figlio che esaurisce i passi spesso ha COMUNQUE fatto qualcosa di
+    utile: eseguito un tool, letto un file, tentato un comando. Tornare
+    vuoto butta quel lavoro e non dice perche' si e' fermato. Qui si
+    prende l'ultimo tool eseguito e il suo esito, in una riga: il padre
+    (e l'utente) vede DOVE il figlio si e' incagliato invece di un muto
+    "non ha risposto".
+    """
+    messaggi = getattr(stato, "messages", None) or []
+    ultimo_tool = ""
+    for m in reversed(messaggi):
+        ruolo = getattr(m, "role", "")
+        if ruolo == "tool":
+            nome = getattr(m, "name", "") or "tool"
+            contenuto = (getattr(m, "content", "") or "").strip()
+            # tagliato: un risultato da 3000 righe in una riga di
+            # diagnosi è rumore, non informazione
+            if len(contenuto) > 200:
+                contenuto = contenuto[:200] + "…"
+            esito = "errore" if contenuto.startswith("ERRORE") else "ok"
+            ultimo_tool = f"ultimo tool `{nome}` ({esito}): {contenuto}"
+            break
+        if ruolo == "assistant":
+            # un assistente con contenuto parziale è già qualcosa
+            testo = (getattr(m, "content", "") or "").strip()
+            if testo:
+                ultimo_tool = f"ultimo messaggio prima di fermarsi: {testo[:200]}"
+                break
+    if not ultimo_tool:
+        return ""
+    return f"[il figlio si è fermato senza chiudere — {ultimo_tool}]"
 
 
 def _costo(stato: Any, tariffa: Any = None) -> float | None:
@@ -228,6 +268,18 @@ class Delegatore:
         passi = int(getattr(stato, "iterations", 0) or 0)
         costo = _costo(stato, self._tariffa)
 
+        # Se il figlio ha esaurito i passi senza chiudere col testo, non
+        # si torna vuoto: vuoto non dice DOVE si è incagliato. Si estrae
+        # l'ultimo progresso utile — l'ultimo tool che ha eseguito e cosa
+        # è tornato — così il padre vede "ha provato run_shell, è tornato
+        # errore" invece di "non ha risposto". È la differenza fra un
+        # fallimento diagnosticabile e uno muto.
+        progresso = ""
+        if not testo_out:
+            progresso = _ultimo_progresso(stato)
+            if progresso:
+                testo_out = progresso
+
         esito = "risposto"
         motivo = ""
         # `stopped_because` dice PERCHE' l'agente si e' fermato, e la
@@ -235,10 +287,16 @@ class Delegatore:
         # si e' fermato perche' ha finito i passi e uno che si e'
         # fermato perche' il provider e' andato via si presentano
         # uguali.
-        fermo = getattr(stato, "stopped_because", "") or ""
-        if fermo and fermo != "risposta_finale" and not testo_out:
+        ragione_fermo = getattr(stato, "stopped_because", "") or ""
+        # L'esito "esaurito" dipende da come si è fermato, non dal fatto
+        # che io abbia recuperato un progresso: se ha esaurito i passi, è
+        # esaurito ANCHE se ho trovato un ultimo tool utile da mostrare. Il
+        # testo recuperato sta DENTRO il messaggio, non lo trasforma in un
+        # successo — sarebbe dire al padre "risposto" per un figlio che non
+        # ha chiuso.
+        if ragione_fermo and ragione_fermo != "risposta_finale":
             esito = "esaurito"
-            motivo = f"fermato: {fermo} (dopo {passi} passi)"
+            motivo = f"fermato: {ragione_fermo} (dopo {passi} passi)"
         elif not testo_out:
             esito, motivo = "errore", "nessuna risposta finale"
 
