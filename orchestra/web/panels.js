@@ -2411,6 +2411,34 @@ async function caricaSideSessioni() {
       });
       li.appendChild(pin);
 
+      // Elimina: mancava in sidebar, c'era solo nelle Opzioni. Chi vive
+      // nella sidebar (ed è il pannello che si tiene aperto) non aveva
+      // modo di cancellare una conversazione senza aprire le Opzioni.
+      const del = document.createElement("button");
+      del.className = "side-del";
+      del.textContent = "\u2715";
+      del.title = "Elimina questa conversazione";
+      del.addEventListener("click", async () => {
+        if (!confirm(`Eliminare "${(s.titolo || "(senza titolo)").slice(0, 40)}"? Non si recupera.`)) return;
+        try {
+          const r = await fetch("/api/storico/elimina", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: s.id }),
+          });
+          const rd = await r.json();
+          if (!r.ok) {
+            if (sideMsg) { sideMsg.textContent = rd.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
+            return;
+          }
+          if (rd.snapshot) handle("snapshot", rd.snapshot);
+          await caricaSideSessioni();
+        } catch (e) {
+          if (sideMsg) { sideMsg.textContent = "eliminazione fallita: " + e; sideMsg.className = "small rosso side-msg"; }
+        }
+      });
+      li.appendChild(del);
+
       sideElenco.appendChild(li);
     }
   } catch (e) {

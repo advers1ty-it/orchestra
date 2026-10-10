@@ -1087,6 +1087,14 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .side-pin.pinnato { color: var(--accent); }
 .side-pin:hover { color: var(--fg); }
 
+.side-del {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); padding: 0 3px; font-size: 12px;
+  flex-shrink: 0; opacity: 0;
+}
+.side-riga:hover .side-del { opacity: 1; }
+.side-del:hover { color: var(--danger, #c05050); }
+
 .side-skill-riga {
   display: flex; align-items: center; justify-content: space-between;
   gap: 6px;
