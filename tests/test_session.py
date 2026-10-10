@@ -20,6 +20,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 WORK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_probe_session")
 os.environ["ORCHESTRA_ROOT"] = WORK
 os.makedirs(WORK, exist_ok=True)
+# Il DB dello storico su una cartella di test: senza, ogni turno di questi
+# test finisce nella cronologia VERA dell'utente. Va impostato prima di
+# qualsiasi import di orchestra, perché lo storico è un singleton che si
+# crea la prima volta che serve.
+os.environ["ORCHESTRA_HOME"] = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "_dati_test")
+os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 
 from orchestra import LLMResponse, LoopConfig  # noqa: E402
 from orchestra.session import EventBridge, Session  # noqa: E402
