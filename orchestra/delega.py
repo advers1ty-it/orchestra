@@ -44,17 +44,6 @@ piccolo, e spendere il modello forte per fare il lavoro di uno piccolo
 
 from typing import Any, Callable
 
-# Perché il tetto è uno solo e non una somma: un tetto per livello
-# permette A→B→C→D→E, e ogni livello sembra ragionevole mentre il
-# totale no. Meglio un piano che non esiste che quattro piani che
-# esistono tutti.
-PROFONDITA_MAX = 1
-
-# Un figlio senza tetto di tempo è un figlio che può mangiare il
-# credito del padre. Non e' un tetto di secondi: e' un numero di
-# passi, che e' la cosa che il modello puo' spendere.
-PASSI_MAX = 12
-
 
 class Figlio:
     """Il risultato di un compito delegato, visto dal padre.
@@ -91,11 +80,10 @@ class Figlio:
         if self.esito == "risposto":
             return self.testo
         if self.esito == "esaurito":
-            # `self.passi` è il numero VERO di passi di questo figlio, non
-            # la costante PASSI_MAX: se il tetto è configurabile (lo è, dal
-            # padre), la costante nel messaggio mentirebbe. "ha finito i 16
-            # passi" con passi=16 è la verità; con passi=12 sarebbe un
-            # numero inventato.
+            # `self.passi` è il numero VERO di passi di questo figlio,
+            # non un numero fisso: il figlio eredita i passi dal padre,
+            # quindi il messaggio deve riportare il valore effettivo
+            # raggiunto, non una costante.
             return (f"[il figlio ha finito i {self.passi} passi senza "
                     f"rispondere — non e' un risultato]\n{self.testo}")
         return (f"[il figlio e' andato in errore: {self.motivo} — "

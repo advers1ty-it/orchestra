@@ -359,3 +359,85 @@ function showVersion(v) {
   $("ver").textContent = v || "?";
   $("ver").title = `interfaccia ${v || "?"} — se non corrisponde al server, ricarica`;
 }
+
+// ---------------------------------------------------- tracce dei turni
+// La diagnosi dopo il fatto: ogni turno lascia una traccia su disco, e
+// qui si riapre "perché è andato com'è andato" senza ripeterlo. Una riga
+// per turno recente; al click, la sequenza esatta degli eventi.
+async function caricaSideTracce() {
+  const ul = $("side-tracce");
+  if (!ul) return;
+  try {
+    const d = await (await fetch("/api/tracce")).json();
+    const tracce = (d.tracce || []).slice(0, 15);
+    ul.replaceChildren();
+    if (!tracce.length) {
+      const li = document.createElement("li");
+      li.className = "small dim";
+      li.textContent = "Nessuna traccia ancora.";
+      ul.appendChild(li);
+      return;
+    }
+    for (const t of tracce) {
+      const li = document.createElement("li");
+      li.className = "side-traccia";
+      const btn = document.createElement("button");
+      btn.className = "side-apri";
+      const quando = new Date(t.ts * 1000).toLocaleString("it-IT",
+        {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+      const esito = t.esito || "?";
+      const classe = esito === "risposta_finale" ? "ok" : "attenzione";
+      const titolo = document.createElement("span");
+      titolo.className = "side-testo";
+      titolo.textContent = `${quando} · ${esito} · ${t.tool_chiamate} tool`;
+      const meta = document.createElement("span");
+      meta.className = "side-meta";
+      meta.textContent = t.errori ? `${t.errori} errori` : `${t.n_eventi} eventi`;
+      btn.appendChild(titolo);
+      btn.appendChild(meta);
+      btn.addEventListener("click", () => apriTraccia(t.id, btn));
+      li.appendChild(btn);
+      ul.appendChild(li);
+    }
+  } catch (e) { /* le tracce sono un extra: se non caricano, la sidebar vive */ }
+}
+
+async function apriTraccia(id, btn) {
+  const det = $("side-traccia-dettaglio");
+  if (!det) return;
+  try {
+    const t = await (await fetch("/api/tracce/" + id)).json();
+    if (t.error) { det.textContent = t.error; det.hidden = false; return; }
+    det.hidden = false;
+    det.replaceChildren();
+    const intest = document.createElement("div");
+    intest.className = "small dim";
+    intest.textContent =
+      `#${t.riepilogo.id} · ${t.riepilogo.modello || "?"} · ` +
+      `${t.riepilogo.iterazioni} iter · ${t.riepilogo.token} tok · ` +
+      `${t.riepilogo.durata_s.toFixed(1)}s · ${t.riepilogo.esito}`;
+    det.appendChild(intest);
+    const ol = document.createElement("ol");
+    ol.className = "side-traccia-eventi";
+    for (const e of (t.eventi || [])) {
+      const li = document.createElement("li");
+      const tipo = e.tipo;
+      let riga = tipo;
+      if (tipo === "tool_start") riga = `tool → ${e.dati.name}`;
+      else if (tipo === "tool_end") riga = `tool ${e.dati.name}: ${e.dati.ok ? "ok" : "errore"}`;
+      else if (tipo === "assistant") riga = e.dati.content && e.dati.content.trim()
+        ? `assistant: ${e.dati.content.trim().slice(0, 60)}` : "assistant (chiama tool)";
+      else if (tipo === "verifica") riga = `verifica: ${e.dati.ok ? "passata" : e.dati.motivo}`;
+      else if (tipo === "gira_a_vuoto") riga = `GIRA A VUOTO su ${e.dati.tool}`;
+      else if (tipo === "fallback_triggered") riga = `fallback → ${e.dati.model || e.dati.provider}`;
+      else if (tipo === "compaction") riga = `compattazione ${e.dati.tokens_before}→${e.dati.tokens_after}`;
+      li.textContent = riga;
+      li.className = "side-traccia-ev " + (tipo === "tool_end" && !e.dati.ok ? "err" : "");
+      ol.appendChild(li);
+    }
+    det.appendChild(ol);
+  } catch (e) {
+    det.textContent = "apertura traccia fallita: " + e;
+    det.hidden = false;
+  }
+}

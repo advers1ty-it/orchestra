@@ -664,6 +664,42 @@ class Session:
 
     def _run_turn(self, user_input: str, allegati: list | None = None) -> None:
         allegati = allegati or []
+        # Traccia del turno: registra OGNI evento su disco mentre gira, così
+        # domani si può riaprire "perché quel task ha sbagliato" senza
+        # ripeterlo. Avvolgo l'on_event dell'agent: registra e poi inoltra al
+        # bridge (lo streaming live non si tocca). Nel finally si salva la
+        # traccia — anche se il turno muore a metà, quello che è successo
+        # fino a lì resta, ed è spesso la parte che conta.
+        from .traccia import RegistratoreTurno
+        reg = RegistratoreTurno(sessione_id=getattr(self, "_sessione_id", None))
+        emit_originale = self.agent.on_event
+        def emit_con_traccia(kind, data):
+            reg.registra(kind, data)
+            if emit_originale:
+                emit_originale(kind, data)
+        self.agent.on_event = emit_con_traccia
+        try:
+            self._esegui_turno(user_input, allegati, reg)
+        finally:
+            self.agent.on_event = emit_originale
+            st = self.agent.state
+            reg.imposta_riepilogo(
+                esito=getattr(st, "stopped_because", "") or "",
+                iterazioni=getattr(st, "iterations", 0) or 0,
+                tool_chiamate=getattr(st, "tool_calls_made", 0) or 0,
+                errori=getattr(st, "tool_errors", 0) or 0,
+                token=getattr(st, "total_tokens", 0) or 0,
+                modello=self.modello_in_uso(),
+                evento_finale=getattr(st, "stopped_because", "") or "",
+            )
+            # Solo la traccia: `_salva_su_disco` lo fa già il `finally`
+            # interno di `_esegui_turno`, in ogni caso (successo, annulla,
+            # eccezione). Duplicarlo qui sarebbe lavoro speso due volte.
+            reg.salva()
+
+    def _esegui_turno(self, user_input: str, allegati: list,
+                      reg: Any) -> None:
+        allegati = allegati or []
         if allegati:
             # Si dice subito quanto costeranno. Un allegato da 12 MB
             # diventa una richiesta da 40.000 token, e scoprirlo dalla

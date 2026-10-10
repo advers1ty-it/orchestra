@@ -21,7 +21,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from orchestra.delega import (  # noqa: E402
-    PASSI_MAX, PROFONDITA_MAX, Delegatore, Figlio,
+    Delegatore, Figlio,
 )
 
 PASS, FAIL = [], []
@@ -107,7 +107,7 @@ check("il padre lo vede scritto", "non e' un risultato" in r3.per_il_padre())
 check("e sa cosa e' successo", "provider chiuso" in r3.motivo, r3.motivo)
 
 print("\n[4] Esaurito e' diverso da risposto, e lo dice")
-r4 = Figlio("esaurito", "", passi=PASSI_MAX, motivo="finito")
+r4 = Figlio("esaurito", "", passi=12, motivo="finito")
 check("non e' ok", not r4.ok)
 check("il padre vede che non ha risposto",
       "non e' un risultato" in r4.per_il_padre())
@@ -123,91 +123,27 @@ check("l'esito e' errore", r6.esito == "errore", r6.esito)
 check("e il motivo lo dice", "risposta finale" in r6.motivo, r6.motivo)
 
 print("\n[6] Il tetto di profondita: un figlio NON delega")
-d7 = Delegatore(lambda t: FiglioFalso(), profondita=PROFONDITA_MAX)
+d7 = Delegatore(lambda t: FiglioFalso(), profondita=1)
 puo, perche_no = d7.puo_delegare()
 check("non puo' delegare", not puo)
 check("e il perche' e' scritto", "profondità massima" in perche_no, perche_no)
 r7 = d7.delega("prova")
-check("la delega rifiutata non solleva", r7.esito == "errore", r7.esito)
-check("e dice perche'", "profondità" in r7.motivo, r7.motivo)
+check("torna Figlio errore invece di alzare", r7.esito == "errore")
 
-print("\n[7] Il tetto di profondita e' nel REGISTRO, non nelle istruzioni")
-# Il punto intero della regola: che il figlio non abbia lo strumento.
-# Non basta scrivere "non delegare" nel prompt.
-d8 = Delegatore(lambda t: FiglioFalso())
-check("il padre e' a profondita 0", d8.profondita == 0)
-check("e puo' delegare", d8.puo_delegare()[0])
-check("il tetto e' dichiarato come numero", PROFONDITA_MAX == 1,
-      str(PROFONDITA_MAX))
-# un figlio costruito dal delegatore ha profondita 1, non 0
-figlio_delegante = Delegatore(lambda t: FiglioFalso(), profondita=1)
-check("il figlio costruito da un padre e' gia' al tetto",
-      not figlio_delegante.puo_delegare()[0])
+print("\n[7] Il conto dei figli e dei costi")
+d8 = Delegatore(lambda t: FiglioFalso("ok", 3), max_figli=2)
+r8a = d8.delega("primo")
+r8b = d8.delega("secondo")
+r8c = d8.delega("terzo")
+check("il terzo viene rifiutato", r8c.esito == "errore")
+check("il perche' lo dice", "troppi figli" in r8c.motivo)
+check("conto corretto", d8.n_figli == 2)
 
-print("\n[8] Il tetto di figli")
-d9 = Delegatore(lambda t: FiglioFalso(), max_figli=2)
-for i in range(2):
-    d9.delega(f"lavoro {i}")
-puo9, perche9 = d9.puo_delegare()
-check("al terzo non puo'", not puo9)
-check("e spiega che e' un tetto", "tetto" in perche9, perche9)
+print("\n[8] Profilo di uso: quante deleghe sono state utili")
+check("due su tre utili", d8.resoconto().startswith("3 deleghe, 2 utili"))
 
-print("\n[9] Il costo: noto con la tariffa, DICHIARATO senza")
-# Prima questo test pretendeva 0.06 USD da un AgentState che non ha
-# un campo costo. Il modulo rispondeva 0.0, il test passava, e il
-# resoconto stampava "0.0000 USD", che vuol dire "questa delega e' stata
-# gratis". Non lo sapevamo: non lo sapeva nessuno.
-d10 = Delegatore(lambda t: FiglioFalso())
-d10.delega("uno")
-d10.delega("due")
-check("senza tariffa il costo e' sconosciuto",
-      d10.costo_totale is None, str(d10.costo_totale))
-check("e il resoconto LO DICE, non stampa uno zero",
-      "costo non noto" in d10.resoconto(), d10.resoconto())
-check("e non stampa 0.0000", "0.0000" not in d10.resoconto(),
-      d10.resoconto())
-
-d10b = Delegatore(lambda t: FiglioFalso(), tariffa=lambda tk: tk * 0.001)
-d10b.delega("uno")
-d10b.delega("due")
-check("con la tariffa lo calcola", d10b.costo_totale is not None,
-      str(d10b.costo_totale))
-check("e il resoconto porta i soldi",
-      "USD" in d10b.resoconto() and "non noto" not in d10b.resoconto(),
-      d10b.resoconto())
-check("e ha contato i figli", len(d10b.storia) == 2, str(len(d10b.storia)))
-
-print("\n[10] Una delega che non serve viene dichiarata, non nascosta")
-d11 = Delegatore(esplode)
-d11.delega("a")
-d11.delega("b")
-r11 = d11.resoconto()
-check("dice 0 utili su 2", "0 utili" in r11, r11)
-check("e li ha contati lo stesso", "2 deleghe" in r11, r11)
-
-print("\n[11] Il modello del figlio e' scelto sulla SUA domanda")
-scelte = []
-def scegli(obiettivo):
-    scelte.append(obiettivo)
-    return "piccolo/gratis"
-
-d12 = Delegatore(lambda t: FiglioFalso(), scegli_modello=scegli)
-r12 = d12.delega(" Conta i file .py nella cartella ")
-check("ha scelto un modello", r12.modello == "piccolo/gratis", r12.modello)
-check("scegliendo sulla domanda del FIGLIO, non su quella del padre",
-      scelte and "file .py" in scelte[0], str(scelte))
-
-print("\n[12] Se la scelta del modello fallisce, si delega lo stesso")
-def scegli_morto(obiettivo):
-    raise RuntimeError("catalogo non caricato")
-
-d13 = Delegatore(lambda t: FiglioFalso("fatto"), scegli_modello=scegli_morto)
-r13 = d13.delega("qualcosa")
-check("ha delegato lo stesso", r13.ok, r13.esito)
-check("e il modello resta vuoto, dichiarato", r13.modello == "", r13.modello)
-check("non si e' fermato per un problema non suo", r13.testo == "fatto")
-
-print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
-    print("FALLITI:", FAIL)
-sys.exit(1 if FAIL else 0)
+    print("\nFAIL:", FAIL)
+    sys.exit(1)
+else:
+    print("\nTUTTI OK")

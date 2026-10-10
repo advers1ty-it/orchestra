@@ -1246,6 +1246,23 @@ class Handler(BaseHTTPRequestHandler):
             snap["model"] = self.app.env.get("ORCHESTRA_MODEL", "")
             snap["provider"] = self.app.env.get("ORCHESTRA_PROVIDER", "")
             self._json(snap)
+        elif path == "/api/tracce":
+            # Le tracce recenti: la diagnosi dopo il fatto. "Perché quel
+            # task ha sbagliato" senza doverlo ripetere.
+            from .traccia import ultime
+            self._json({"tracce": ultime(limite=50)})
+        elif path.startswith("/api/tracce/"):
+            try:
+                tid = int(path.rsplit("/", 1)[-1])
+            except ValueError:
+                self._json({"error": "id non valido"}, 400)
+                return
+            from .traccia import apri
+            t = apri(tid)
+            if t is None:
+                self._json({"error": "traccia non trovata"}, 404)
+                return
+            self._json(t)
         elif path == "/api/storico":
             # In GET perche' e' una lettura: il pannello lo carica da
             # solo quando si apre. Registrata solo fra i POST rispondeva

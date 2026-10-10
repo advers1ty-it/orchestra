@@ -1528,3 +1528,20 @@ select:disabled {
   font-size: 13px;
 }
 .verifica-nota { margin-top: 4px; line-height: 1.35; }
+
+/* Tracce dei turni, nella sidebar. Una riga per turno; al click si apre
+   la sequenza degli eventi. Sobrio: è uno strumento di diagnosi, non
+   deve competere con la chat. */
+.side-tracce { list-style: none; margin: 0; padding: 0; }
+.side-traccia .side-meta { color: var(--muted, #999); }
+.side-traccia-dettaglio {
+  margin-top: 6px;
+  border-top: 1px solid var(--border, #333);
+  padding-top: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.side-traccia-eventi { margin: 4px 0 0; padding-left: 18px; }
+.side-traccia-eventi li { margin: 1px 0; color: var(--fg, #ddd); }
+.side-traccia-ev.err { color: var(--danger, #c05050); }
