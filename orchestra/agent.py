@@ -629,7 +629,19 @@ class Agent:
             self._emit("fallback_exhausted", history=fs.history)
             if last_error:
                 raise last_error
-            raise RuntimeError("Nessun provider disponibile nella fallback chain")
+            # Catena vuota dall'inizio: nessun provider provato, nessun
+            # errore da riportare. Il messaggio generico nascondeva il
+            # vero problema — catena non costruita o modello primario
+            # assente — e per chi guardava era un vicolo cieco muto.
+            # Qui si dice quale provider si stava usando e cosa manca,
+            # che è l'unica informazione utile per rimediare.
+            primario = self.fallback_chain[0] if self.fallback_chain else None
+            raise RuntimeError(
+                "Nessun provider disponibile: la catena di fallback è vuota "
+                f"(provider attivo: {primario.provider if primario else 'nessuno'}, "
+                f"modello: {getattr(self.provider, 'model', '?')}). "
+                "Controlla in Opzioni che il provider e il modello siano validi "
+                "e che la chiave del provider sia configurata.")
 
         # -- output ------------------------------------------------------------
 
