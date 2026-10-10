@@ -106,6 +106,12 @@ function seiInFondo() {
   return main.scrollHeight - main.scrollTop - main.clientHeight < 140;
 }
 
+// L'utente stava seguendo quando questo turno è partito. Registrato a
+// `turn_start` e consumato dal messaggio finale: un tool da 200 righe
+// fa scendere "in fondo" per qualche secondo, e il messaggio che arriva
+// dopo non troverebbe più nessuno in fondo. Il flag ricorda l'intento.
+let seguiTurno = false;
+
 function scrollDown() {
   // solo se l'utente è già in fondo: scrollare mentre legge sopra è irritante
   if (seiInFondo()) main.scrollTop = main.scrollHeight;
@@ -402,9 +408,14 @@ function addTool(name, args, key) {
   // allungato il log e il controllo "sei in fondo" direbbe sempre no —
   // ed è per quello che dopo un tool lungo la risposta arrivava senza
   // che nessuno scrollasse, e toccava farlo a mano.
-  t._segui = seiInFondo();
-  tieniRagionamentoInFondo();
-  scrollDown();
+  const seguiva = seiInFondo();
+  t._segui = seguiva;
+  // Coerente col flag: se l'utente seguiva, il tool nuovo va in fondo;
+  // se era risalito a leggere, NON si scrolla — chiamare `scrollDown`
+  // qui ignorava proprio l'intento appena registrato e strattonava chi
+  // stava leggendo sopra. Il ragionamento (se c'è) resta ancorato a
+  // fondo solo quando si segue.
+  if (seguiva) { main.scrollTop = main.scrollHeight; }
   return { root: t, status: st, out };
 }
 
@@ -490,6 +501,14 @@ function handle(kind, d) {
     case "turn_start":
       // segnalava l'inizio del turno. Non crea piu' nulla: il blocco
       // finiva sopra il messaggio dell'utente e la risposta finiva dentro.
+      //
+      // Qui si registra se l'utente stava seguendo quando il turno è
+      // partito. Non è la stessa cosa di "sei in fondo adesso": con un
+      // tool da 200 righe, il messaggio finale arriva secondi dopo e in
+      // quel lasso di tempo l'utente non è più esattamente in fondo —
+      // quindi `scrollDown` (che controlla "sei in fondo adesso") lo
+      // salta, e la risposta resta sotto. Il flag sopravvive ai tool.
+      seguiTurno = seiInFondo();
       break;
     case "user_message":
       addText("user", d.text);
@@ -534,6 +553,13 @@ function handle(kind, d) {
       togliAttesa();
       if (d.content) {
         addText("assistant", d.content, true);
+        // La risposta vera va in fondo SE l'utente stava seguendo il
+        // turno — non "se è in fondo adesso". Con un tool da 200 righe,
+        // quando la risposta arriva secondi dopo, nessuno è più in fondo
+        // e `scrollDown` la lascia sotto. Questo è il "devo scrollare
+        // io" segnalato in uso. Se l'utente era risalito a leggere, il
+        // flag è falso e nessuno lo strattona.
+        if (seguiTurno) { seguiTurno = false; main.scrollTop = main.scrollHeight; }
       }
       (d.tool_calls || []).forEach((tc) => {
         // chiave basata sull'id del tool call: `tool_end` lo cerca cosi' e
