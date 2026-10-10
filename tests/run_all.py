@@ -10,6 +10,19 @@ import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# I test NON devono toccare la cronologia dell'utente. Ogni test che
+# chiama `Session.send()` fa girare il worker, che salva il turno nello
+# storico — e lo storico vero è quello dell'app. Risultato: la cronologia
+# dell'utente si riempie di conversazioni di test ("lungo", "a", "lento",
+# "primo", "booma"...) da cancellare a mano.
+#
+# Puntiamo ORCHESTRA_HOME su una cartella di test: `storico()` la legge
+# come base del DB, così ogni subprocess qui sotto eredita un DB separato.
+# Deve stare nell'ambiente PRIMA di lanciare i test — cambiarlo dopo non
+# sposta il singleton già creato.
+os.environ.setdefault("ORCHESTRA_HOME", os.path.join(HERE, "_dati_test"))
+os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
+
 SUITES = [
     ("offline", "test_offline.py", True),
     ("resilienza", "test_resilience.py", True),

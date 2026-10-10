@@ -18,6 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 WORK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_probe_web")
 os.environ["ORCHESTRA_ROOT"] = WORK
 os.makedirs(WORK, exist_ok=True)
+os.environ["ORCHESTRA_HOME"] = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "_dati_test")
+os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 
 from orchestra import LLMResponse  # noqa: E402
 from orchestra.session import Session  # noqa: E402
