@@ -1545,3 +1545,28 @@ select:disabled {
 .side-traccia-eventi { margin: 4px 0 0; padding-left: 18px; }
 .side-traccia-eventi li { margin: 1px 0; color: var(--fg, #ddd); }
 .side-traccia-ev.err { color: var(--danger, #c05050); }
+
+/* Intestazione uniforme di ogni sezione della sidebar: titolo a sinistra,
+   eventuale controllo a destra. Prima solo Cronologia aveva il contenitore
+   flex, e le altre sezioni mostravano il titolo come blocco con uno spazio
+   vuoto a destra — incoerenza visiva fra le intestazioni. Adesso tutte le
+   sezioni hanno la stessa forma. */
+.side-testata {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 4px;
+}
+.side-testata .side-titolo { flex: 1 1 auto; }
+.side-cap-btn {
+  background: none;
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  color: var(--muted, #999);
+  font-size: 10px;
+  padding: 2px 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.side-cap-btn:hover { color: var(--fg, #eee); border-color: var(--accent); }
