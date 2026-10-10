@@ -357,11 +357,20 @@ sN.wait(timeout=10)
 msgs = sN.snapshot()["messages"]
 roles = [m["role"] for m in msgs]
 check("2 messaggi utente", roles.count("user") == 2, str(roles))
-# 3 risposte dal modello, una sola senza testo (quella con la tool call):
-# deve restarne 1 in meno, non comparire come riga vuota
-check("un solo assistant scartato", roles.count("assistant") == 2, str(roles))
-check("nessun messaggio vuoto", all(m["content"].strip() for m in msgs),
-      str([m["content"][:20] for m in msgs]))
+# Il turno con la tool call NON viene più scartato: entra nello snapshot
+# (con contenuto vuoto) perché è la riga madre della chiamata, e senza di
+# lui il blocco del tool non si potrebbe ridisegnare al refresh. Quindi
+# ora ci sono 3 assistant, e il primo ha contenuto vuoto ma una tool_call:
+# è corretto, non è una riga bianca.
+check("3 assistant, quello col tool incluso", roles.count("assistant") == 3, str(roles))
+con_testo = [m for m in msgs
+             if m["role"] == "assistant" and not m.get("tool_calls")]
+check("nessun messaggio di testo vuoto",
+      all(m["content"].strip() for m in con_testo),
+      str([m["content"][:20] for m in con_testo]))
+check("l'assistant vuoto porta la tool call",
+      any(m["role"] == "assistant" and not m["content"].strip()
+          and m.get("tool_calls") for m in msgs))
 check("i testi finali ci sono", sum(1 for m in msgs if m["content"].startswith("risposta")) == 2)
 
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
