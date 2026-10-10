@@ -143,6 +143,12 @@ class Agent:
             # raggiunto (oltre, si chiude col lavoro imperfetto).
             self._verifica_tentativo = 0
             self._verifica_esaurita = False
+            # Anti-gira-a-vuoto: quante volte ho già visto QUESTA identica
+            # chiamata (nome+argomenti). Un modello piccolo che si incanta
+            # su un tool che fallisce lo riprova tale e quale, e ogni giro
+            # costa token per tornare allo stesso errore. Dopo due colpi
+            # gli si dice di smettere; dopo tre si chiude col lavoro fatto.
+            self._chiamate_identiche: dict[str, int] = {}
             # Budget. Lo stato si crea SEMPRE, anche senza limiti espliciti:
             # saltare la creazione perche' "non mi hanno passato niente"
             # faceva leggere il .env a BudgetGuard senza che nessuno gli
@@ -348,6 +354,7 @@ class Agent:
         self._nudge_fatto = False
         self._verifica_tentativo = 0
         self._verifica_esaurita = False
+        self._chiamate_identiche = {}
 
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):
@@ -417,6 +424,47 @@ class Agent:
                 if violations:
                     self._emit("budget_violation", violations=violations)
                     self.state.stopped_because = "budget_exceeded"
+                    return self.state
+
+            # --- anti-gira-a-vuoto: la stessa identica chiamata ripetuta --
+            #
+            # Un modello piccolo che si incanta su un tool che fallisce lo
+            # riprova TALE E QUALE: stesso nome, stessi argomenti, stesso
+            # errore, un giro di token speso per tornare al punto di
+            # partenza. Questa guardia lo becca.
+            #
+            # La soglia è max_consecutive_errors + 2, NON un numero fisso:
+            # sotto quella del breaker, ruberebbe il suo lavoro (il breaker
+            # già ferma i loop degenerati, ed è testato). Questo è il caso
+            # che il breaker NON copre — la stessa chiamata identica — e sta
+            # SOPRA, come rete di sicurezza quando il breaker per qualche
+            # motivo non è scattato.
+            if resp.tool_calls:
+                soglia_ripetuta = self.config.max_consecutive_errors + 2
+                ripetuta_troppo = None
+                for tc in resp.tool_calls:
+                    chiave = f"{tc.name}|{tc.arguments or ''}"
+                    self._chiamate_identiche[chiave] = \
+                        self._chiamate_identiche.get(chiave, 0) + 1
+                    if self._chiamate_identiche[chiave] >= soglia_ripetuta:
+                        ripetuta_troppo = (tc.name, tc.arguments)
+                        break
+                if ripetuta_troppo:
+                    nome_rip, args_rip = ripetuta_troppo
+                    self._emit("gira_a_vuoto", tool=nome_rip, args=args_rip)
+                    self.state.messages.append(Message(
+                        role="tool",
+                        name="__sistema__",
+                        content=(
+                            f"STAI RIPETENDO la stessa chiamata `{nome_rip}` con gli "
+                            f"stessi argomenti e torna sempre lo stesso errore. "
+                            f"Smetti di riprovarla: è un vicolo cieco. Rispondi "
+                            f"adesso con quello che sei riuscito a fare finora, e "
+                            f"dì in una riga cosa non ha funzionato e perché. "
+                            f"Un «non ce l'ho fatta su {nome_rip}» è una risposta "
+                            f"utile; ritentare la stessa chiamata non lo è."),
+                    ))
+                    self.state.stopped_because = "gira_a_vuoto"
                     return self.state
 
             # --- caso 1: il modello ha chiesto tool -> esegui e continua
