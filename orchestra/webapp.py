@@ -853,13 +853,36 @@ class OrchestraApp:
                     modello = ""
 
             from .agent import Agent, LoopConfig
+            # Il tetto dei passi è quello del PADRE, non un numero fisso.
+            # Prima era 16 hard-coded, e cambiavo le Opzioni del padre che
+            # il figlio non se ne accorgeva: due numeri diversi per la
+            # stessa scelta, e quello del figlio non si poteva toccare da
+            # nessuna parte. Adesso leggono la stessa impostazione.
+            # Limite di sicurezza: se il padre ne ha pochi (o zero), il
+            # figlio non può averne di più — un figlio non allarga il
+            # lavoro che gli hanno dato.
+            try:
+                passi_padre = int(
+                    self.env.get("ORCHESTRA_MAX_ITERS", "")
+                    or self.session.agent.config.max_iterations)
+            except (TypeError, ValueError):
+                passi_padre = 20
+            passi_figlio = max(1, min(passi_padre, 50))
             return Agent(
                 build_provider(nome_provider, model=modello, env=env_chiavi),
                 default_registry(),          # NUOVO: senza 'delega'
                 PROMPT_FIGLIO,
-                LoopConfig(max_iterations=12, context_limit=60_000,
+                LoopConfig(max_iterations=passi_figlio, context_limit=60_000,
                            keep_recent=6),
-                on_event=lambda kind, data: None,   # il figlio e' muto
+                # Il figlio NON e' piu' muto: i suoi eventi passano al
+                # bridge del padre con un tag `figlio`. Prima era
+                # `lambda: None`, e quando il figlio si incagliava sui
+                # tool (gira a vuoto su run_shell, per esempio) non si
+                # vedeva niente — ne' nell'UI ne' nel log — e l'unico
+                # indizio era "ha finito i passi senza risposta", che
+                # non dice DOVE. Adesso si vede cosa ha tentato.
+                on_event=lambda kind, data: self.session.bridge.emit(
+                    "figlio", {"tipo": kind, **(data or {})}),
             )
 
         self.session._fabbrica_figlio = fabbrica

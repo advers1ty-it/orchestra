@@ -630,6 +630,19 @@ function handle(kind, d) {
       addNote(`instradamento: ${chi}${p} — ${d.motivo || ""}`);
       break;
     }
+    case "figlio": {
+      // Il sub-agente lavora: mostro i suoi passi, annotati come "figlio".
+      // Solo l'essenziale — tool chiamati e testo — non ogni evento, o il
+      // log del padre si riempie dei passi del figlio e non si distingue
+      // più chi sta facendo cosa.
+      const t = d.tipo || "";
+      if (t === "tool_start") {
+        addNote(`figlio → ${d.name}`);
+      } else if (t === "assistant" && d.content && d.content.trim()) {
+        addNote(`figlio: ${d.content.trim().slice(0, 120)}`);
+      }
+      break;
+    }
     case "delega": {
       const esito = {risposto: "fatto", esaurito: "senza risposta",
                      errore: "errore"}[d.esito] || d.esito;
