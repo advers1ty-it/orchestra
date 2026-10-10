@@ -480,9 +480,11 @@
   <div class="centro">
 <aside id="sidebar" hidden>
     <div class="side-testa">
-      <span class="side-titolo">Cronologia</span>
-      <button id="side-riduci" class="ghost side-x" title="Riduci il pannello"
-              aria-label="Riduci il pannello">&minus;</button>
+      <div class="side-testata">
+        <span class="side-titolo">Cronologia</span>
+        <button id="side-riduci" class="ghost side-x" title="Riduci il pannello"
+                aria-label="Riduci il pannello">&minus;</button>
+      </div>
     </div>
 
     <div class="side-azioni">
@@ -498,7 +500,9 @@
     </div>
 
     <div class="side-sez">
-      <span class="side-titolo">Memoria</span>
+      <div class="side-testata">
+        <span class="side-titolo">Memoria</span>
+      </div>
       <div class="side-mem-campi">
         <input id="side-mem-input" type="text" placeholder="Fatto da ricordare..." />
         <button id="side-mem-aggiungi" class="primary">+</button>
@@ -512,13 +516,17 @@
     </div>
 
     <div class="side-sez">
-      <span class="side-titolo">Skill</span>
-      <button id="side-cap" class="side-cap-btn">Apri tutte le capacit&agrave;</button>
+      <div class="side-testata">
+        <span class="side-titolo">Skill</span>
+        <button id="side-cap" class="side-cap-btn">Apri tutte le capacit&agrave;</button>
+      </div>
       <ul id="side-skill" class="side-skill"></ul>
     </div>
 
     <div class="side-sez">
-      <span class="side-titolo">Tracce</span>
+      <div class="side-testata">
+        <span class="side-titolo">Tracce</span>
+      </div>
       <p class="small dim">Perché un turno è andato com'è andato, senza ripeterlo.</p>
       <ul id="side-tracce" class="side-tracce"></ul>
       <div id="side-traccia-dettaglio" class="side-traccia-dettaglio" hidden></div>
