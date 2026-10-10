@@ -387,15 +387,25 @@ class BudgetGuard:
             if not raw:
                 return BudgetLimits()
             d = json.loads(raw)
+            # REGOLA: 0 vuol dire "illimitato" e va preservato. L'`or` di
+            # Python tratta 0 come falso e ci rimetterebbe il default — era
+            # un difetto vero: chi azzerava i campi dal pannello (scelta
+            # legittima) veniva ignorato in silenzio, il tetto tornava
+            # 200k/50 e il loop moriva con budget_exceeded senza che
+            # nessuno avesse chiesto un limite. Il `is not None` distingue
+            # "scritto 0" da "non scritto".
+            def _limite(chiave, default):
+                v = d.get(chiave)
+                return default if v is None else v
             return BudgetLimits(
-                max_tokens_per_task=d.get("task_tokens") or 200_000,
-                max_cost_usd_per_task=d.get("task_cost") or 5.0,
-                max_iterations_per_task=d.get("task_iters") or 50,
-                max_tokens_per_session=d.get("sess_tokens") or 1_000_000,
-                max_cost_usd_per_session=d.get("sess_cost") or 10.0,
-                max_requests_per_session=d.get("sess_reqs") or 500,
-                max_cost_usd_per_day=d.get("day_cost") or 50.0,
-                max_cost_usd_per_month=d.get("month_cost") or 200.0,
+                max_tokens_per_task=_limite("task_tokens", 200_000),
+                max_cost_usd_per_task=_limite("task_cost", 5.0),
+                max_iterations_per_task=_limite("task_iters", 50),
+                max_tokens_per_session=_limite("sess_tokens", 1_000_000),
+                max_cost_usd_per_session=_limite("sess_cost", 10.0),
+                max_requests_per_session=_limite("sess_reqs", 500),
+                max_cost_usd_per_day=_limite("day_cost", 50.0),
+                max_cost_usd_per_month=_limite("month_cost", 200.0),
             )
         except Exception:
             return BudgetLimits()
