@@ -1135,6 +1135,53 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- GET ---------------------------------------------------------------
 
+    def _imposta_verifica(self, specifiche: list) -> None:
+        """Traduce i controlli scelti dall'utente in verificatori oggettivi.
+
+        `specifiche` è una lista di dict dichiarativi dal frontend, es.:
+          {"tipo": "json_campi", "file": "out.json", "campi": ["totale"]}
+          {"tipo": "testo_presente", "file": "appunti.md"}
+          {"tipo": "json_somma", "file": "v.json", "campo": "totale", "somma": 42}
+
+        Li traduco nei verificatori veri (verificatori.py) e li attacco al
+        config del giro. Se qualcosa non torna — tipo ignoto, file mancante
+        — quel controllo si SALTA invece di far cadere il turno: una
+        verifica rotta non deve bloccare l'invio. Se non resta nessun
+        verificatore valido, la self-correzione non si attiva e il turno
+        gira come al solito.
+        """
+        from . import verificatori as V
+        cat = {
+            "testo_presente": lambda s: V.v_testo_presente(s["file"]),
+            "testo_lungo": lambda s: V.v_testo_lungo(
+                s["file"], minimo=int(s.get("minimo", 1)),
+                massimo=int(s.get("massimo", 10_000_000))),
+            "testo_contiene": lambda s: V.v_testo_contiene(s["file"], s.get("frammenti", [])),
+            "json_campi": lambda s: V.v_json_campi(s["file"], s.get("campi", [])),
+            "json_valori": lambda s: V.v_json_valori(s["file"], s.get("attesi", {})),
+            "json_somma": lambda s: V.v_json_somma(s["file"], s["campo"], float(s.get("somma", 0))),
+        }
+        verificatori = []
+        for s in specifiche:
+            if not isinstance(s, dict):
+                continue
+            tipo = s.get("tipo")
+            if not s.get("file") or tipo not in cat:
+                continue
+            try:
+                verificatori.append(cat[tipo](s))
+            except Exception:
+                continue
+        cfg = self.app.session.agent.config
+        if verificatori:
+            cfg.verifica_compito = {
+                "verificatori": verificatori,
+                "work": "",
+                "max_tentativi": 3,
+            }
+        else:
+            cfg.verifica_compito = None
+
     def do_GET(self) -> None:  # noqa: N802 - firma di BaseHTTPRequestHandler
         path = self.path.split("?")[0]
         if path == "/":
