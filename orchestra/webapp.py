@@ -1870,10 +1870,10 @@ class Handler(BaseHTTPRequestHandler):
             # Elenco delle conversazioni. Solo GET: la lista si scrive
             # da sola a fine turno, non c'e' niente da mandare.
             try:
-                elenco = self._storico.elenco(limite=200) if self._storico else []
+                elenco = self.app._storico.elenco(limite=200) if self.app._storico else []
                 self._json({
                     "sessioni": elenco,
-                    "attiva": getattr(self.session, "_sessione_id", None),
+                    "attiva": getattr(self.app.session, "_sessione_id", None),
                 })
             except Exception as e:
                 self._json({"error": str(e)}, 500)
@@ -1912,14 +1912,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "id mancante o non valido"}, 400)
                 return
             try:
-                ok = self.session.carica_sessione(sid)
+                ok = self.app.session.carica_sessione(sid)
             except RuntimeError as e:
                 self._json({"error": str(e)}, 409)
                 return
             if not ok:
                 self._json({"error": "sessione non trovata"}, 404)
                 return
-            self._json({"ok": True, "snapshot": self.session.snapshot()})
+            self._json({"ok": True, "snapshot": self.app.session.snapshot()})
 
         elif path == "/api/storico/elimina":
             try:
@@ -1927,26 +1927,26 @@ class Handler(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 self._json({"error": "id mancante o non valido"}, 400)
                 return
-            attiva = getattr(self.session, "_sessione_id", None)
-            if self._storico is not None:
-                self._storico.elimina(sid)
+            attiva = getattr(self.app.session, "_sessione_id", None)
+            if self.app._storico is not None:
+                self.app._storico.elimina(sid)
             # Se era quella aperta, si riparte da una vuota: lasciarla
             # significherebbe scrivere su una riga che non esiste piu'.
             if sid == attiva:
-                self.session.reset()
-                self.session._sessione_id = self._storico.nuova_sessione(
-                    modello=self.env.get("ORCHESTRA_MODEL", ""),
-                    provider=self.env.get("ORCHESTRA_PROVIDER", "")) if self._storico else None
-            self._json({"ok": True, "snapshot": self.session.snapshot()})
+                self.app.session.reset()
+                self.app.session._sessione_id = self.app._storico.nuova_sessione(
+                    modello=self.app.env.get("ORCHESTRA_MODEL", ""),
+                    provider=self.app.env.get("ORCHESTRA_PROVIDER", "")) if self.app._storico else None
+            self._json({"ok": True, "snapshot": self.app.session.snapshot()})
 
         elif path == "/api/storico/nuova":
             # Nuova conversazione, senza toccare le vecchie.
             try:
-                self.session.reset()
+                self.app.session.reset()
             except RuntimeError as e:
                 self._json({"error": str(e)}, 409)
                 return
-            self._json({"ok": True, "snapshot": self.session.snapshot()})
+            self._json({"ok": True, "snapshot": self.app.session.snapshot()})
 
         elif path == "/api/memoria/cerca":
             # Ricerca FTS5 dalla UI. `conta_usi=False`: cercare per
