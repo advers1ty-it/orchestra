@@ -621,6 +621,9 @@ function handle(kind, d) {
       addNote(`fermato: ripeteva \`${d.tool}\` con gli stessi argomenti, sempre lo stesso errore. ` +
               `Chiudo col lavoro fatto invece di girare a vuoto.`);
       break;
+    case "tool_cache":
+      addNote(`cache: \`${d.name}\` già calcolato, restituisco senza rifarlo`);
+      break;
 
     // Instradamento e delega: le due cose che Orchestra fa da sola.
     // Senza una riga qui, l'agente cambia modello e chiede a un
