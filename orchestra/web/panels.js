@@ -2540,7 +2540,6 @@ if (sideRicarica) sideRicarica.addEventListener("click", caricaSide);
 const sideMemElenco = $("side-mem-elenco");
 const sideMemInput = $("side-mem-input");
 const sideMemAggiungi = $("side-mem-aggiungi");
-const sideMemPercorso = $("side-mem-percorso");
 const sideMemCerca = $("side-mem-cerca");
 const sideMemStat = $("side-mem-stat");
 
@@ -2566,14 +2565,8 @@ async function caricaSideMemoria() {
       if (sideMsg) { sideMsg.textContent = d.error || ("errore " + resp.status); sideMsg.className = "small rosso side-msg"; }
       return;
     }
-    // Solo il NOME del file, non il percorso assoluto: "D:\orchestra\
-    // orchestra\memory.md" era rumore tecnico — il percorso Windows non
-    // dice niente a chi guarda, e attaccato alle skill sembrava un
-    // errore di lista. "memory.md" basta: dice dov'è la memoria.
-    if (sideMemPercorso && d.percorso) {
-      sideMemPercorso.textContent =
-        "memoria: " + (d.percorso.split(/[\\/]/).pop() || d.percorso);
-    }
+    // (la riga col percorso del file non c'è più in sidebar: era rumore
+    // tecnico e l'elemento che sbordava sopra SKILL — resta solo in Opzioni)
     if (sideMemStat) sideMemStat.textContent = _memStatTesto(d);
     sideMemElenco.replaceChildren();
     const fatti = d.fatti || [];
