@@ -71,6 +71,21 @@ rem ===================================================================
 rem  Avvia
 rem ===================================================================
 :avvia
+rem  Se qualcuno e' gia' in ascolto, NON si avvia un secondo processo:
+rem  morirebbe sull'indirizzo occupato e resterebbe vivo quello vecchio,
+rem  con il codice sbagliato — il "refresha e non cambia niente". Si
+rem  ammazzano gli occupanti e si aspetta che la porta si liberi, così
+rem  il nuovo parte su una porta pulita. E' il caso peggiore, ed e'
+rem  capitato: quattro server sovrapposti, ognuno con una versione
+rem  diversa, e le richieste colpivano a caso.
+call :chi_ha %PORTA%
+if not errorlevel 1 (
+    echo   Qualcuno e' gia' in ascolto sulla porta %PORTA%: lo chiudo
+    echo   prima di ripartire, o il nuovo morirebbe sull'indirizzo
+    echo   occupato e resterebbe il vecchio.
+    call :uccidi %PORTA%
+    call :aspetta_libera %PORTA% 10
+)
 echo.
 echo   Avvio di Orchestra su http://127.0.0.1:%PORTA%
 echo   Attendere il caricamento del catalogo, puo' durare qualche
@@ -332,17 +347,17 @@ if not "%_PID%"=="" exit /b 0
 exit /b 1
 
 rem  Chiude quello che ascolta sulla porta.
+rem  Li ammazza TUTTI, non il primo: possono essercene diversi che si
+rem  contendono la stessa porta (riavvii interrotti a meta'), e chiuderne
+rem  uno lascia gli altri vivi a riprenderla — il nuovo server muore
+rem  sull'indirizzo occupato e resta il vecchio, che e' il caso peggiore.
+rem  Tutto su una riga perche' un ciclo `for /f` con un `taskkill`
+rem  dentro, in cmd, chiude il blocco e lascia code residue.
 :uccidi
-call :chi_ha
-if "%_PID%"=="" exit /b 1
-rem  -f: senza conferma. Il server e' nostro e l'utente ha chiesto di
-rem  fermarlo; chiedere conferma a chiudere un programma che ha
-rem  chiesto di chiudere e' solo un passo in piu' da spiegare.
-rem  /T anche: se il server ha avviato un figlio, senza /T il figlio
-rem  resta vivo e tiene la porta, e sembra che il fermo non abbia
-rem  fatto niente.
-taskkill /F /T /PID %_PID% >nul 2>&1
-if errorlevel 1 exit /b 1
+set "_N="
+for /f "tokens=5" %%a in ('powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %PORTA% -State Listen -EA SilentlyContinue ^| Select -Expand OwningProcess" 2^>nul') do taskkill /F /T /PID %%a >nul 2>&1 & set "_N=1"
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:"LISTENING" ^| findstr /C:":%PORTA%"') do taskkill /F /T /PID %%a >nul 2>&1 & set "_N=1"
+if "%_N%"=="" exit /b 1
 exit /b 0
 
 rem  Aspetta che la porta risponda. Errorlevel 1 = non ha risposto.
