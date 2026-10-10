@@ -599,6 +599,25 @@ function handle(kind, d) {
               `(potati ${d.tools_pruned} tool, fusi ${d.history_merged} turni)`);
       break;
 
+    // Self-correzione: il loop "agisci → verifica oggettiva → correggi".
+    // Va detto a schermo quando scatta: un controllo automatico che non
+    // si vede è indistinguibile da uno che non esiste — e qui il modello
+    // potrebbe "correggersi" e l'utente deve sapere che è stato rimandato
+    // indietro, non che l'agente ha risposto due volte a caso.
+    case "verifica": {
+      if (d.ok) {
+        addNote(`verifica superata (tentativo ${d.tentativo})`);
+      } else {
+        addNote(`verifica FALLITA (tentativo ${d.tentativo}): ${d.motivo} ` +
+                `— rimando al modello con il motivo esatto`);
+      }
+      break;
+    }
+    case "verifica_esaurita":
+      addNote(`self-correzione esaurita dopo ${d.tentativi} tentativi: ${d.motivo}. ` +
+              `Restituisco il lavoro così com'è, col motivo.`);
+      break;
+
     // Instradamento e delega: le due cose che Orchestra fa da sola.
     // Senza una riga qui, l'agente cambia modello e chiede a un
     // sub-agente senza che nulla lo dica, e un comportamento

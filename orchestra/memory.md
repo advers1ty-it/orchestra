@@ -10,3 +10,7 @@ Puoi modificare questo file a mano: viene riletto da solo.
 ## Importanti
 
 - Lavora su Windows  _agente_  <!-- 2026-10-09 -->
+
+## Fatti
+
+- Ho imparato a leggere i file sorgente prima di analizzare: il progetto Orchestra ha già routing per categoria, fallback chain, memoria a 3 strati, budget trasversale, verificatori oggettivi; mancano pianificazione/scomposizione task, self-correction nel loop, sandboxing, caching, tracing.  _agente_  <!-- 2026-10-10 -->
