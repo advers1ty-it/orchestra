@@ -58,6 +58,17 @@ class LoopConfig:
     reasoning_level: str | None = None
     # Budget limits per questa run (None = usa default)
     budget_limits: BudgetLimits | None = None
+    # Loop di self-correzione: quando il modello chiide con risposta
+    # finale, se `verifica_compito` è impostata Orchestra controlla
+    # OGGETTIVAMENTE il risultato e, se non torna, rimanda il modello
+    # indietro col motivo esatto. None = nessuna verifica (task
+    # conversazionali, o chi non ne ha bisogno).
+    verifica_compito: Any = None
+    # Tetto ai tentativi di self-correzione: un modello che non ce la fa
+    # in N giri, con l'errore sotto il naso, non ce la farà al N+1 — e
+    # ogni giro costa token. Meglio il lavoro imperfetto col motivo che
+    # girare in tondo.
+    max_tentativi_verifica: int = 3
 
 
 @dataclass
@@ -127,6 +138,11 @@ class Agent:
             # che ricasca nello stesso annuncio viene corretta di nuovo —
             # ma lo STESSO turno non si auto-nudga all'infinito.
             self._nudge_fatto = False
+            # Self-correzione: contatore dei tentativi di verifica per
+            # questo turno, e bandiera che scatta quando il tetto è stato
+            # raggiunto (oltre, si chiude col lavoro imperfetto).
+            self._verifica_tentativo = 0
+            self._verifica_esaurita = False
             # Budget. Lo stato si crea SEMPRE, anche senza limiti espliciti:
             # saltare la creazione perche' "non mi hanno passato niente"
             # faceva leggere il .env a BudgetGuard senza che nessuno gli
@@ -327,9 +343,11 @@ class Agent:
 
         if self._budget_state:
             self._budget_state.reset_task()
-        # Il nudge riparte pulito a ogni turno: il precedente promemoria
-        # apparteneva alla domanda di prima.
+        # Il nudge e la verifica ripartono puliti a ogni turno: appartenevano
+        # alla domanda di prima.
         self._nudge_fatto = False
+        self._verifica_tentativo = 0
+        self._verifica_esaurita = False
 
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):
@@ -476,6 +494,50 @@ class Agent:
                     name="__nudge__",
                 ))
                 self._emit("nudge", testo=resp.content[:120])
+                continue
+
+            # --- self-correzione: verificare prima di chiudere -------------
+            #
+            # Il modello dice "fatto". Prima di accettarlo, se questo task
+            # ha una specifica di verifica, la eseguiamo: controlli
+            # OGGETTIVI sul risultato (file c'è, JSON valido, codice
+            # eseguito dà il numero atteso). Se non torna, NON chiudere:
+            # inietta l'errore esatto e rimanda il modello indietro.
+            #
+            # Mai un modello che giudica un modello — quello premia il più
+            # verboso. Qui si controlla il risultato, e il motivo è la
+            # prova. Tetto ai tentativi: oltre, il lavoro imperfetto col
+            # motivo vince su un loop che brucia token.
+            if self.config.verifica_compito is not None and not self._verifica_esaurita:
+                self._verifica_tentativo += 1
+                from .autoverifica import verifica_compito, nota_per_modello
+                specifica = self.config.verifica_compito
+                esito = verifica_compito(
+                    verificatori=specifica.get("verificatori", []),
+                    work=specifica.get("work", ""),
+                )
+                self._emit("verifica", ok=esito.ok, motivo=esito.motivo,
+                           tentativo=self._verifica_tentativo,
+                           verificatore=esito.verificatore)
+                if esito.ok:
+                    self.state.stopped_because = "risposta_finale"
+                    return self.state
+                if self._verifica_tentativo >= specifica.get(
+                        "max_tentativi", self.config.max_tentativi_verifica):
+                    self._verifica_esaurita = True
+                    self._emit("verifica_esaurita",
+                               motivo=esito.motivo,
+                               tentativi=self._verifica_tentativo)
+                    self.state.stopped_because = "verifica_fallita"
+                    return self.state
+                self.state.messages.append(Message(
+                    role="tool",
+                    content=nota_per_modello(
+                        esito, self._verifica_tentativo,
+                        specifica.get("max_tentativi",
+                                      self.config.max_tentativi_verifica)),
+                    name="__verifica__",
+                ))
                 continue
 
             self.state.stopped_because = "risposta_finale"
