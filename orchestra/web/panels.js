@@ -2329,7 +2329,7 @@ function _sideData(ts) {
 async function caricaSide() {
   if (!sideElenco) return;
   if (sideMsg) { sideMsg.textContent = "caricamento..."; sideMsg.className = "small dim side-msg"; }
-  await Promise.all([caricaSideSessioni(), caricaSideSkill()]);
+  await Promise.all([caricaSideSessioni(), caricaSideSkill(), caricaSideTracce()]);
   if (sideMsg) { sideMsg.textContent = ""; sideMsg.className = "small dim side-msg"; }
 }
 
