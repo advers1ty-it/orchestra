@@ -198,6 +198,15 @@ def tool_web_leggi() -> Tool:
             "properties": {
                 "url": {"type": "string",
                        "description": "Indirizzo http o https da leggere."},
+                "righe": {
+                    "type": "integer",
+                    "description": (
+                        "Tiene solo le prime N righe del testo (0 = tutte, "
+                        "default). Per pagine lunghissime: la ricerca serve a "
+                        "non riempire il contesto di una pagina intera."
+                    ),
+                    "default": 0,
+                },
             },
             "required": ["url"],
         },
