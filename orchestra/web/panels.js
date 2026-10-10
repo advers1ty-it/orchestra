@@ -2566,7 +2566,14 @@ async function caricaSideMemoria() {
       if (sideMsg) { sideMsg.textContent = d.error || ("errore " + resp.status); sideMsg.className = "small rosso side-msg"; }
       return;
     }
-    if (sideMemPercorso && d.percorso) sideMemPercorso.textContent = d.percorso;
+    // Solo il NOME del file, non il percorso assoluto: "D:\orchestra\
+    // orchestra\memory.md" era rumore tecnico — il percorso Windows non
+    // dice niente a chi guarda, e attaccato alle skill sembrava un
+    // errore di lista. "memory.md" basta: dice dov'è la memoria.
+    if (sideMemPercorso && d.percorso) {
+      sideMemPercorso.textContent =
+        "memoria: " + (d.percorso.split(/[\\/]/).pop() || d.percorso);
+    }
     if (sideMemStat) sideMemStat.textContent = _memStatTesto(d);
     sideMemElenco.replaceChildren();
     const fatti = d.fatti || [];
