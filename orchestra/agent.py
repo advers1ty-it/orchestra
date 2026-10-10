@@ -122,6 +122,11 @@ class Agent:
             else:
                 self.fallback_chain = fallback_chain or []
             self._fallback_state: FallbackState | None = None
+            # Nudge anti-bocca-vuota: un solo promemoria per turno, non
+            # per sempre. Si azzera a ogni `run`, così una domanda futura
+            # che ricasca nello stesso annuncio viene corretta di nuovo —
+            # ma lo STESSO turno non si auto-nudga all'infinito.
+            self._nudge_fatto = False
             # Budget. Lo stato si crea SEMPRE, anche senza limiti espliciti:
             # saltare la creazione perche' "non mi hanno passato niente"
             # faceva leggere il .env a BudgetGuard senza che nessuno gli
@@ -322,6 +327,9 @@ class Agent:
 
         if self._budget_state:
             self._budget_state.reset_task()
+        # Il nudge riparte pulito a ogni turno: il precedente promemoria
+        # apparteneva alla domanda di prima.
+        self._nudge_fatto = False
 
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):
@@ -441,11 +449,71 @@ class Agent:
                 continue
 
             # --- caso 2: risposta testuale -> finito
+            #
+            # NUDGE ANTI-BOCCA-VUOTA: se il modello chiude il turno
+            # annunciando che farà un lavoro ("analizzo il progetto...")
+            # ma NON ha eseguito nessun tool, è il sintomo del modello
+            # piccolo che, con un contesto ripetitivo, descrive invece di
+            # fare. Una volta sola si rimanda indietro con un messaggio
+            # esplicito: se il lavoro richiede davvero gli strumenti, deve
+            # chiamarli. Il flag `_nudge_fatto` garantisce che sia UNA
+            # volta — un loop che si auto-nudga all'infinito sprecherebbe
+            # token senza aggiungere niente.
+            if (self.state.tool_calls_made == 0
+                    and not self._nudge_fatto
+                    and self._annuncia_senza_fare(resp.content)):
+                self._nudge_fatto = True
+                self.state.messages.append(Message(
+                    role="tool",
+                    content=(
+                        "NOTA DEL SISTEMA: hai descritto il lavoro ma non hai "
+                        "ancora usato nessuno strumento. Se la richiesta "
+                        "richiede dati che non hai a memoria — il contenuto di "
+                        "file, lo stato del progetto, un fatto da verificare — "
+                        "chiama gli strumenti (list_dir, read_file, web_cerca) "
+                        "ORA. Se invece puoi rispondere solo con quello che sai, "
+                        "rispondi e basta: non serve ripetere l'annuncio."),
+                    name="__nudge__",
+                ))
+                self._emit("nudge", testo=resp.content[:120])
+                continue
+
             self.state.stopped_because = "risposta_finale"
             return self.state
 
         self.state.stopped_because = "max_iterations"
         return self.state
+
+    @staticmethod
+    def _annuncia_senza_fare(testo: str) -> bool:
+        """Riconosce una pura annunciazione di lavoro, non una risposta.
+
+        Distingue "analizzo il progetto e ti dico" (bocca vuota) da "ecco
+        la valutazione, punto 1..." (risposta vera). Euristiche dichiarate,
+        non magia: cerca il verbo all'inizio con un ANCORAGGIO, così
+        "Punto 1: devo verificare" NON scatta — là il verbo è a metà e c'è
+        contenuto. Sottile per costruzione: meglio un falso negativo (il
+        modello parla a vuoto una volta) che un falso positivo (Orchestra
+        interrompe una risposta vera perché conteneva la parola
+        "analizzo").
+        """
+        if not testo:
+            return False
+        t = testo.strip()
+        # corta e con verbo annuncia in testa -> bocca vuota. Lunga o con
+        # sostanza -> vera risposta, anche se contiene "analizzo".
+        ANNUNCI = (
+            "analizz", "valuterò", "valutero", "iniziamo", "procedo",
+            "esaminerò", "esaminero", "controllo", "verifico il",
+            "leggo il", "esplor", "occupo la sessione", "mi occupo",
+        )
+        testa = t[:40].lower()
+        if not any(a in testa for a in ANNUNCI):
+            return False
+        # se è lunga e ha struttura (elenchi, più righe), è una risposta
+        if len(t) > 220 or t.count("\n") >= 3:
+            return False
+        return True
 
     def _call_model_with_retry(self) -> LLMResponse:
             """Retry sui soli errori transitori (429/5xx/rete) con fallback chain.
