@@ -82,7 +82,7 @@ DEFAULT_CHAINS: dict[str, list[ChainEntry]] = {
     "openrouter": [
         ChainEntry("openrouter", "", name="OpenRouter (auto)"),  # model will be filled by routing
         ChainEntry("groq", "openai/gpt-oss-120b", name="Groq GPT-OSS"),
-        ChainEntry("nvidia", "openai/gpt-oss-120b", name="NVIDIA GPT-OSS"),
+        ChainEntry("nvidia", "nvidia/llama-3.1-nemotron-70b-instruct", name="NVIDIA Nemotron 70B"),
         ChainEntry("together", "meta-llama/Llama-3.3-70B-Instruct-Turbo", name="Together Llama"),
         ChainEntry("cerebras", "llama3.1-70b", name="Cerebras Llama"),
     ],

@@ -566,12 +566,29 @@ class OrchestraApp:
             )
 
         from .providers import build_provider
+        from .fallback import get_chain_for_provider, ChainEntry
 
         provider_name = self.env.get("ORCHESTRA_PROVIDER", "openrouter")
         env = ambiente(ENV_PATH)
         prov = build_provider(provider_name, model=model_id, env=env)
         self.session.agent.provider = prov
         self.env["ORCHESTRA_MODEL"] = model_id
+        # La catena di fallback va RICOSTRUITA sul nuovo modello. Senza,
+        # la prima entry continua a puntare al modello di prima: quello
+        # morto o inesistente viene chiamato per primo, risponde 404/410,
+        # e la catena consuma i passi sui provider sbagliati fino a
+        # finire con "Nessun provider disponibile" — mentre il modello
+        # nuovo non è mai stato provato per primo.
+        ag = self.session.agent
+        chain = get_chain_for_provider(provider_name, model_id)
+        if chain:
+            chain[0] = ChainEntry(
+                provider=provider_name,
+                model=model_id,
+                name=f"{provider_name}/{model_id}",
+            )
+            ag.fallback_chain = chain
+            ag._fallback_state = None  # si ricrea al primo uso, pulita
         # La finestra segue il modello: se cambia il modello e resta il
         # limite vecchio, un modello da 1M di token viene compattato a
         # 120k — e uno da 32k non viene compattato finché non è troppo
