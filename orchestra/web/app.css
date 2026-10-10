@@ -1228,7 +1228,6 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 }
 
 .side-mem-via:hover { color: var(--fg); }
-.side-mem-percorso { padding: 4px 12px 8px; font-size: 10px; overflow-wrap: anywhere; }
 
 /* Maniglia di ridimensionamento. Sottile di proposito: si afferra col
    mouse, non si guarda. */
@@ -1570,3 +1569,27 @@ select:disabled {
   flex-shrink: 0;
 }
 .side-cap-btn:hover { color: var(--fg, #eee); border-color: var(--accent); }
+
+/* Solo le liste assorbono lo schiacciamento. Teste, campi, stat, note e
+   bottoni restano interi (flex: none); le tre liste + tracce scrollano
+   dentro il proprio box. Senza, quando la sidebar è corta il testo esce
+   dal proprio box e dipinge sopra la sezione dopo — visto in uso: la riga
+   "memoria: memory.md" sopra l'intestazione SKILL. Le liste erano già a
+   posto (overflow-y: auto); a mancare era il divieto di restringersi per
+   tutto il resto. */
+#sidebar > :not(ul):not(.side-sez),
+.side-sez > :not(ul) {
+  flex: none;
+}
+.side-tracce {
+  flex: 1 1 0;
+  min-height: 30px;
+  overflow-y: auto;
+}
+
+/* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non
+   basta: tiene interi i figli ma la sezione schiacciata resta più corta
+   del contenuto, che continua a sbordare sulla sezione dopo. Con
+   overflow:hidden il di più si taglia al bordo invece di accavallarsi —
+   le liste scrollano dentro, il resto resta dov'è. */
+.side-sez { overflow: hidden; }
