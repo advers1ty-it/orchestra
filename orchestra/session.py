@@ -806,15 +806,29 @@ class Session:
         l'ha vista — perdere il salvataggio è un difetto da segnalare, non
         da far diventare un errore in chat.
         """
-        if self._sessione_id is None:
+        st = self.agent.state
+        messaggi = [
+            {"ruolo": m.role, "contenuto": m.content, "nome": m.name}
+            for m in st.messages
+            if m.role in ("user", "assistant") and m.content.strip()
+        ]
+        # Niente da salvare = niente riga. Creare una conversazione vuota
+        # per ogni turno vuoto riempie la cronologia di righe senza
+        # contenuto — ed è il loop: elimini la riga, ricompare al giro
+        # dopo, la elimini di nuovo. Una riga nasce solo quando c'è qualcosa
+        # da metterci dentro.
+        if not messaggi:
             return
+        # Se non c'è una riga attiva (es. hai eliminato l'ultima
+        # conversazione), la si crea ORA, al primo messaggio vero. Così
+        # eliminare l'ultima lascia la lista vuota, e la conversazione
+        # riparte da sola al prossimo scambio — senza ricreare righe
+        # fantasma nel frattempo.
+        if self._sessione_id is None:
+            self._sessione_id = self._nuova_sessione_db()
+            if self._sessione_id == -1:
+                return
         try:
-            st = self.agent.state
-            messaggi = [
-                {"ruolo": m.role, "contenuto": m.content, "nome": m.name}
-                for m in st.messages
-                if m.role in ("user", "assistant") and m.content.strip()
-            ]
             storico().salva_turno(self._sessione_id, messaggi,
                                   modello=self.modello_in_uso())
             # Il titolo si prende dal primo messaggio dell'utente: una
@@ -916,12 +930,14 @@ class Session:
             self.agent.state.compactions = 0
             self.agent.state.stopped_because = ""
             self.agent.state.usage_by_model = {}
-            # Nuova conversazione = nuova riga nello storico, non la
-            # vecchia svuotata. Senza questo, "nuova chat" cancella la
-            # conversazione di ieri e ci scrive sopra: l'utente crede di
-            # averne aperta una e ha perso l'altra.
-            if self._sessione_id is not None:
-                self._sessione_id = self._nuova_sessione_db()
+            # Nuova conversazione = nuova riga nello storico, ma la si crea
+            # QUANDO c'è qualcosa da salvarci, non adesso. Prima la creava
+            # subito (`_nuova_sessione_db`), e ogni "nuova chat" o reset
+            # lasciava una riga vuota nella cronologia: elimini l'ultima,
+            # ricompare vuota al giro dopo, la elimini di nuovo — loop. La
+            # riga nasce in `_salva_su_disco`, al primo turno con contenuto.
+            # Così la cronologia mostra solo conversazioni vere.
+            self._sessione_id = None
         self.bridge.emit("reset", {})
 
     def wait(self, timeout: float | None = None) -> bool:
