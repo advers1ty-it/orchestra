@@ -166,14 +166,14 @@ function renderStats(s) {
 // che arriva PRIMA di `user_message`: finiva cosi' un contenitore vuoto
 // sopra il messaggio dell'utente, con la risposta dentro. Sembrava che
 // l'agente rispondesse "sopra". In una chat l'ordine e' tutto.
-// Se il ragionamento è visibile, resta in fondo: ogni cosa che arriva
+// Se il ragionamento è aperto, resta in fondo: ogni cosa che arriva
 // dopo (tool, testo, attesa) lo spingerebbe su, e dopo tre tool non si
-// vedrebbe più. `appendChild` su un nodo che esiste già lo SPOSTA, non
-// lo duplica — quindi questa è un'operazione sicura da chiamare sempre.
+// vedrebbe più. Sposta il nodo CORRENTE, non il primo della pagina: con
+// un nodo per ciclo, "il primo" sarebbe un blocco storico già letto.
 function tieniRagionamentoInFondo() {
-  if (typeof ragionamentoVisibile === "undefined" || !ragionamentoVisibile) return;
-  const n = document.getElementById("ragionamento");
-  if (n && n.parentNode === log) log.appendChild(n);
+  if (typeof ragionamentoCorrente !== "undefined" && ragionamentoCorrente) {
+    if (ragionamentoCorrente.parentNode === log) log.appendChild(ragionamentoCorrente);
+  }
   scrollDown();
 }
 
@@ -505,6 +505,15 @@ function handle(kind, d) {
       // righe "sto pensando" e il pannello diventerebbe illeggibile —
       // che e' il difetto che il [tool?] aveva.
       mostraAttesa();
+      // Nuovo ciclo di thinking = il ragionamento di prima è finito. Si
+      // chiude il nodo, così il prossimo pezzo di ragionamento ne apre
+      // uno nuovo in fondo (sotto i tool, non sopra). Senza questo, un
+      // modello che ragiona, chiama un tool e ragiona ancora riempirebbe
+      // il blocco iniziale, che i tool hanno già spinto in cima.
+      // Il flag va azzerato insieme, o il prossimo pezzo crederebbe che
+      // un blocco sia già aperto e non ne aprirebbe uno nuovo.
+      ragionamentoVisibile = false;
+      ragionamentoChiudi();
       break;
     }
     case "ragionamento": {

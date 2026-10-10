@@ -3030,6 +3030,14 @@ if (sideCerca) {
 
 // ------------------------------------------------- streaming del ragionamento
 
+// Il nodo del ragionamento "vivo", cioè quello che sta accumulando adesso.
+// Un nodo per ciclo di thinking: quando l'agente chiama un tool e poi
+// ragiona ancora, NON deve riempire il blocco di prima (che resterebbe
+// ancorato in cima, sotto il ragionamento iniziale), ma aprirne uno nuovo
+// in fondo. Così il ragionamento segue la conversazione invece di
+// accumularsi tutto in un punto fisso che i tool spingono su.
+let ragionamentoCorrente = null;
+
 function ragionamentoNodo() {
   let n = document.getElementById("ragionamento");
   if (!n) {
@@ -3043,19 +3051,30 @@ function ragionamentoNodo() {
 }
 
 function ragionamentoApri() {
-  const n = ragionamentoNodo();
+  // Nodo nuovo, in fondo, a ogni ciclo: il precedente resta dov'è (e se
+  // era aperto si chiude da sé perché non è più quello "corrente").
+  // Così il ragionamento dopo un tool non si accoda a quello prima del
+  // tool — che ormai è salito in cima — ma parte pulito sotto i tool.
+  const n = document.createElement("div");
+  n.className = "ragionamento";
   n.textContent = "";
+  log.appendChild(n);
+  ragionamentoCorrente = n;
   n.removeAttribute("hidden");
   scrollDown();
 }
 
 function ragionamentoAggiungi(testo) {
-  const n = ragionamentoNodo();
+  const n = ragionamentoCorrente || ragionamentoApri();
   n.textContent += testo;
   scrollDown();
 }
 
 function ragionamentoChiudi() {
+  // Non si cancella niente: il blocco resta visibile come storia. Si
+  // stacca solo il puntatore, così il prossimo ragionamento apre un nodo
+  // nuovo invece di riempire questo.
+  ragionamentoCorrente = null;
   const n = document.getElementById("ragionamento");
   if (n) n.setAttribute("hidden", "");
 }
