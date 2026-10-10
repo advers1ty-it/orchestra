@@ -888,11 +888,12 @@ class OrchestraApp:
                 sid = int(ultima[0]["id"])
                 if self.session.carica_sessione(sid):
                     return
-            # niente da riaprire: si crea la riga, così il primo turno
-            # ha già dove scrivere
-            self.session._sessione_id = self._storico.nuova_sessione(
-                modello=self.env.get("ORCHESTRA_MODEL", ""),
-                provider=self.env.get("ORCHESTRA_PROVIDER", ""))
+            # Niente da riaprire: NON si crea una riga adesso. La riga
+            # nasce al primo messaggio vero (`_salva_su_disco`), non
+            # all'avvio: crearne una vuota qui la faceva comparire in
+            # cronologia senza contenuto, e toccava eliminarla a mano.
+            # La sessione resta senza id: `_salva_su_disco` lo mette al
+            # primo turno.
         except Exception:
             self._storico = None
 
@@ -1832,6 +1833,16 @@ class Handler(BaseHTTPRequestHandler):
             if not text and not allegati:
                 self._json({"error": "messaggio vuoto"}, 400)
                 return
+            # Self-correzione: l'utente può chiedere che il lavoro venga
+            # VERIFICATO prima di accettarlo. `verifica` è una lista di
+            # nomi di controlli oggettivi; li traduciamo nei verificatori
+            # veri e li attacchiamo al config del giro. Senza lista,
+            # nessuna verifica: i task conversazionali restano intatti.
+            verifica_nomi = body.get("verifica") or []
+            if verifica_nomi:
+                self._imposta_verifica(verifica_nomi)
+            else:
+                self.app.session.agent.config.verifica_compito = None
             ok = s.send(text, allegati, scope=scope)
             if ok:
                 # Gli allegati vivono per un messaggio. Senza questo,
@@ -1932,11 +1943,17 @@ class Handler(BaseHTTPRequestHandler):
                 self.app._storico.elimina(sid)
             # Se era quella aperta, si riparte da una vuota: lasciarla
             # significherebbe scrivere su una riga che non esiste piu'.
+            #
+            # ATTENZIONE — qui cascava in un loop: crearne SUBITO una nuova
+            # faceva ricomparire una riga in lista, la si eliminava, e lui
+            # ne rifaceva un'altra, all'infinito. La sessione attiva NON
+            # deve esistere per forza: se elimini l'ultima conversazione,
+            # la lista resta vuota. La riga su cui scrivere la si creerà
+            # al PROSSIMO messaggio, non adesso — `_salva_su_disco` lo fa
+            # già quando serve davvero.
             if sid == attiva:
                 self.app.session.reset()
-                self.app.session._sessione_id = self.app._storico.nuova_sessione(
-                    modello=self.app.env.get("ORCHESTRA_MODEL", ""),
-                    provider=self.app.env.get("ORCHESTRA_PROVIDER", "")) if self.app._storico else None
+                self.app.session._sessione_id = None
             self._json({"ok": True, "snapshot": self.app.session.snapshot()})
 
         elif path == "/api/storico/nuova":
