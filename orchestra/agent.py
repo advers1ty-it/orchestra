@@ -218,12 +218,29 @@ class Agent:
             )
 
         try:
+            # Cache sui tool puri: se lo stesso calcolo è già stato fatto,
+            # si restituisce quello invece di ricalcolarlo. Solo per i tool
+            # PURE (il risultato dipende solo dagli argomenti) — su
+            # read_file o web_cerca servirebbe roba vecchia. Vedi cache_tool.
+            from .cache_tool import cache_tool
+            cache = cache_tool()
+            cached = cache.prendi(name, args)
+            if cached is not None:
+                self._emit("tool_cache", name=name, hit=True)
+                text = cached
+                if len(text) > self.config.tool_timeout_chars:
+                    text = text[: self.config.tool_timeout_chars]
+                return text, True
+
             result = tool.handler(**args)
             if hasattr(result, "__await__"):
                 import asyncio
 
                 result = asyncio.run(result)
             text = result if isinstance(result, str) else json.dumps(result, default=str)
+            # Si cachea solo il successo: un errore transitorio inchiodato
+            # per 5 minuti sarebbe peggio che ricalcolarlo.
+            cache.metti(name, args, text)
         except TypeError as e:
             # quasi sempre argomenti sbagliati: lo riportiamo con
             # precisione. È un errore del modello, quindi conta verso
