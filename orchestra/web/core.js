@@ -617,6 +617,10 @@ function handle(kind, d) {
       addNote(`self-correzione esaurita dopo ${d.tentativi} tentativi: ${d.motivo}. ` +
               `Restituisco il lavoro così com'è, col motivo.`);
       break;
+    case "gira_a_vuoto":
+      addNote(`fermato: ripeteva \`${d.tool}\` con gli stessi argomenti, sempre lo stesso errore. ` +
+              `Chiudo col lavoro fatto invece di girare a vuoto.`);
+      break;
 
     // Instradamento e delega: le due cose che Orchestra fa da sola.
     // Senza una riga qui, l'agente cambia modello e chiede a un

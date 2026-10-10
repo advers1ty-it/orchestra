@@ -123,14 +123,26 @@ class ChattyProvider:
         if self.turn > 40:
             return resp("finito")
         big = "dato " + ("z" * 6000)
-        return resp("", [tc(self.turn, "big", "{}")])
+        # argomenti DIVERSI ogni turno: è realistico (tool che tornano
+        # molto testo con input diversi) e NON innesca la guardia
+        # anti-gira-a-vuoto, che becca la STESSA identica chiamata. Con
+        # args fissi "{}" sarebbero 40 chiamate identiche — esattamente il
+        # vicolo cieco che la guardia ferma, e la compattazione non
+        # arriverebbe mai. Il test vuole misurare la compattazione, non la
+        # guardia: gli dà il carico senza il pattern che la innesca.
+        return resp("", [tc(self.turn, "big", '{"n": %d}' % self.turn)])
 
 
 REG_BIG = ToolRegistry()
 REG_BIG.register(__import__("orchestra").Tool(
     name="big", description="restituisce molto testo",
-    schema={"type": "object", "properties": {}},
-    handler=lambda: "dato " + ("z" * 6000)))
+    schema={"type": "object", "properties": {"n": {"type": "integer"}}},
+    # accetta n e lo ignora: il test vuole solo molto output per forzare
+    # la compattazione. Senza il parametro, le args diverse ("n": turno)
+    # che servono a non innescare l'anti-gira-a-vuoto farebbero fallire il
+    # tool con "unexpected keyword argument", e il loop morirebbe di errori
+    # consecutivi prima di compattare.
+    handler=lambda **kw: "dato " + ("z" * 6000)))
 
 cp = ChattyProvider()
 # limite basso per forzare la compazione

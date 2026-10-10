@@ -285,8 +285,10 @@ check("loop non crasha con callback attivo", stK.stopped_because == "risposta_fi
 # e specificamente sulla compazione, che era il path rotto
 EVENTS.clear()
 big_reg = ToolRegistry()
-big_reg.register(Tool(name="big", description="x", schema={"type": "object", "properties": {}},
-                      handler=lambda: "dato " + ("z" * 6000)))
+# args diverse ("n": turno) per non innescare l'anti-gira-a-vuoto, che
+# becca la stessa identica chiamata; l'handler accetta **kw e ignora n.
+big_reg.register(Tool(name="big", description="x", schema={"type": "object", "properties": {"n": {"type": "integer"}}},
+                      handler=lambda **kw: "dato " + ("z" * 6000)))
 
 
 class Chatty2(FakeProvider):
@@ -298,7 +300,7 @@ class Chatty2(FakeProvider):
         self.t += 1
         if self.t > 30:
             return resp("finito")
-        return resp("", [ToolCall(id=tcid(self.t), name="big", arguments="{}")])
+        return resp("", [ToolCall(id=tcid(self.t), name="big", arguments='{"n": %d}' % self.t)])
 
 
 aK2 = Agent(Chatty2(), big_reg, "SYS", LoopConfig(max_iterations=30, context_limit=30_000, keep_recent=6),
