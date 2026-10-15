@@ -46,3 +46,9 @@ skills/percorso/traceapp/
 skills/percorso/marketing/traceapp-social-promo/
 skills/percorso/mobile/react-native-device-debug/
 skills/percorso/react-native/rn086-newarch-pitfalls/
+# tutti gli skill specifici di TraceApp, Godot, Aphrodite, su qualunque categoria
+skills/percorso/*/traceapp-*/
+skills/percorso/*/trace-app*/
+skills/percorso/*/godot-arca/
+skills/percorso/creative/aphrodite-character/
+skills/percorso/creative/aphrodite-character/**
