@@ -27,6 +27,7 @@ SUITES = [
     ("offline", "test_offline.py", True),
     ("resilienza", "test_resilience.py", True),
     ("orchestrazione", "test_orchestrazione.py", True),
+    ("update", "test_update.py", True),
     ("shell", "test_shell.py", True),
     ("sicurezza", "test_security.py", True),
     ("sessione", "test_session.py", True),

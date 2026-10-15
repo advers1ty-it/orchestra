@@ -37,3 +37,5 @@ orchestra/nous_auth.json
 _ goals_fallback/
 # Directory di probe vuote create dai test.
 tests/_probe5/
+# Token read-only per gli aggiornamenti: lo mette chi fa il pacchetto.
+token.txt

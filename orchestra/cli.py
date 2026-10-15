@@ -669,6 +669,40 @@ def cmd_goal_next(args: argparse.Namespace) -> int:
     return 0 if g.get("status") == "done" else 1
 
 
+def cmd_update(args: argparse.Namespace) -> int:
+    from . import update as upd
+    repo = getattr(args, "repo", None) or "advers1ty-it/orchestra"
+    token = getattr(args, "token", None)
+    try:
+        if getattr(args, "auto", False):
+            info = upd.controlla(repo, token)
+            if not info["aggiornamento"]:
+                print(f"già aggiornato ({info['locale']})")
+                return 0
+            print(f"aggiornamento {info['locale']} -> {info['remota']}...")
+            esito = upd.aggiorna(repo, token)
+            print(f"aggiornato alla {esito['remota']} ({esito['file']} file)")
+            return 0
+        if getattr(args, "check", False):
+            info = upd.controlla(repo, token)
+            print(f"locale {info['locale']} · remota {info['remota']}"
+                  + (" · AGGIORNAMENTO DISPONIBILE" if info["aggiornamento"]
+                     else " · aggiornato"))
+            return 0
+        esito = upd.aggiorna(repo, token)
+        if not esito["aggiornato"]:
+            print(f"già aggiornato ({esito['locale']})")
+            return 0
+        print(f"aggiornato {esito['locale']} -> {esito['remota']} "
+              f"({esito['file']} file)")
+        if esito.get("backup"):
+            print(f"backup: {esito['backup']}")
+        return 0
+    except upd.UpdateError as e:
+        print(f"update: {e}", file=sys.stderr)
+        return 1
+
+
 def cmd_scheduler(args: argparse.Namespace) -> int:
     from . import goal as goal_mod
     env = _env()
@@ -803,6 +837,17 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--una-volta", action="store_true",
                     help="svuota la coda e esci, senza restare in attesa")
     sc.set_defaults(func=cmd_scheduler)
+
+    u = sub.add_parser("update", help="aggiorna l'app dall'ultima release GitHub")
+    u.add_argument("--check", action="store_true",
+                   help="controlla soltanto se c'e' un aggiornamento")
+    u.add_argument("--auto", action="store_true",
+                   help="per gli script: aggiorna in silenzio se serve")
+    u.add_argument("--repo", default="advers1ty-it/orchestra",
+                   help="repo GitHub delle release")
+    u.add_argument("--token", default=None,
+                   help="token read-only (default: env ORCHESTRA_UPDATE_TOKEN o token.txt)")
+    u.set_defaults(func=cmd_update)
 
     args = p.parse_args(argv)
     return args.func(args)
