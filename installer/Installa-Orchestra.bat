@@ -1,6 +1,7 @@
 @echo off
 rem ============================================================
 rem  Installa-Orchestra.bat — installazione per non esperti
+rem  FILE UNICO: contiene anche lo scaricatore (righe REM-PS:).
 rem  Non serve Git, non serve un account GitHub: l'app e' pubblica
 rem  e l'installer scarica l'ultima release.
 rem ============================================================
@@ -35,9 +36,15 @@ if not exist "%DESTDIR%" mkdir "%DESTDIR%"
 echo  [OK] Cartella: %DESTDIR%
 
 rem --- 3. Download ultima release + estrazione ---
+rem Lo script PowerShell e' dentro questo stesso file (righe REM-PS:):
+rem lo si estrae in TEMP e lo si esegue, niente altri file da scaricare.
 echo  Scarico l'ultima versione da GitHub...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scarica-release.ps1" -Dest "%DESTDIR%"
-if %errorlevel% neq 0 (
+set "PSSCRIPT=%TEMP%\orchestra-scarica.ps1"
+powershell -NoProfile -Command "(Get-Content '%~f0' | Where-Object { $_.StartsWith('REM-PS:') } | ForEach-Object { $_.Substring(7) }) | Set-Content '%PSSCRIPT%'"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PSSCRIPT%" -Dest "%DESTDIR%"
+set "RC=%errorlevel%"
+del "%PSSCRIPT%" 2>nul
+if %RC% neq 0 (
   echo.
   echo  [ERRORE] Download fallito. Controlla la connessione e riprova.
   pause
@@ -45,7 +52,7 @@ if %errorlevel% neq 0 (
 )
 echo  [OK] App scaricata.
 
-rem --- 5. File .env ---
+rem --- 4. File .env ---
 if not exist "%DESTDIR%\orchestra\.env" (
   copy /y "%DESTDIR%\orchestra\.env.example" "%DESTDIR%\orchestra\.env" >nul
   echo  [OK] Creato orchestra\.env — aprilo e inserisci le chiavi API.
@@ -53,7 +60,7 @@ if not exist "%DESTDIR%\orchestra\.env" (
   echo  [OK] .env esistente conservato.
 )
 
-rem --- 6. Collegamento sul Desktop (con icona Orchestra) ---
+rem --- 5. Collegamento sul Desktop (con icona Orchestra) ---
 set "SHORTCUT=%USERPROFILE%\Desktop\Avvia Orchestra.lnk"
 powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT%'); $s.TargetPath='%DESTDIR%\Avvia-Orchestra.bat'; $s.WorkingDirectory='%DESTDIR%'; $s.IconLocation='%DESTDIR%\installer\orchestra.ico'; $s.Save()"
 echo  [OK] Collegamento sul Desktop creato.
@@ -62,3 +69,37 @@ echo.
 echo  === Fatto! Premi un tasto per avviare Orchestra ===
 pause >nul
 call "%DESTDIR%\Avvia-Orchestra.bat"
+exit /b 0
+
+rem ===== Sotto questa riga solo codice PowerShell (mai eseguito da cmd) =====
+REM-PS:$ErrorActionPreference = 'Stop'
+REM-PS:param([Parameter(Mandatory = $true)][string]$Dest)
+REM-PS:$headers = @{ 'User-Agent' = 'orchestra-installer'; 'Accept' = 'application/vnd.github+json' }
+REM-PS:try {
+REM-PS:  $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/advers1ty-it/orchestra/releases/latest' -Headers $headers -TimeoutSec 30
+REM-PS:} catch {
+REM-PS:  Write-Host '[ERRORE] GitHub non raggiungibile.'
+REM-PS:  Write-Host $_.Exception.Message
+REM-PS:  exit 1
+REM-PS:}
+REM-PS:if (-not $rel.zipball_url) { Write-Host '[ERRORE] Nessuna release pubblicata.'; exit 1 }
+REM-PS:Write-Host ('  release trovata: ' + $rel.tag_name)
+REM-PS:$zip = Join-Path $env:TEMP 'orchestra-release.zip'
+REM-PS:Invoke-WebRequest -Uri $rel.zipball_url -Headers $headers -OutFile $zip -TimeoutSec 300
+REM-PS:$tmp = Join-Path $env:TEMP ('orchestra-rel-' + [guid]::NewGuid().ToString('N'))
+REM-PS:Expand-Archive -Path $zip -DestinationPath $tmp -Force
+REM-PS:$root = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
+REM-PS:if (-not $root) { Write-Host '[ERRORE] Zip vuoto.'; exit 1 }
+REM-PS:$escludi = @('.env', 'token.txt', 'goals.json', 'budget_global.json', 'storico.db', 'memoria_indice.db', '__pycache__', '_ goals_fallback', '_dati_test')
+REM-PS:Get-ChildItem -Path $root.FullName -Force | ForEach-Object {
+REM-PS:  if ($escludi -contains $_.Name) { return }
+REM-PS:  $dst = Join-Path $Dest $_.Name
+REM-PS:  if ($_.PSIsContainer) {
+REM-PS:    if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+REM-PS:    Copy-Item -Recurse -Force $_.FullName $dst
+REM-PS:  } else {
+REM-PS:    Copy-Item -Force $_.FullName $dst
+REM-PS:  }
+REM-PS:}
+REM-PS:Remove-Item -Recurse -Force $tmp, $zip
+REM-PS:Write-Host '  file copiati.'
