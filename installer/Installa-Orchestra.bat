@@ -53,9 +53,9 @@ if not exist "%DESTDIR%\orchestra\.env" (
   echo  [OK] .env esistente conservato.
 )
 
-rem --- 6. Collegamento sul Desktop ---
+rem --- 6. Collegamento sul Desktop (con icona Orchestra) ---
 set "SHORTCUT=%USERPROFILE%\Desktop\Avvia Orchestra.lnk"
-powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT%'); $s.TargetPath='%DESTDIR%\Avvia-Orchestra.bat'; $s.WorkingDirectory='%DESTDIR%'; $s.Save()"
+powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT%'); $s.TargetPath='%DESTDIR%\Avvia-Orchestra.bat'; $s.WorkingDirectory='%DESTDIR%'; $s.IconLocation='%DESTDIR%\installer\orchestra.ico'; $s.Save()"
 echo  [OK] Collegamento sul Desktop creato.
 
 echo.
