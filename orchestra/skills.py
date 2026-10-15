@@ -17,7 +17,7 @@ messaggio, e la gran parte di quelle skill non servirebbe a nulla.
 
 LE DUE ORIGINI, E PERCHE' SONO DIVERSE
 
-    percorso/  — copiate da uno store esterno. Contengono istruzioni
+    scaricate/  — copiate da uno store esterno. Contengono istruzioni
                  scritte da altri, e non sono state verificate qui.
     generate/  — scritte dall'agente dopo aver eseguito qualcosa che
                  ha funzionato. Portano con se' le prove.
@@ -52,7 +52,7 @@ from typing import Any, Iterable
 HERE = os.path.dirname(os.path.abspath(__file__))
 RADICE = os.environ.get("ORCHESTRA_SKILLS") or os.path.join(
     os.path.dirname(HERE), "skills")
-CARTELLA_SCARICATE = "percorso"
+CARTELLA_SCARICATE = "scaricate"
 CARTELLA_GENERATE = "generate"
 
 # Quante volte una procedura deve riuscire prima di meritare una skill.

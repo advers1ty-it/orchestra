@@ -45,7 +45,7 @@ def crea(nome, descrizione="Fa una cosa.", corpo="Corpo." * 60,
     # ATTENZIONE: "origine" qui e' il valore logico ("scaricata",
     # "generata"), NON il nome della cartella, che e' un altro
     # ("percorso", "generate"). Scrivere in skills/scaricata/ e poi
-    # cercare in skills/percorso/ e' il primo modo di scrivere un
+    # cercare in skills/scaricate/ e' il primo modo di scrivere un
     # test che passa vuoto: la skill c'e' su disco, l'indice dice che
     # non esiste, e il guasto sembra nel modulo.
     cartella = sk.CARTELLA_SCARICATE if origine == "scaricata" else sk.CARTELLA_GENERATE

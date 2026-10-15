@@ -199,10 +199,10 @@ probe = """
     skillDati.scaricate = [
       { nome: "pdf-una", descrizione: "Estrae tabelle", categoria: "prod",
         origine: "scaricata", prove: 0, con_prove: false, usata: 2,
-        caratteri: 1200, percorso: "percorso/prod/pdf-una/SKILL.md" },
+        caratteri: 1200, percorso: "scaricate/prod/pdf-una/SKILL.md" },
       { nome: "apk-due", descrizione: "Compila un APK", categoria: "dev",
         origine: "scaricata", prove: 0, con_prove: false, usata: 0,
-        caratteri: 900, percorso: "percorso/dev/apk-due/SKILL.md" },
+        caratteri: 900, percorso: "scaricate/dev/apk-due/SKILL.md" },
     ];
     skillDati.generate = [
       { nome: "mio-metodo", descrizione: "Quello che ho fatto io",
