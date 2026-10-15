@@ -19,6 +19,7 @@ from typing import Any
 
 from .types import LLMResponse, Message, ToolCall, new_id
 from .reasoning import build_reasoning_payload
+from . import nous_auth
 
 
 class ProviderError(RuntimeError):
@@ -509,6 +510,174 @@ class OpenAICompatAdapter:
             return []
 
 
+class AnthropicAdapter:
+    """Adapter nativo per l'API Messages di Anthropic.
+
+    Differenza fondamentale rispetto all'OpenAI-compat: i tool vengono
+    mandati in un formato proprio (`input_schema` invece di
+    `function.parameters`), il system prompt va nel campo top-level e non
+    dentro i messaggi, e le risposte separano `text` blocks da `tool_use`
+    blocks dentro l'array `content`.
+
+    Non implementiamo lo streaming: `chat_stream` resta assente e l'agent
+    cade su `chat`, che è il caso corretto per i provider-memo (reasoning)
+    non è disponibile qui.
+    """
+
+    UA = "Orchestra/0.2 (agentic CLI; +https://github.com/local/orchestra)"
+
+    def __init__(self, *, base_url: str, api_key: str, model: str,
+                timeout: int = 120, extra_headers: dict[str, str] | None = None) -> None:
+        self.name = "anthropic"
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.timeout = timeout
+        self.extra_headers = extra_headers or {}
+
+    def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self.base_url}/messages"
+        body = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": self.UA,
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+        }
+        headers.update(self.extra_headers)
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                raw = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8")[:500]
+            except Exception:
+                pass
+            raise ProviderError(
+                f"anthropic: HTTP {e.code} — {detail or e.reason}",
+                retryable=e.code in RETRYABLE_STATUS,
+                status=e.code,
+            ) from e
+        except urllib.error.URLError as e:
+            raise ProviderError(f"anthropic: errore di rete — {e.reason}",
+                               retryable=True) from e
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise ProviderError(f"anthropic: risposta non-JSON: {raw[:200]}") from e
+
+    def _convert_messages(self, messages: list[Message]):
+        system: list[str] = []
+        out: list[dict[str, Any]] = []
+        for m in messages:
+            if m.role == "system":
+                if m.content:
+                    system.append(m.content)
+                continue
+            if m.role == "assistant":
+                content: list[dict[str, Any]] = []
+                if m.content:
+                    content.append({"type": "text", "text": m.content})
+                for tc in m.tool_calls:
+                    try:
+                        inp = json.loads(tc.arguments or "{}")
+                    except json.JSONDecodeError:
+                        inp = {"_raw": tc.arguments}
+                    if not isinstance(inp, dict):
+                        inp = {"_raw": inp}
+                    content.append({"type": "tool_use",
+                                   "id": tc.id, "name": tc.name, "input": inp})
+                if not content:
+                    content.append({"type": "text", "text": ""})
+                out.append({"role": "assistant", "content": content})
+            elif m.role == "tool":
+                out.append({"role": "user", "content": [
+                    {"type": "tool_result", "tool_use_id": m.tool_call_id,
+                     "content": m.content}]})
+            else:
+                content = []
+                if m.content:
+                    content.append({"type": "text", "text": m.content})
+                # immagini data URL -> base64 source
+                for url in getattr(m, "images", []) or []:
+                    if not isinstance(url, str) or not url.startswith("data:"):
+                        continue
+                    try:
+                        head, b64 = url.split(",", 1)
+                        media = head.split(";")[0].split(":")[1] if ";" in head else head.split(":")[1]
+                    except (ValueError, IndexError):
+                        continue
+                    content.append({"type": "image", "source": {
+                        "type": "base64", "media_type": media, "data": b64}})
+                if not content:
+                    content.append({"type": "text", "text": ""})
+                out.append({"role": "user", "content": content})
+        return ("\n\n".join(system).strip(), out)
+
+    def _convert_tools(self, tools):
+        out = []
+        for t in tools or []:
+            f = t.get("function", t) if isinstance(t, dict) else t
+            if not isinstance(f, dict):
+                continue
+            out.append({
+                "name": f["name"],
+                "description": f.get("description", ""),
+                "input_schema": f.get("parameters", {"type": "object"}),
+            })
+        return out
+
+    def chat(self, messages, tools=None, *, temperature=0.7, max_tokens=4096,
+             stop=None, reasoning_level=None) -> LLMResponse:
+        system, converted = self._convert_messages(messages)
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": converted,
+            "temperature": temperature,
+        }
+        if system:
+            payload["system"] = system
+        converted_tools = self._convert_tools(tools) if tools else []
+        if converted_tools:
+            payload["tools"] = converted_tools
+        try:
+            data = self._post(payload)
+        except Exception:
+            raise
+
+        blocks = data.get("content") or []
+        text_parts: list[str] = []
+        calls: list[ToolCall] = []
+        for b in blocks:
+            if not isinstance(b, dict):
+                continue
+            bt = b.get("type")
+            if bt == "text":
+                text_parts.append(b.get("text") or "")
+            elif bt == "tool_use":
+                calls.append(ToolCall(
+                    id=b.get("id") or new_id(),
+                    name=b.get("name") or "",
+                    arguments=json.dumps(b.get("input") or {}),
+                ))
+        usage = data.get("usage") or {}
+        return LLMResponse(
+            content="".join(text_parts),
+            tool_calls=calls,
+            model=data.get("model") or self.model,
+            prompt_tokens=usage.get("input_tokens") or 0,
+            completion_tokens=usage.get("output_tokens") or 0,
+            finish_reason=data.get("stop_reason") or "",
+            raw=data,
+        )
+
+    def list_models(self) -> list[str]:
+        return []
+
+
 # --------------------------------------------------------------------------
 # Configurazione provider da .env
 # --------------------------------------------------------------------------
@@ -543,7 +712,11 @@ KNOWN_PROVIDERS: dict[str, tuple[str, str, str]] = {
     "google": ("https://generativelanguage.googleapis.com/v1beta/openai",
                "GEMINI_API_KEY", "gemini-2.0-flash"),
     "mistral": ("https://api.mistral.ai/v1", "MISTRAL_API_KEY", ""),
+    "anthropic": ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY", "claude-3-5-sonnet-latest"),
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4o-mini"),
+    # Nous Research: accesso diretto all'inference API tramite il
+    # device code OAuth Nous (JWT), oppure NOUS_API_KEY.
+    "nous": ("https://inference-api.nousresearch.com/v1", "NOUS_API_KEY", ""),
     # --- locali, senza chiave ---
     "ollama": ("http://127.0.0.1:11434/v1", "", "llama3.2"),
     "lmstudio": ("http://127.0.0.1:1234/v1", "", "local-model"),
@@ -557,14 +730,13 @@ NO_KEY_PROVIDERS: frozenset[str] = frozenset(
 
 
 def base_url_for(name: str, env: dict[str, str] | None = None) -> str:
-    """L'indirizzo del provider, con override possibile.
-
-    Serve per i motori locali che girano su una porta diversa dalla
-    solita (vLLM su 8000, un Ollama remoto su un'altra macchina). Senza
-    override si dovrebbe modificare il codice, e un utente non tecnico
-    non puo' farlo.
-    """
     env = env if env is not None else os.environ
+    if name == "nous":
+        _, base = nous_auth.get_nous_credentials(env)
+        if base:
+            return base.rstrip("/")
+        override = str(env.get("ORCHESTRA_NOUS_URL") or env.get("NOUS_INFERENCE_BASE_URL") or "").strip()
+        return (override or "https://inference-api.nousresearch.com/v1").rstrip("/")
     if name not in KNOWN_PROVIDERS:
         raise KeyError(f"provider sconosciuto: {name}")
     override = env.get(f"ORCHESTRA_{name.upper()}_URL", "").strip()
@@ -642,8 +814,33 @@ def build_provider(
     *,
     model: str,
     env: dict[str, str] | None = None,
-) -> OpenAICompatAdapter:
+) -> Any:
     env = env if env is not None else os.environ
+    if name == "anthropic":
+        api_key = (env.get("ANTHROPIC_API_KEY") or "").strip()
+        if not api_key:
+            raise ProviderError("manca la chiave ANTHROPIC_API_KEY per il provider 'anthropic'.")
+        _, _, default_model = KNOWN_PROVIDERS[name]
+        return AnthropicAdapter(
+            base_url=base_url_for(name, env),
+            api_key=api_key,
+            model=model or default_model,
+        )
+    if name == "nous":
+        token, base_url_override = nous_auth.get_nous_credentials(env)
+        if not token:
+            raise ProviderError(
+                "nous: collegamento non disponibile. Esegui "
+                "`python -m orchestra.cli auth nous` (oppure imposta NOUS_API_KEY), "
+                "poi riprova."
+            )
+        _, _, default_model = KNOWN_PROVIDERS[name]
+        return OpenAICompatAdapter(
+            base_url=base_url_override or base_url_for(name, env),
+            api_key=token,
+            model=model or default_model,
+            name=name,
+        )
     if name not in KNOWN_PROVIDERS:
         raise KeyError(f"provider sconosciuto: {name}. Disponibili: {list(KNOWN_PROVIDERS)}")
     _, key_env, default_model = KNOWN_PROVIDERS[name]

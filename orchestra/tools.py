@@ -9,7 +9,64 @@ timeout) invece di fidarsi che il modello faccia la cosa giusta. Il modello
 non è un confine di sicurezza.
 """
 
-from __future__ import annotations
+import signal as _signal
+
+
+def _sandbox_env() -> dict[str, str]:
+    """Ambiente scrubbed per i processi figli.
+
+    Non passiamo mai le credenziali del processo padre (chiavi API, token,
+    secret) ai subprocessi: un `printenv`, un `python -c 'import os;
+    print(...)'` o un child process compromesso potrebbe leggerle. Lasciamo
+    PATH, temporanee, locale: senza questi la shell non parte.
+    """
+    keep_prefixes = ("PATH", "HOME", "USERPROFILE", "TMP", "TEMP", "LANG",
+                     "LC_", "SYSTEMROOT", "COMSPEC", "WINDIR", "TERM",
+                     "ORCHESTRA_ROOT")
+    out: dict[str, str] = {}
+    for key, val in os.environ.items():
+        upper = key.upper()
+        sensitive = any(tok in upper for tok in
+                        ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASS", "AUTH",
+                         "CREDENTIAL", "DATABASE", "DSN"))
+        if sensitive:
+            continue
+        if upper.startswith(keep_prefixes) or upper in {"USER", "LOGNAME",
+                                                        "SHELL", "PWD"}:
+            out[key] = val
+    # Fallback minimale se non c'e' PATH.
+    if "PATH" not in out and "Path" not in out:
+        path = os.environ.get("PATH", "")
+        if path:
+            out["PATH"] = path
+    return out
+
+
+def _kill_tree(pid: int) -> None:
+    """Termina il processo e tutti i figli.
+
+    subprocess.run con timeout uccide solo il processo principale; i
+    figli (server avviati dal comando, make ricorsivi) restano zombie.
+    Qui chiudiamo tutto l'albero, anche se non possiamo sempre farlo con
+    garanzie a livello OS (serve il sandbox di processo vero per quello).
+    """
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        else:
+            try:
+                os.killpg(pid, _signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    except Exception:  # noqa: BLE001
+        try:
+            os.kill(pid, _signal.SIGKILL)
+        except Exception:
+            pass
+
 
 import os
 import subprocess
@@ -250,7 +307,7 @@ def tool_run_shell() -> Tool:
        POSIX nel PATH la usiamo; altrimenti lo diciamo al modello.
 
     2. Senza guardia, `run_shell` rendeva inutile quella di `read_file`:
-       `head -2 ../../....env` leggeva le chiavi API di Hermes. Il root è
+       `head -2 ../../....env` leggeva le chiavi API. Il root è
        un confine di sicurezza, non una convenzione, quindi va imposto
        anche a questo tool — non solo dichiarato.
 
@@ -322,18 +379,42 @@ def tool_run_shell() -> Tool:
             # via esplicita: niente quoting da cmd, e `;` torna a essere un
             # separatore come il modello si aspetta
             shell_cmd = f'"{posix}" -lc {_sq(command)}'
+        creationflags = 0
+        preexec_fn = None
+        if os.name == "nt":
+            # nuovo process group: libera taskkill di chiudere tutto l'albero.
+            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            try:
+                preexec_fn = os.setsid
+            except AttributeError:
+                preexec_fn = None
+        proc = subprocess.Popen(
+            shell_cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(_root()),
+            env=_sandbox_env(),
+            creationflags=creationflags,
+            start_new_session=(os.name != "nt"),
+            preexec_fn=preexec_fn,
+        )
         try:
-            r = subprocess.run(
-                shell_cmd,
-                shell=True,
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout,
-                cwd=str(_root()),
-            )
+            stdout, stderr = proc.communicate(timeout=timeout)
+            r = subprocess.CompletedProcess(
+                args=shell_cmd, returncode=proc.returncode, stdout=stdout,
+                stderr=stderr)
         except subprocess.TimeoutExpired:
-            return f"TIMEOUT dopo {timeout}s: comando interrotto"
+            _kill_tree(proc.pid)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            return f"TIMEOUT dopo {timeout}s: comando interrotto e processo terminato"
+
         out = (r.stdout or "") + (("\n[stderr]\n" + r.stderr) if r.stderr else "")
         hint = ""
         if not posix:
@@ -573,6 +654,58 @@ def tool_calculate() -> Tool:
 # --------------------------------------------------------------------------
 
 
+# Profili di carico dei tool. Servono per non mandare tutto al modello su
+# ogni turno: il buco dichiarato era proprio la politica di attivazione,
+# non la primitiva. Qui c'e' la mappa; la decisione resta esplicita e
+# ispezionabile, nessuna automazione silenziosa.
+_PROFILI: dict[str, tuple[str, ...]] = {
+    "base": ("read_file", "write_file", "list_dir", "run_shell",
+             "calculate"),
+    "ricerca": ("read_file", "write_file", "list_dir", "run_shell",
+                "calculate", "memoria", "web_cerca", "web_leggi",
+                "storico_cerca"),
+    "skill": ("read_file", "skill_cerca", "skill_genera", "skill_importa",
+             "skill_leggi"),
+    "pieno": (),  # sentinella: attiva tutto quello che e' registrato
+}
+
+
+def applica_profilo(registry: ToolRegistry, nome: str) -> None:
+    """Stringe il registry a un profilo. `pieno` riporta tutto attivo.
+
+    Non rimuove i tool, disattiva solo quelli fuori profilo: un blocco
+    può riattivare strumenti dopo, senza dover re-registrarli.
+    """
+    if nome not in _PROFILI:
+        raise KeyError(f"profilo strumenti sconosciuto: {nome}. "
+                       f"Disponibili: {sorted(_PROFILI)}")
+    tutti = set(registry.all_names())
+    if nome == "pieno":
+        registry.activate(*tutti)
+        return
+    voluti = set(_PROFILI[nome])
+    for n in tutti:
+        if n in voluti:
+            registry.activate(n)
+        else:
+            registry.deactivate(n)
+
+
+def profilo_per_testo(testo: str) -> str:
+    """Sceglie un profilo da un testo. Euristica esplicita e conservativa.
+
+    Meglio un profilo più ampio del necessario che uno troppo stretto:
+    un tool mancante è un fallimento visibile, uno di troppo solo costo.
+    """
+    t = (testo or "").lower()
+    if any(k in t for k in ("skill", "procedura", "workflow")):
+        return "skill"
+    if any(k in t for k in ("cerca", "web", "ricerca", "articolo",
+                            "notizie", "memoria", "history")):
+        return "ricerca"
+    # default: programmare / file / shell / locale
+    return "base"
+
 def default_registry() -> ToolRegistry:
     """Il set di base. Espandibile: i tool del cliente si aggiungono qui."""
     r = ToolRegistry()
@@ -610,6 +743,21 @@ def default_registry() -> ToolRegistry:
     # l'hai usato una volta e' un tool che non usi mai.
     import orchestra.skill_tools as _st
     _st.registra(r)
+    # Browser: apertura/render/screenshot. Il rendering reale usa Chrome o
+    # Edge di sistema: assente, si degrada a fetch testuale.
+    from .browser_tools import (
+        tool_browser_apri, tool_browser_render, tool_browser_screenshot)
+    r.register(tool_browser_apri())
+    r.register(tool_browser_render())
+    r.register(tool_browser_screenshot())
+    # Automazione computer via API Windows native (niente pip).
+    from .computer_tools import (
+        tool_computer_screenshot, tool_computer_click,
+        tool_computer_type, tool_computer_open)
+    r.register(tool_computer_screenshot())
+    r.register(tool_computer_click())
+    r.register(tool_computer_type())
+    r.register(tool_computer_open())
     return r
 
 

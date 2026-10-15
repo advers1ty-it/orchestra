@@ -56,6 +56,10 @@ class LoopConfig:
     # reasoning effort: none | minimal | low | medium | high | xhigh | max
     # None = usa default per provider/category
     reasoning_level: str | None = None
+    # Profilo strumenti opzionale. None = registro intatto (default,
+    # massima disponibilita'). "auto" = scelta dall'input; altrimenti nome
+    # profilo esplicito ("base", "ricerca", "skill", "pieno").
+    tool_profile: str | None = None
     # Budget limits per questa run (None = usa default)
     budget_limits: BudgetLimits | None = None
     # Loop di self-correzione: quando il modello chiide con risposta

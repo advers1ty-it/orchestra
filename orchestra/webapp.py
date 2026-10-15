@@ -814,9 +814,10 @@ class OrchestraApp:
                     registry=default_registry(),
                     system_prompt=prompt_con_memoria,
                     config=LoopConfig(max_iterations=num("ORCHESTRA_MAX_ITERS", 20),
-                                      context_limit=num("ORCHESTRA_CONTEXT_LIMIT", 120_000),
-                                      keep_recent=8,
-                                      reasoning_level=os.environ.get("ORCHESTRA_REASONING", None)),
+                                                          context_limit=num("ORCHESTRA_CONTEXT_LIMIT", 120_000),
+                                                          keep_recent=8,
+                                                          reasoning_level=os.environ.get("ORCHESTRA_REASONING", None),
+                                                          tool_profile=os.environ.get("ORCHESTRA_TOOL_PROFILE") or None),
                 )
 
     def _collega_delega(self) -> None:
@@ -1209,6 +1210,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/":
             self._html(UI_PATH)
+        elif path == "/docs":
+            self._static("docs.html", "text/html; charset=utf-8")
+            return
         elif path == "/app.js":
             self._bundle()
         elif path.endswith(".js"):
@@ -1413,6 +1417,69 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"provider": q, "modelli": out,
                         "gratuiti": len(cat.free()),
                         "tool_calling_ignoti": ignoti})
+        elif path == "/api/goal/status":
+            import urllib.parse as _up
+            parsed = _up.urlparse(self.path)
+            gid = (_up.parse_qs(parsed.query).get("id") or [None])[0]
+            from . import goal as goal_mod
+            if gid:
+                g = goal_mod.get(gid)
+                if not g:
+                    self._json({"error": "goal sconosciuto"}, 404)
+                else:
+                    self._json(g)
+            else:
+                self._json({"goals": goal_mod.list_goals()})
+        elif path == "/api/goal/ready":
+            from . import goal as goal_mod
+            pronti = [g for g in goal_mod.list_goals()
+                      if not goal_mod.motivo_non_pronto(g)]
+            self._json({"pronti": pronti})
+        elif path == "/api/dipendenze/stato":
+            import importlib, sys as _sys
+            deps=[]
+            for nome in ("ddgs",):
+                try:
+                    m=importlib.import_module(nome)
+                    deps.append({"nome": nome, "stato":"ok",
+                                 "versione": getattr(m, "__version__", "?")})
+                except Exception:
+                    deps.append({"nome": nome, "stato":"da installare"})
+            from pathlib import Path as _P
+            req = _P(__file__).resolve().parents[1] / "requirements.txt"
+            self._json({"python": _sys.version.split()[0], "deps": deps,
+                        "requirements": str(req), "esiste": req.exists()})
+            return
+        elif path == "/api/tools/profile":
+            from .tools import _PROFILI
+            prof = getattr(self.app.session.agent.config, "tool_profile", None)
+            reg = self.app.session.agent.registry
+            self._json({
+                "profile": (prof or "none"),
+                "valid": sorted(_PROFILI.keys()) + ["auto", "none"],
+                "active": [t.name for t in reg.active],
+                "total": len(reg.all_names()),
+            })
+        elif path == "/api/nous/auth/status":
+            from . import nous_auth
+            token, base = nous_auth.get_nous_credentials(self.app.env)
+            if token:
+                self.app._nous_flow = None
+                self._json({"connected": True, "base": base})
+                return
+            flow = getattr(self.app, "_nous_flow", None)
+            if not flow:
+                self._json({"connected": False, "flow": None})
+                return
+            dev = flow.get("device") or {}
+            self._json({
+                "connected": False,
+                "verification_url": dev.get("verification_uri_complete"),
+                "user_code": dev.get("user_code"),
+                "error": flow.get("error"),
+                "done": bool(flow.get("done", False)),
+            })
+            return
         elif path == "/api/chiavi":
             # Solo stato, mai valori. La chiave non esce mai da qui:
             # questa risposta finisce nella cronologia del browser e
@@ -1436,6 +1503,8 @@ class Handler(BaseHTTPRequestHandler):
                 "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
                 "model": self.app.env.get("ORCHESTRA_MODEL", ""),
                 "reasoning": self.app.env.get("ORCHESTRA_REASONING", ""),
+                "tool_profile": getattr(self.app.session.agent.config,
+                                        "tool_profile", None),
                 "budget": _budget_per_pannello(self.app.env),
                 "max_iterations": self.app.session.agent.config.max_iterations,
                 "context_limit": self.app.session.agent.config.context_limit,
@@ -2265,6 +2334,185 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": revocato, "stato": gate.stato()})
                 return
             self._json(gate.stato())
+        elif path == "/api/dipendenze/stato":
+            import importlib, sys as _sys
+            deps = []
+            for nome in ("ddgs",):
+                try:
+                    m = importlib.import_module(nome)
+                    deps.append({"nome": nome, "stato": "ok",
+                                 "versione": getattr(m, "__version__", "?")})
+                except Exception:
+                    deps.append({"nome": nome, "stato": "da installare"})
+            try:
+                from orchestra.tools import _root
+                root = _root()
+            except Exception:
+                root = Path(".")
+            from pathlib import Path as _P
+            req = _P(__file__).resolve().parents[1] / "requirements.txt"
+            self._json({"python": _sys.version.split()[0], "deps": deps,
+                        "requirements": str(req),
+                        "esiste": req.exists()})
+            return
+        elif path == "/api/dipendenze/installa":
+            from pathlib import Path as _P
+            req = _P(__file__).resolve().parents[1] / "requirements.txt"
+            if not req.exists():
+                self._json({"error": "requirements.txt mancante"}, 404)
+                return
+            try:
+                import sys as _sys, subprocess
+                r = subprocess.run(
+                    [_sys.executable, "-m", "pip", "install", "-r", str(req)],
+                    text=True, capture_output=True, timeout=300)
+                self._json({
+                    "ok": r.returncode == 0,
+                    "returncode": r.returncode,
+                    "output": ((r.stdout or "") + (r.stderr or ""))[-1800:],
+                })
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return
+        elif path == "/api/diagnosi/stato":
+            self._json({
+                "comandi": [
+                    {"id": "doctor", "desc": "Verifica config e connessione"},
+                    {"id": "model-list", "desc": "Lista modelli supportati"},
+                    {"id": "bench-show", "desc": "Mostra task del benchmark"},
+                    {"id": "dipendenze", "desc": "Stato dipendenze opzionali"},
+                ]
+            })
+            return
+        elif path == "/api/diagnosi/run":
+            cmd_id = (body.get("comando") if isinstance(body, dict) else None) or ""
+            import sys as _sys, subprocess
+            from pathlib import Path as _P
+            root = _P(__file__).resolve().parents[1]
+            if cmd_id == "doctor":
+                args = [_sys.executable, "-m", "orchestra.cli", "doctor"]
+            elif cmd_id == "model-list":
+                args = [_sys.executable, "-m", "orchestra.cli", "model", "--list"]
+            elif cmd_id == "bench-show":
+                args = [_sys.executable, "-m", "orchestra.cli", "bench", "--show"]
+            elif cmd_id == "dipendenze":
+                # riuso lo stato deps esistente
+                cur = root / "requirements.txt"
+                self._json({"comando": cmd_id, "output": str(cur), "ok": cur.exists()})
+                return
+            else:
+                self._json({"error": "comando non consentito"}, 400)
+                return
+            try:
+                r = subprocess.run(args, cwd=str(root), text=True,
+                                  capture_output=True, timeout=150)
+                out = (str(r.stdout or "") + chr(10) + str(r.stderr or "")).strip()[-4000:]
+                self._json({"ok": r.returncode == 0,
+                            "returncode": r.returncode, "output": out})
+                return
+            except subprocess.TimeoutExpired:
+                self._json({"error": "timeout 150s"}, 504)
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return
+        elif path == "/api/tools/profile":
+            from .tools import applica_profilo, profilo_per_testo, _PROFILI
+            cfg = self.app.session.agent.config
+            val = (body.get("profile") if isinstance(body, dict) else None)
+            val = (val or "").strip() if isinstance(val, str) else ""
+            if val in ("", "none"):
+                cfg.tool_profile = None
+                applica_profilo(self.app.session.agent.registry, "pieno")
+            elif val == "auto":
+                cfg.tool_profile = "auto"
+                # applica solo esplicitamente se possibile; l'auto si
+                # specializza al primo turno con testo.
+                applica_profilo(self.app.session.agent.registry, "pieno")
+            else:
+                if val not in _PROFILI:
+                    self._json({"error": f"profilo sconosciuto: {val}. " +
+                                         f"Validi: {', '.join(sorted(_PROFILI))}"}, 400)
+                    return
+                cfg.tool_profile = val
+                applica_profilo(self.app.session.agent.registry, val)
+            self._json({
+                "ok": True,
+                "profile": cfg.tool_profile or "none",
+                "active": [t.name for t in
+                           self.app.session.agent.registry.active],
+            })
+            return
+        elif path == "/api/goal/start":
+            objective = (body.get("objective") or "").strip() if isinstance(body, dict) else ""
+            if not objective:
+                self._json({"error": "objective richiesto"}, 400)
+                return
+            profile = (body.get("profile") or "auto").strip() if isinstance(body, dict) else "auto"
+            max_iters = 60
+            max_attempts = 1
+            priority = 0
+            not_before = None
+            criteri = None
+            recovery = None
+            depends_on = None
+            parent_id = None
+            kind = "goal"
+            consenti_parziale = False
+            if isinstance(body, dict):
+                try:
+                    max_iters = int(body.get("max_iterations") or 60)
+                    max_attempts = int(body.get("max_attempts") or 1)
+                    priority = int(body.get("priority") or 0)
+                except (TypeError, ValueError):
+                    max_iters = 60
+                    max_attempts = 1
+                    priority = 0
+                try:
+                    if body.get("not_before") is not None:
+                        not_before = float(body.get("not_before"))
+                except (TypeError, ValueError):
+                    not_before = None
+                depends_on = body.get("depends_on")
+                parent_id = (body.get("parent_id") or None)
+                kind = (body.get("kind") or "goal")
+                consenti_parziale = bool(body.get("consenti_parziale"))
+                criteri = body.get("criteri")
+                recovery = body.get("recovery")
+            from . import goal as goal_mod
+            try:
+                gid = goal_mod.start_goal(
+                    objective, env=self.app.env, profile=profile,
+                    max_iterations=max_iters, parent_id=parent_id,
+                    depends_on=depends_on, priority=priority,
+                    not_before=not_before, kind=kind,
+                    max_attempts=max_attempts,
+                    consenti_parziale=consenti_parziale,
+                    criteri=criteri, recovery=recovery)
+            except (RuntimeError, ValueError) as e:
+                self._json({"error": f"goal non avviato: {e}"}, 409)
+                return
+            self._json({"ok": True, "id": gid})
+            return
+        elif path == "/api/goal/run-next":
+            from . import goal as goal_mod
+            try:
+                g = goal_mod.accoda_prossimo(env=self.app.env)
+            except (RuntimeError, ValueError) as e:
+                self._json({"error": f"scheduler: {e}"}, 409)
+                return
+            if not g:
+                self._json({"ok": False, "error": "nessun goal pronto"})
+                return
+            self._json({"ok": True, "id": g.get("id")})
+            return
+        elif path == "/api/goal/stop":
+            gid = (body.get("id") if isinstance(body, dict) else None)
+            from . import goal as goal_mod
+            ok = goal_mod.cancel(str(gid or ""))
+            self._json({"ok": ok})
+            return
         elif path == "/api/provider":
             p = (body.get("provider") or "").strip()
             if not p:
@@ -2286,6 +2534,39 @@ class Handler(BaseHTTPRequestHandler):
             if risultato:
                 risposta.update(risultato)
             self._json(risposta)
+        elif path == "/api/nous/auth/start":
+            import threading
+            from . import nous_auth
+            token, base = nous_auth.get_nous_credentials(self.app.env)
+            if token:
+                self._json({"ok": True, "connected": True, "base": base})
+                return
+            flow = getattr(self.app, "_nous_flow", None)
+            if flow and not flow.get("done") and not flow.get("error"):
+                dev = flow["device"]
+                self._json({"ok": True, "connected": False,
+                           "verification_url": dev["verification_uri_complete"],
+                           "user_code": dev["user_code"]})
+                return
+            try:
+                dev = nous_auth.request_device_code()
+            except Exception as ex:
+                self._json({"error": str(ex)}, 502)
+                return
+            flow = {"device": dev, "done": False, "error": None, "auth": None}
+            self.app._nous_flow = flow
+            def _run():
+                try:
+                    flow["auth"] = nous_auth.complete_device_flow(dev)
+                    flow["done"] = True
+                except Exception as ex:
+                    flow["error"] = str(ex)
+                    flow["done"] = True
+            threading.Thread(target=_run, daemon=True).start()
+            self._json({"ok": True, "connected": False,
+                       "verification_url": dev["verification_uri_complete"],
+                       "user_code": dev["user_code"]})
+            return
         elif path == "/api/chiavi":
             # Scrive una chiave. Whitelist obbligatoria: senza, un POST
             # scriverebbe qualsiasi riga nel .env e avremmo dato una

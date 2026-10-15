@@ -42,6 +42,8 @@ piccolo, e spendere il modello forte per fare il lavoro di uno piccolo
 è il modo più comune di buttare via un orchestratore.
 """
 
+PROFONDITA_MAX = 1
+
 from typing import Any, Callable
 
 

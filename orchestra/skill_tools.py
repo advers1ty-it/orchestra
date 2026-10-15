@@ -158,7 +158,7 @@ def tool_skill_leggi() -> Tool:
 
 def tool_skill_genera() -> Tool:
     async def handler(nome: str = "", descrizione: str = "",
-                      procedura: str = "", obiettivo: str = "") -> str:
+                      procedura: str = "", obiettivo: str = "", **args) -> str:
         nome = str(nome or "").strip()
         descrizione = str(descrizione or "").strip()
         corpo = str(procedura or "").strip()

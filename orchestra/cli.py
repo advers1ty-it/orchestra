@@ -64,6 +64,7 @@ def _config(env: dict[str, str]) -> LoopConfig:
         temperature=flt("ORCHESTRA_TEMPERATURE", 0.7),
         max_tokens=num("ORCHESTRA_MAX_TOKENS", 4096),
         reasoning_level=env.get("ORCHESTRA_REASONING", None),
+        tool_profile=env.get("ORCHESTRA_TOOL_PROFILE") or None,
     )
 
 
@@ -191,6 +192,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         if not key_env:
             continue  # i provider locali non hanno chiave: vedi sotto
         present = bool(env.get(key_env))
+        if key_env == "NOUS_API_KEY" and not present:
+            try:
+                from . import nous_auth
+                tok, _ = nous_auth.get_nous_credentials(env)
+                present = bool(tok)
+            except Exception:
+                present = False
         # stampiamo solo se presente, mai il valore
         stato = "presente" if present else f"{dim}assente{reset}"
         print(f"  {key_env:<24} {stato}")
@@ -228,7 +236,16 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ok = False
     else:
         _, key_env, _ = KNOWN_PROVIDERS[name]
-        if not env.get(key_env):
+        if name == "nous":
+            try:
+                from . import nous_auth
+                token, _ = nous_auth.get_nous_credentials(env)
+                has_key = bool(token)
+            except Exception:
+                has_key = False
+        else:
+            has_key = bool(env.get(key_env))
+        if not has_key:
             print(f"  {C['r']}manca {key_env}{C['x']}")
             ok = False
         else:
@@ -550,6 +567,108 @@ def cmd_web(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_auth(args: argparse.Namespace) -> int:
+    provider = getattr(args, "provider", "nous")
+    if provider != "nous":
+        print(f"provider non supportato: {provider}", file=sys.stderr)
+        return 2
+    try:
+        from . import nous_auth
+        auth = nous_auth.login(open_browser=not getattr(args, "no_browser", False))
+    except Exception as e:
+        print(f"errore: {e}", file=sys.stderr)
+        return 1
+    print(f"token scade: {auth.get('expires_at')}")
+    # prova subito la connessione
+    try:
+        from .providers import build_provider
+        env = _env()
+        p = build_provider("nous", model="", env=env)
+        print(f"modelli disponibili: {len(p.list_models())}")
+    except Exception as e:
+        print(f"avviso connessione: {e}", file=sys.stderr)
+    return 0
+
+
+def _json_arg(valore: str | None, nome: str) -> Any:
+    if not valore:
+        return None
+    try:
+        return json.loads(valore)
+    except json.JSONDecodeError as e:
+        print(f"{nome} non e' JSON valido: {e}", file=sys.stderr)
+        raise SystemExit(2)
+
+
+def cmd_goal(args: argparse.Namespace) -> int:
+    objective = " ".join(args.objective or []).strip()
+    if not objective:
+        print("indica l'obiettivo", file=sys.stderr)
+        return 2
+    from .goal import start_goal
+    env = _env()
+    try:
+        gid = start_goal(
+            objective, env=env,
+            profile=getattr(args, "profile", None),
+            max_iterations=getattr(args, "max_iterations", 60),
+            parent_id=getattr(args, "parent", None),
+            depends_on=getattr(args, "depends_on", None),
+            priority=getattr(args, "priority", 0),
+            not_before=getattr(args, "not_before", None),
+            kind=getattr(args, "kind", "goal"),
+            max_attempts=getattr(args, "max_attempts", 1),
+            consenti_parziale=bool(getattr(args, "consenti_parziale", False)),
+            criteri=_json_arg(getattr(args, "criteri", None), "criteri"),
+            recovery=_json_arg(getattr(args, "recovery", None), "recovery"),
+        )
+    except (RuntimeError, ValueError) as e:
+        print(f"goal non avviato: {e}", file=sys.stderr)
+        return 3
+    print(f"goal avviato: {gid}")
+    if getattr(args, "kind", "goal") != "goal":
+        print("piano creato: lo scheduler lo chiude quando i figli finiscono")
+        return 0
+    # attende terminazione per dare feedback sincrono
+    while True:
+        g = __import__("orchestra.goal", fromlist=["get"]).get(gid)
+        if g is None:
+            break
+        if g["status"] not in ("pending", "running"):
+            print(f"{g['status']}: {g.get('last_output','')[:1000]}")
+            if g.get("error"):
+                print(f"errore: {g.get('error')}", file=sys.stderr)
+            break
+        time.sleep(1)
+    return 0
+
+
+def cmd_goals(args: argparse.Namespace) -> int:
+    from . import goal as goal_mod
+    goals = goal_mod.list_goals()
+    if getattr(args, "pronti", False):
+        goals = [g for g in goals if not goal_mod.motivo_non_pronto(g)]
+    for g in goals:
+        print(f"{g.get('id')} [{g.get('kind', 'goal')}/{g.get('status')}] "
+              f"prio={g.get('priority', 0)} tent={g.get('attempts', 0)}/"
+              f"{g.get('max_attempts', 1)} dip={','.join(g.get('depends_on') or [])} "
+              f"{(g.get('objective') or '')[:100]}")
+    return 0
+
+
+def cmd_goal_next(args: argparse.Namespace) -> int:
+    from . import goal as goal_mod
+    env = _env()
+    g = goal_mod.esegui_prossimo(env=env)
+    if not g:
+        print("nessun goal pronto")
+        return 1
+    print(f"{g.get('status')}: {g.get('id')}: {(g.get('last_output') or '')[:1000]}")
+    if g.get("error"):
+        print(f"errore: {g.get('error')}", file=sys.stderr)
+    return 0 if g.get("status") == "done" else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="orchestra", description="Orchestratore agentico")
     p.add_argument("--version", action="version", version=f"orchestra {__version__}")
@@ -611,6 +730,42 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--provider")
     m.add_argument("--free", action="store_true", help="solo modelli gratuiti")
     m.set_defaults(func=cmd_models)
+
+    a = sub.add_parser("auth", help="collega un provider (OAuth device-code)")
+    a.add_argument("provider", nargs="?", default="nous", help="provider da collegare (default: nous)")
+    a.add_argument("--no-browser", action="store_true", help="non aprire il browser")
+    a.set_defaults(func=cmd_auth)
+
+    g = sub.add_parser("goal", help="lancia un obiettivo autonomo e aspetta il risultato")
+    g.add_argument("objective", nargs="+", help="descrizione dell'obiettivo")
+    g.add_argument("--profile", choices=["auto", "base", "ricerca", "skill", "pieno"],
+                   default="auto", help="profilo strumenti")
+    g.add_argument("--max-iterations", type=int, default=60,
+                   help="massimo iterazioni (default 60)")
+    g.add_argument("--parent", help="id del piano/contenitore padre")
+    g.add_argument("--depends-on",
+                   help="dipendenze separate da virgola: parte solo se sono done")
+    g.add_argument("--priority", type=int, default=0,
+                   help="priorita' scheduler: piu' alto parte prima")
+    g.add_argument("--not-before", type=float, default=None,
+                   help="epoch: non partire prima di questo istante")
+    g.add_argument("--kind", choices=["goal", "piano"], default="goal",
+                   help="piano = contenitore senza esecuzione diretta")
+    g.add_argument("--max-attempts", type=int, default=1,
+                   help="tentativi totali prima di marcare failed")
+    g.add_argument("--consenti-parziale", action="store_true",
+                   help="accetta un completamento parziale dopo stop anomalo")
+    g.add_argument("--criteri", help="criteri di accettazione in JSON")
+    g.add_argument("--recovery", help="politica retry delega in JSON")
+    g.set_defaults(func=cmd_goal)
+
+    gs = sub.add_parser("goals", help="elenca goal e piani con stato scheduler")
+    gs.add_argument("--pronti", action="store_true",
+                    help="mostra solo i goal pronti a partire")
+    gs.set_defaults(func=cmd_goals)
+
+    gn = sub.add_parser("goal-next", help="esegue il prossimo goal pronto")
+    gn.set_defaults(func=cmd_goal_next)
 
     args = p.parse_args(argv)
     return args.func(args)

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestra — Documentazione 0.5.0</title>
+<style>
+  :root {
+    --bg: #0c1018;
+    --bg2: #12151f;
+    --card: #181c26;
+    --bd: #272c3b;
+    --fg: #e6e9f2;
+    --muted: #9aa3b2;
+    --accent: #c8a95e;
+    --red: #8b3a3a;
+    --blue: #1f2b40;
+    --mono: Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background: radial-gradient(1200px 800px at 10% -10%, #1a2434 0%, var(--bg) 70%); color: var(--fg); font-family: Inter, "Segoe UI", Arial, sans-serif; }
+  header { padding:24px 32px 12px; border-bottom:1px solid var(--bd); position: sticky; top:0; background: rgba(12,16,24,.92); backdrop-filter: blur(10px); z-index:5; }
+  header h1 { margin:0; font-size:26px; color: var(--accent); letter-spacing:.5px; }
+  header .sub { color: var(--muted); margin-top:4px; }
+  .layout { display:grid; grid-template-columns:280px 1fr; min-height: calc(100vh - 80px); }
+  nav { border-right:1px solid var(--bd); padding:20px 18px; position: sticky; top:82px; height: calc(100vh - 82px); overflow:auto; }
+  nav ul { list-style:none; padding:0; margin:0; }
+  nav li { margin:0; }
+  nav a { display:block; text-decoration:none; color: var(--muted); padding:7px 9px; border-radius:8px; border:1px solid transparent; font-size:13.5px; }
+  nav a:hover { color:var(--fg); border-color:var(--bd); background:rgba(255,255,255,.02); }
+  .toc-title { font-size:11px; text-transform:uppercase; color:var(--muted); letter-spacing:1.1px; margin:14px 9px 8px; }
+  main { padding:28px 34px 56px; max-width: 1080px; }
+  section { margin-bottom:40px; scroll-margin-top:100px; }
+  h2 { color: var(--accent); border-bottom:1px solid var(--bd); padding-bottom:6px; margin-top:28px; }
+  h3 { color:#e8d09b; margin-top:18px; }
+  p, li { line-height:1.6; }
+  code, pre { font-family: var(--mono); }
+  code { background: var(--blue); border:1px solid var(--bd); padding:1px 6px; border-radius:6px; font-size:13px; }
+  pre { background:#0a0e16; border:1px solid var(--bd); border-radius:12px; padding:14px; overflow:auto; color:#dbe1ee; }
+  pre code { background:transparent; border:0; padding:0; }
+  .box { background: var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+  .kbd { background:#11151d; border:1px solid var(--bd); border-radius:6px; padding:1px 7px; font-family:var(--mono); }
+  .badge { display:inline-block; background:transparent; border:1px solid var(--accent); color:var(--accent); padding:2px 8px; border-radius:999px; font-size:12px; }
+  footer { color: var(--muted); font-size:12px; padding:18px 34px; border-top:1px solid var(--bd); }
+  a.btn { display:inline-block; background: var(--accent); color:#101218; text-decoration:none; padding:6px 12px; border-radius:8px; font-weight:700; margin-right:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Orchestra — Documentazione</h1>
+  <div class="sub">Versione 0.5.0 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
+  <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica docs</a></div>
+</header>
+<div class="layout">
+  <nav>
+    <div class="toc-title">Contenuti</div>
+    <ul>
+      <li><a href="#avvio">Avvio rapido</a></li>
+      <li><a href="#config">Configurazione</a></li>
+      <li><a href="#modelli">Modelli & provider</a></li>
+      <li><a href="#onboarding">Onboarding web</a></li>
+      <li><a href="#ui">Interfaccia web</a></li>
+      <li><a href="#tooling">Tool & profili</a></li>
+      <li><a href="#delega">Multi-agent & delega</a></li>
+      <li><a href="#goal">Goal autonomi</a></li>
+      <li><a href="#browser">Browser e computer</a></li>
+      <li><a href="#permessi">Permessi</a></li>
+      <li><a href="#memoria">Memoria & storia</a></li>
+      <li><a href="#budget">Budget</a></li>
+      <li><a href="#bugfix">Debug & stato</a></li>
+      <li><a href="#deploy">Rilascio tester</a></li>
+    </ul>
+  </nav>
+  <main>
+
+<section id="avvio">
+<h2>Avvio rapido</h2>
+<p>Orchestra è un orchestratore agentico locale, senza dipendenze esterne per il core (stdlib Python). Oltre alla CLI, ha una <strong>web UI</strong> con chat, tool stream, benchmark, onboarding, goal persistente.</p>
+<div class="box">
+<pre><code>cp orchestra/.env.example orchestra/.env
+# imposta provider (OPENROUTER_API_KEY, ORCHESTRA_MODEL, …)
+python3 -m orchestra.cli doctor
+python3 -m orchestra.cli web                # http://127.0.0.1:8737
+python3 -m orchestra.cli chat               # sessione CLI
+python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
+</div>
+<p>Comandi GUI: <code>python3 kill_ports.py 8737</code>, poi <code>python3 -m orchestra.cli web</code>.</p>
+</section>
+
+<section id="config">
+<h2>Configurazione</h2>
+<p>La configurazione vive in <code>orchestra/.env</code>, mai committata:</p>
+<ul>
+  <li><code>ORCHESTRA_PROVIDER=openrouter|nous|groq|nvidia|anthropic|...</code></li>
+  <li><code>ORCHESTRA_MODEL=...</code></li>
+  <li>chiavi provider (<code>OPENROUTER_API_KEY</code>, <code>NOUS_API_KEY</code>, …)</li>
+  <li><code>ORCHESTRA_ROOT</code> / <code>ORCHESTRA_HOME</code> (root task e dati)</li>
+</ul>
+<p>Nous può connettersi via OAuth device-code (<code>python3 -m orchestra.cli auth nous</code>), senza incollare chiavi.</p>
+</section>
+
+<section id="modelli">
+<h2>Modelli & provider</h2>
+<p>Il selettore modello in UI aggiorna il modello senza riavviare il server. Un provider/scambio a metà turno è respinto (409) per coerenza della conversazione.</p>
+<ul>
+  <li>Elenco filtrabile per provider/free/categoria.</li>
+  <li>Switch provider aggiorna anche fallback chain (non solo provider attivo).</li>
+  <li>Verifica versione servita e se il backend la supporta (pricing, tool calling).</li>
+</ul>
+</section>
+
+<section id="onboarding">
+<h2>Onboarding web</h2>
+<p>Modal “Cosa fai con Orchestra?” compare solo alla prima apertura. Sceglie ambito, profilo strumenti e prompt iniziale (repository, sito web, dati, app, docs, automazione, debug, ricerca, pianificazione, design, ecc.).</p>
+<ul>
+  <li>Pulsante header “Cosa fai?” riapre sempre (anche dopo “Salta”).</li>
+  <li>Applicazione: profilo → scope → prompt draft → invio.</li>
+  <li>Persistenza del flag salta via <code>localStorage</code>.</li>
+</ul>
+</section>
+
+<section id="ui">
+<h2>Interfaccia web</h2>
+<div class="grid">
+  <div class="box">
+    <h3>Chat streaming</h3>
+    <p>Eventi real-time, tool richiudibili, contatori token, annulla, nuova conversazione, ragionamento separato.</p>
+  </div>
+  <div class="box">
+    <h3>Opzioni</h3>
+    <p>Servizio/modello, chiavi, budget, skill, permessi, servizi gratuiti, dipendenze.</p>
+  </div>
+  <div class="box">
+    <h3>Goal bar</h3>
+    <p>Input obiettivo + avvia/stop + polling stato. Lista goals scrollabile.</p>
+  </div>
+  <div class="box">
+    <h3>Docs</h3>
+    <p>Pulsante Docs apre questa guida in nuova tab.</p>
+  </div>
+</div>
+</section>
+
+<section id="tooling">
+<h2>Tool & profili</h2>
+<p>I tool sono separati da profili per evitare token sprecati. `pieno` riattiva tutto. Profili: <code>base</code>, <code>ricerca</code>, <code>skill</code>, <code>pieno</code> o <code>auto</code>.</p>
+<pre><code>PROFILI = {
+  "base": read/write/list/run_shell/calc + memoria,
+  "ricerca": base + web_cerca/web_leggi + storico,
+  "skill": skill tools,
+  "pieno": tutti i tool registrati
+}</code></pre>
+<p>Tool aggiunti: browser (<code>browser_apri</code>, <code>browser_render</code>, <code>browser_screenshot</code>), computer (<code>computer_screenshot</code>, <code>computer_click/type/open</code>), web, shell, memoria, skill, storico, goal via API/UI non tool.</p>
+</section>
+
+<section id="delega">
+<h2>Multi-agent & delega</h2>
+<p>Il padre può delegare subtask a figli on-demand se il tool <code>delega</code> è registrato (aggiunto in `default_registry` solo con profilo/condizioni appropriate). Delega best-effort: fall-back se catalog o modello non disponibile.</p>
+<ul>
+  <li>Profondità max, # figli limitato.</li>
+  <li>Costo per figlio aggiunto al resoconto (se catalogo).</li>
+  <li>Il figlio non può delegare a sua volta (tetto profondità).</li>
+  <li>Recovery opzionale nei goal: <code>recovery={max_retry, modelli_alternativi, accorcia_contesto}</code>. Di default nessun retry; i tetti strutturali non si ritentano mai.</li>
+</ul>
+</section>
+
+<section id="goal">
+<h2>Goal autonomi</h2>
+<p>Layer persistente <code>JSON</code> in <code>ORCHESTRA_HOME</code>. Stati: pending, running, done, failed, cancelled. I piani <code>kind=piano</code> sono contenitori: non eseguono agenti e si chiudono da soli quando i figli finiscono.</p>
+<pre><code>orchestra goal "obiettivo" [--profile ...] [--max-iterations N] [--depends-on A,B] [--priority N] [--max-attempts N] [--criteri JSON] [--recovery JSON]
+orchestra goals [--pronti]
+orchestra goal-next
+POST /api/goal/start
+POST /api/goal/stop
+POST /api/goal/run-next
+GET  /api/goal/status
+GET  /api/goal/ready</code></pre>
+<ul>
+  <li>Thread daemon, massimo iterazioni (default 60), timeout pre-process massimo.</li>
+  <li>Stop condition: risposta finale, fallimento provider/tool, max iterazioni, timeout.</li>
+  <li>Gate di accettazione: solo <code>risposta_finale</code> non vuota diventa <code>done</code>, salvo <code>--consenti-parziale</code> o criteri dichiarativi superati.</li>
+  <li>Retry limitato con backoff fino a <code>max_attempts</code>; dipendenze circolari rifiutate; un goal non pronto non parte nemmeno se avviato direttamente.</li>
+  <li>UI poll 2s solo se esiste goal running.</li>
+</ul>
+</section>
+
+<section id="browser">
+<h2>Browser & computer use</h2>
+<p>Sfruttano SOLO componenti OS già presenti (Chrome/Edge, PowerShell, .NET). Non richiedono pacchetti esterni.</p>
+<ul>
+  <li><code>browser_render</code>: headless Chrome/Edge (JS eseguito), fallback fetch leggero.</li>
+  <li><code>browser_screenshot</code>: PNG nel workdir.</li>
+  <li>Automazione click/type/open gated da permesso o env <code>ORCHESTRA_COMPUTER_USE</code>.</li>
+</ul>
+<p>Per i tester: l’automazione da tastiera/click richiede conferma esplicita; di default bloccata finché non si abilita.</p>
+</section>
+
+<section id="permessi">
+<h2>Permessi</h2>
+<p>File fuera della root richiedono conferma (gate). In web, un modal chiede “una volta/sessione/sempre/mai”. In assenza di canale (CLI/benchmark) il default è negare.</p>
+<p>Creazione nuove chiavi API: esse non devono arrivare ai subprocessi (scrub env).</p>
+</section>
+
+<section id="memoria">
+<h2>Memoria & storia</h2>
+<ul>
+  <li>memoria ricercabile via tool (<code>memoria</code>), sezioni Importanti/Fatti, anti-duplicati.</li>
+  <li>storico conversazioni persistente, search via tool (<code>storico_cerca</code>).</li>
+  <li>non iniettata nel prompt: l’agente la cerca su richiesta.</li>
+</ul>
+</section>
+
+<section id="budget">
+<h2>Budget & limiti</h2>
+<p>Budget trasversale (costo per turno/complessivo) applicato a tutte le chiamate. Il consumo ha una sola porta; contatori su disco per giorno/mese; limite 0 ammesso (distingue “scritto 0” da “non scritto”). Verifica l’identità del contatore condiviso (<code>a is b</code>) e il limite applicato, non solo quello salvato.</p>
+</section>
+
+<section id="bugfix">
+<h2>Debug & stato del server</h2>
+<ul>
+  <li>Serve su 127.0.0.1:8737 di default.</li>
+  <li>HTTP 000 → worker morto (non una rotta mancante).</li>
+  <li>Piu processi sulla stessa porta → comportamento intermittente.</li>
+  <li>HC: endpoint <code>/docs</code>, <code>/api/dipendenze/stato</code>.</li>
+</ul>
+</section>
+
+<section id="deploy">
+<h2>Rilascio tester</h2>
+<p>Checklist minima:</p>
+<ol>
+  <li><code>git status</code> pulito (no temp, log, DB run)</li>
+  <li>fresh server su <code>ORCHESTRA_ROOT=/test</code> e chiamate agli endpoint editati col metodo giusto.</li>
+  <li>node/js syntax + python compile + suite ui/webapp.</li>
+  <li>tre scenari E2E reali (bugfix, sito, dati).</li>
+  <li>credere all’errore del modello solo dopo aver controllato config/versione/endpoints.</li>
+</ol>
+<p><span class="badge">0.5.0</span> — Core in stdlib Python, packaging leggero.</p>
+</section>
+
+  </main>
+</div>
+<footer>
+  Orchestra — versione 0.5.0 · docs servita da <code>/docs</code> · contiene screenshot path e output troncati quando richiesto.
+</footer>
+</body>
+</html>

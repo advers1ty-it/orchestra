@@ -219,13 +219,13 @@ class Catalog:
         base = os.environ.get("ORCHESTRA_HOME")
         if not base:
             home = os.environ.get("HERMES_HOME") or os.path.expanduser("~")
-            # HERMES_HOME punta gia' alla cartella di Hermes. Appiattirla
+            # HERMES_HOME punta gia' alla cartella dati app. Appiattirla
             # sotto ancora "AppData/Local/hermes" produceva un percorso
             # doppio tipo
             #   ...\hermes\AppData\Local\hermes\orchestra\catalog_x.json
             # che funziona (salvataggio e lettura puntano allo stesso
             # posto) ma mette i dati in una cartella che nessuno cerca.
-            # Se la base finisce gia' per Hermes, si aggiunge solo
+            # Se la base finisce gia' per app, si aggiunge solo
             # "orchestra".
             if os.name == "nt":
                 se_hermes = home.rstrip("\\/").lower().endswith("hermes")

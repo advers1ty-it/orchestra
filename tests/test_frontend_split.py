@@ -101,9 +101,28 @@ check("ogni sorgente si annuncia", all(
 
 # harness: DOM finto, ma con lo scope condiviso che ha il browser
 harness = """
-const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","stats","conn",
-             "model-pick","btn-bench","bench","bench-sample","bench-cat","bench-run",
-             "bench-log","bench-out","bench-close","ver"];
+const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","stats","conn","ver","ragionamento",
+             "model-pick","model-btn","model-label","btn-bench","bench","bench-sample","bench-cat","bench-count",
+             "bench-free","bench-allfree","bench-models","bench-none","bench-run","bench-status","bench-log","bench-out","bench-close",
+             "btn-capacita","capacita","capacita-close","cap-filtro","cap-lista","cap-msg",
+             "btn-opzioni","opzioni","opzioni-close","opzioni-deps","opzioni-nota","opt-context-note","opt-max-iters",
+             "opt-model","opt-provider","opt-provider-msg","opt-reasoning","opt-tool-profile","provider-note","provider-pick",
+             "reasoning-pick","routing-cat","routing-go","routing-out","routing-top","scope-note","scope-pick",
+             "prova-model","prova-out","prova-prompt","prova-run","btn-verifica","verifica-file","verifica-pop","verifica-tipo",
+             "prior-copertura","prior-go","prior-out",
+             "btn-side","sidebar","side-cap","side-cerca","side-elenco","side-mem-aggiungi","side-mem-cerca","side-mem-elenco",
+             "side-mem-input","side-mem-stat","side-msg","side-nuova","side-ricarica","side-riduci","side-skill","side-tracce",
+             "side-traccia-dettaglio",
+             "memoria-aggiungi","memoria-elenco","memoria-msg","memoria-nuovo","memoria-percorso",
+             "skill-cartella","skill-categorie","skill-cestino","skill-cestino-nota","skill-filtro","skill-generate",
+             "skill-generate-nota","skill-importa","skill-ricarica","skill-riepilogo","skill-scaricate","skill-svuota","skill-vista",
+             "storico-elenco","storico-msg","storico-nuova","storico-ricarica",
+             "permesso","permesso-dettaglio","permesso-mai","permesso-percorso","permesso-ses","permesso-una",
+             "permessi-msg","permessi-prova","permessi-stato",
+             "budget-day-cost","budget-global-msg","budget-month-cost","budget-msg","budget-reset","budget-salva",
+             "budget-sess-cost","budget-sess-reqs","budget-sess-tokens","budget-task-cost","budget-task-iters","budget-task-tokens",
+             "locali-avviso","gratis-lista","chiavi-lista",
+             "btn-allega","btn-diagnosi","btn-onboard","file-input","allegati-lista","onboard","onboard-cards","onboard-skip"];
 function mkEl(tag) {
   const isSelect = tag === "select";
   const st = {
@@ -137,17 +156,19 @@ function mkEl(tag) {
     },
     addEventListener(k, f) { this._on = this._on || {}; this._on[k] = f; },
     removeEventListener() {}, setAttribute() {}, getAttribute() { return null; },
+    removeAttribute() {}, hasAttribute() { return false; },
     querySelector() { return null; }, querySelectorAll() { return []; },
     scrollIntoView() {}, focus() {}, blur() {}, click() {},
     getBoundingClientRect() { return { top:0, left:0, width:100, height:30, bottom:30, right:100 }; },
   };
   st._cl = {
     _s: new Set(),
-    add(...c) { c.forEach(x => st._s.add(x)); st.className = [...st._s].join(" "); },
-    remove(...c) { c.forEach(x => st._s.delete(x)); st.className = [...st._s].join(" "); },
-    toggle(c) { st._s.has(c) ? st._s.delete(c) : st._s.add(c); st.className = [...st._s].join(" "); },
-    contains(c) { return st._s.has(c); },
+    add(...c) { c.forEach(x => this._s.add(x)); st.className = [...this._s].join(" "); },
+    remove(...c) { c.forEach(x => this._s.delete(x)); st.className = [...this._s].join(" "); },
+    toggle(c) { this._s.has(c) ? this._s.delete(c) : this._s.add(c); st.className = [...this._s].join(" "); },
+    contains(c) { return this._s.has(c); },
   };
+  st.classList = st._cl;
   return st;
 }
 globalThis.Option = function (text, value) {
@@ -158,9 +179,17 @@ globalThis.Option = function (text, value) {
   return o;
 };
 const REG = {};
+const SELECT_IDS = new Set(["model-pick","bench-sample","bench-cat","bench-count","provider-pick","opt-provider","opt-model","opt-tool-profile","opt-reasoning","reasoning-pick","routing-cat","scope-pick"]);
+const INPUT_IDS = new Set(["bench-free","bench-allfree","file-input"]);
 IDS.forEach(function (id) {
-  const sel = id === "model-pick" || id === "bench-sample" || id === "bench-cat";
-  REG[id] = mkEl(sel ? "select" : "div");
+  if (INPUT_IDS.has(id)) {
+    const el = mkEl("input");
+    el.checked = false;
+    el.files = [];
+    REG[id] = el;
+    return;
+  }
+  REG[id] = mkEl(SELECT_IDS.has(id) ? "select" : "div");
 });
 // Gli elementi del pannello a sezioni servono anche qui: il bundle
 // chiama document.querySelectorAll(".opzioni-tab") e, senza,
@@ -203,6 +232,15 @@ globalThis.document = {
 };
 // i marcatori dei file scrivono su window.__diagFiles
 globalThis.window = globalThis;
+globalThis.localStorage = (() => {
+  const m = new Map();
+  return {
+    getItem(k) { return m.has(String(k)) ? m.get(String(k)) : null; },
+    setItem(k, v) { m.set(String(k), String(v)); },
+    removeItem(k) { m.delete(String(k)); },
+    clear() { m.clear(); },
+  };
+})();
 globalThis.addEventListener = function () {};
 globalThis.getComputedStyle = function () { return {}; };
 globalThis.CSS = { escape: function (s) { return String(s); } };
@@ -217,7 +255,7 @@ globalThis.fetch = async function (u) {
       { id:"vendor/b:free", short:"b", free:true, context:200000, prompt_price:0, scores:{}, current:false },
     ] }) };
   if (u === "/api/state")
-    return { ok:true, status:200, json: async () => ({ ready:true, version:"0.4.0", messages:[], busy:false }) };
+    return { ok:true, status:200, json: async () => ({ ready:true, version:"0.5.0", messages:[], busy:false }) };
   return { ok:true, status:200, json: async () => ({ running:false, log:[], result:null }) };
 };
 """

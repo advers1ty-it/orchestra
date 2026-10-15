@@ -133,6 +133,8 @@ class El {
   get textContent(){ return this._text || this.children.map(c=>c.textContent).join(""); }
   setAttribute(k,v){ this._attrs[k]=v; this[k]=v; }
   getAttribute(k){ return this._attrs[k]; }
+  removeAttribute(k){ delete this._attrs[k]; delete this[k]; }
+  hasAttribute(k){ return Object.prototype.hasOwnProperty.call(this._attrs, k); }
   // find ricorsivo: querySelector scende in profondita' nel DOM reale,
   // e tool_end lo usa per raggiungere .tool-status dentro .tool-head
   _find(pred, out){
@@ -234,7 +236,13 @@ globalThis.Option = function (text, value) {
   o.selected = false;
   return o;
 };
+globalThis.localStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
 globalThis.document = {
+  cookie: "",
   createElement: (t) => new El(t),
   getElementById: mk,
   createTextNode: (t) => { const e = new El("#text"); e._text = t; return e; },
@@ -283,7 +291,7 @@ globalThis.fetch = async (u) => {
     return { ok:true, status:200, json: async () => ({ provider:"or", current:"a:free", models:[
       {id:"vendor/a:free", short:"a", free:true, context:100000, prompt_price:0, scores:{}, current:true}]}) };
   if (u === "/api/state")
-    return { ok:true, status:200, json: async () => ({ready:true, version:"0.4.0", messages:[], busy:false}) };
+    return { ok:true, status:200, json: async () => ({ready:true, version:"0.5.0", messages:[], busy:false}) };
   return { ok:true, status:200, json: async () => ({}) };
 };
 globalThis.autoGrow = () => {};
@@ -502,7 +510,7 @@ globalThis.fetch = async (url, opts) => {
       ]}) };
   }
   if (url === "/api/state")
-    return { ok:true, status:200, json: async () => ({ready:true, version:"0.4.0", messages:[]}) };
+    return { ok:true, status:200, json: async () => ({ready:true, version:"0.5.0", messages:[]}) };
   if (url === "/api/bench/status")
     return { ok:true, status:200, json: async () => ({running:false, log:[], result:null}) };
   return { ok:true, status:200, json: async () => ({}) };
@@ -564,7 +572,7 @@ if _r9.get("value") != "vendor/a:free":
     print(f"     [debug] valori opzione: {_r9.get('valori')}")
     print(f"     [debug] current atteso: vendor/a:free")
     print(f"     [debug] testo errore   : {_r9.get('testoErrore')!r}")
-check("versione mostrata", _r9.get("ver") == "0.4.0", str(_r9.get("ver")))
+check("versione mostrata", _r9.get("ver") == "0.5.0", str(_r9.get("ver")))
 check("pannello benchmark presente", _r9.get("benchEsiste") is True)
 check("pannello si apre", "hidden" not in str(_r9.get("benchAperto")), str(_r9.get("benchAperto")))
 check("pannello si chiude", "hidden" in str(_r9.get("benchRichiuso")), str(_r9.get("benchRichiuso")))
@@ -575,7 +583,7 @@ _fail_fetch = r"""
 globalThis.fetch = async (url) => {
   if (url === "/api/models") return { ok:false, status:503, json: async () => ({error:"catalogo non disponibile"}) };
   if (url === "/api/state")
-    return { ok:true, status:200, json: async () => ({ready:true, version:"0.4.0", messages:[]}) };
+    return { ok:true, status:200, json: async () => ({ready:true, version:"0.5.0", messages:[]}) };
   return { ok:true, status:200, json: async () => ({}) };
 };
 """

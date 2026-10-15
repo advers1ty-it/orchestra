@@ -20,6 +20,16 @@
     padding: 6px 10px; max-height: 34vh; overflow-y: auto;
     white-space: pre-wrap; display: none;
   }
+
+.goal-list { margin-top: 8px; max-height: 120px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.goal-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px;
+  background: color-mix(in srgb, var(--card,#1a1a1f) 80%, transparent); cursor: pointer; }
+.goal-row.sel { outline: 1px solid var(--accent,#3a7bd5); }
+.goal-row .goal-stato { padding: 2px 6px; border-radius: 6px; font-size: 11px; }
+.stato-running, .stato-pending { background: #2a5; color: white; }
+.stato-done { background: #2a4a9a; color: white; }
+.stato-failed, .stato-cancelled { background: #8a3a3a; color: white; }
+.goal-row .goal-obj { font-size: 12px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
 </style>
 <script>
 // Cattura ogni errore e ogni promise rifiutata e li scrive a schermo.
@@ -62,13 +72,17 @@
 <header>
   <div class="logo">Orches<span>tra</span></div>
   <span class="ver" id="ver" title="versione della interfaccia">·</span>
-  <span class="stamp" id="stamp">UI-4</span>
+  <!-- stamp rimosso -->
   <button id="btn-side" class="ghost" title="Cronologia e skill (Ctrl+B)"
           aria-label="Apri il pannello laterale">&#9776;</button>
   <div class="grow"></div>
   <button id="btn-capacita" class="ghost" title="Skill e strumenti">Capacit&agrave;</button>
   <button id="btn-opzioni" class="ghost" title="Chiavi API e servizi gratuiti">Opzioni</button>
   <button id="btn-bench" class="ghost">Benchmark</button>
+  <button id="btn-goal" class="ghost" title="Obiettivo autonomo">Obiettivo</button>
+  <button id="btn-onboard" class="ghost" title="Mostra obiettivi iniziali">Cosa fai?</button>
+  <button id="btn-docs" class="ghost" title="Documentazione">Docs</button>
+  <button id="btn-diagnosi" class="ghost" title="Diagnostica allowlisted">Diagnosi</button>
 
   <!-- Lo scopo sta PRIMA del modello, non in un pannello: la domanda
        "che lavoro stai facendo" viene prima di "con quale modello", e
@@ -149,6 +163,7 @@
         <span class="dim">chiavi dei servizi e modelli locali</span>
       </div>
       <button id="opzioni-close" class="ghost">Chiudi</button>
+      <button id="opzioni-deps" class="ghost" title="Installa dipendenze opzionali (ddgs ecc.)">Dipendenze</button>
     </div>
     <div class="avviso-sicurezza">
       Le chiavi finiscono in <code>orchestra/.env</code> e non lasciano questa
@@ -204,6 +219,15 @@
                       </label>
                       <label>Modello
                         <select id="opt-model" disabled></select>
+                      </label>
+                      <label>Profilo strumenti
+                        <select id="opt-tool-profile">
+                          <option value="">pieno (tutti)</option>
+                          <option value="auto">auto (per input)</option>
+                          <option value="base">base (file/shell/calcolo)</option>
+                          <option value="ricerca">ricerca (+web/memoria)</option>
+                          <option value="skill">skill (+tool skill)</option>
+                        </select>
                       </label>
                       <label>Reasoning
                         <select id="opt-reasoning" disabled>
@@ -505,7 +529,18 @@
       </div>
       <div class="side-mem-campi">
         <input id="side-mem-input" type="text" placeholder="Fatto da ricordare..." />
-        <button id="side-mem-aggiungi" class="primary">+</button>
+         <button id="side-mem-aggiungi" class="primary">+</button>
+            <div hidden aria-hidden="true">
+              <div id="storico-elenco"></div>
+              <div id="storico-msg"></div>
+              <button id="storico-nuova"></button>
+              <button id="storico-ricarica"></button>
+              <button id="memoria-aggiungi"></button>
+              <div id="memoria-elenco"></div>
+              <div id="memoria-msg"></div>
+              <button id="memoria-nuovo"></button>
+              <input id="memoria-percorso" />
+            </div>
       </div>
       <div class="side-mem-campi">
         <input id="side-mem-cerca" type="text" placeholder="Cerca nella memoria..." />
@@ -599,5 +634,37 @@
   </div>
 </div>
 
+  <div hidden aria-hidden="true" id="legacy-ui-ids">
+    <div id="storico-elenco"></div>
+    <div id="storico-msg"></div>
+    <button id="storico-nuova"></button>
+    <button id="storico-ricarica"></button>
+    <button id="memoria-aggiungi"></button>
+    <div id="memoria-elenco"></div>
+    <div id="memoria-msg"></div>
+    <button id="memoria-nuovo"></button>
+    <input id="memoria-percorso" />
+  </div>
+<div id="onboard" class="onboard-backdrop" hidden>
+  <div class="onboard">
+    <h2>Per cosa stai usando Orchestra oggi?</h2>
+    <p class="sotto">Scegli l’obiettivo: Orchestra imposta il modello, i tool e il modo di lavoro più adatto. Puoi sempre cambiarlo sopra.</p>
+    <div id="onboard-cards" class="onboard-grid"></div>
+    <div class="onboard-foot">
+      <span class="small dim">Mostrato solo alla prima apertura. Premi “Salta” per nasconderlo sempre.</span>
+      <button id="onboard-skip" class="onboard-skip">Salta</button>
+    </div>
+  </div>
+</div>
+<div id="goal-bar" class="goal-bar" hidden>
+  <div class="goal-bar-inner">
+    <input id="goal-input" type="text" placeholder="Obiettivo (es. creare un sito web completo...)" />
+    <button id="goal-start" class="primary">Avvia</button>
+    <button id="goal-stop" class="ghost">Stop</button>
+    <span id="goal-status" class="small dim"></span>
+  </div>
+  <div id="goal-output" class="goal-output"></div>
+  <div id="goal-list" class="goal-list"></div>
+</div>
 </body>
 </html>
