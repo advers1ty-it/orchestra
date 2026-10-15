@@ -1,55 +1,62 @@
-__pycache__/
+
+# che nessuno vuole vedere e che nessuno rimuove.
+# Directory di probe vuote create dai test.
+# Indice FTS5 della memoria: si ricostruisce da memory.md, non è verità.
+# roba dei test: i file che il test di delega crea per far contare le righe
+# Skill personali: restano installate in locale ma non su GitHub (pubblico).
+# Sono id generati (numeri), e committarli riempie il diff di robba
+# Spazzatura dei test: il cestino delle skill e la cartella di prova
+# Stato runtime dei goal in locale: si ricostruisce usandoli, non è verità.
+# Token read-only per gli aggiornamenti: lo mette chi fa il pacchetto.
+# tutti gli skill specifici di TraceApp, Godot, Aphrodite, su qualunque categoria
+# vengono creati dal vivo quando i test scrivono e cancellano skill.
+*.log
 *.pyc
 *.pyo
-.venv/
-venv/
 .env
-*.log
-_probe/
-tests/_probe3/
-_bench/
-_prova/
 .prova/
-_msg.txt
-nul*\ntests/_run_*.js
+.venv/
+_ goals_fallback/
 _*.py
-_ext*.py
-
-# roba dei test: i file che il test di delega crea per far contare le righe
+__pycache__/
+_bench/
 _delega_prova/
+_ext*.py
 _m.txt
-
-# Spazzatura dei test: il cestino delle skill e la cartella di prova
-# vengono creati dal vivo quando i test scrivono e cancellano skill.
-# Sono id generati (numeri), e committarli riempie il diff di robba
-# che nessuno vuole vedere e che nessuno rimuove.
-skills/.cestino/
-skills/percorso/prova/
-orchestra.log
-orchestra.log.1
+_msg.txt
+_probe/
+_prova/
+budget_global.json
+memoria_indice.db
+nul*\ntests/_run_*.js
 orchestra.err.log
 orchestra.err.log.1
-# Indice FTS5 della memoria: si ricostruisce da memory.md, non è verità.
-memoria_indice.db
-budget_global.json
+orchestra.log
+orchestra.log.1
 orchestra/nous_auth.json
-# Stato runtime dei goal in locale: si ricostruisce usandoli, non è verità.
-_ goals_fallback/
-# Directory di probe vuote create dai test.
-tests/_probe5/
-# Token read-only per gli aggiornamenti: lo mette chi fa il pacchetto.
-token.txt
-
-# Skill personali: restano installate in locale ma non su GitHub (pubblico).
-skills/percorso/creative/aphrodite-character/
-skills/percorso/traceapp/
-skills/percorso/marketing/traceapp-social-promo/
-skills/percorso/mobile/react-native-device-debug/
-skills/percorso/react-native/rn086-newarch-pitfalls/
-# tutti gli skill specifici di TraceApp, Godot, Aphrodite, su qualunque categoria
+skills/.cestino/
+skills/percorso/*/godot-arca/
 skills/percorso/*/traceapp-*/
 skills/percorso/*/trace-app*/
-skills/percorso/*/godot-arca/
 skills/percorso/creative/aphrodite-character/
 skills/percorso/creative/aphrodite-character/**
+skills/percorso/marketing/traceapp-social-promo/
+skills/percorso/mobile/react-native-device-debug/
+skills/percorso/prova/
+skills/percorso/react-native/rn086-newarch-pitfalls/
 skills/percorso/software-development/rn086-gradle-bundle-stale-json/
+skills/percorso/traceapp/
+tests/_probe3/
+tests/_probe5/
+token.txt
+venv/
+skills/percorso/devops/react-native-android-build/
+skills/percorso/devops/rn-android-bundle-build/
+skills/percorso/generale/react-native-troubleshooting/
+skills/percorso/generale/rn-prebuilt-sqlite-android/
+skills/percorso/generale/rn-sqlite-opensqlite-newarch/
+skills/percorso/generale/supabase-secure-public-read/
+skills/percorso/software-development/parallel-content-generation/
+skills/percorso/software-development/progressive-voice-refactor/
+skills/percorso/software-development/react-native-visual-feedback/
+skills/percorso/software-development/supabase-react-native-backend/
