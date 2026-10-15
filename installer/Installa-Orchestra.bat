@@ -13,20 +13,41 @@ echo  === Installazione Orchestra ===
 echo.
 
 rem --- 1. Python ---
-py -3 --version >nul 2>&1
-if %errorlevel% neq 0 python --version >nul 2>&1
-if %errorlevel% neq 0 (
+set "PYEXE="
+for %%P in (python py python3) do (
+  if not defined PYEXE %%P --version >nul 2>&1 && set "PYEXE=%%P"
+)
+if not defined PYEXE (
+  for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312" "%LocalAppData%\Programs\Python\Python311" "C:\Python312" "C:\Python311" "C:\Program Files\Python312" "C:\Program Files\Python311") do (
+    if not defined PYEXE if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
+  )
+)
+if not defined PYEXE (
   echo  Python non trovato. Provo a installarlo...
   winget install -e --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
+  set "PYEXE=py"
   py -3 --version >nul 2>&1
-  if !errorlevel! neq 0 python --version >nul 2>&1
   if !errorlevel! neq 0 (
-    echo.
-    echo  [ERRORE] Installa Python 3.11 o superiore da https://www.python.org/downloads/
-    echo  e rilancia questo installer.
-    pause
-    exit /b 1
+    set "PYEXE=python"
+    python --version >nul 2>&1
   )
+  if defined PYEXE python --version >nul 2>&1 || (
+    echo  Winget non ha funzionato; scarico l'installer da python.org...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe' -OutFile '%TEMP%\python-setup.exe' -UseBasicParsing" 2>nul
+    if exist "%TEMP%\python-setup.exe" (
+      start /wait "" "%TEMP%\python-setup.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+      del "%TEMP%\python-setup.exe" >nul 2>&1
+    )
+    set "PYEXE="
+    for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312") do if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
+  )
+)
+if not defined PYEXE (
+  echo.
+  echo  [ERRORE] Installa Python 3.11 o superiore da https://www.python.org/downloads/
+  echo  e rilancia questo installer.
+  pause
+  exit /b 1
 )
 echo  [OK] Python presente.
 
@@ -72,8 +93,9 @@ call "%DESTDIR%\Avvia-Orchestra.bat"
 exit /b 0
 
 rem ===== Sotto questa riga solo codice PowerShell (mai eseguito da cmd) =====
-REM-PS:$ErrorActionPreference = 'Stop'
 REM-PS:param([Parameter(Mandatory = $true)][string]$Dest)
+REM-PS:$ErrorActionPreference = 'Stop'
+REM-PS:$ProgressPreference = 'SilentlyContinue'
 REM-PS:$headers = @{ 'User-Agent' = 'orchestra-installer'; 'Accept' = 'application/vnd.github+json' }
 REM-PS:try {
 REM-PS:  $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/advers1ty-it/orchestra/releases/latest' -Headers $headers -TimeoutSec 30
