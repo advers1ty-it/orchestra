@@ -1,0 +1,41 @@
+PACCHETTO TESTER + RELEASE — istruzioni per chi distribuisce
+============================================================
+
+1. CREA IL TOKEN READ-ONLY (una volta sola)
+-------------------------------------------
+GitHub → Settings (del tuo account) → Developer settings →
+Personal access tokens → Fine-grained tokens → Generate new token:
+  - Repository access: "Only select repositories" → orchestra
+  - Permissions → Repository → Contents: Read-only (tutto il resto: No access)
+  - Expiration: 1 anno (poi lo rigeneri)
+Copia il token (inizia con github_pat_...) e incollalo in un file
+chiamato token.txt dentro installer/. MAI committarlo (è già in .gitignore).
+
+2. PREPARA LO ZIP PER I TESTER
+------------------------------
+Metti in uno zip questi file (e nient'altro):
+  installer/Installa-Orchestra.bat
+  installer/scarica-release.ps1
+  installer/token.txt        <- lo aggiungi tu a mano, non è nel repo
+Il tester lancia Installa-Orchestra.bat: non serve Git né account GitHub.
+Gli serve solo: Windows, internet, e le chiavi API da mettere in .env.
+
+3. PUBBLICA UNA RELEASE (a ogni aggiornamento)
+----------------------------------------------
+  - alza __version__ in orchestra/__init__.py e committa
+  - git tag v0.6.0 && git push --tags
+  - gh release create v0.6.0 --generate-notes
+Da quel momento tutti i tester ricevono l'update al prossimo avvio
+(Avvia-Orchestra.bat fa update --auto prima di partire).
+
+4. SE IL TOKEN TRAPELA
+----------------------
+Revocalo dalla stessa pagina dei token e creane uno nuovo: il repo
+resta privato, i vecchi pacchetti smettono di aggiornarsi finché non
+ricevono il token nuovo. Nessun codice da cambiare.
+
+NOTE
+----
+- .env, budget, storico e goals dei tester non vengono mai toccati
+  dagli aggiornamenti (lista CONSERVA in orchestra/update.py).
+- Prima di una release, fai girare python tests/run_all.py col server acceso.
