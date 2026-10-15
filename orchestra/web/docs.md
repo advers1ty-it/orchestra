@@ -24,7 +24,7 @@
 - multi-agente: disponibile se il modello chiama `delega`; retry opzionale con `--recovery JSON`.
 
 ## Tester senza GitHub
-- Pacchetto: `installer/Installa-Orchestra.bat` + `scarica-release.ps1` + `token.txt` (token read-only, lo aggiungi tu; mai nel repo).
+- Pacchetto: `installer/Installa-Orchestra.bat` + `scarica-release.ps1` (niente token, repo pubblico).
 - Il tester lancia l'installer: controlla Python, scarica l'ultima release, crea `.env` da esempio, mette "Avvia Orchestra" sul Desktop.
 - `Avvia-Orchestra.bat` fa `orchestra update --auto` a ogni avvio: riceve gli update senza fare niente.
 - Pubblicare un update: alza `__version__`, committa, `git tag vX.Y.Z && git push --tags`, `gh release create vX.Y.Z --generate-notes`.
