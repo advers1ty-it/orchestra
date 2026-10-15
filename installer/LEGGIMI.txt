@@ -1,29 +1,33 @@
-PACCHETTO TESTER + RELEASE — istruzioni per chi distribuisce
-============================================================
+ORCHESTRA — guida rapida
+=======================
 
-Il repo e' pubblico: niente token, niente account per i tester.
+COS'È
+-----
+Orchestra è un assistente AI che lavora da solo: gli scrivi un obiettivo
+in italiano e lui lo esegue usando file, web e altri strumenti.
 
-1. PREPARA LO ZIP PER I TESTER
-------------------------------
-Metti in uno zip questi file (e nient'altro):
-  installer/Installa-Orchestra.bat
-  installer/scarica-release.ps1
-Il tester lancia Installa-Orchestra.bat: non serve Git né account GitHub.
-Gli serve solo: Windows, internet, e le chiavi API da mettere in .env
-(il file .env si crea da solo al primo avvio, da .env.example).
+INSTALLAZIONE
+-------------
+1. Lancia Installa-Orchestra.bat e aspetta la fine (se manca Python,
+   te lo installa da solo).
+2. Alla fine si crea "Avvia Orchestra" sul Desktop: usalo ogni volta.
 
-2. PUBBLICA UNA RELEASE (a ogni aggiornamento)
-----------------------------------------------
-  - alza __version__ in orchestra/__init__.py e committa
-  - git tag v0.6.0 && git push --tags
-  - gh release create v0.6.0 --generate-notes
-Da quel momento tutti i tester ricevono l'update al prossimo avvio
-(Avvia-Orchestra.bat fa update --auto prima di partire).
+PRIMO AVVIO
+-----------
+1. Apri "Avvia Orchestra": si apre il browser da solo.
+2. Ti serve una chiave API (es. OpenRouter, gratis con limiti):
+   la inserisci una volta sola nel pannello Opzioni in alto.
+3. Scrivi un obiettivo nel pannello Obiettivo e premi Avvia.
 
-NOTE
-----
-- .env, budget, storico e goals dei tester non vengono mai toccati
-  dagli aggiornamenti (lista CONSERVA in orchestra/update.py).
-- Prima di una release, fai girare python tests/run_all.py col server acceso.
-- Se un giorno il repo tornasse privato, orchestra update supporta
-  ancora un token read-only via env ORCHESTRA_UPDATE_TOKEN o token.txt.
+AGGIORNAMENTI
+-------------
+Arrivano da soli: a ogni avvio l'app controlla se c'è una versione
+nuova e la installa. Le tue chiavi e i tuoi lavori non vengono toccati.
+
+SE QUALCOSA NON VA
+-------------------
+- Il browser non si apre: vai a mano su http://127.0.0.1:8737
+- "Chiave mancante": rimetti la chiave API nel pannello Opzioni.
+- L'app non parte: chiudi la finestra nera, rilancia "Avvia Orchestra".
+- Per togliere tutto: cancella la cartella %LOCALAPPDATA%\Orchestra
+  e il collegamento sul Desktop.
