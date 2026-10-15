@@ -20,13 +20,23 @@ globalThis.document = {
     // function" — che vuol dire "manca un metodo", non "manca un
     // elemento", e manda a cercare nel posto sbagliato.
     const R = Object.assign({}, globalThis.REG || {}, this._els || {});
+    const _ids = Array.isArray(globalThis.SEZIONI_E_TAB) ? globalThis.SEZIONI_E_TAB : [];
+    const _tabs = _ids.filter((id) => id.indexOf("opz-tab-") === 0);
+    const _sezs = _ids.filter((id) => id.indexOf("opz-sez-") === 0);
     if (sel === ".opz-sez" || sel === "section.opz-sez") {
-      for (const n of ["modelo", "skill", "servizi", "permessi", "gratis"]) {
-        push(R["opz-sez-" + n]);
-      }
+      for (const id of _sezs) push(R[id]);
     } else if (sel === ".opzioni-tab" || sel === "button.opzioni-tab") {
-      for (const n of ["modelo", "skill", "servizi", "permessi", "gratis"]) {
-        push(R["opz-tab-" + n]);
+      for (const id of _tabs) push(R[id]);
+    } else if (sel === ".opzioni-tab.attiva"
+               || sel === ".opzioni-tab:not(.attiva)") {
+      // Il probe cerca la tab attiva per classe composta, e qui non
+      // c'e' un parser di selettori. Sono due selettori e la
+      // domanda e' sempre la stessa: quale delle tab ha quella
+      // classe.
+      const vuoleAttiva = sel === ".opzioni-tab.attiva";
+      for (const id of _tabs) {
+        const e = R[id];
+        if (e && e.classList.contains("attiva") === vuoleAttiva) push(e);
       }
     } else if (sel === ".opzioni-nav" || sel === "nav.opzioni-nav") {
       push(R["opzioni-nav"]);
@@ -38,7 +48,7 @@ globalThis.document = {
     return t.length ? t[0] : null;
   },
   createElement(tag) { return mk(tag); },
-  createTextNode(t) { return { text: t }; },
+  createTextNode(t) { const e = mk("#text"); e.textContent = String(t); return e; },
   addEventListener() {},
 };
 globalThis.__diagErrors = [];
@@ -47,13 +57,31 @@ globalThis.EventSource = function () {
   this.onopen = null; this.onerror = null; this.onmessage = null;
 };
 globalThis.addEventListener = () => {};
+globalThis.localStorage = (() => {
+  const m = new Map();
+  return {
+    getItem(k) { return m.has(String(k)) ? m.get(String(k)) : null; },
+    setItem(k, v) { m.set(String(k), String(v)); },
+    removeItem(k) { m.delete(String(k)); },
+    clear() { m.clear(); },
+  };
+})();
 globalThis.setInterval = () => 0;
 globalThis.clearInterval = () => {};
 
 function mk(tag) {
   const e = {
     tagName: String(tag).toUpperCase(), children: [], options: [],
-    _handlers: {}, value: "", textContent: "", disabled: false, className: "",
+    _handlers: {}, value: "", _text: "", disabled: false, className: "",
+    get textContent() {
+      let t = this._text || "";
+      for (const c of this.children || []) {
+        if (c && typeof c.textContent === "string") t += c.textContent;
+        else if (c && typeof c.text === "string") t += c.text;
+      }
+      return t;
+    },
+    set textContent(v) { this._text = String(v); this.children = []; },
     // dataset per tab e sezioni: il pannello ci legge "sez". Senza,
     // il click su una tab non sapeva quale sezione aprire e il test
     // sarebbe passato sul nulla.
@@ -103,11 +131,15 @@ function mk(tag) {
     setAttribute(nome, v) {
       this._attrs = this._attrs || {};
       this._attrs[nome] = v;
-      if (nome === "hidden") this._hidden = v !== "";
+      if (nome === "hidden") this._hidden = true;
     },
     removeAttribute(nome) {
       if (this._attrs) delete this._attrs[nome];
       if (nome === "hidden") this._hidden = false;
+    },
+    hasAttribute(nome) {
+      if (nome === "hidden") return !!this._hidden;
+      return !!(this._attrs && (nome in this._attrs));
     },
     // Registrato a mano: gli elementi vivono in una mappa per id, e per
     // trovarli per classe serve un elenco. Il bundle lo chiede solo per
@@ -196,6 +228,7 @@ if (!SEZIONI_E_TAB.length) {
     + "sarebbe vuoto e ogni check passerebbe perche' non c'e' niente "
     + "da misurare");
 }
+globalThis.SEZIONI_E_TAB = SEZIONI_E_TAB;
 
 // Gli id vengono letti dall'HTML, non elencati qui.
 //
@@ -296,7 +329,7 @@ globalThis.fetch = async function (u) {
     ] });
   }
   if (u === "/api/state")
-    return ok({ ready: true, version: "0.4.0", messages: [], busy: false });
+    return ok({ ready: true, version: "0.5.0", messages: [], busy: false });
   return ok({ running: false, log: [], result: null });
 };
 /* catturiamo il corpo della POST provider */

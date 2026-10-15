@@ -32,3 +32,8 @@ orchestra.err.log.1
 # Indice FTS5 della memoria: si ricostruisce da memory.md, non è verità.
 memoria_indice.db
 budget_global.json
+orchestra/nous_auth.json
+# Stato runtime dei goal in locale: si ricostruisce usandoli, non è verità.
+_ goals_fallback/
+# Directory di probe vuote create dai test.
+tests/_probe5/

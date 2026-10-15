@@ -464,6 +464,7 @@ on(opzioniPanel, "click", (e) => { if (e.target === opzioniPanel) chiudiOpzioni(
 const optProvider = $("opt-provider");
 const optModel = $("opt-model");
 const optReasoning = $("opt-reasoning");
+const optToolProfile = $("opt-tool-profile");
 const optMaxIters = $("opt-max-iters");
 const optContextNote = $("opt-context-note");
 const optBudgetTaskTokens = $("budget-task-tokens");
@@ -1088,6 +1089,56 @@ function schedaGratis(s) {
     w.textContent = s.avvertenza;
     d.appendChild(w);
   }
+  if (s.id === "nous") {
+    const box = el("div", "nous-auth");
+    const stato = el("span", "dim small");
+    stato.textContent = "per collegare: usa il pulsante e conferma nel browser";
+    const btn = el("button", "primary", "Collega Nous");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      stato.textContent = "avvio…";
+      try {
+        const r = await fetch("/api/nous/auth/start", { method: "POST" });
+        const dd = await r.json();
+        if (!r.ok) {
+          stato.textContent = "errore: " + (dd.error || r.status);
+          btn.disabled = false;
+          return;
+        }
+        if (dd.connected) {
+          stato.textContent = "già collegato";
+          caricaOpzioni();
+          btn.disabled = false;
+          return;
+        }
+        try { window.open(dd.verification_url, "_blank"); } catch (e) {}
+        stato.textContent = "codice " + dd.user_code + " — conferma nel browser…";
+        const poll = async () => {
+          const rr = await fetch("/api/nous/auth/status");
+          const d2 = await rr.json();
+          if (d2.connected) {
+            stato.textContent = "collegato";
+            caricaOpzioni();
+            btn.disabled = false;
+            return;
+          }
+          if (d2.error) {
+            stato.textContent = "errore: " + d2.error;
+            btn.disabled = false;
+            return;
+          }
+          setTimeout(poll, 3000);
+        };
+        setTimeout(poll, 3000);
+      } catch (e) {
+        stato.textContent = "connessione fallita: " + e;
+        btn.disabled = false;
+      }
+    });
+    box.appendChild(btn);
+    box.appendChild(stato);
+    d.appendChild(box);
+  }
   return d;
 }
 
@@ -1102,6 +1153,22 @@ function schedaGratis(s) {
 // Non e' una paranoia: e' successo, misurato, con i due selettori a
 //perti su servizi diversi.
 let generazioneChiavi = 0;
+
+if (optToolProfile) {
+  optToolProfile.addEventListener("change", async () => {
+    try {
+      const r = await fetch("/api/tools/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile: optToolProfile.value || null }),
+      });
+      const dd = await r.json();
+      if (!r.ok) throw new Error(dd.error || ("HTTP " + r.status));
+    } catch (e) {
+      console.warn("profilo strumenti:", e);
+    }
+  });
+}
 
 async function caricaOpzioni() {
   const mia = ++generazioneChiavi;
@@ -1118,6 +1185,9 @@ async function caricaOpzioni() {
     // superato
     if (mia !== generazioneChiavi) return;
     opzioniNota.textContent = d.nota_gratis || "";
+    if (optToolProfile) {
+      optToolProfile.value = d.tool_profile || "";
+    }
 
     caricaPermessi();
     // Le skill anche. Una chiamata in piu' a /api/skill durante
@@ -1952,10 +2022,13 @@ let sezioneSkillCaricata = false;
 
 function mostraSezione(nome) {
   const sezioni = document.querySelectorAll(".opz-sez");
-  let trovata = false;
+  const daMostrare = Array.from(sezioni).find((s) => s.dataset.sez === nome);
+  // Una sezione inesistente non deve nascondere tutto: senza questo
+  // controllo un nome sbagliato lasciava il pannello vuoto, senza dire
+  // perche'. Prima si verifica che esista, poi si tocca il DOM.
+  if (!daMostrare) return;
   for (const s of sezioni) {
     const mostra = s.dataset.sez === nome;
-    if (mostra) trovata = true;
     // hidden e' l'attributo, non lo stile: e' quello che il DOM finto
     // dei test rispetta, ed e' lo stesso che il browser usa per
     // l'accessibilita' (un display:none a mano lascia la sezione
@@ -1968,7 +2041,6 @@ function mostraSezione(nome) {
     if (t.dataset.sez === nome) t.classList.add("attiva");
     else t.classList.remove("attiva");
   }
-  if (!trovata) return;
   // pigro: la prima volta che si arriva alle skill, si chiedono
   if ((nome === "skill" || nome === "cestino") && !sezioneSkillCaricata) {
     sezioneSkillCaricata = true;
@@ -3105,4 +3177,192 @@ function ragionamentoChiudi() {
   ragionamentoCorrente = null;
   const n = document.getElementById("ragionamento");
   if (n) n.setAttribute("hidden", "");
+}
+
+// ------------------------------------------------- onboarding guidato
+// La prima volta si mostra un selettore di obiettivo: l'utente non deve
+// conoscere i modelli, sceglie che lavoro fare e Orchestra configura
+// scope/profilo/prompt iniziale.
+const OBBIETTIVI = [
+  { id: "code", t: "Programmare", d: "Fix bug, feature, refactor, test, review del codice.", scope: "code", profile: "base",
+    prompt: "Analizza il progetto corrente e proponi un piano di lavoro conciso. Se c'e' un bug o una feature da fare, dimmi quale sarebbe il primo passo sensato." },
+  { id: "web", t: "Sito web", d: "Landing, pagine, layout, CSS, accessibilita'.", scope: "web", profile: "base",
+    prompt: "Aiutami a progettare o correggere un sito web. Chiedimi prima dettagli su obiettivo, contenuti e stile, poi proponi struttura e codice." },
+  { id: "app", t: "App mobile", d: "Schermate, build Android/React Native, correzioni runtime.", scope: "app", profile: "base",
+    prompt: "Aiutami con un'app mobile. Dimmi il framework e il problema, e analizza il codice rilevante prima di modificarlo." },
+  { id: "dati", t: "Dati / analisi", d: "CSV, PDF, aggregazioni, outliner, report.", scope: "extraction", profile: "ricerca",
+    prompt: "Ho dei dati da analizzare. Spiegami il formato e che domande devo fare, poi proponi i calcoli e il report." },
+  { id: "docs", t: "Scrivere/documentare", d: "README, guide, changelog, note tecniche.", scope: "writing", profile: "base",
+    prompt: "Aiutami a scrivere o migliorare la documentazione del progetto. Indica i file rilevanti e il pubblico target." },
+  { id: "auto", t: "Automazione", d: "Script, batch, organizzazione file, pulizia.", scope: "code", profile: "base",
+    prompt: "Voglio automatizzare un compito. Descrivilo, e proponi uno script sicuro e verificabile." },
+  { id: "devops", t: "Test / CI / build", d: "Debug di build, pipeline, test, fallimenti.", scope: "code", profile: "base",
+    prompt: "Un test o una build falliscono. Analizza gli errori e proponi una correzione minimale con verifica." },
+  { id: "repo", t: "Capire un repository", d: "Architettura, punti critici, onboarding.", scope: "code", profile: "base",
+    prompt: "Analizza questo repository e spiegami architettura, dipendenze e dove mettere mano. Non modificare nulla senza chiedermi conferma." },
+  { id: "ricerca", t: "Ricerca / sintesi", d: "Documenti, siti, appunti, comparazioni.", scope: "reasoning", profile: "ricerca",
+    prompt: "Aiutami a fare ricerca e sintesi. Indica fonti e produced un sunto strutturato con fonti." },
+  { id: "piano", t: "Pianificare un lavoro", d: "Breakdown, checklist, milestone.", scope: "", profile: "base",
+    prompt: "Scomponi un obiettivo in passi verificabili. Dimmi quali file o artefatti verranno toccati e come verifico il risultato." },
+  { id: "debug", t: "Debug / crash", d: "Traceback, stack trace, logs, regressioni.", scope: "code", profile: "base",
+    prompt: "Ho un errore o un crash. Analizza traceback/logs, trova la causa e proponi la minima correzione con test." },
+  { id: "backend", t: "API / backend", d: "Endpoint, database, auth, modelli, validazione.", scope: "code", profile: "base",
+    prompt: "Aiutami a progettare o correggere un backend/API. Prima discuti risorse, payload, auth e database, poi implementa step by step." },
+  { id: "ui", t: "Interfaccia frontend", d: "Componenti, stato, stile, accessibilita'.", scope: "web", profile: "base",
+    prompt: "Aiutami con l'interfaccia frontend. Indica framework/stile desiderato; proponi componenti e verifica accessibilita'." },
+  { id: "db", t: "Database / SQL", d: "Schema, migration, query, indici.", scope: "code", profile: "base",
+    prompt: "Aiutami con database e SQL. Analizza schema, query e migrare in sicurezza; proponi indici e test." },
+  { id: "perf", t: "Performance", d: "Profiling, miglioramenti, regressioni.", scope: "code", profile: "base",
+    prompt: "Migliora le performance del codice o di una query. Misura prima, poi proponi la minima ottimizzazione verificata." },
+  { id: "git", t: "Git / collaborazione", d: "Branch, commit, PR, review.", scope: "code", profile: "base",
+    prompt: "Aiutami con git e collaborazione: branch, commit, PR, review, risoluzione conflitti." },
+  { id: "security", t: "Security review", d: "Validazione input, segreti, auth, superficie attacco.", scope: "code", profile: "base",
+    prompt: "Fai una security review del codice indicato. Trova vulnerabilita', impatto e correzioni minime." },
+  { id: "design", t: "Design / UX", d: "Wireframe, tono visivo, flussi.", scope: "web", profile: "base",
+    prompt: "Aiutami a progettare UX/UI. Definisci obiettivo, utente, flusso, poi variante visiva." },
+  { id: "lead", t: "Scrivere un README", d: "Onboarding dev e documentazione utile.", scope: "writing", profile: "base",
+    prompt: "Scrivi o ristruttura il README per utenti / contributori. Indica prerequisiti e comandi." },
+  { id: "json", t: "JSON / config", d: "API payloads, configurazioni, manifest.", scope: "code", profile: "base",
+    prompt: "Aiutami a modelizzare JSON/configurazioni. Valida schema e compatibilita'." },
+];
+
+function chiudiOnboarding() {
+  const o = document.getElementById("onboard");
+  if (o) {
+    o.classList.add("hidden");
+    o.setAttribute("hidden", "");
+    o.style.display = "none";
+  }
+  try { localStorage.setItem("orchestra.onboard.done", "1"); } catch (e) {}
+}
+
+async function avviaObiettivo(o) {
+  try {
+    await fetch("/api/tools/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: o.profile || "auto" }),
+    });
+  } catch (e) { /* best effort */ }
+  if (typeof applicaScope === "function" && o.scope) {
+    const sp = document.getElementById("scope-pick");
+    if (sp) { sp.value = o.scope; }
+    try { applicaScope(o.scope); } catch (e) {}
+  }
+  const inp = document.getElementById("input");
+  if (inp) { inp.value = o.prompt; if (typeof autoGrow === "function") autoGrow(); inp.focus(); }
+  chiudiOnboarding();
+  if (typeof send === "function") { send(); }
+}
+
+function mostraOnboarding(forza) {
+  const o = document.getElementById("onboard");
+  if (!o) return;
+  if (!forza && localStorage.getItem("orchestra.onboard.done")) return;
+  const cards = document.getElementById("onboard-cards");
+  if (cards && !cards.childElementCount) {
+    for (const o of OBBIETTIVI) {
+      const b = document.createElement("button");
+      b.className = "onboard-card";
+      const t = document.createElement("div"); t.className = "t"; t.textContent = o.t;
+      const d = document.createElement("div"); d.className = "d"; d.textContent = o.d;
+      b.appendChild(t); b.appendChild(d);
+      b.addEventListener("click", () => avviaObiettivo(o));
+      cards.appendChild(b);
+    }
+  }
+  o.classList.remove("hidden");
+  o.removeAttribute("hidden");
+  o.style.display = "";
+}
+
+const _avviaOnboardingSeServe = () => {
+  const skip = document.getElementById("onboard-skip");
+  if (skip) skip.addEventListener("click", chiudiOnboarding);
+  const o = document.getElementById("onboard");
+  if (o && !localStorage.getItem("orchestra.onboard.done")) setTimeout(mostraOnboarding, 200);
+};
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _avviaOnboardingSeServe, { once: true });
+} else {
+  _avviaOnboardingSeServe();
+}
+
+const btnOnboard = $("btn-onboard");
+if (btnOnboard) {
+  // mostra modal anche se aveva gia' detto "Salta"
+  btnOnboard.addEventListener("click", () => {
+    try { localStorage.removeItem("orchestra.onboard.done"); } catch (e) {}
+    mostraOnboarding(true);
+  });
+}
+
+
+
+// ------------------------------------------------- dipendenze opzionali
+const btnDeps = $("opzioni-deps");
+if (btnDeps) btnDeps.addEventListener("click", async () => {
+  if (btnDeps.disabled) return;
+  btnDeps.disabled = true;
+  const prev = btnDeps.textContent;
+  btnDeps.textContent = "installazione…";
+  try {
+    const r = await fetch("/api/dipendenze/installa", { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) alert(d.error || "Dipendenze: errore installazione");
+    else alert((d.output || "fatto").slice(-1200));
+  } catch (e) {
+    alert("Dipendenze: " + e);
+  } finally {
+    btnDeps.disabled = false;
+    btnDeps.textContent = prev;
+  }
+});
+
+// ------------------------------------------------- diagnostica allowlisted
+const btnDiag = $("btn-diagnosi");
+if (btnDiag) {
+  btnDiag.addEventListener("click", () => {
+    let modal = document.getElementById("diag-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "diag-modal";
+      modal.innerHTML = `
+        <div class="diag-modalbox">
+          <h3>Diagnostica (allowlisted)</h3>
+          <select id="diag-scelta">
+            <option value="doctor">doctor – verifica config/connessione</option>
+            <option value="model-list">model-list – modelli supportati</option>
+            <option value="bench-show">bench-show – task benchmark</option>
+            <option value="dipendenze">dipendenze – stato optional</option>
+          </select>
+          <button id="diag-run" class="primary">Esegui</button>
+          <button id="diag-close" class="ghost">Chiudi</button>
+          <textarea id="diag-out" rows="18" readonly></textarea>
+        </div>
+      `;
+      const style = document.createElement("style");
+      style.textContent = `
+        #diag-modal { position:fixed;inset:0;background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:2001; }
+        #diag-modal.show { display:flex; }
+        .diag-modalbox { background:var(--card,#1a1a1f); color:var(--fg,#eee); border:1px solid var(--border,#333); border-radius:12px; width:920px; max-width:92%; max-height:86vh; padding:16px; overflow:auto; }
+        .diag-modalbox select, #diag-out { width:100%; box-sizing:border-box; margin:8px 0; }
+        #diag-out { font-family:monospace; min-height:260px; background:#0b0f18; color:#dbe1ee; border:1px solid #333; }`;
+      document.head.appendChild(style);
+      document.body.appendChild(modal);
+      modal.querySelector("#diag-close").addEventListener("click", () => modal.classList.remove("show"));
+      modal.querySelector("#diag-run").addEventListener("click", async () => {
+        const sel = modal.querySelector("#diag-scelta").value;
+        const out = modal.querySelector("#diag-out");
+        out.value = 'Esecuzione ' + sel + '...\n';
+        try {
+          const r = await fetch("/api/diagnosi/run", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({comando: sel}) });
+          const d = await r.json().catch(() => ({}));
+          out.value = (d.output || d.error || JSON.stringify(d)).slice(-4000);
+          if (d.returncode && d.returncode !== 0) out.value += String.fromCharCode(10) + "[codice " + d.returncode + "]";
+        } catch (e) { out.value = "Errore: " + e; }
+      });
+    }
+    modal.classList.add("show");
+  });
 }

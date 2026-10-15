@@ -219,7 +219,11 @@ probe = """
     disegnaSkill();
     const righe = (id) => {
       const c = document.getElementById(id);
-      return c ? c.children.length : -1;
+      if (!c) return -1;
+      // Le schede contano, la riga "N su M" no: e' un contatore, non un
+      // risultato. Contare i figli grezzi faceva fallire il filtro
+      // proprio quando funzionava (1 scheda + 1 contatore = 2 nodi).
+      return c.children.filter((x) => String(x.className || "").split(" ").includes("skill-carta")).length;
     };
     OUT.scaricate = righe("skill-scaricate");
     OUT.generate = righe("skill-generate");

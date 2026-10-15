@@ -49,6 +49,7 @@ WRITABLE: dict[str, str] = {
     "HF_TOKEN": "Hugging Face",
     "GEMINI_API_KEY": "Google AI Studio",
     "OPENAI_API_KEY": "OpenAI",
+    "NOUS_API_KEY": "Nous Research (token)",
     "ARTIFICIAL_ANALYSIS_KEY": "Artificial Analysis",
     "ORCHESTRA_PROVIDER": "Provider predefinito",
     "ORCHESTRA_MODEL": "Modello predefinito",
@@ -172,6 +173,24 @@ FREE_SERVICES: list[dict[str, Any]] = [
         "avvertenza": "Non e' Vertex AI: quello chiede un progetto GCP e una carta. Qui si parla solo di AI Studio.",
     },
     {
+        "id": "nous",
+        "nome": "Nous Research",
+        "costo": "gratis con collegamento Orchestra, con limiti",
+        "chiave": False,
+        "cosa": "Accesso diretto all'inference API di Nous (Pareto, LFM, Gemini, ecc.), con il modello free nous/welcome e, su account, ai modelli a pagamento.",
+        "requisiti": "Collegamento automatico via Orchestra su questo computer, oppure NOUS_API_KEY impostato a mano.",
+        "come": " python -m orchestra.cli auth nous",
+    },
+{
+        "id": "anthropic",
+        "nome": "Anthropic",
+        "costo": "a pagamento",
+        "chiave": True,
+        "cosa": "Claude nativo via Messages API. Richiede chiave e carta; modelli Claude 3.5 / opus / haiku.",
+        "requisiti": "Account Anthropic con carta. Serve una chiave.",
+        "come": " console.anthropic.com/settings/keys",
+    },
+    {
         "id": "openai",
         "nome": "OpenAI",
         "costo": "a pagamento",
@@ -209,6 +228,14 @@ def stato(path: str, valori: dict[str, str]) -> list[dict[str, Any]]:
         if chiave in SOLO_SCRIVIBILI:
             continue  # non e' una credenziale: sta nei menu in alto
         v = (valori or {}).get(chiave, "")
+        if chiave == "NOUS_API_KEY" and not str(v).strip():
+            try:
+                from . import nous_auth
+                tok, _ = nous_auth.get_nous_credentials(valori)
+                if tok:
+                    v = tok
+            except Exception:
+                pass
         v = v.strip()
         out.append({
             "chiave": chiave,

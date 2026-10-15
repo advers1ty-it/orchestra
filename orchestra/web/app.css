@@ -35,8 +35,7 @@
   .logo span { color: var(--accent); }
   .ver { font: 10px var(--mono); color: var(--muted); margin-left: 6px; }
   /* Timbro statico scritto nell'HTML, non da JS: se nella pagina compare
-     "UI-4" e l'interfaccia sembra vecchia, non e' un problema di cache —
-     e' un'altra pagina. Serve per distinguere i due casi a colpo d'occhio. */
+     "UI-4"... */
   .stamp {
     font: 10px var(--mono); color: #0f1115; background: var(--warn);
     padding: 2px 6px; border-radius: 3px; margin-left: 6px; font-weight: 700;
@@ -1593,3 +1592,34 @@ select:disabled {
    overflow:hidden il di più si taglia al bordo invece di accavallarsi —
    le liste scrollano dentro, il resto resta dov'è. */
 .side-sez { overflow: hidden; }
+
+/* Onboarding e goal-bar: stili spostati qui per mantenere index.html con il
+   solo blocco diagnostico inline. */
+.onboard-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.72);
+  z-index: 999; display: flex; align-items: center; justify-content: center;
+  padding: 16px; }
+.onboard-backdrop[hidden] { display: none !important; }
+.onboard { max-width: 920px; width: 100%; background: var(--card, #1a1a1f);
+  border: 1px solid var(--border, #333); border-radius: 14px; padding: 20px;
+  max-height: 90vh; overflow: auto; color: var(--foreground, #eee); }
+.onboard h2 { margin: 0 0 6px; }
+.onboard .sotto { color: var(--muted-foreground, #aaa); margin: 0 0 16px; }
+.onboard-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(200px,1fr));
+  gap: 10px; }
+.onboard-card { text-align: left; background: var(--bg2, #121217);
+  border: 1px solid var(--border,#333); border-radius: 10px; padding: 12px;
+  cursor: pointer; transition: border-color .12s; }
+.onboard-card:hover { border-color: var(--accent,#C8A95E); }
+.onboard-card .t { font-weight: 700; margin-bottom: 4px; }
+.onboard-card .d { font-size: 13px; color: var(--muted-foreground,#aaa); }
+.onboard-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px;
+  align-items: center; flex-wrap: wrap; }
+.onboard-skip { background: transparent; border: 1px solid var(--border,#444);
+  color: var(--foreground,#eee); padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+.goal-bar { position: fixed; left: 12px; bottom: 12px; z-index: 500; max-width: 620px;
+  background: var(--card,#1a1a1f); border: 1px solid var(--border,#333);
+  border-radius: 12px; padding: 10px; backdrop-filter: blur(6px); }
+.goal-bar-inner { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.goal-bar-inner input { flex: 1 1 200px; }
+.goal-output { margin-top: 8px; max-height: 180px; overflow: auto; font-size: 12px;
+  color: var(--muted-foreground,#aaa); white-space: pre-wrap; }

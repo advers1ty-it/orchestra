@@ -134,7 +134,7 @@ class Tool:
     schema: dict[str, Any]
     handler: ToolHandler
     # il tool system-prompt è l'unico posto dove la policy dei prompt
-    # tool di Hermes ("usa le skill, non improvvisare") viene codificata
+    # policy tool prompt ("usa le skill, non improvvisare") viene codificata
     is_async: bool = False
 
     def to_api(self) -> dict[str, Any]:

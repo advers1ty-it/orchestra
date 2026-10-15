@@ -3,7 +3,7 @@ Indice di ricerca sopra `memory.md`. FTS5, non un archivio.
 
 PERCHÉ NON SOSTITUISCE IL FILE
 
-Questa è la lezione che viene da come fanno OpenClaw e Hermes, e che
+Questa è la lezione su suggerita da un benchmark locale e che
 avevo sbagliato: `MEMORY.md` resta la SORGENTE DI VERITÀ, SQLite è
 l'INDICE. Non un backend alternativo — uno strato sopra.
 

@@ -26,6 +26,7 @@ os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 SUITES = [
     ("offline", "test_offline.py", True),
     ("resilienza", "test_resilience.py", True),
+    ("orchestrazione", "test_orchestrazione.py", True),
     ("shell", "test_shell.py", True),
     ("sicurezza", "test_security.py", True),
     ("sessione", "test_session.py", True),

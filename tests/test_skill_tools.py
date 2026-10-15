@@ -39,7 +39,12 @@ def chiama(qual_, **kw):
     # loop implicito, e chiederlo solleva un errore che parla di
     # threading e non del codice sotto test — il genere di rumore che
     # fa perdere mezz'ora a cercare il bug nel posto sbagliato.
-    return asyncio.run(t.handler(kw))
+    #
+    # Gli handler si chiamano come li chiama l'agente: keyword
+    # splattate, non un dict posizionale. Passare il dict intero
+    # finiva dentro il primo parametro e ogni ricerca sembrava
+    # chiedere una skill chiamata "{'parole': ...}".
+    return asyncio.run(t.handler(**kw))
 
 
 def crea(nome, descrizione, corpo="Procedura. " * 40,

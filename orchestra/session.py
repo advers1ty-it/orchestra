@@ -710,6 +710,15 @@ class Session:
                 "immagini": len(allegati[0].immagini) if allegati else 0,
                 "token_stimati": totale,
             })
+        if self.agent.config.tool_profile:
+            try:
+                from .tools import applica_profilo, profilo_per_testo
+                nome = self.agent.config.tool_profile
+                if nome == "auto":
+                    nome = profilo_per_testo(user_input)
+                applica_profilo(self.agent.registry, nome)
+            except Exception:
+                pass
         try:
             self.bridge.emit("turn_start", {"input": user_input})
             try:
