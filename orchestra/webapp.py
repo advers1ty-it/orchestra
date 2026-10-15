@@ -1435,6 +1435,9 @@ class Handler(BaseHTTPRequestHandler):
             pronti = [g for g in goal_mod.list_goals()
                       if not goal_mod.motivo_non_pronto(g)]
             self._json({"pronti": pronti})
+        elif path == "/api/scheduler/status":
+            from . import goal as goal_mod
+            self._json(goal_mod.scheduler_status())
         elif path == "/api/dipendenze/stato":
             import importlib, sys as _sys
             deps=[]
@@ -2506,6 +2509,25 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "nessun goal pronto"})
                 return
             self._json({"ok": True, "id": g.get("id")})
+            return
+        elif path == "/api/scheduler/start":
+            interval = 5.0
+            if isinstance(body, dict) and body.get("interval") is not None:
+                try:
+                    interval = float(body.get("interval"))
+                except (TypeError, ValueError):
+                    interval = 5.0
+            from . import goal as goal_mod
+            ok = goal_mod.scheduler_start(env=self.app.env, interval=interval)
+            if not ok:
+                self._json({"ok": False, "error": "scheduler gia' attivo"})
+                return
+            self._json({"ok": True})
+            return
+        elif path == "/api/scheduler/stop":
+            from . import goal as goal_mod
+            goal_mod.scheduler_stop()
+            self._json({"ok": True})
             return
         elif path == "/api/goal/stop":
             gid = (body.get("id") if isinstance(body, dict) else None)

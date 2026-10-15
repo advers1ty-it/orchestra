@@ -3366,3 +3366,271 @@ if (btnDiag) {
     modal.classList.add("show");
   });
 }
+
+// ------------------------------------------------- goal, piani, scheduler, gate
+//
+// Il pannello goal era HTML morto: esisteva la barra ma nessuno la
+// collegava alle API. Qui si collega tutto: creazione con piano/retry/
+// criteri, lista con gate di accettazione visibile, scheduler manuale
+// (Prossimo) e polling solo a pannello aperto.
+
+const goalBar = $("goal-bar");
+const goalInput = $("goal-input");
+const goalProfile = $("goal-profile");
+const goalKind = $("goal-kind");
+const goalPriority = $("goal-priority");
+const goalDepends = $("goal-depends");
+const goalMaxIters = $("goal-maxiters");
+const goalAttempts = $("goal-attempts");
+const goalPartial = $("goal-partial");
+const goalCriteri = $("goal-criteri");
+const goalRecovery = $("goal-recovery");
+const goalStatus = $("goal-status");
+const goalOutput = $("goal-output");
+const goalList = $("goal-list");
+const goalPronti = $("goal-pronti");
+let goalSelezionato = null;
+let goalPoll = 0;
+
+function goalJson(testo) {
+  const t = (testo || "").trim();
+  if (!t) return undefined;
+  return JSON.parse(t);
+}
+
+// Il gate visivo: traduce stato+errore+output in un badge. La regola e'
+// la stessa del backend (accettazione.py): done = gate ok, a meno che
+// l'output dichiari un parziale accettato; failed con "accettazione
+// fallita" = gate bocciato; il resto e' in attesa o fallito altrove.
+function goalGate(g) {
+  const stato = g.status || "";
+  const err = g.error || "";
+  const out = g.last_output || "";
+  if (stato === "done") {
+    if (out.indexOf("[parziale accettato:") === 0) {
+      return { cls: "gate-parziale", testo: "gate: parziale" };
+    }
+    return { cls: "gate-ok", testo: "gate: ok" };
+  }
+  if (stato === "failed") {
+    if (err.indexOf("accettazione fallita") === 0) {
+      return { cls: "gate-ko", testo: "gate: bocciato" };
+    }
+    return { cls: "gate-attesa", testo: "fallito" };
+  }
+  if (stato === "cancelled") return { cls: "gate-attesa", testo: "cancellato" };
+  return { cls: "gate-attesa", testo: "gate: in attesa" };
+}
+
+function goalRiga(g) {
+  const riga = document.createElement("div");
+  riga.className = "goal-row" + (goalSelezionato === g.id ? " sel" : "");
+  const gate = goalGate(g);
+
+  const id = document.createElement("span");
+  id.className = "goal-id";
+  id.textContent = String(g.id || "").slice(0, 8);
+  id.title = g.id || "";
+  riga.appendChild(id);
+
+  const kind = document.createElement("span");
+  kind.className = "goal-kind";
+  kind.textContent = g.kind === "piano" ? "piano" : "goal";
+  riga.appendChild(kind);
+
+  const st = document.createElement("span");
+  st.className = "goal-stato stato-" + (g.status || "pending");
+  st.textContent = g.status || "?";
+  riga.appendChild(st);
+
+  const gb = document.createElement("span");
+  gb.className = "goal-gate " + gate.cls;
+  gb.textContent = gate.testo;
+  gb.title = g.error || (g.last_output || "").slice(0, 300);
+  riga.appendChild(gb);
+
+  const meta = document.createElement("span");
+  meta.className = "goal-meta";
+  const dip = (g.depends_on || []).length
+    ? " dip:" + (g.depends_on || []).map((d) => String(d).slice(0, 6)).join(",")
+    : "";
+  meta.textContent = "prio:" + (g.priority || 0)
+    + " tent:" + (g.attempts || 0) + "/" + (g.max_attempts || 1) + dip;
+  riga.appendChild(meta);
+
+  const obj = document.createElement("span");
+  obj.className = "goal-obj";
+  obj.textContent = g.objective || "";
+  obj.title = g.objective || "";
+  riga.appendChild(obj);
+
+  riga.addEventListener("click", () => {
+    goalSelezionato = g.id;
+    if (goalOutput) goalOutput.textContent = (g.last_output || "") + (g.error ? "\n[errore] " + g.error : "");
+    caricaGoal();
+  });
+  return riga;
+}
+
+async function caricaGoal() {
+  if (!goalBar || goalBar.hidden) return;
+  try {
+    const [rs, rr, sched] = await Promise.all([
+      fetch("/api/goal/status").then((r) => r.json().catch(() => ({}))),
+      fetch("/api/goal/ready").then((r) => r.json().catch(() => ({}))),
+      fetch("/api/scheduler/status").then((r) => r.json().catch(() => ({}))),
+    ]);
+    const goals = rs.goals || [];
+    if (goalPronti) {
+      const n = (rr.pronti || []).length;
+      goalPronti.textContent = n === 1 ? "1 goal pronto" : n + " goal pronti";
+    }
+    const schedBtn = $("goal-sched");
+    const schedStat = $("goal-sched-stat");
+    if (schedBtn) schedBtn.textContent = sched.running ? "Coda: on" : "Coda: off";
+    if (schedStat) {
+      schedStat.textContent = sched.running
+        ? ("coda attiva · " + (sched.rounds || 0) + " esecuzioni"
+           + (sched.last_id ? " · ultima: " + String(sched.last_id).slice(0, 8) + "/" + (sched.last_status || "") : ""))
+        : "";
+    }
+    if (goalList) {
+      goalList.replaceChildren();
+      const attivi = goals.filter((g) => g.status === "running" || g.status === "pending");
+      const chiusi = goals.filter((g) => g.status !== "running" && g.status !== "pending");
+      for (const g of attivi.concat(chiusi).slice(0, 60)) {
+        goalList.appendChild(goalRiga(g));
+      }
+      if (!goals.length) {
+        const vuoto = document.createElement("div");
+        vuoto.className = "goal-meta";
+        vuoto.textContent = "Nessun goal. Scrivi un obiettivo e premi Avvia, oppure crea un piano.";
+        goalList.appendChild(vuoto);
+      }
+    }
+    // Polling solo se serve: c'e' almeno un goal in corsa e il pannello e' aperto.
+    const serve = goals.some((g) => g.status === "running");
+    if (goalStatus && !serve) goalStatus.textContent = "";
+  } catch (e) {
+    if (goalStatus) goalStatus.textContent = "goal non raggiungibili: " + e;
+  }
+}
+
+function goalPolling() {
+  if (goalPoll) return;
+  goalPoll = setInterval(() => {
+    if (goalBar && !goalBar.hidden) caricaGoal();
+  }, 2000);
+}
+
+on("btn-goal", "click", () => {
+  if (!goalBar) return;
+  goalBar.hidden = !goalBar.hidden;
+  if (!goalBar.hidden) {
+    goalPolling();
+    caricaGoal();
+  }
+});
+
+on("goal-refresh", "click", () => caricaGoal());
+
+on("goal-start", "click", async () => {
+  const objective = (goalInput && goalInput.value || "").trim();
+  if (!objective) {
+    if (goalStatus) goalStatus.textContent = "scrivi prima l'obiettivo";
+    return;
+  }
+  let criteri, recovery;
+  try {
+    criteri = goalJson(goalCriteri && goalCriteri.value);
+    recovery = goalJson(goalRecovery && goalRecovery.value);
+  } catch (e) {
+    if (goalStatus) goalStatus.textContent = "JSON non valido: " + e.message;
+    return;
+  }
+  const corpo = {
+    objective: objective,
+    profile: goalProfile && goalProfile.value || "auto",
+    kind: goalKind && goalKind.value || "goal",
+    max_iterations: parseInt(goalMaxIters && goalMaxIters.value || "60", 10),
+    priority: parseInt(goalPriority && goalPriority.value || "0", 10),
+    depends_on: (goalDepends && goalDepends.value || "").split(",").map((s) => s.trim()).filter(Boolean),
+    max_attempts: parseInt(goalAttempts && goalAttempts.value || "1", 10),
+    consenti_parziale: !!(goalPartial && goalPartial.checked),
+    criteri: criteri,
+    recovery: recovery,
+  };
+  if (goalStatus) goalStatus.textContent = "avvio...";
+  try {
+    const r = await fetch("/api/goal/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (goalStatus) goalStatus.textContent = d.error || ("errore " + r.status);
+      return;
+    }
+    goalSelezionato = d.id;
+    if (goalInput) goalInput.value = "";
+    if (goalStatus) goalStatus.textContent = (corpo.kind === "piano" ? "piano creato: " : "avviato: ") + d.id;
+    caricaGoal();
+  } catch (e) {
+    if (goalStatus) goalStatus.textContent = "errore: " + e;
+  }
+});
+
+on("goal-run-next", "click", async () => {
+  if (goalStatus) goalStatus.textContent = "scheduler...";
+  try {
+    const r = await fetch("/api/goal/run-next", { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) {
+      if (goalStatus) goalStatus.textContent = d.error || ("errore " + r.status);
+      return;
+    }
+    goalSelezionato = d.id;
+    if (goalStatus) goalStatus.textContent = "scheduler ha avviato: " + d.id;
+    caricaGoal();
+  } catch (e) {
+    if (goalStatus) goalStatus.textContent = "errore: " + e;
+  }
+});
+
+on("goal-stop", "click", async () => {
+  if (!goalSelezionato) {
+    if (goalStatus) goalStatus.textContent = "seleziona prima un goal dalla lista";
+    return;
+  }
+  try {
+    await fetch("/api/goal/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: goalSelezionato }),
+    });
+    if (goalStatus) goalStatus.textContent = "stop inviato";
+    caricaGoal();
+  } catch (e) {
+    if (goalStatus) goalStatus.textContent = "errore: " + e;
+  }
+});
+
+on("goal-sched", "click", async () => {
+  // La coda spende token veri: parte solo su pressione esplicita, e il
+  // bottone dice sempre se e' on o off leggendo lo stato dal server.
+  try {
+    const st = await fetch("/api/scheduler/status").then((r) => r.json().catch(() => ({})));
+    const rotta = st.running ? "/api/scheduler/stop" : "/api/scheduler/start";
+    const r = await fetch(rotta, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ interval: 5 }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (goalStatus) goalStatus.textContent = d.error || (st.running ? "coda fermata" : "coda avviata");
+    caricaGoal();
+  } catch (e) {
+    if (goalStatus) goalStatus.textContent = "errore: " + e;
+  }
+});
