@@ -1,10 +1,8 @@
 @echo off
 rem ============================================================
 rem  Installa-Orchestra.bat — installazione per non esperti
-rem  Non serve Git, non serve un account GitHub.
-rem  Scarica l'ultima release dal repo privato usando token.txt
-rem  (il file token.txt deve stare accanto a questo installer:
-rem  ce lo mette chi prepara il pacchetto, NON sta su GitHub).
+rem  Non serve Git, non serve un account GitHub: l'app e' pubblica
+rem  e l'installer scarica l'ultima release.
 rem ============================================================
 setlocal EnableDelayedExpansion
 title Installazione Orchestra
@@ -31,25 +29,14 @@ if %errorlevel% neq 0 (
 )
 echo  [OK] Python presente.
 
-rem --- 2. Token read-only ---
-set "TOKENFILE=%~dp0token.txt"
-if not exist "%TOKENFILE%" (
-  echo.
-  echo  [ERRORE] Manca token.txt accanto a questo installer.
-  echo  Chiedi a chi ti ha mandato il pacchetto il file mancante.
-  pause
-  exit /b 1
-)
-
-rem --- 3. Cartella di installazione ---
+rem --- 2. Cartella di installazione ---
 set "DESTDIR=%LOCALAPPDATA%\Orchestra"
 if not exist "%DESTDIR%" mkdir "%DESTDIR%"
-copy /y "%TOKENFILE%" "%DESTDIR%\token.txt" >nul
 echo  [OK] Cartella: %DESTDIR%
 
-rem --- 4. Download ultima release + estrazione ---
+rem --- 3. Download ultima release + estrazione ---
 echo  Scarico l'ultima versione da GitHub...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scarica-release.ps1" -TokenFile "%DESTDIR%\token.txt" -Dest "%DESTDIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scarica-release.ps1" -Dest "%DESTDIR%"
 if %errorlevel% neq 0 (
   echo.
   echo  [ERRORE] Download fallito. Controlla la connessione e riprova.

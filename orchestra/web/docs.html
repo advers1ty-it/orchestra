@@ -247,7 +247,7 @@ POST /api/scheduler/stop</code></pre>
 
 <section id="tester">
 <h2>Tester senza GitHub</h2>
-<p>Pacchetto da passare ai tester: <code>installer/Installa-Orchestra.bat</code> + <code>scarica-release.ps1</code> + <code>token.txt</code> (token read-only contents, lo aggiungi tu — mai nel repo, vedi <code>installer/LEGGIMI.txt</code>).</p>
+<p>Pacchetto da passare ai tester: <code>installer/Installa-Orchestra.bat</code> + <code>scarica-release.ps1</code> (niente token, repo pubblico — vedi <code>installer/LEGGIMI.txt</code>).</p>
 <ul>
   <li>L’installer controlla Python, scarica l’ultima release, crea <code>.env</code> da esempio e mette “Avvia Orchestra” sul Desktop. Niente Git, niente account.</li>
   <li><code>Avvia-Orchestra.bat</code> esegue <code>orchestra update --auto</code> a ogni avvio: gli update arrivano da soli.</li>

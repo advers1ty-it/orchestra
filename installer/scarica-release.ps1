@@ -1,24 +1,19 @@
 #Requires -Version 5.1
 param(
-  [Parameter(Mandatory = $true)][string]$TokenFile,
   [Parameter(Mandatory = $true)][string]$Dest
 )
-# Scarica l'ultima release del repo privato ed estrae orchestra/ in Dest.
+# Scarica l'ultima release pubblica ed estrae orchestra/ in Dest.
 # Usato da Installa-Orchestra.bat. Errori -> exit 1 con messaggio.
 $ErrorActionPreference = 'Stop'
 
-$token = (Get-Content -Raw $TokenFile).Trim().Split()[0]
-if (-not $token) { Write-Host '[ERRORE] token.txt vuoto.'; exit 1 }
-
 $headers = @{
-  'User-Agent'    = 'orchestra-installer'
-  'Accept'        = 'application/vnd.github+json'
-  'Authorization' = "Bearer $token"
+  'User-Agent' = 'orchestra-installer'
+  'Accept'     = 'application/vnd.github+json'
 }
 try {
   $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/advers1ty-it/orchestra/releases/latest' -Headers $headers -TimeoutSec 30
 } catch {
-  Write-Host '[ERRORE] GitHub non raggiungibile o token non valido.'
+  Write-Host '[ERRORE] GitHub non raggiungibile.'
   Write-Host $_.Exception.Message
   exit 1
 }

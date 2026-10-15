@@ -11,9 +11,8 @@ Funziona anche con repo privato tramite un token di SOLA LETTURA
   1. variabile d'ambiente ORCHESTRA_UPDATE_TOKEN
   2. file token.txt nella cartella di installazione
 
-Il token NON sta nel repo: ce lo mette chi prepara il pacchetto tester.
-Se il token trapelasse, si revoca dalla pagina GitHub e se ne crea uno
-nuovo — l'app resta privata al resto del mondo.
+Col repo pubblico il token non serve piu': resta supportato solo come
+ripiego se un giorno il repo tornasse privato.
 """
 
 from __future__ import annotations
@@ -57,6 +56,18 @@ class InfoRelease:
     zip_url: str
 
 
+def scegli_asset(release: dict, fallback_zipball: str = "") -> str:
+    """Sceglie lo zip da scaricare: prima un asset .zip della release,
+    altrimenti lo zipball del sorgente (serve token se privato)."""
+    assets = release.get("assets") or []
+    for a in assets:
+        url = str(a.get("browser_download_url") or "")
+        nome = str(a.get("name") or "")
+        if url and nome.lower().endswith(".zip"):
+            return url
+    return fallback_zipball or str(release.get("zipball_url") or "")
+
+
 def radice_installazione() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -82,6 +93,14 @@ def leggi_token() -> str:
     raise UpdateError(
         "token di aggiornamento mancante: imposta ORCHESTRA_UPDATE_TOKEN "
         "o metti token.txt nella cartella di installazione")
+
+
+def token_se_disponibile() -> str | None:
+    """Token se configurato, altrimenti None (repo pubblico: non serve)."""
+    try:
+        return leggi_token()
+    except UpdateError:
+        return None
 
 
 def _richiesta(url: str, token: str | None) -> urllib.request.Request:
@@ -115,19 +134,12 @@ def ultima_release(repo: str, token: str | None) -> InfoRelease:
 
 def controlla(repo: str, token: str | None = None) -> dict:
     """Dice se c'e' un aggiornamento, senza scaricare niente."""
-    token = token or _token_se_c_e(repo)
+    if token is None:
+        token = token_se_disponibile()
     rel = ultima_release(repo, token)
     loc = versione_locale()
     return {"locale": loc, "remota": rel.versione, "tag": rel.tag,
             "aggiornamento": rel.versione != loc, "zip_url": rel.zip_url}
-
-
-def _token_se_c_e(repo: str) -> str | None:
-    try:
-        return leggi_token()
-    except UpdateError:
-        # Repo pubblico: si puo' controllare anche senza token.
-        return None
 
 
 def scarica(zip_url: str, token: str | None, dest: str) -> None:
@@ -196,7 +208,8 @@ def applica(zip_path: str, root: str | None = None) -> dict:
 def aggiorna(repo: str, token: str | None = None,
              root: str | None = None) -> dict:
     """Controlla, scarica e applica. Torna il resoconto."""
-    token = token or leggi_token()
+    if token is None:
+        token = token_se_disponibile()
     info = controlla(repo, token)
     if not info["aggiornamento"]:
         return {"aggiornato": False, **info}

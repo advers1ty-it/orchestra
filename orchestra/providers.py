@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import re
 import os
+import shutil
+import sys
 import urllib.request
 import urllib.error
 from typing import Any
@@ -865,7 +867,6 @@ def ambiente(path: str) -> dict[str, str]:
     """Le chiavi per costruire un provider: .env + ambiente di sistema.
 
     Il .env riempie quello che manca; l'ambiente esplicito vince.
-
     Prima era il contrario — `dict(os.environ)` seguito da
     `update(load_env(...))` — e rendeva impossibile cambiare provider o
     modello dalla riga di comando senza editare il file. E' utile solo
@@ -878,6 +879,19 @@ def ambiente(path: str) -> dict[str, str]:
     un .env con dentro una chiave scaduta non deve vincere su una
     chiave messa a posto per questa esecuzione.
     """
+    # Primo avvio: se il .env non esiste ma c'e' l'esempio accanto, lo
+    # si crea da soli. Cosi' l'installazione per i non esperti non puo'
+    # restare senza file di configurazione: resta solo da riempire le
+    # chiavi (dalla UI in Opzioni, o editando il file).
+    if not os.path.exists(path):
+        esempio = os.path.join(os.path.dirname(path), ".env.example")
+        if os.path.exists(esempio):
+            try:
+                shutil.copy(esempio, path)
+                print(f"creato {path} da .env.example: inserisci le chiavi API",
+                      file=sys.stderr)
+            except OSError:
+                pass
     merged = dict(load_env(path))
     merged.update(os.environ)
     return merged
