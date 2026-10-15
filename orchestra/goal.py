@@ -428,6 +428,84 @@ def accoda_prossimo(env: dict[str, str] | None = None,
     return prenotato
 
 
+# --------------------------------------------------------------------------
+# Coda automatica: un loop che svuota i goal pronti, uno alla volta.
+#
+# Uno alla volta, non in parallelo: due agenti sullo stesso registro e
+# sullo stesso budget si pestano i piedi, e due run concorrenti sullo
+# stesso goals.json si rubano la prenotazione. La coda e' un singolo
+# consumatore, e resta spenta di default: accenderla spende token veri.
+# --------------------------------------------------------------------------
+
+_sched_lock = threading.Lock()
+_sched = {"running": False, "interval": 5.0, "last_id": None,
+          "last_status": "", "rounds": 0, "error": ""}
+
+
+def scheduler_status() -> dict[str, Any]:
+    with _sched_lock:
+        return dict(_sched)
+
+
+def scheduler_start(env: dict[str, str] | None = None,
+                    interval: float = 5.0) -> bool:
+    """Avvia la coda automatica in un thread daemon. False se gia' attiva."""
+    with _sched_lock:
+        if _sched["running"]:
+            return False
+        try:
+            interval = max(1.0, float(interval or 5.0))
+        except (TypeError, ValueError):
+            interval = 5.0
+        _sched["running"] = True
+        _sched["interval"] = interval
+        _sched["error"] = ""
+    env = env or _env()
+    threading.Thread(target=_scheduler_loop, args=(env,), daemon=True).start()
+    return True
+
+
+def scheduler_stop() -> bool:
+    with _sched_lock:
+        _sched["running"] = False
+    return True
+
+
+def _scheduler_loop(env: dict[str, str]) -> None:
+    while True:
+        with _sched_lock:
+            if not _sched["running"]:
+                return
+            interval = _sched["interval"]
+        try:
+            g = esegui_prossimo(env=env)
+        except Exception as e:  # noqa: BLE001 - la coda non deve morire
+            with _sched_lock:
+                _sched["error"] = f"{type(e).__name__}: {e}"
+            time.sleep(interval)
+            continue
+        with _sched_lock:
+            _sched["rounds"] += 1
+            if g:
+                _sched["last_id"] = g.get("id")
+                _sched["last_status"] = g.get("status", "")
+        time.sleep(0 if g else interval)
+
+
+def svuota_coda(env: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """Esegue tutti i goal pronti, in ordine, finche' ce ne sono.
+
+    Versione sincrona per CLI e test: torna la lista dei goal finali.
+    """
+    env = env or _env()
+    fatti = []
+    while True:
+        g = esegui_prossimo(env=env)
+        if not g:
+            return fatti
+        fatti.append(g)
+
+
 def _env(path: str = "orchestra/.env") -> dict[str, str]:
     try:
         from .providers import ambiente

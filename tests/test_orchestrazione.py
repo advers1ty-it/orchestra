@@ -166,6 +166,43 @@ f2 = delega_con_recupero(
 check("modello alternativo usato al retry", modelli[1:2] == ["modello-b"], str(modelli))
 check("hook ripristinato", modelli[-1] is None, str(modelli))
 
+print("\n[8] Coda automatica: un consumatore, non due")
+import time as _time  # noqa: E402
+G.scheduler_stop()
+G.scheduler_stop()
+_originale = G.esegui_prossimo
+coda = [{"id": "g_finto_1", "status": "done"},
+        {"id": "g_finto_2", "status": "failed"}]
+
+
+def _finto(env=None, extra_prompt=""):
+    if not coda:
+        return None
+    return coda.pop(0)
+
+
+G.esegui_prossimo = _finto
+try:
+    check("parte da ferma", G.scheduler_start(env={}, interval=1) is True)
+    check("doppio start rifiutato", G.scheduler_start(env={}, interval=1) is False)
+    for _ in range(200):
+        if G.scheduler_status()["rounds"] >= 3:
+            break
+        _time.sleep(0.05)
+    st = G.scheduler_status()
+    check("gira e consuma", st["rounds"] >= 2 and not coda, str(st))
+    check("ultimo registrato", st["last_id"] == "g_finto_2", str(st))
+    G.scheduler_stop()
+    _time.sleep(0.1)
+    check("si ferma", G.scheduler_status()["running"] is False)
+    r1 = G.scheduler_status()["rounds"]
+    _time.sleep(1.2)
+    check("ferma resta ferma", G.scheduler_status()["rounds"] == r1,
+          f"{r1} vs {G.scheduler_status()['rounds']}")
+finally:
+    G.scheduler_stop()
+    G.esegui_prossimo = _originale
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

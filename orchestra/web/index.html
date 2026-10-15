@@ -659,9 +659,44 @@
 <div id="goal-bar" class="goal-bar" hidden>
   <div class="goal-bar-inner">
     <input id="goal-input" type="text" placeholder="Obiettivo (es. creare un sito web completo...)" />
+    <select id="goal-profile" title="Profilo strumenti">
+      <option value="auto">auto</option>
+      <option value="base">base</option>
+      <option value="ricerca">ricerca</option>
+      <option value="skill">skill</option>
+      <option value="pieno">pieno</option>
+    </select>
+    <select id="goal-kind" title="Goal o piano contenitore">
+      <option value="goal">goal</option>
+      <option value="piano">piano</option>
+    </select>
+    <input id="goal-priority" type="number" value="0" title="Priorità scheduler (più alto parte prima)" />
     <button id="goal-start" class="primary">Avvia</button>
+    <button id="goal-run-next" class="ghost" title="Esegue il prossimo goal pronto">Prossimo</button>
     <button id="goal-stop" class="ghost">Stop</button>
     <span id="goal-status" class="small dim"></span>
+  </div>
+  <details class="goal-avanzate">
+    <summary>Piano, retry e gate di accettazione</summary>
+    <div class="goal-bar-inner">
+      <input id="goal-depends" type="text" placeholder="Dipendenze: id separati da virgola" title="Parte solo quando sono done" />
+      <input id="goal-maxiters" type="number" value="60" title="Massimo iterazioni agente" />
+      <input id="goal-attempts" type="number" value="1" min="1" title="Tentativi totali prima di failed" />
+      <label class="goal-check" title="Accetta anche un completamento parziale dopo stop anomalo">
+        <input id="goal-partial" type="checkbox" /> parziale ok
+      </label>
+    </div>
+    <div class="goal-bar-inner">
+      <textarea id="goal-criteri" rows="2" placeholder='Criteri JSON, es. [{"tipo":"file_contiene","percorso":"report.md","testo":"totale"}]' title="Criteri di accettazione dichiarativi"></textarea>
+      <textarea id="goal-recovery" rows="2" placeholder='Recovery JSON, es. {"max_retry":1,"modelli_alternativi":["..."]}' title="Retry della delega con modelli alternativi"></textarea>
+    </div>
+  </details>
+  <div class="goal-bar-inner">
+    <span id="goal-pronti" class="small dim"></span>
+    <span class="grow"></span>
+    <span id="goal-sched-stat" class="small dim" title="Stato della coda automatica"></span>
+    <button id="goal-sched" class="ghost" title="Avvia/ferma la coda automatica">Coda: off</button>
+    <button id="goal-refresh" class="ghost">Aggiorna</button>
   </div>
   <div id="goal-output" class="goal-output"></div>
   <div id="goal-list" class="goal-list"></div>

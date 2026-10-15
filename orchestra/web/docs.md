@@ -17,6 +17,8 @@
 - stato/output live, Stop disponibile.
 - per CLI: `orchestra goal "..."`.
 - scheduler: `--depends-on A,B`, `--priority N`, `--max-attempts N`, `orchestra goals [--pronti]`, `orchestra goal-next`.
+- coda automatica: `orchestra scheduler [--una-volta]` oppure bottone "Coda on/off" nel pannello (spenta di default).
+- gate visivo nel pannello: badge `gate: ok / bocciato / parziale / in attesa` su ogni riga.
 - piani `kind=piano`: contenitori che si chiudono quando i figli finiscono.
 - gate di accettazione: solo risposta finale non vuota = done (o `--consenti-parziale`, o criteri `--criteri JSON`).
 - multi-agente: disponibile se il modello chiama `delega`; retry opzionale con `--recovery JSON`.

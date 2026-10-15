@@ -669,6 +669,36 @@ def cmd_goal_next(args: argparse.Namespace) -> int:
     return 0 if g.get("status") == "done" else 1
 
 
+def cmd_scheduler(args: argparse.Namespace) -> int:
+    from . import goal as goal_mod
+    env = _env()
+    if getattr(args, "una_volta", False):
+        fatti = goal_mod.svuota_coda(env=env)
+        for g in fatti:
+            print(f"{g.get('status')}: {g.get('id')}: "
+                  f"{(g.get('last_output') or '')[:200]}")
+            if g.get("error"):
+                print(f"  errore: {g.get('error')}", file=sys.stderr)
+        if not fatti:
+            print("nessun goal pronto")
+        return 0
+    interval = getattr(args, "interval", 5.0) or 5.0
+    if not goal_mod.scheduler_start(env=env, interval=interval):
+        print("scheduler gia' attivo", file=sys.stderr)
+        return 1
+    print(f"scheduler attivo (ogni {interval}s, Ctrl+C per fermare)")
+    try:
+        while goal_mod.scheduler_status()["running"]:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        goal_mod.scheduler_stop()
+    st = goal_mod.scheduler_status()
+    print(f"fermato dopo {st['rounds']} esecuzioni")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="orchestra", description="Orchestratore agentico")
     p.add_argument("--version", action="version", version=f"orchestra {__version__}")
@@ -766,6 +796,13 @@ def main(argv: list[str] | None = None) -> int:
 
     gn = sub.add_parser("goal-next", help="esegue il prossimo goal pronto")
     gn.set_defaults(func=cmd_goal_next)
+
+    sc = sub.add_parser("scheduler", help="coda automatica: esegue i goal pronti uno alla volta")
+    sc.add_argument("--interval", type=float, default=5.0,
+                    help="secondi di attesa a coda vuota (default 5)")
+    sc.add_argument("--una-volta", action="store_true",
+                    help="svuota la coda e esci, senza restare in attesa")
+    sc.set_defaults(func=cmd_scheduler)
 
     args = p.parse_args(argv)
     return args.func(args)

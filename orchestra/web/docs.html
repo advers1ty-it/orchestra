@@ -171,16 +171,22 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 <pre><code>orchestra goal "obiettivo" [--profile ...] [--max-iterations N] [--depends-on A,B] [--priority N] [--max-attempts N] [--criteri JSON] [--recovery JSON]
 orchestra goals [--pronti]
 orchestra goal-next
+orchestra scheduler [--una-volta] [--interval N]
 POST /api/goal/start
 POST /api/goal/stop
 POST /api/goal/run-next
 GET  /api/goal/status
-GET  /api/goal/ready</code></pre>
+GET  /api/goal/ready
+GET  /api/scheduler/status
+POST /api/scheduler/start
+POST /api/scheduler/stop</code></pre>
 <ul>
   <li>Thread daemon, massimo iterazioni (default 60), timeout pre-process massimo.</li>
   <li>Stop condition: risposta finale, fallimento provider/tool, max iterazioni, timeout.</li>
-  <li>Gate di accettazione: solo <code>risposta_finale</code> non vuota diventa <code>done</code>, salvo <code>--consenti-parziale</code> o criteri dichiarativi superati.</li>
+  <li>Gate di accettazione: solo <code>risposta_finale</code> non vuota diventa <code>done</code>, salvo <code>--consenti-parziale</code> o criteri dichiarativi superati. Nel pannello il badge gate mostra <code>ok / bocciato / parziale / in attesa</code>.</li>
   <li>Retry limitato con backoff fino a <code>max_attempts</code>; dipendenze circolari rifiutate; un goal non pronto non parte nemmeno se avviato direttamente.</li>
+  <li>Pannello Obiettivo: creazione con piano/retry/criteri, lista con gate visivo, pulsante Prossimo e coda automatica on/off.</li>
+  <li>Coda automatica spenta di default (spende token veri): un solo consumatore alla volta.</li>
   <li>UI poll 2s solo se esiste goal running.</li>
 </ul>
 </section>

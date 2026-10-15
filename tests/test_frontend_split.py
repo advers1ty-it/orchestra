@@ -122,7 +122,11 @@ const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","sta
              "budget-day-cost","budget-global-msg","budget-month-cost","budget-msg","budget-reset","budget-salva",
              "budget-sess-cost","budget-sess-reqs","budget-sess-tokens","budget-task-cost","budget-task-iters","budget-task-tokens",
              "locali-avviso","gratis-lista","chiavi-lista",
-             "btn-allega","btn-diagnosi","btn-onboard","file-input","allegati-lista","onboard","onboard-cards","onboard-skip"];
+             "btn-allega","btn-diagnosi","btn-onboard","file-input","allegati-lista","onboard","onboard-cards","onboard-skip",
+             "btn-goal","goal-bar","goal-input","goal-profile","goal-kind","goal-priority","goal-depends",
+             "goal-maxiters","goal-attempts","goal-partial","goal-criteri","goal-recovery","goal-start",
+             "goal-run-next","goal-stop","goal-refresh","goal-status","goal-pronti",
+             "goal-sched","goal-sched-stat"];
 function mkEl(tag) {
   const isSelect = tag === "select";
   const st = {
@@ -179,8 +183,8 @@ globalThis.Option = function (text, value) {
   return o;
 };
 const REG = {};
-const SELECT_IDS = new Set(["model-pick","bench-sample","bench-cat","bench-count","provider-pick","opt-provider","opt-model","opt-tool-profile","opt-reasoning","reasoning-pick","routing-cat","scope-pick"]);
-const INPUT_IDS = new Set(["bench-free","bench-allfree","file-input"]);
+const SELECT_IDS = new Set(["model-pick","bench-sample","bench-cat","bench-count","provider-pick","opt-provider","opt-model","opt-tool-profile","opt-reasoning","reasoning-pick","routing-cat","scope-pick","goal-profile","goal-kind"]);
+const INPUT_IDS = new Set(["bench-free","bench-allfree","file-input","goal-priority","goal-maxiters","goal-attempts","goal-partial","goal-depends","goal-input"]);
 IDS.forEach(function (id) {
   if (INPUT_IDS.has(id)) {
     const el = mkEl("input");
@@ -276,6 +280,13 @@ const OUT = { errore: null };
   for (const n of ["log","main","input","btnSend","btnCancel","btnReset","dot","stats","conn","modelPick"])
     vr[n] = typeof eval(n);
   OUT.fn = fn; OUT.vr = vr;
+  OUT.goalFn = {};
+  for (const n of ["goalGate","goalRiga","caricaGoal"])
+    OUT.goalFn[n] = typeof eval(n);
+  OUT.gateOk = goalGate({status:"done", last_output:"fatto"}).testo;
+  OUT.gateKo = goalGate({status:"failed", error:"accettazione fallita: stop anomalo: max_iterations"}).testo;
+  OUT.gateParz = goalGate({status:"done", last_output:"[parziale accettato: stop anomalo: max_iterations]" + String.fromCharCode(10) + "quasi"}).testo;
+  OUT.gateAttesa = goalGate({status:"pending"}).testo;
   const mp = REG["model-pick"];
   OUT.opzioni = mp.children.length;
   OUT.disabled = mp.disabled;
@@ -329,6 +340,19 @@ check("selettore abilitato", out.get("disabled") is False, str(out.get("disabled
 check("opzioni vere", all(t == "option" for t in out.get("tagPrimi", [""])),
       str(out.get("tagPrimi")))
 check("opzioni con value", all(out.get("valori") or []), str(out.get("valori")))
+
+print("\n[4] Pannello goal: funzioni e gate visivo")
+gf = out.get("goalFn", {})
+check("goalGate definita", gf.get("goalGate") == "function", str(gf))
+check("goalRiga definita", gf.get("goalRiga") == "function", str(gf))
+check("caricaGoal definita", gf.get("caricaGoal") == "function", str(gf))
+check("gate ok su done", out.get("gateOk") == "gate: ok", str(out.get("gateOk")))
+check("gate bocciato su accettazione fallita",
+      out.get("gateKo") == "gate: bocciato", str(out.get("gateKo")))
+check("gate parziale dichiarato",
+      out.get("gateParz") == "gate: parziale", str(out.get("gateParz")))
+check("gate in attesa su pending",
+      out.get("gateAttesa") == "gate: in attesa", str(out.get("gateAttesa")))
 if r.stderr.strip():
     print("   [stderr]", r.stderr.strip().splitlines()[0][:200])
 
