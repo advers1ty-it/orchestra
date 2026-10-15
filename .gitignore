@@ -39,3 +39,10 @@ _ goals_fallback/
 tests/_probe5/
 # Token read-only per gli aggiornamenti: lo mette chi fa il pacchetto.
 token.txt
+
+# Skill personali: restano installate in locale ma non su GitHub (pubblico).
+skills/percorso/creative/aphrodite-character/
+skills/percorso/traceapp/
+skills/percorso/marketing/traceapp-social-promo/
+skills/percorso/mobile/react-native-device-debug/
+skills/percorso/react-native/rn086-newarch-pitfalls/
