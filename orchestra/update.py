@@ -42,6 +42,10 @@ CONSERVA = {
     "__pycache__",
     "_ goals_fallback",
     "_dati_test",
+    # Stato personale: mai sovrascritto (e mai nel repo, vedi .gitignore).
+    "memory.md",
+    "memoria_config.json",
+    "nous_auth.json",
 }
 
 
