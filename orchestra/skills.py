@@ -22,6 +22,10 @@ LE DUE ORIGINI, E PERCHE' SONO DIVERSE
     generate/  — scritte dall'agente dopo aver eseguito qualcosa che
                  ha funzionato. Portano con se' le prove.
 
+Le skill dentro skills/ senza sottocartelle sono la base
+distribuita con Orchestra: valgono come scaricate, e la categoria
+si dichiara nel frontmatter (`categoria: base`).
+
 La distinzione non e' cosmetica ed e' percio' nel formato: `origine` e
 `prove` stanno nel frontmatter, e chi le legge deve poter dire quanto
 vale cid' che sta leggendo. Una skill scaricata dice "questa e' la
@@ -235,6 +239,36 @@ class Indice:
 
     # -- lettura ---------------------------------------------------------
 
+    def _skill_da_file(self, p: str, dirpath: str, base_categoria: str,
+                       origine_default: str) -> tuple[str, Skill]:
+        """Costruisce una Skill da uno SKILL.md."""
+        campi, corpo = _leggi(p)
+        nome = campi.get("name") or os.path.basename(dirpath)
+        prove = _prove_json(p)
+        if not prove and campi.get("prove"):
+            prove = _prove_da_campo(campi["prove"])
+        return nome, Skill(
+            nome=nome,
+            descrizione=campi.get("description", "").strip(),
+            corpo=corpo,
+            percorso=p,
+            # La categoria e' il percorso RELATIVO alla radice
+            # delle scaricate, cioe' tutto tranne il nome della
+            # skill. Prendere solo il nome della cartella padre
+            # perdeva i livelli: uno store con tante skill in tante
+            # categorie, e dentro ognuna altre sottocategorie,
+            # finiva tutto sotto una sola voce — e allora due
+            # skill con lo stesso nome in posti diversi erano
+            # indistinguibili. E il nome e' la chiave.
+            categoria=campi.get("categoria")
+            or os.path.relpath(
+                os.path.dirname(dirpath), base_categoria
+            ).replace(os.sep, "/"),
+            origine=campi.get("origine") or origine_default,
+            prove=prove,
+            volte_usata=int(campi.get("volte_usata", 0) or 0),
+        )
+
     def _scorri(self) -> None:
         # 5 secondi: abbastanza per non rileggere 188 file a ogni
         # messaggio, poco perche' una skill scaricata durante la
@@ -257,33 +291,28 @@ class Indice:
                 if "SKILL.md" not in files:
                     continue
                 p = os.path.join(dirpath, "SKILL.md")
-                campi, corpo = _leggi(p)
-                nome = campi.get("name") or os.path.basename(dirpath)
-                prove = _prove_json(p)
-                if not prove and campi.get("prove"):
-                    prove = _prove_da_campo(campi["prove"])
-                trovate[nome] = Skill(
-                    nome=nome,
-                    descrizione=campi.get("description", "").strip(),
-                    corpo=corpo,
-                    percorso=p,
-                    # La categoria e' il percorso RELATIVO alla radice
-                    # delle scaricate, cioe' tutto tranne il nome della
-                    # skill. Prendere solo il nome della cartella padre
-                    # perdeva i livelli: uno store con tante skill in tante
-                    # categorie, e dentro ognuna altre sottocategorie,
-                    # finiva tutto sotto una sola voce — e allora due
-                    # skill con lo stesso nome in posti diversi erano
-                    # indistinguibili. E il nome e' la chiave.
-                    categoria=campi.get("categoria")
-                    or os.path.relpath(
-                        os.path.dirname(dirpath),
-                        os.path.join(self.radice, cartella)
-                    ).replace(os.sep, "/"),
-                    origine=campi.get("origine") or origine,
-                    prove=prove,
-                    volte_usata=int(campi.get("volte_usata", 0) or 0),
-                )
+                nome, skill = self._skill_da_file(
+                    p, dirpath, os.path.join(self.radice, cartella),
+                    origine)
+                trovate[nome] = skill
+        # Skill di base: dentro skills/ senza sottocartelle. Stessa
+        # regola dei punti, e si saltano le cartelle gestite
+        # (scaricate/generate) per non indicizzare due volte.
+        try:
+            voci = sorted(os.listdir(self.radice))
+        except OSError:
+            voci = []
+        for voce in voci:
+            if voce.startswith(".") or voce in (CARTELLA_SCARICATE,
+                                                CARTELLA_GENERATE):
+                continue
+            p = os.path.join(self.radice, voce, "SKILL.md")
+            if not os.path.isfile(p):
+                continue
+            nome, skill = self._skill_da_file(
+                p, os.path.join(self.radice, voce), self.radice,
+                "scaricata")
+            trovate[nome] = skill
         self._cache = trovate
         self._leggibile = time.time()
 
