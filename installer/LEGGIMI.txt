@@ -14,10 +14,13 @@ INSTALLAZIONE
 
 PRIMO AVVIO
 -----------
-1. Apri "Avvia Orchestra": si apre il browser da solo.
-2. Ti serve una chiave API (es. OpenRouter, gratis con limiti):
+1. Apri "Avvia Orchestra": parte in background, si apre il browser
+   da solo e la finestra nera si chiude subito.
+2. Se lo riapri mentre e' acceso, ti chiede: apri interfaccia,
+   riavvia oppure ferma.
+3. Ti serve una chiave API (es. OpenRouter, gratis con limiti):
    la inserisci una volta sola nel pannello Opzioni in alto.
-3. Scrivi un obiettivo nel pannello Obiettivo e premi Avvia.
+4. Scrivi un obiettivo nel pannello Obiettivo e premi Avvia.
 
 AGGIORNAMENTI
 -------------
@@ -28,6 +31,7 @@ SE QUALCOSA NON VA
 -------------------
 - Il browser non si apre: vai a mano su http://127.0.0.1:8737
 - "Chiave mancante": rimetti la chiave API nel pannello Opzioni.
-- L'app non parte: chiudi la finestra nera, rilancia "Avvia Orchestra".
+- L'app non risponde: riapri "Avvia Orchestra" e scegli Riavvia.
+  Dettagli tecnici in orchestra-server.log.
 - Per togliere tutto: cancella la cartella %LOCALAPPDATA%\Orchestra
   e il collegamento sul Desktop.
