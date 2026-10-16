@@ -1515,12 +1515,15 @@ class Handler(BaseHTTPRequestHandler):
                 "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
                 "model": self.app.env.get("ORCHESTRA_MODEL", ""),
                 "reasoning": self.app.env.get("ORCHESTRA_REASONING", ""),
-                "tool_profile": getattr(self.app.session.agent.config,
-                                        "tool_profile", None),
+                "tool_profile": (getattr(self.app.session.agent.config,
+                                    "tool_profile", None)
+                           if self.app.session is not None else None),
                 "budget": _budget_per_pannello(self.app.env),
-                "max_iterations": self.app.session.agent.config.max_iterations,
-                "context_limit": self.app.session.agent.config.context_limit,
-            })
+                "max_iterations": (self.app.session.agent.config.max_iterations
+                                   if self.app.session is not None else 12),
+                "context_limit": (self.app.session.agent.config.context_limit
+                                  if self.app.session is not None else 120000),
+                })
         elif path == "/api/locali":
             # Separato perche' e' lento per costruzione: si interrogano
             # motori in ascolto su localhost e una porta chiusa puo'
@@ -3049,7 +3052,7 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
               f"({app.env.get('ORCHESTRA_PROVIDER')})")
         print(f"  Ctrl+C per fermare\n")
 
-    if open_browser and app.ready:
+    if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
 
     try:
