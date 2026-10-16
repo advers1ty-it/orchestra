@@ -6,7 +6,15 @@ rem    apre il browser e chiude subito questa finestra
 rem  - se il server e' acceso: chiede Apri / Riavvia / Ferma
 rem ============================================================
 setlocal EnableDelayedExpansion
-cd /d "%~dp0"
+rem --- 0. Copia stabile: update puo' sostituire questo file mentre gira.
+if not defined ORCHESTRA_STABILE (
+  set "ORCHESTRA_STABILE=1"
+  set "ORCHESTRA_DIR=%~dp0"
+  copy /y "%~f0" "%TEMP%\Avvia-Orchestra.stabile.bat" >nul
+  call "%TEMP%\Avvia-Orchestra.stabile.bat"
+  exit /b %errorlevel%
+)
+cd /d "%ORCHESTRA_DIR%"
 title Orchestra
 
 set "PORT=8737"
