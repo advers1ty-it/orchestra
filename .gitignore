@@ -27,7 +27,10 @@ _msg.txt
 _probe/
 _prova/
 budget_global.json
+orchestra/budget_global.json
 memoria_indice.db
+orchestra/memory.md
+orchestra/memoria_config.json
 nul*\ntests/_run_*.js
 orchestra.err.log
 orchestra.err.log.1
@@ -60,3 +63,5 @@ skills/scaricate/software-development/parallel-content-generation/
 skills/scaricate/software-development/progressive-voice-refactor/
 skills/scaricate/software-development/react-native-visual-feedback/
 skills/scaricate/software-development/supabase-react-native-backend/
+skills/scaricate/creative/comfyui/outputs/aphrodite_bedroom_selfie_00001_.png
+skills/scaricate/creative/comfyui/workflows/aphrodite_sdxl_txt2img.json
