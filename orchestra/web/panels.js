@@ -1025,6 +1025,7 @@ function rigaChiave(k) {
         messaggio.className = "small verde";
         campo.value = "";  // non tenere la chiave in memoria del DOM
         caricaOpzioni();
+        if (d.ready && (typeof ready !== "undefined" && !ready)) location.reload();
       }
     } catch (e) {
       messaggio.textContent = "connessione fallita: " + e;
@@ -1107,7 +1108,8 @@ function schedaGratis(s) {
         }
         if (dd.connected) {
           stato.textContent = "già collegato";
-          caricaOpzioni();
+                    caricaOpzioni();
+                    if (typeof ready !== "undefined" && !ready) location.reload();
           btn.disabled = false;
           return;
         }
@@ -1119,6 +1121,7 @@ function schedaGratis(s) {
           if (d2.connected) {
             stato.textContent = "collegato";
             caricaOpzioni();
+            if (typeof ready !== "undefined" && !ready) location.reload();
             btn.disabled = false;
             return;
           }

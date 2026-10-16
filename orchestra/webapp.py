@@ -1477,6 +1477,32 @@ class Handler(BaseHTTPRequestHandler):
             token, base = nous_auth.get_nous_credentials(self.app.env)
             if token:
                 self.app._nous_flow = None
+                # se l'app era ferma per mancanza chiave, la connessione
+                # a Nous la sblocca: si passa al provider nous e si crea
+                # la sessione qui (stesso percorso di create() in caso ok).
+                if not (self.app.ready and self.app.session is not None):
+                    self.app.env["ORCHESTRA_PROVIDER"] = "nous"
+                    try:
+                        from . import keys as keys_mod
+                        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", "nous")
+                    except Exception:
+                        pass
+                    try:
+                        self.app.session = self.app._make_session(
+                            "nous", self.app.env.get("ORCHESTRA_MODEL", ""))
+                        self.app.ready = self.app.session is not None
+                        if self.app.ready:
+                            self.app._collega_recupero_tool()
+                            self.app._collega_delega()
+                            self.app._ripara_modello_iniziale()
+                            try:
+                                self.app.allinea_finestra()
+                            except Exception:
+                                pass
+                            self.app.error = ""
+                    except Exception as e:
+                        self.app.ready = False
+                        self.app.error = str(e)
                 self._json({"connected": True, "base": base})
                 return
             flow = getattr(self.app, "_nous_flow", None)
@@ -2623,8 +2649,33 @@ class Handler(BaseHTTPRequestHandler):
             self.app.env.update(load_env(ENV_PATH))
             self.app.env.setdefault("ORCHESTRA_PROVIDER", "openrouter")
             # la risposta porta solo lo stato, mai il valore
+            # se la sessione mancava e abbiamo ora la chiave per il
+            # provider attivo, si riprova ad avviarla: niente riavvio
+            # server necessario, e l'utente vede la chat diventare viva.
+            if not self.app.ready:
+                prov = self.app.env.get("ORCHESTRA_PROVIDER", "openrouter")
+                from .providers import KNOWN_PROVIDERS
+                _, kenv, _ = KNOWN_PROVIDERS.get(prov, ("", "", ""))
+                if not kenv or (kenv == k and v) or self.app.env.get(kenv):
+                    try:
+                        self.app.session = self.app._make_session(
+                            prov, self.app.env.get("ORCHESTRA_MODEL", ""))
+                        self.app.ready = self.app.session is not None
+                        if self.app.ready:
+                            self.app._collega_recupero_tool()
+                            self.app._collega_delega()
+                            self.app._ripara_modello_iniziale()
+                            try:
+                                self.app.allinea_finestra()
+                            except Exception:
+                                pass
+                            self.app.error = ""
+                    except Exception as e:
+                        self.app.ready = False
+                        self.app.error = str(e)
             self._json({"ok": True, "messaggio": msg,
-                        "chiavi": keys_mod.stato(ENV_PATH, self.app.env)})
+                                    "chiavi": keys_mod.stato(ENV_PATH, self.app.env),
+                                    "ready": self.app.ready})
         elif path == "/api/reasoning":
             # Livello di reasoning dall'UI. L'endpoint era sparito in un
             # `git checkout` di emergenza e non era mai stato committato:
