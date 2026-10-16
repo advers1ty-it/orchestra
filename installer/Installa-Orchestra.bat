@@ -82,8 +82,7 @@ if not exist "%DESTDIR%\orchestra\.env" (
 )
 
 rem --- 5. Collegamento sul Desktop (con icona Orchestra) ---
-set "SHORTCUT=%USERPROFILE%\Desktop\Avvia Orchestra.lnk"
-powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT%'); $s.TargetPath='%DESTDIR%\Avvia-Orchestra.bat'; $s.WorkingDirectory='%DESTDIR%'; $s.IconLocation='%DESTDIR%\installer\orchestra.ico'; $s.Save()"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=[Environment]::GetFolderPath('Desktop'); if(-not (Test-Path $d)){ $d=Join-Path $env:USERPROFILE 'Desktop'; New-Item -ItemType Directory -Force -Path $d | Out-Null }; $s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'Avvia Orchestra.lnk')); $s.TargetPath='%DESTDIR%\Avvia-Orchestra.bat'; $s.WorkingDirectory='%DESTDIR%'; $s.IconLocation='%DESTDIR%\installer\orchestra.ico'; $s.Save(); Write-Host ('  collegamento creato in ' + $d)"
 echo  [OK] Collegamento sul Desktop creato.
 
 echo.
