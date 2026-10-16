@@ -288,7 +288,7 @@ class OrchestraApp:
         per aggirare la configurazione, quindi se manca la chiave si
         dice subito e in chiaro.
         """
-        if self.session.busy:
+        if self.session is not None and self.session.busy:
             raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
 
         from .providers import KNOWN_PROVIDERS, NO_KEY_PROVIDERS, base_url_for
@@ -296,7 +296,17 @@ class OrchestraApp:
         if provider_name not in KNOWN_PROVIDERS:
             raise ValueError(f"provider sconosciuto: {provider_name}")
         key_env = KNOWN_PROVIDERS[provider_name][1]
-        if key_env and not (self.env.get(key_env) or load_env(ENV_PATH).get(key_env)):
+        chiave_presente = bool(self.env.get(key_env) or load_env(ENV_PATH).get(key_env)) if key_env else True
+        if provider_name == "nous" and not chiave_presente:
+            # Il collegamento OAuth scrive il JWT in un file separato, non
+            # una riga NOUS_API_KEY: se il token esiste, la chiave e' ok.
+            try:
+                from . import nous_auth as _nous_auth
+                token, _base = _nous_auth.get_nous_credentials(self.env)
+                chiave_presente = bool(token)
+            except Exception:
+                chiave_presente = False
+        if key_env and not chiave_presente:
             raise ValueError(f"manca la chiave {key_env} per {provider_name}")
 
         self.env["ORCHESTRA_PROVIDER"] = provider_name
@@ -327,6 +337,20 @@ class OrchestraApp:
         # Non si lascia cosi'. Si sceglie un modello che quel servizio
         # ha davvero, e si DICE quale: un cambio silenzioso lascia
         # l'utente convinto di stare usando il modello che ha scelto.
+        # Se l'app era senza sessione, prima la si costruisce: la scelta
+        # del modello valido dopo presuppone una sessione esistente.
+        if self.session is None:
+            try:
+                self.session = self._make_session(provider_name, self.env.get("ORCHESTRA_MODEL", ""))
+                self.ready = self.session is not None
+                if self.ready:
+                    self._collega_recupero_tool(); self._collega_delega()
+                    self._ripara_modello_iniziale()
+                    try: self.allinea_finestra()
+                    except Exception: pass
+                    self.error = ""
+            except Exception as e:
+                self.ready = False; self.error = str(e)
         modello_vecchio = self.env.get("ORCHESTRA_MODEL", "")
         scelto = self._modello_per_servizio(provider_name, modello_vecchio)
         if scelto:
@@ -335,6 +359,7 @@ class OrchestraApp:
             "provider": provider_name,
             "modello": scelto or modello_vecchio,
             "modello_cambiato": bool(scelto and scelto != modello_vecchio),
+            "ready": self.ready,
         }
 
     def _modello_per_servizio(self, provider_name: str,

@@ -680,6 +680,7 @@ async function cambiaServizio(p) {
       // stessa ragione del ramo sotto: Opzioni deve dire il servizio
       // vero, non quello che ricordava di prima
       await caricaOpzioni();
+      if (d.ready && (typeof ready !== "undefined" && !ready)) location.reload();
       return;
     }
     // Niente "ora: <nome>": il menu a tendina lo dice gia', e ripeterlo
@@ -701,6 +702,7 @@ async function cambiaServizio(p) {
     await caricaModelli(p, d.modello || null);
     await loadModels();
     await caricaOpzioni();
+    if (d.ready && (typeof ready !== "undefined" && !ready)) location.reload();
   } catch (e) {
     // Il select torna a quello che il server sta usando davvero. Prima
     // restava sul valore nuovo: il menu diceva "Groq" e la chat

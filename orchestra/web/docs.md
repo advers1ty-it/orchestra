@@ -26,7 +26,7 @@
 ## Tester senza GitHub
 - Pacchetto tester: `installer/Installa-Orchestra.bat` + `installer/LEGGIMI.txt` (il bat è autonomo: contiene anche lo scaricatore).
 - Il tester lancia l'installer: controlla Python, scarica l'ultima release, crea `.env` da esempio, mette "Avvia Orchestra" sul Desktop.
-- `Avvia-Orchestra.bat` fa `orchestra update --auto` a ogni avvio: riceve gli update senza fare niente.
+- `Avvia-Orchestra.bat` fa `orchestra update --auto`, avvia il server in background e apre il browser; se riaperto a server acceso chiede Apri / Riavvia / Ferma.
 - Pubblicare un update: alza `__version__`, committa, `git tag vX.Y.Z && git push --tags`, `gh release create vX.Y.Z --generate-notes`.
 - `.env`, token, budget, storico e goals non vengono mai sovrascritti (lista CONSERVA in `orchestra/update.py`).
 - Prima di una release: `python tests/run_all.py` col server acceso.
