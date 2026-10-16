@@ -28,7 +28,7 @@ from .context import (
 from .agent import Agent, AgentState, LoopConfig
 from .tools import SYSTEM_PROMPT, default_registry
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 
 __all__ = [
     "LLMResponse", "Message", "Tool", "ToolCall", "ToolRegistry",
