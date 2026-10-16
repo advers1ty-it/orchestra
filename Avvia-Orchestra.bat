@@ -26,8 +26,8 @@ if not defined PYEXE (
 )
 
 rem --- 2. Aggiornamenti ---
-%PYEXE% -m orchestra.cli update --auto >nul 2>&1
-
+echo  Controllo aggiornamenti...
+%PYEXE% -m orchestra.cli update --auto
 echo  Avvio Orchestra...
 %PYEXE% -m orchestra.cli web
 pause

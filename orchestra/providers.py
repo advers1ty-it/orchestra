@@ -854,7 +854,7 @@ def build_provider(
     if not api_key and name not in NO_KEY_PROVIDERS:
         raise ProviderError(
             f"manca la chiave {key_env} per il provider '{name}'. "
-            f"Mettila nel .env o nell'ambiente."
+            f"Inseriscila dal pannello Opzioni (icona in alto) o in .env."
         )
     return OpenAICompatAdapter(
         base_url=base_url_for(name, env),
