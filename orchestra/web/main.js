@@ -340,9 +340,9 @@ caricaOpzioni().catch(() => {
   // e i selettori semplicemente restano disabilitati
 });
 fetch("/api/state").then(r => r.json()).then(s => {
+  if (s.version) showVersion(s.version);
   if (s.ready === false) { showBanner(s.error); if (typeof apriOpzioni === "function") apriOpzioni(); return; }
   ready = true;
-  showVersion(s.version);
   // setBusy applica `ready` ai controlli. Senza questa chiamata il
   // flag e' impostato ma nessuno lo guarda: il campo resta disabilitato
   // e la pagina sembra rotta. E' lo stesso buco dei selettori di
