@@ -99,6 +99,17 @@ function el(tag, cls, text) {
   return e;
 }
 
+// Legge una risposta come JSON, ma se il server manda HTML o testo
+// (proxy, errore grezzo, porta occupata da altro) l'errore dice lo
+// stato HTTP e l'inizio del corpo invece di un SyntaxError muto.
+async function leggiJson(r) {
+  const testo = await r.text();
+  try { return JSON.parse(testo); }
+  catch (e) {
+    throw new Error("risposta non JSON (HTTP " + r.status + "): " + testo.slice(0, 120));
+  }
+}
+
 function seiInFondo() {
   // Il predicato da solo, perché a `tool_end` serve sapere DOVE era
   // l'utente quando il tool è partito, non dove sta adesso che il

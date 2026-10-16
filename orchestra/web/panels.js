@@ -1102,7 +1102,7 @@ function schedaGratis(s) {
       stato.textContent = "avvio…";
       try {
         const r = await fetch("/api/nous/auth/start", { method: "POST" });
-        const dd = await r.json();
+        const dd = await leggiJson(r);
         if (!r.ok) {
           stato.textContent = "errore: " + (dd.error || r.status);
           btn.disabled = false;
@@ -1119,7 +1119,7 @@ function schedaGratis(s) {
         stato.textContent = "codice " + dd.user_code + " — conferma nel browser…";
         const poll = async () => {
           const rr = await fetch("/api/nous/auth/status");
-          const d2 = await rr.json();
+          const d2 = await leggiJson(rr);
           if (d2.connected) {
             stato.textContent = "collegato";
             caricaOpzioni();
@@ -2250,7 +2250,7 @@ async function caricaMemoria() {
   if (!memoriaElenco) return;
   try {
     const resp = await fetch("/api/memoria");
-    const d = await resp.json();
+    const d = await leggiJson(resp);
     if (!resp.ok) {
       memoriaMsg.textContent = d.error || ("errore " + resp.status);
       memoriaMsg.className = "small rosso";
@@ -2637,7 +2637,7 @@ async function caricaSideMemoria() {
   if (!sideMemElenco) return;
   try {
     const resp = await fetch("/api/memoria");
-    const d = await resp.json();
+    const d = await leggiJson(resp);
     if (!resp.ok) {
       if (sideMsg) { sideMsg.textContent = d.error || ("errore " + resp.status); sideMsg.className = "small rosso side-msg"; }
       return;
@@ -2674,7 +2674,7 @@ async function caricaSideMemoria() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fatto: fatto }),
           });
-          const rd = await r.json();
+          const rd = await leggiJson(r);
           if (!r.ok) {
             if (sideMsg) { sideMsg.textContent = rd.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
             return;
@@ -2702,7 +2702,7 @@ async function sideMemRicorda() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fatto: fatto }),
     });
-    const d = await r.json();
+    const d = await leggiJson(r);
     if (!r.ok) {
       if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
       return;
@@ -2735,7 +2735,7 @@ async function sideMemRicerca() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: q, limite: 30 }),
     });
-    const d = await r.json();
+    const d = await leggiJson(r);
     if (!r.ok) {
       if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
       return;

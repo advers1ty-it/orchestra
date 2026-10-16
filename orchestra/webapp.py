@@ -586,6 +586,20 @@ class OrchestraApp:
         id sbagliato in una select non è un errore plausibile da accettare
         in silenzio.
         """
+        if self.session is None:
+            # Senza sessione non c'e' nulla da aggiornare live: si valida
+            # contro il catalogo (se c'e') e si registra la scelta, che
+            # la sessione usera' quando nascera'.
+            cat = self.catalog
+            if cat is not None and cat.models and model_id not in cat.models:
+                raise ValueError(
+                    f"modello sconosciuto: {model_id}. "
+                    f"Disponibili: {', '.join(sorted(cat.models)[:5])}…"
+                )
+            self.env["ORCHESTRA_MODEL"] = model_id
+            from . import keys as keys_mod
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
+            return
         if self.session.busy:
             raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
 
@@ -1002,6 +1016,24 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         pass
 
+    def send_error(self, code: int, message: str | None = None,
+                   explain: str | None = None) -> None:
+        # Per le API mai HTML: la UI fa resp.json() su tutto, e una pagina
+        # di errore standard diventerebbe un SyntaxError illeggibile.
+        try:
+            path = (self.path or "").split("?")[0]
+        except Exception:
+            path = ""
+        if path.startswith("/api/"):
+            try:
+                testo = f"errore {code}" + (f": {message}" if message else "")
+                stato = code if isinstance(code, int) and 100 <= code < 600 else 500
+                self._json({"error": testo}, stato)
+            except Exception:
+                pass
+            return
+        super().send_error(code, message, explain)
+
     def handle_error(self, request, client_address) -> None:
         """Silenzia il rumore di connessione, tieni il resto.
 
@@ -1274,6 +1306,15 @@ class Handler(BaseHTTPRequestHandler):
                 urllib.parse.urlparse(self.path).query)
             self._skill({"azione": (q.get("azione", [""]) or [""])[0]})
         elif path == "/api/state":
+            # Lo stato deve rispondere anche senza sessione: e' cosi'
+            # che la UI scopre di dover chiedere una chiave.
+            if self.app.session is None or not self.app.ready:
+                self._json({"ready": False, "error": self.app.error or "server non pronto",
+                            "version": __version__,
+                            "model": self.app.env.get("ORCHESTRA_MODEL", ""),
+                            "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
+                            "busy": False})
+                return
             s = self._need_session()
             if s is None:
                 return
@@ -2029,9 +2070,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?")[0]
-        s = self._need_session()
-        if s is None:
-            return
+        # Rotte di configurazione e memoria: devono funzionare anche
+        # senza sessione, altrimenti senza chiave non si puo' salvare
+        # nessuna chiave e l'app resta bloccata per sempre.
+        if path in ("/api/nous/auth/start", "/api/chiavi",
+                    "/api/provider", "/api/memoria/cerca",
+                    "/api/memoria/aggiungi", "/api/memoria/elimina"):
+            s = self.app.session  # puo' essere None: non la usano
+        else:
+            s = self._need_session()
+            if s is None:
+                return
         try:
             # /api/allega e' l'unica rotta che puo' ricevere un file:
             # solo li si permette un corpo grande. Su /api/send il
