@@ -118,10 +118,16 @@ class OrchestraApp:
         # è che TUTTE le istanze passano da qui: prima `create()` usava
         # __new__ e saltava __init__, e gli attributi mancavano a runtime
         # con un AttributeError che emergeva solo al primo /api/models.
-        self.session = session if session is not None else self._make_session(
-            env.get("ORCHESTRA_PROVIDER", "openrouter"),
-            env.get("ORCHESTRA_MODEL", ""),
-        )
+        self.session = None
+        sess_err = ""
+        try:
+            self.session = session if session is not None else self._make_session(
+                env.get("ORCHESTRA_PROVIDER", "openrouter"),
+                env.get("ORCHESTRA_MODEL", ""),
+            )
+        except (ProviderError, KeyError, Exception) as _e:
+            self.session = None
+            sess_err = str(_e)
         # Lo storico. La sessione appena creata non ha ancora un id: o è
         # nuova, o deve caricare l'ultima conversazione da disco.
         #
@@ -131,8 +137,8 @@ class OrchestraApp:
         self._storico: Any = None
         self._aggancia_storico()
         self.delega_attiva = False
-        self.ready = True
-        self.error = ""
+        self.ready = self.session is not None
+        self.error = sess_err if self.session is None else ""
         # Gate dei permessi: l'unico posto dove l'utente puo' autorizzare
         # un accesso fuori dalla cartella di lavoro. Vive sull'app perche'
         # deve sopravvivere fra una richiesta e l'altra: il tool che
@@ -904,6 +910,9 @@ class OrchestraApp:
         fermare l'avvio: una chat che funziona e non salva è un difetto,
         una chat che non parte è un blocco.
         """
+        if self.session is None:
+            self._storico = None
+            return
         try:
             from .storico import storico
             self._storico = storico()
