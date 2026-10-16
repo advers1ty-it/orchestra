@@ -22,6 +22,23 @@ not remembered.
 3. Cross at least two independent sources before asserting.
    One source is hearsay with a URL.
 
+## If search is not installed
+
+`web_cerca` needs the `ddgs` library (the only network
+dependency: `ddgs>=9.0` in requirements.txt). If it answers
+that search is not installed, activate it yourself:
+
+1. `run_shell` with `python -m pip install "ddgs>=9.0"`
+   (on Windows `py -m pip install "ddgs>=9.0"` if `python`
+   is not found).
+2. Verify with `run_shell` and
+   `python -c "import ddgs; print('ok')"`.
+3. Retry the original `web_cerca` once.
+
+If the install fails (no network, no permissions), say so
+and keep working local-only: search is optional, the rest
+is not.
+
 ## Rules
 
 - Cite real URLs you opened, never from memory: an invented
