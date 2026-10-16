@@ -38,6 +38,9 @@ orchestra.log
 orchestra.log.1
 orchestra/nous_auth.json
 skills/.cestino/
+# Le skill restano solo locali (scaricate o generate): mai su GitHub.
+skills/scaricate/
+skills/generate/
 tests/_probe3/
 tests/_probe5/
 token.txt
