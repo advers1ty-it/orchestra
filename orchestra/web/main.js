@@ -340,7 +340,7 @@ caricaOpzioni().catch(() => {
   // e i selettori semplicemente restano disabilitati
 });
 fetch("/api/state").then(r => r.json()).then(s => {
-  if (s.ready === false) { showBanner(s.error); return; }
+  if (s.ready === false) { showBanner(s.error); if (typeof apriOpzioni === "function") apriOpzioni(); return; }
   ready = true;
   showVersion(s.version);
   // setBusy applica `ready` ai controlli. Senza questa chiamata il
