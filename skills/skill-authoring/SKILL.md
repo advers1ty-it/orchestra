@@ -1,60 +1,66 @@
 ---
 name: skill-authoring
-description: Usa quando crei o modifichi una skill di Orchestra. Formato SKILL.md, frontmatter e verifica.
+description: Use when creating or editing an Orchestra skill. SKILL.md format, frontmatter, verification.
 version: 1.0.0
 author: Orchestra
 categoria: base
-origine: scaricata
+origine: base
 ---
 
-# Scrivere skill di Orchestra
+# Writing Orchestra Skills
 
-Una skill è un'istruzione che l'agente segue: se è sbagliata,
-sbaglia tutto quello che ci costruisce sopra. Scrivila con cura.
+A skill is an instruction the agent follows: if it is wrong,
+everything built on it is wrong. Write it carefully.
 
-## Formato
+## Format
 
-Una cartella piatta dentro `skills/`, con un solo file:
+One flat folder inside `skills/`, one file:
 
 ```
-skills/<nome>/
+skills/<name>/
   SKILL.md
 ```
 
-Lo `SKILL.md` ha un frontmatter e un corpo:
+`SKILL.md` has frontmatter plus body:
 
 ```
 ---
-name: <nome-della-cartella>
-description: Quando usarla. Una riga, con il trigger.
+name: <folder-name>
+description: When to use it. One line, with the trigger.
 categoria: base
-origine: scaricata
+origine: base
 ---
 
-# Titolo
+# Title
 
-Corpo in markdown: cosa fare, con quali comandi.
+Markdown body: what to do, with which commands.
 ```
 
-- `description` è l'unica cosa che l'agente vede sempre
-  (due righe nel prompt): deve dire QUANDO usare la skill,
-  non cosa contiene.
-- Il corpo entra nel contesto solo quando la skill viene
-  scelta (`skill_leggi`), e per intero: niente segreti,
-  niente chiavi, niente dati personali. Mai.
-- `categoria: base` per quelle distribuite con Orchestra.
+- `description` is all the agent always sees (two lines in
+  the prompt): it must say WHEN to use the skill, not what
+  it contains.
+- The body enters context only when the skill is chosen
+  (`skill_leggi`), in full: no secrets, no keys, no personal
+  data. Ever.
+- `categoria: base` groups shipped skills; `origine: base`
+  marks them as reviewed by the developers. Skills the agent
+  writes itself live elsewhere and carry proofs instead.
 
-## Regole di contenuto
+## Content rules
 
-- Comandi veri, mai inventati: ogni comando citato deve
-  esistere (tool dell'agente o CLI reale), ogni percorso
-  deve essere quello vero del progetto.
-- Procedure, non saggi: passi numerati, verificabili uno a uno.
-- Una skill, un lavoro: se serve un "quando" diverso,
-  sono due skill.
+- Real commands, never invented: every cited command must
+  exist (agent tool or real CLI), every path must be the
+  project's real one.
+- Procedures, not essays: numbered steps, each verifiable.
+- One skill, one job: a different "when" means two skills.
 
-## Verifica
+## Language
 
-Dopo averla scritta, rileggila come un estraneo e aprila
-con `skill_leggi <nome>`: deve tornare il testo intero.
-Poi `python tests/test_skills.py` deve restare verde.
+Write skills in English: shorter, and easier for the agent
+to follow than any other language.
+
+## Verify
+
+After writing, re-read it as a stranger and open it with
+`skill_leggi <name>`: the full text must come back.
+Then `python tests/test_skills.py` must stay green.

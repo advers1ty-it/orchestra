@@ -1,38 +1,37 @@
 ---
 name: local-web-ui
-description: Usa quando costruisci o tocchi un'interfaccia web locale. Solo HTML/CSS/JS, verifica con curl prima di dire che funziona.
+description: Use when building or touching a local web interface. Plain HTML/CSS/JS only, verify with curl before calling it done.
 version: 1.0.0
 author: Orchestra
 categoria: base
-origine: scaricata
+origine: base
 ---
 
 # Local Web UI
 
-Interfacce locali: HTML, CSS e JavaScript puro, zero dipendenze
-da installare. Se serve un server, quello del progetto o
-`python -m http.server` — niente toolchain nuove per una prova.
+Local interfaces: plain HTML, CSS, JavaScript, zero installable
+dependencies. If a server is needed, the project's own or
+`python -m http.server` — no new toolchain for a check.
 
-## Costruire
+## Build
 
-- Un file fa tutto, oppure pochi file con nomi ovvi.
-- Niente framework, niente build: la pagina deve aprirsi e
-  funzionare così com'è.
-- Testi e stati d'errore in italiano se l'app è in italiano.
+- One file does everything, or a few files with obvious names.
+- No frameworks, no build step: the page must open and work
+  as it is.
+- Error texts and states in the user's language.
 
-## Verificare (obbligatorio)
+## Verify (mandatory)
 
-1. Servi la pagina e colpiscila con `run_shell` + `curl`:
-   lo status deve essere 200 e il corpo quello atteso.
-2. Se il progetto ha strumenti browser (`browser_render`,
-   `browser_screenshot`), usali per vedere davvero la pagina:
-   un markup che "dovrebbe" funzionare non ha funzionato
-   finché non l'hai visto.
-3. Console pulita: nessun errore JavaScript. Un `console.log`
-   dimenticato è rumore, un'eccezione è un bug.
+1. Serve the page and hit it with `run_shell` + `curl`:
+   status must be 200 and the body the expected one.
+2. If the project has browser tools (`browser_render`,
+   `browser_screenshot`), use them to actually see the page:
+   markup that "should" work has not worked until seen.
+3. Clean console: no JavaScript errors. A forgotten
+   `console.log` is noise, an exception is a bug.
 
-## Mai
+## Never
 
-Mai dire "funziona" senza aver caricato la pagina almeno una
-volta dopo l'ultima modifica. L'ultima modifica è sempre
-quella che rompe.
+Never say "it works" without loading the page at least once
+after the last edit. The last edit is always the one that
+breaks it.

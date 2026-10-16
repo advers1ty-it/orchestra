@@ -1,39 +1,39 @@
 ---
 name: test-driven-development
-description: Usa quando aggiungi una funzione o correggi un bug. Prima il test che fallisce, poi il codice che lo fa passare.
+description: Use when adding a feature or fixing a bug. Failing test first, then the code that passes it.
 version: 1.0.0
 author: Orchestra
 categoria: base
-origine: scaricata
+origine: base
 ---
 
 # Test-Driven Development
 
-RED – GREEN – REFACTOR. Niente scorciatoie: l'ordine è il metodo.
+RED – GREEN – REFACTOR. The order is the method; no shortcuts.
 
-## RED: il test che fallisce
+## RED: the failing test
 
-Scrivi il test prima del codice, e lancialo con `run_shell`
-(`pytest` o `python tests/...`). Deve fallire, e deve fallire
-per il motivo giusto: un test che fallisce per un import rotto
-non prova niente. Leggi l'errore e chiediti "è questo il
-comportamento che voglio cambiare?" — se sì, il test è buono.
+Write the test before the code and run it with `run_shell`
+(`pytest` or `python tests/...`). It must fail, and for the
+right reason: a test failing on a broken import proves nothing.
+Read the error and ask "is this the behavior I want to change?"
+— if yes, the test is good.
 
-## GREEN: il minimo che passa
+## GREEN: the minimum that passes
 
-Scrivi il codice più piccolo che fa passare il test. Niente
-generalizzazioni, niente "già che ci sono". Se per far passare
-il test devi stravolgere mezzo progetto, il test sta dicendo
-che il disegno è sbagliato: ascoltalo prima di forzarlo.
+Write the smallest code that passes. No generalizations, no
+"while I'm at it". If passing requires gutting half the
+project, the test is saying the design is wrong: listen before
+forcing it.
 
-## REFACTOR: pulisci a test verdi
+## REFACTOR: clean up on green
 
-Solo ora: nomi migliori, duplicazioni via, funzioni corte.
-Dopo ogni tocco, riesegui i test. Un refactor che rompe un test
-non è un refactor, è un secondo task camuffato.
+Only now: better names, no duplication, short functions.
+Re-run the tests after every touch. A refactor that breaks a
+test is not a refactor, it is a second task in disguise.
 
-## Dove e come qui
+## Where and how here
 
-I test vivono in `tests/test_*.py` e si lanciano con `run_shell`.
-Prima di chiudere, la suite intera (`python tests/run_all.py`)
-deve restare verde: un test nuovo non giustifica uno vecchio rotto.
+Tests live in `tests/test_*.py` and run with `run_shell`.
+Before closing, the full suite (`python tests/run_all.py`)
+must stay green: a new test never justifies an old broken one.

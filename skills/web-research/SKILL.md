@@ -1,34 +1,34 @@
 ---
 name: web-research
-description: Usa quando la risposta dipende da fatti recenti o esterni. Cerca sul web, apri le pagine, cita le fonti.
+description: Use when the answer depends on recent or external facts. Search the web, open pages, cite sources.
 version: 1.0.0
 author: Orchestra
 categoria: base
-origine: scaricata
+origine: base
 ---
 
 # Web Research
 
-La memoria del modello scade: prezzi, versioni, API e notizie
-si controllano, non si ricordano.
+Model memory expires: prices, versions, APIs, news get checked,
+not remembered.
 
-## Come si fa
+## How
 
-1. `web_cerca` con query precise, meglio più d'una con parole
-   diverse: la prima pagina di risultati ha sempre un'opinione.
-2. `web_leggi` sulle pagine che promettono la risposta: il
-   riassunto della ricerca non basta mai per i dettagli
-   (firme, parametri, prezzi esatti).
-3. Incrocia almeno due fonti indipendenti prima di affermare.
-   Una sola fonte è un sentito dire con URL.
+1. `web_cerca` with precise queries, better several with
+   different words: the first result page always has an opinion.
+2. `web_leggi` on pages that promise the answer: search gives
+   title plus summary, this gives the page. Summaries never
+   suffice for details (signatures, parameters, exact prices).
+3. Cross at least two independent sources before asserting.
+   One source is hearsay with a URL.
 
-## Regole
+## Rules
 
-- Cita gli URL reali che hai aperto, mai a memoria: un link
-  inventato è peggio di nessun link.
-- Distingui "l'ho letto nella documentazione" da "l'ho dedotto":
-  la seconda frase comincia con "probabilmente".
-- Se le fonti si contraddicono, dillo invece di sceglierne
-  una in silenzio.
-- Non usare la ricerca per cose che sai già: costa tempo
-  e non aggiunge niente.
+- Cite real URLs you opened, never from memory: an invented
+  link is worse than no link.
+- Separate "read in the docs" from "deduced": the second
+  sentence starts with "probably".
+- If sources contradict each other, say so instead of
+  silently picking one.
+- No search for what you already know: it costs time and
+  adds nothing.

@@ -1,37 +1,38 @@
 ---
 name: plan
-description: Usa quando un lavoro è troppo grosso per farlo a braccio. Scrivi prima il piano in .orchestra/plans/, non eseguire niente.
+description: Use when a job is too big to do freehand. Write the plan to .orchestra/plans/ first, execute nothing.
 version: 1.0.0
 author: Orchestra
 categoria: base
-origine: scaricata
+origine: base
 ---
 
 # Plan
 
-Un piano è un file markdown, non una promessa. Si scrive prima,
-si esegue dopo. Mai le due cose insieme.
+A plan is a markdown file, not a promise. Write it first,
+execute later. Never both at once.
 
-## Come si scrive
+## How to write it
 
-1. Leggi i file rilevanti con `read_file` prima di proporre passi:
-   un piano scritto senza aver guardato il codice è un augurio.
-2. Crea `.orchestra/plans/<slug>.md` con `write_file`, in questa forma:
-   - **Obiettivo**: una frase, misurabile.
-   - **Contesto**: cosa sai già (file, vincoli, decisioni prese).
-   - **Passi**: numerati, ognuno piccolo abbastanza da verificare
-     da solo, con il comando o il file che lo chiude.
-   - **Rischi**: cosa può andare storto e come te ne accorgi.
-   - **Verifica finale**: come si dimostra che è finito
-     (test, comando, output atteso).
-3. Fermati lì. Non eseguire nessun passo: l'esecuzione è un
-   lavoro separato, con il suo turno di verifica.
+1. Read the relevant files with `read_file` before proposing
+   steps: a plan written without looking at the code is a wish.
+2. Create `.orchestra/plans/<slug>.md` with `write_file`:
+   - **Goal**: one sentence, measurable.
+   - **Context**: what you already know (files, constraints,
+     past decisions).
+   - **Steps**: numbered, each small enough to verify alone,
+     with the command or file that closes it.
+   - **Risks**: what can go wrong and how you would notice.
+   - **Final check**: how done is demonstrated (test,
+     command, expected output).
+3. Stop there. Execute nothing: execution is a separate job
+   with its own verification round.
 
-## Regole
+## Rules
 
-- Un passo = una verifica. Un passo senza verifica è due passi
-  di cui uno nascosto: dividilo.
-- Se durante la scrittura scopri che manca un'informazione,
-  scrivilo nei rischi invece di inventarla.
-- Il piano vive nel repo (`.orchestra/plans/`): la prossima
-  sessione lo ritrova e non ricomincia da zero.
+- One step = one check. A step without a check is two steps
+  with one hidden: split it.
+- If writing reveals missing information, put it under risks
+  instead of inventing it.
+- The plan lives in the repo (`.orchestra/plans/`): the next
+  session finds it instead of starting over.

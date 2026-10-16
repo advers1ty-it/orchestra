@@ -23,8 +23,11 @@ LE DUE ORIGINI, E PERCHE' SONO DIVERSE
                  ha funzionato. Portano con se' le prove.
 
 Le skill dentro skills/ senza sottocartelle sono la base
-distribuita con Orchestra: valgono come scaricate, e la categoria
-si dichiara nel frontmatter (`categoria: base`).
+distribuita con Orchestra. Portano `origine: base` invece di
+`scaricata`: stesso trattamento tecnico, ma dicono di essere
+state riviste dagli sviluppatori invece che copiate da uno
+store esterno. La categoria si dichiara nel frontmatter
+(`categoria: base`).
 
 La distinzione non e' cosmetica ed e' percio' nel formato: `origine` e
 `prove` stanno nel frontmatter, e chi le legge deve poter dire quanto

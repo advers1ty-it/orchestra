@@ -1,40 +1,42 @@
 ---
 name: systematic-debugging
-description: Usa quando un bug resiste al primo fix o non sai dove nasce. Trova la causa radice prima di toccare codice.
+description: Use when a bug survives the first fix or its origin is unclear. Find the root cause before touching code.
 version: 1.0.0
 author: Orchestra
 categoria: base
-origine: scaricata
+origine: base
 ---
 
 # Systematic Debugging
 
-Un fix al sintomo sposta il bug, non lo chiude. Procedi in quattro fasi,
-una ipotesi alla volta.
+Fixing symptoms moves the bug. Work in four phases, one hypothesis
+at a time.
 
-## 1. Riproduci
+## 1. Reproduce
 
-Trova il comando minimo che mostra il bug e lancialo con `run_shell`.
-Se non si riproduce a comando, non hai un bug: hai un'impressione.
-Annota l'output esatto, non un riassunto a memoria.
+Find the smallest command that shows the bug and run it with
+`run_shell`. If it does not reproduce on command, you have an
+impression, not a bug. Record the exact output, never a summary
+from memory.
 
-## 2. Restringi
+## 2. Narrow down
 
-Biseca: separa la metà che funziona da quella che rompe, e dimezza
-di nuovo. Leggi il codice con `read_file` prima di cambiarlo —
-mai modificare un file che non hai letto. Per le regressioni,
-`git log` e `git blame` sul file dicono cosa è cambiato per ultimo:
-la regressione abita quasi sempre lì.
+Bisect: split what works from what breaks, then halve again.
+Read the code with `read_file` before changing it — never edit
+a file you have not read. For regressions, `git log` and
+`git blame` show what changed last: regressions almost always
+live there.
 
-## 3. Causa radice
+## 3. Root cause
 
-Scrivi la causa in una frase: "succede X perché Y". Se la frase
-contiene "e poi anche", non è la radice: scendi di un livello.
-Se servono due fix in due punti diversi, manca ancora la causa vera.
+State it in one sentence: "X happens because Y". If the sentence
+contains "and also", it is not the root: go one level deeper.
+If two fixes in two places seem necessary, the real cause is
+still missing.
 
-## 4. Ripara e verifica
+## 4. Fix and verify
 
-Un fix solo, poi riesegui il comando della fase 1: deve passare.
-Poi cerca danni collaterali: casi simili nello stesso file e nei
-fratelli (stesso bug, stessa famiglia). Chiudi solo quando la
-riproduzione passa e niente altro si è rotto.
+One fix, then re-run the phase-1 command: it must pass. Then
+check for collateral damage — same bug, same family, in the
+file and its siblings. Done means the reproduction passes and
+nothing else broke.
