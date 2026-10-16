@@ -11,8 +11,8 @@ Una skill e' un SKILL.md con un frontmatter:
 
 Il corpo non finisce MAI nel prompt di sistema. Va' nel contesto solo
 quando la skill e' stata scelta, e per intero. Il prompt porta i nomi
-e le descrizioni — due righe per skill — e nient'altro. Con 188 skill
-scaricate, il prompt pieno costerebbe piu' di 20.000 token a ogni
+e le descrizioni — due righe per skill — e nient'altro. Con decine di
+skill, il prompt pieno costerebbe migliaia di token a ogni
 messaggio, e la gran parte di quelle skill non servirebbe a nulla.
 
 LE DUE ORIGINI, E PERCHE' SONO DIVERSE
@@ -270,7 +270,7 @@ class Indice:
                     # La categoria e' il percorso RELATIVO alla radice
                     # delle scaricate, cioe' tutto tranne il nome della
                     # skill. Prendere solo il nome della cartella padre
-                    # perdeva i livelli: uno store con 188 skill in 40
+                    # perdeva i livelli: uno store con tante skill in tante
                     # categorie, e dentro ognuna altre sottocategorie,
                     # finiva tutto sotto una sola voce — e allora due
                     # skill con lo stesso nome in posti diversi erano
@@ -413,7 +413,7 @@ class Indice:
             # convenzione, e in uno store ".archive" significa
             # "messo via apposta". Importarlo comunque porta dentro
             # roba che qualcuno ha deciso di non usare piu' — e da
-            # 188 skill a 103, con meta' del prompt speso su nomi che
+            # tante skill, con meta' del prompt speso su nomi che
             # nessuno aprira'.
             #
             # Non e' una deduplica e' una distinzione: una skill
