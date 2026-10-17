@@ -25,8 +25,35 @@ from typing import Any
 PORTAL_BASE_URL = "https://portal.nousresearch.com"
 INFERENCE_DEFAULT = "https://inference-api.nousresearch.com/v1"
 CLIENT_ID = "orchestra"
+# Client in prestito finche' «orchestra» non e' registrato sul portale.
+# E' un identificativo pubblico, non un segreto; la pagina di conferma
+# citera' Hermes invece di Orchestra. Quando il nostro client viene
+# abilitato, basta togliere questa riga e default torna «orchestra».
+CLIENT_PRESTITO = "hermes-cli"
 SCOPE = "inference:invoke"
 SKEW_SECONDS = 120
+
+
+def client_id_attivo(env: dict[str, str] | None = None) -> str:
+    """Quale client_id presentare a Nous.
+
+    Il portale accetta solo client registrati: finche' «orchestra» non
+    lo e', chi distribuisce puo' impostare NOUS_CLIENT_ID senza toccare
+    il codice. Il default resta, cosi' il giorno in cui viene abilitato
+    funziona senza aggiornare niente.
+    """
+    env = env or {}
+    return str(env.get("NOUS_CLIENT_ID") or os.environ.get("NOUS_CLIENT_ID")
+               or CLIENT_PRESTITO).strip() or CLIENT_PRESTITO
+
+
+def _errore_umano(status: int, payload: dict[str, Any], client_id: str) -> str:
+    if isinstance(payload, dict) and payload.get("error") == "invalid_client":
+        return (f"Nous non riconosce questa installazione (client '{client_id}' "
+                "non registrato sul portale). Finche' il collegamento diretto "
+                "non e' abilitato, usa un token manuale: Opzioni → Servizi → "
+                "«Nous Research (token manuale)».")
+    return f"Nous device-code fallito (HTTP {status}): {payload}"
 
 
 def auth_file_path(env: dict[str, str] | None = None) -> Path:
@@ -209,17 +236,20 @@ def _post_form(url: str, data: dict[str, str], timeout: float = 15) -> tuple[int
 
 def request_device_code(
     portal_url: str = PORTAL_BASE_URL,
-    client_id: str = CLIENT_ID,
+    client_id: str | None = None,
     scope: str = SCOPE,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Chiede il device-code a Nous. Non apre il browser, non blocca."""
+    if not client_id:
+        client_id = client_id_attivo(env)
     portal = portal_url.rstrip("/")
     status, device = _post_form(
         f"{portal}/api/oauth/device/code",
         {"client_id": client_id, "scope": scope},
     )
     if status != 200 or not isinstance(device, dict):
-        raise RuntimeError(f"Nous device-code fallito (HTTP {status}): {device}")
+        raise RuntimeError(_errore_umano(status, device, client_id))
     for field in ("device_code", "user_code", "verification_uri", "verification_uri_complete", "expires_in", "interval"):
         if field not in device:
             raise RuntimeError(f"Risposta Nous incompleta: manca {field}")
@@ -304,10 +334,11 @@ def complete_device_flow(device: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def login(portal_url: str = PORTAL_BASE_URL, open_browser: bool = True) -> dict[str, Any]:
+def login(portal_url: str = PORTAL_BASE_URL, open_browser: bool = True,
+          env: dict[str, str] | None = None) -> dict[str, Any]:
     """Avvia il flusso device-code Nous. Blocca finche' l'utente conferma o scade."""
     portal = portal_url.rstrip("/")
-    device = request_device_code(portal_url=portal)
+    device = request_device_code(portal_url=portal, env=env)
 
     verification_url = str(device["verification_uri_complete"])
     user_code = str(device["user_code"])

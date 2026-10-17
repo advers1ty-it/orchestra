@@ -574,7 +574,8 @@ def cmd_auth(args: argparse.Namespace) -> int:
         return 2
     try:
         from . import nous_auth
-        auth = nous_auth.login(open_browser=not getattr(args, "no_browser", False))
+        auth = nous_auth.login(open_browser=not getattr(args, "no_browser", False),
+                               env=dict(os.environ))
     except Exception as e:
         print(f"errore: {e}", file=sys.stderr)
         return 1

@@ -2732,7 +2732,7 @@ class Handler(BaseHTTPRequestHandler):
                            "user_code": dev["user_code"]})
                 return
             try:
-                dev = nous_auth.request_device_code()
+                dev = nous_auth.request_device_code(env=self.app.env)
             except Exception as ex:
                 self._json({"error": str(ex)}, 502)
                 return

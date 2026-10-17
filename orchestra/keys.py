@@ -192,7 +192,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
         "costo": "gratis con collegamento Orchestra, con limiti",
         "chiave": False,
         "cosa": "Accesso diretto all'inference API di Nous (Pareto, LFM, Gemini, ecc.), con il modello free nous/welcome e, su account, ai modelli a pagamento.",
-        "requisiti": "Si collega da solo con il pulsante qui sotto, oppure con un token manuale messo in Servizi.",
+        "requisiti": "Si collega da solo con il pulsante qui sotto (la conferma cita Hermes: e' il client provvisorio), oppure con un token manuale messo in Servizi.",
         "come": " premi «Collega Nous» qui sotto",
     },
 {
