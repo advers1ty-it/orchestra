@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import os
 import re
+from .dati import percorso
 import sqlite3
 import threading
 import time
@@ -87,17 +88,7 @@ END;
 
 def percorso_db() -> str:
     """Accanto allo storico, nella cartella dati di Orchestra."""
-    base = os.environ.get("ORCHESTRA_HOME")
-    if not base:
-        home = os.environ.get("HERMES_HOME") or os.path.expanduser("~")
-        if os.name == "nt":
-            se_hermes = home.rstrip("\\/").lower().endswith("hermes")
-            base = (os.path.join(home, "orchestra") if se_hermes
-                    else os.path.join(home, "AppData", "Local", "hermes", "orchestra"))
-        else:
-            base = os.path.join(home, ".orchestra")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, "memoria_indice.db")
+    return percorso("memoria_indice.db")
 
 
 def chunk_testo(testo: str) -> list[str]:
@@ -285,6 +276,25 @@ class IndiceMemoria:
             except OSError:
                 pass
         return tolto
+
+    def modifica(self, vecchio: str, nuovo: str) -> bool:
+        """Riscrive un fatto nel file e aggiorna l'indice.
+
+        Il file resta la verità: si delega a `Memoria.modifica`, poi si
+        cancella la riga vecchia dall'indice e si indicizza quella nuova.
+        """
+        cambiato = self.sorgente.modifica(vecchio, nuovo)
+        if cambiato:
+            with self._lock:
+                self._conn.execute("DELETE FROM fatti WHERE testo = ?",
+                                   (vecchio.strip(),))
+                self._conn.commit()
+            self.ricostruisci_se_cambiato(forza=True)
+            try:
+                self._ultimo_file = os.path.getmtime(self.sorgente.percorso)
+            except OSError:
+                pass
+        return cambiato
 
     def leggi(self) -> str:
         """Il file, non l'indice: la verità è quella."""

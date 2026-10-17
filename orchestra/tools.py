@@ -389,19 +389,36 @@ def tool_run_shell() -> Tool:
                 preexec_fn = os.setsid
             except AttributeError:
                 preexec_fn = None
-        proc = subprocess.Popen(
-            shell_cmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-            errors="replace",
-            cwd=str(_root()),
-            env=_sandbox_env(),
-            creationflags=creationflags,
-            start_new_session=(os.name != "nt"),
-            preexec_fn=preexec_fn,
-        )
+        if posix:
+            # Passa il comando come singolo argomento a bash -lc.
+            # Niente shell=True: con cmd.exe i backslash e le virgolette
+            # venivano corrotti (echo 'ciao' -> unexpected EOF).
+            proc = subprocess.Popen(
+                [posix, "-lc", command],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(_root()),
+                env=_sandbox_env(),
+                creationflags=creationflags,
+                start_new_session=(os.name != "nt"),
+                preexec_fn=preexec_fn,
+            )
+        else:
+            proc = subprocess.Popen(
+                shell_cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(_root()),
+                env=_sandbox_env(),
+                creationflags=creationflags,
+                start_new_session=(os.name != "nt"),
+                preexec_fn=preexec_fn,
+            )
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
             r = subprocess.CompletedProcess(
@@ -473,7 +490,7 @@ _SUSPICIOUS = (
     r"system32",
     r"/etc/",
     r"sam\b",
-    r"\.config/hermes",
+    r"\.config/orchestra",
 )
 
 

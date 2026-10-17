@@ -5,20 +5,21 @@ fuori chiede. Questo e' il senso di un agente che scrive codice: se puo'
 arrivare ovunque senza chiedere, non e' un aiuto, e' una porta aperta con
 una sbarra.
 
-Le tre scelte, e sono tre perche' due non bastano:
+Le quattro scelte, e sono quattro perche' tre non bastano:
 
   una volta    vale per questa chiamata e basta
   per sessione vale finche' Orchestra resta aperto, non oltre
-  mai         resta negato, e lo ricorda
+  sempre       resta concesso finche' non viene revocato a mano
+  mai          resta negato, e lo ricorda
 
-La terza esiste perche' "questa volta" e "per questa sessione" si
-assomigliano troppo: chiedere ogni volta e' fastidioso, e con un
-permesso "per sempre" accordato a caso sul primo prompt si ottiene un
-agente che scrive dove gli pare per il resto della giornata.
+"sempre" esiste perche' alcuni percorsi sono di lavoro, non di passaggio:
+un progetto in un'altra cartella, una toolchain. Chiedere ogni volta e'
+fastidioso, e "per sessione" scade mentre il lavoro e' ancora aperto.
+Revocabile da /api/permessi, cosi' non e' un permesso che resta per caso.
 
-C'e' anche un quarto caso, non negoziabile: i percorsi sensibili. Non
-sono autorizzabili con nessuna delle tre scelte, perche' sbagliarli non
-costa un file, costa il sistema. Su quelli si nega e basta — e si dice
+C'e' anche un quinto caso, non negoziabile: i percorsi sensibili. Non
+sono autorizzabili con nessuna delle quattro scelte, perche' sbagliarli
+non costa un file, costa il sistema. Su quelli si nega e basta — e si dice
 perche', altrimenti sembra un bug.
 
 Il vincolo e' sul TOOL, non sul prompt. Se autorizzi la lettura di una
@@ -63,6 +64,10 @@ CHIAVI_SENSIBILI = (".env", ".ssh", ".aws", ".gnupg", "id_rsa", "credentials")
 # permesso che non scade e' un permesso che hai dimenticato di dare.
 SESSIONE_SECONDI = 60 * 60 * 2
 
+# Le scelte riconosciute. Unica fonte di verita': la UI, il prompt e il
+# gate le leggono da qui, cosi' non possono divergere.
+SCELTE = ("una_volta", "sessione", "sempre", "mai")
+
 
 class Negato(Exception):
     """L'operazione non e' consentita. Non e' un errore da riprovare."""
@@ -97,7 +102,7 @@ class Richiesta:
 
 @dataclass
 class Risposta:
-    scelta: str          # "una_volta" | "sessione" | "mai"
+    scelta: str          # "una_volta" | "sessione" | "sempre" | "mai"
     testo: str = ""
 
 
@@ -113,6 +118,8 @@ class Gate:
         self._attesa: dict[str, threading.Event] = {}
         # permessi concessi per la sessione: percorso -> scade
         self._sessione: dict[str, float] = {}
+        # permessi concessi per sempre: percorso -> True
+        self._sempre: set[str] = set()
         # permessi negati per sempre: percorso -> True
         self._negati: set[str] = set()
         self._lock = threading.Lock()
@@ -158,7 +165,7 @@ class Gate:
 
     # -- decisione ----------------------------------------------------------
 
-    def _concesso_anche_figli(self, p: Path, chiave: str, scade: float) -> bool:
+    def _concesso_anche_figli(self, p: Path, chiave: str) -> bool:
         """Il permesso su una cartella vale anche per quello che c'e' dentro.
 
         Senza, concedere "Documenti" non serve a niente: il primo
@@ -196,26 +203,32 @@ class Gate:
         if self.dentro_root(p):
             return "concesso"
 
-        # 2. percorsi vietati: nessuna delle tre scelte li sblocca
+        # 2. percorsi vietati: nessuna delle quattro scelte li sblocca
         motivo = self.percorso_sensibile(p)
         if motivo:
             return "negato"
 
         k = self._chiave(p)
         with self._lock:
-            # 3. negato in precedenza, e il tempo non e' scaduto
+            # 3. negato in precedenza: non si torna indietro
             if k in self._negati:
                 return "negato"
-            # 4. concesso per la sessione, se non e' scaduto
+            # 4. concesso per sempre
+            if k in self._sempre:
+                return "concesso"
+            # 5. concesso per la sessione, se non e' scaduto
             scade = self._sessione.get(k)
             ora = time.time()
             if scade is not None:
                 if scade > ora:
                     return "concesso"
                 del self._sessione[k]
-            # 4b. concesso perché sta dentro una cartella già concessa
+            # 5b. concesso perché sta dentro una cartella già concessa
             for kc, sc in self._sessione.items():
-                if sc > ora and self._concesso_anche_figli(p, kc, sc):
+                if sc > ora and self._concesso_anche_figli(p, kc):
+                    return "concesso"
+            for kc in self._sempre:
+                if self._concesso_anche_figli(p, kc):
                     return "concesso"
         return "chiedi"
 
@@ -276,6 +289,9 @@ class Gate:
             if scelta == "sessione":
                 self._sessione[k] = time.time() + SESSIONE_SECONDI
                 return True
+            if scelta == "sempre":
+                self._sempre.add(k)
+                return True
             # "mai", o qualsiasi risposta non riconosciuta
             self._negati.add(k)
         return False
@@ -303,11 +319,15 @@ class Gate:
                      "scade_tra": int(v - ora)}
                     for k, v in attive.items()
                 ],
+                "sempre": sorted(self._sempre),
                 "negati": sorted(self._negati),
             }
 
     def revoca(self, percorso: str) -> bool:
-        """Toglie un permesso concesso per la sessione."""
+        """Toglie un permesso concesso (sessione o sempre)."""
         k = self._chiave(Path(str(percorso)))
         with self._lock:
-            return self._sessione.pop(k, None) is not None
+            tolto = self._sessione.pop(k, None) is not None
+            tolto = k in self._sempre or tolto
+            self._sempre.discard(k)
+        return tolto

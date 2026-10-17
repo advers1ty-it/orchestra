@@ -131,6 +131,14 @@ def tool_memoria() -> Tool:
             return f"Dimenticato: {fatto}"
         return f"Non l'ho trovato in memoria: {fatto}"
 
+    def modifica(vecchio: str = "", nuovo: str = "") -> str:
+        """Riscrive un fatto esistente, tenendo data e origine."""
+        if not (vecchio or "").strip() or not (nuovo or "").strip():
+            return "Servono il fatto da cambiare e il testo nuovo."
+        if memoria().modifica(vecchio, nuovo):
+            return f"Modificato: {nuovo}"
+        return f"Non l'ho trovato in memoria: {vecchio}"
+
     def elenca(limite: int = 30) -> str:
         """Tutta la memoria, per chi vuole vedere cosa c'è."""
         m = memoria()
@@ -140,7 +148,8 @@ def tool_memoria() -> Tool:
         return "\n".join(f"- {f}" for f in tutti[-limite:])
 
     def handler(azione: str = "cerca", query: str = "", fatto: str = "",
-                priorita: str = "", limite: int = 10) -> str:
+                priorita: str = "", limite: int = 10,
+                vecchio: str = "", nuovo: str = "") -> str:
         try:
             azione = (azione or "cerca").strip().lower()
             if azione == "cerca":
@@ -149,10 +158,12 @@ def tool_memoria() -> Tool:
                 return aggiungi(fatto, priorita)
             if azione == "elimina":
                 return elimina(query or fatto)
+            if azione == "modifica":
+                return modifica(vecchio or fatto, nuovo or query)
             if azione == "elenca":
                 return elenca(limite)
             return (f"Azione non riconosciuta: {azione}. "
-                    f"Puoi fare: cerca, aggiungi, elimina, elenca.")
+                    f"Puoi fare: cerca, aggiungi, elimina, modifica, elenca.")
         except Exception as e:
             # Un errore qui non deve far cadere il turno: l'agente deve
             # poter dire "non riesco a cercare" e continuare.
@@ -161,7 +172,8 @@ def tool_memoria() -> Tool:
     return Tool(
         name="memoria",
         description=(
-            "Cerca, aggiunge o toglie fatti nella memoria a lungo termine. "
+            "Cerca, aggiunge, toglie o riscrive fatti nella memoria a "
+            "lungo termine. "
             "Usa 'cerca' PRIMA di chiedere qualcosa che potresti già sapere "
             "dalle conversazioni precedenti, e 'aggiungi' quando l'utente "
             "dice di ricordare qualcosa o prende una decisione che varrà "
@@ -174,16 +186,30 @@ def tool_memoria() -> Tool:
             "properties": {
                 "azione": {
                     "type": "string",
-                    "enum": ["cerca", "aggiungi", "elimina", "elenca"],
+                    "enum": ["cerca", "aggiungi", "elimina", "modifica", "elenca"],
                     "description": "Cosa fare. Default: cerca.",
                 },
                 "query": {
                     "type": "string",
-                    "description": "Testo da cercare, o il fatto da eliminare.",
+                    "description": (
+                        "Testo da cercare. Per 'elimina' e 'modifica' puo' "
+                        "essere anche il fatto da togliere o da cambiare."
+                    ),
                 },
                 "fatto": {
                     "type": "string",
-                    "description": "Il fatto da ricordare (per 'aggiungi').",
+                    "description": (
+                        "Il fatto da ricordare (per 'aggiungi'), oppure il "
+                        "fatto attuale da cambiare (per 'modifica')."
+                    ),
+                },
+                "vecchio": {
+                    "type": "string",
+                    "description": "Il fatto attuale, per azione=modifica.",
+                },
+                "nuovo": {
+                    "type": "string",
+                    "description": "Il testo nuovo, per azione=modifica.",
                 },
                 "priorita": {
                     "type": "string",

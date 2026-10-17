@@ -17,18 +17,11 @@ import threading
 import time
 import uuid
 from typing import Any
-
-
-def _home() -> str:
-    return os.environ.get("ORCHESTRA_HOME") or os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "_ goals_fallback",
-    )
+from .dati import percorso
 
 
 def _path() -> str:
-    return os.path.join(_home(), "goals.json")
-
+    return percorso("goals.json")
 
 def _lock() -> threading.Lock:
     global _GOAL_LOCK
@@ -589,7 +582,12 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
     def on_event(kind: str, data: dict[str, Any] | None) -> None:
         data = data or {}
         if kind in ("contenuto", "testo", "ragionamento"):
-            t = data.get("text") or data.get("contenuto") or ""
+            # L'agente emette con la chiave "testo" (agent.py); "text" e
+            # "contenuto" restano per compatibilita' con emettitori piu'
+            # vecchi. Cercare solo una chiave lasciava last_output vuoto
+            # e il goal risultava "done" senza risultato.
+            t = (data.get("testo") or data.get("text")
+                 or data.get("contenuto") or "")
             if isinstance(t, str) and t.strip():
                 last_output.append(t.strip())
                 if len(last_output) > 12:

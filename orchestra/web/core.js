@@ -33,8 +33,10 @@ const on = (el, evento, fn) => {
   return true;
 };
 const log = $("log"), main = $("main"), input = $("input");
-const btnSend = $("btn-send"), btnCancel = $("btn-cancel"), btnReset = $("btn-reset");
+const btnSend = $("btn-send"), btnStop = $("btn-stop");
+const steerBar = $("steer-bar"), steerInput = $("steer-input"), steerSend = $("steer-send");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
+const work = $("work"), workTxt = $("work-txt");
 const modelPick = $("model-pick");
 const reasoningPick = $("reasoning-pick");
 // id -> modello. Il popup del selettore serve il punteggio di una
@@ -131,6 +133,10 @@ function scrollDown() {
 function setBusy(v) {
   busy = v;
   dot.className = "dot" + (v ? " busy" : " ok");
+  // Il pallino e' sempre li': verde a riposo, giallo mentre lavora.
+  // L'etichetta compare solo durante il lavoro, per non aggiungere
+  // rumore quando non c'e' niente da dire.
+  if (workTxt) workTxt.hidden = !v;
   input.disabled = !ready || v;
   btnSend.disabled = !ready || v;
   // La graffetta segue la chat: durante un turno la richiesta e' gia'
@@ -139,8 +145,9 @@ function setBusy(v) {
   if (typeof btnAllega !== "undefined" && btnAllega) {
     btnAllega.disabled = !ready || v;
   }
-  btnCancel.disabled = !v;
-  $("btn-reset").disabled = v;
+  if (btnStop) btnStop.disabled = !v;
+  if (steerBar) steerBar.hidden = !v;
+  if (steerInput && v) steerInput.focus();
   // Il bottone del modello segue il select: senza, durante un turno
   // resterebbe cliccabile mentre il select e' disabilitato, e si
   // potrebbe aprire un pannello su un catalogo che il server sta
@@ -365,7 +372,7 @@ async function rispondiPermesso(scelta) {
   // blocc subito: due clic non devono mandare due risposte, e la
   // seconda arriverebbe su una domanda gia' chiusa
   permessoAttivo = null;
-  for (const b of ["permesso-una", "permesso-ses", "permesso-mai"]) {
+  for (const b of ["permesso-una", "permesso-ses", "permesso-sempre", "permesso-mai"]) {
     $(b).disabled = true;
   }
   nascondiPermesso();
@@ -380,7 +387,7 @@ async function rispondiPermesso(scelta) {
     // quello e' l'esito sicuro: non riprovare, non insistere.
     addText("error", "risposta non arrivata: " + e);
   } finally {
-    for (const b of ["permesso-una", "permesso-ses", "permesso-mai"]) {
+    for (const b of ["permesso-una", "permesso-ses", "permesso-sempre", "permesso-mai"]) {
       $(b).disabled = false;
     }
   }
@@ -388,6 +395,7 @@ async function rispondiPermesso(scelta) {
 
 on($("permesso-una"), "click", () => rispondiPermesso("una_volta"));
 on($("permesso-ses"), "click", () => rispondiPermesso("sessione"));
+  on($("permesso-sempre"), "click", () => rispondiPermesso("sempre"));
 on($("permesso-mai"), "click", () => rispondiPermesso("mai"));
 
 // chiudere il pannello Opzioni mentre c'e' una domanda: la domanda

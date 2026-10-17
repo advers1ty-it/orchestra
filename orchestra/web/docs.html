@@ -61,6 +61,7 @@
       <li><a href="#modelli">Modelli & provider</a></li>
       <li><a href="#onboarding">Onboarding web</a></li>
       <li><a href="#ui">Interfaccia web</a></li>
+      <li><a href="#steer">Steer e Stop</a></li>
       <li><a href="#tooling">Tool & profili</a></li>
       <li><a href="#delega">Multi-agent & delega</a></li>
       <li><a href="#goal">Goal autonomi</a></li>
@@ -136,10 +137,38 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
     <p>Input obiettivo + avvia/stop + polling stato. Lista goals scrollabile.</p>
   </div>
   <div class="box">
+    <h3>Steer</h3>
+    <p>Mentre il modello lavora, la barra Steer compare sopra il campo di scrittura: il messaggio che invii viene consegnato al modello <b>subito dopo</b> il tool o il ragionamento in corso, senza fermare il turno. Utile per correggere la rotta senza ricominciare.</p>
+  </div>
+  <div class="box">
+    <h3>Stop</h3>
+    <p>Il pulsante <b>■</b> accanto a Invia ferma il turno. Il cancel viene controllato a ogni iterazione e prima di ogni tool: i tool non ancora eseguiti ricevono un risultato "cancellato" e il turno si chiude pulito, senza lasciare buchi nella sequenza.</p>
+  </div>
+  <div class="box">
     <h3>Docs</h3>
     <p>Pulsante Docs apre questa guida in nuova tab.</p>
   </div>
 </div>
+</section>
+
+<section id="steer">
+<h2>Steer e Stop</h2>
+<p>Due modi per intervenire su un turno <b>mentre</b> il modello lavora, senza aspettare che finisca.</p>
+
+<h3>Steer — correggere la rotta a metà lavoro</h3>
+<p>La barra Steer compare sopra il campo di scrittura solo durante un turno attivo. Quello che scrivi viene messo in coda e consegnato al modello <b>alla prima occasione utile</b>: subito dopo il tool o il ragionamento in corso, prima della chiamata successiva al modello.</p>
+<pre><code>POST /api/steer
+{ "testo": "usa il formato CSV, non JSON" }</code></pre>
+<ul>
+  <li>Il turno <b>non</b> viene interrotto: lo steer si innesta nel flusso esistente.</li>
+  <li>Limite di 5 messaggi steer per turno, 2000 caratteri ciascuno.</li>
+  <li>Se il modello stava per concludere, lo steer lo fa riprendere.</li>
+</ul>
+
+<h3>Stop — fermare il turno</h3>
+<p>Il pulsante <b>■</b> accanto a Invia ferma il turno in corso. Il controllo di cancellazione avviene a ogni iterazione e <b>prima di ogni tool</b>: se il modello aveva chiesto dieci tool e ne hai eseguiti tre, i sette rimanenti ricevono un risultato "cancellato" e la sequenza resta valida.</p>
+<pre><code>POST /api/cancel</code></pre>
+<p>Il turno si chiude con motivo <code>canceled_da_should_continue</code>, senza lasciare tool_call senza risultato (invariante della sequenza).</p>
 </section>
 
 <section id="tooling">

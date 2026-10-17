@@ -893,6 +893,149 @@ on(optModel, "change", async () => {
 });
 
 
+// ------------------------------------------------------------------- memoria: modale
+// La sidebar tiene solo "Tutti i fatti" + aggiunta rapida: sfoglia,
+// cerca e correggi vivono qui dentro.
+const memModal = $("mem-modal"), memLista = $("mem-lista"),
+  memStat = $("mem-stat"), memMsg = $("mem-msg"),
+  memCerca = $("mem-cerca"), memAnnullaCerca = $("mem-annulla-cerca");
+
+function rigaMemoria(testo) {
+  const r = el("div", "mem-item");
+  const t = el("span", "txt");
+  t.textContent = testo;
+  const btns = el("span", "btns");
+  const mod = el("button", "ghost piccolo", "✎");
+  mod.title = "Correggi";
+  const del = el("button", "ghost piccolo", "×");
+  del.title = "Dimentica";
+  on(mod, "click", () => {
+    const inp = document.createElement("input");
+    inp.value = testo;
+    inp.style.flex = "1";
+    inp.style.minWidth = "0";
+    const ok = el("button", "ghost piccolo", "Salva");
+    r.replaceChildren(inp, ok);
+    inp.focus();
+    inp.select();
+    on(ok, "click", async () => {
+      const nt = inp.value.trim();
+      if (!nt || nt === testo) { ricaricaMemoria(); return; }
+      await fetch("/api/memoria/modifica", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vecchio: testo, nuovo: nt }),
+      });
+      ricaricaMemoria();
+    });
+    on(inp, "keydown", (e) => { if (e.key === "Enter") ok.click(); });
+  });
+  on(del, "click", async () => {
+    await fetch("/api/memoria/elimina", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fatto: testo }),
+    });
+    ricaricaMemoria();
+  });
+  btns.appendChild(mod);
+  btns.appendChild(del);
+  r.appendChild(t);
+  r.appendChild(btns);
+  return r;
+}
+
+function disegnaMemoria(fatti) {
+  if (!memLista) return;
+  memLista.replaceChildren();
+  if (!fatti.length) {
+    const p = el("div", "small dim");
+    p.textContent = "Nessun fatto.";
+    memLista.appendChild(p);
+    return;
+  }
+  for (const f of fatti) memLista.appendChild(rigaMemoria(typeof f === "string" ? f : f.testo));
+}
+
+async function ricaricaMemoria() {
+  if (memMsg) memMsg.textContent = "";
+  try {
+    const d = await (await fetch("/api/memoria")).json();
+    if (d.errore) throw new Error(d.errore);
+    disegnaMemoria(d.fatti || []);
+    if (memStat) memStat.textContent = (d.n_fatti || 0) + " fatti";
+  } catch (e) {
+    if (memMsg) memMsg.textContent = "non raggiungibile: " + e;
+  }
+}
+
+function apriMemoria() {
+  if (!memModal) return;
+  memModal.hidden = false;
+  memModal.classList.add("show");
+  if (memCerca) { memCerca.value = ""; memAnnullaCerca.hidden = true; }
+  ricaricaMemoria();
+}
+
+function chiudiMemoria() {
+  if (!memModal) return;
+  memModal.hidden = true;
+  memModal.classList.remove("show");
+}
+
+async function cercaMemoria() {
+  if (!memCerca) return;
+  const q = memCerca.value.trim();
+  if (memAnnullaCerca) memAnnullaCerca.hidden = !q;
+  if (!q) { ricaricaMemoria(); return; }
+  try {
+    const r = await fetch("/api/memoria/cerca", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q, limite: 50 }),
+    });
+    const d = await r.json();
+    disegnaMemoria((d.risultati || []).map((x) => x.testo));
+    if (memStat) memStat.textContent = (d.risultati || []).length + " risultati";
+  } catch (e) {
+    if (memMsg) memMsg.textContent = "ricerca fallita: " + e;
+  }
+}
+
+let memTimer = null;
+on(memCerca, "input", () => {
+  clearTimeout(memTimer);
+  memTimer = setTimeout(cercaMemoria, 250);
+});
+on(memAnnullaCerca, "click", () => {
+  if (memCerca) memCerca.value = "";
+  if (memAnnullaCerca) memAnnullaCerca.hidden = true;
+  ricaricaMemoria();
+  if (memCerca) memCerca.focus();
+});
+on($("mem-trova"), "click", () => { if (memCerca) memCerca.focus(); });
+on($("mem-chiudi"), "click", chiudiMemoria);
+on($("side-mem-tutti"), "click", apriMemoria);
+on($("side-mem-aggiungi"), "click", async () => {
+  const inp = $("side-mem-input");
+  const v = inp ? inp.value.trim() : "";
+  if (!v) return;
+  await fetch("/api/memoria/aggiungi", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fatto: v }),
+  });
+  inp.value = "";
+  if (memModal && !memModal.hidden) ricaricaMemoria();
+});
+on($("side-mem-input"), "keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("side-mem-aggiungi").click(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && memModal && !memModal.hidden) chiudiMemoria();
+});
+
+
 // ---- Permessi: stato e prova del canale
 // Lo stato serve a non dare l'idea che "per questa sessione" voglia
 // dire "per sempre": ogni concessione mostra quando scade, e si revoca
@@ -927,6 +1070,22 @@ function disegnaPermessi(st) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ revoca: s.percorso }),
+        });
+        const d = await r.json();
+        disegnaPermessi(d.stato || st);
+      } catch (e) { /* resta com'e' */ }
+    });
+  }
+  for (const p of st.sempre || []) {
+    const riga = aggiungi("Sempre concesso: " + p, "ok");
+    const rev = el("button", "ghost piccolo", "Revoca");
+    riga.appendChild(rev);
+    on(rev, "click", async () => {
+      try {
+        const r = await fetch("/api/permessi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ revoca: p }),
         });
         const d = await r.json();
         disegnaPermessi(d.stato || st);
@@ -1070,6 +1229,12 @@ function schedaGratis(s) {
   nome.textContent = s.nome;
   const badge = el("span", "gratis-badge " + (s.chiave ? "con-chiave" : "senza-chiave"));
   badge.textContent = s.chiave ? "serve account" : "nessuna chiave";
+  if (s.id === "nous" && s.connesso) {
+    // Nous non usa chiavi: collegato via Orchestra. Il server lo dice
+    // con "connesso", e il badge lo mostra invece di "nessuna chiave".
+    badge.textContent = "collegato";
+    badge.className = "gratis-badge senza-chiave";
+  }
   capo.appendChild(nome);
   capo.appendChild(badge);
 
@@ -1095,8 +1260,9 @@ function schedaGratis(s) {
   if (s.id === "nous") {
     const box = el("div", "nous-auth");
     const stato = el("span", "dim small");
-    stato.textContent = "per collegare: usa il pulsante e conferma nel browser";
-    const btn = el("button", "primary", "Collega Nous");
+    const gia = !!s.connesso;
+    stato.textContent = gia ? "collegato — se qualcosa non va, ricollega" : "per collegare: usa il pulsante e conferma nel browser";
+    const btn = el("button", "primary", gia ? "Ricollega" : "Collega Nous");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       stato.textContent = "avvio…";
@@ -1242,7 +1408,19 @@ async function caricaOpzioni() {
     }
 
     for (const k of d.chiavi || []) chiaviLista.appendChild(rigaChiave(k));
-    for (const s of d.servizi_gratis || []) gratisLista.appendChild(schedaGratis(s));
+    // Gratis in gruppi ordinati per percorso, non nell'ordine dei dati:
+    // prima come si parte senza niente, in fondo il confronto a pagamento.
+    const ordineGruppi = ["Collegamento diretto", "Sul tuo computer", "Gratis con chiave", "A pagamento"];
+    const schede = d.servizi_gratis || [];
+    for (const g of ordineGruppi) {
+      const del_gruppo = schede.filter((s) => (s.gruppo || "Gratis con chiave") === g);
+      if (!del_gruppo.length) continue;
+      const h = el("div", "gratis-gruppo");
+      h.textContent = g;
+      gratisLista.appendChild(h);
+      for (const s of del_gruppo) gratisLista.appendChild(schedaGratis(s));
+    }
+    for (const s of schede.filter((s) => !ordineGruppi.includes(s.gruppo))) gratisLista.appendChild(schedaGratis(s));
   } catch (e) {
     opzioniNota.textContent = "caricamento fallito: " + e;
   }
@@ -2369,7 +2547,6 @@ function apriSide(aperta) {
   if (aperta) {
     sidebar.removeAttribute("hidden");
     caricaSide();
-    caricaSideMemoria();
   } else {
     sidebar.setAttribute("hidden", "");
   }
@@ -2381,8 +2558,16 @@ function apriSide(aperta) {
 // Ctrl+B passava da qui, ed è per questo che "la prima volta non c'è".
 // La X non c'è più: il bottone RIDUCE a una striscia invece di chiudere.
 // La cronologia serve troppo spesso per costare due clic.
-const sideRiduci = $("side-riduci");
-if (sideRiduci) sideRiduci.addEventListener("click", riduciSide);
+
+// Rotaia delle sezioni: visibile solo a sidebar ridotta, un'icona per
+// sezione. Il clic riapre e porta alla sezione.
+for (const b of document.querySelectorAll("#side-rail button")) {
+  b.addEventListener("click", () => {
+    allargaSide();
+    const t = $(b.dataset.sez);
+    if (t && t.scrollIntoView) t.scrollIntoView({ block: "nearest" });
+  });
+}
 
 // Ctrl+B, come gli editor: è il gesto che le persone già hanno in mano.
 document.addEventListener("keydown", (ev) => {
@@ -2608,200 +2793,6 @@ if (sideNuova) {
 const sideRicarica = $("side-ricarica");
 if (sideRicarica) sideRicarica.addEventListener("click", caricaSide);
 
-// ------------------------------------------------- memoria, dentro la sidebar
-//
-// Stessa logica del vecchio pannello in Opzioni, altri elementi. Opzioni
-// è un posto da CONFIGURAZIONE; la memoria è contenuto, e stare accanto
-// alla cronologia è dove si guarda.
-
-const sideMemElenco = $("side-mem-elenco");
-const sideMemInput = $("side-mem-input");
-const sideMemAggiungi = $("side-mem-aggiungi");
-const sideMemCerca = $("side-mem-cerca");
-const sideMemStat = $("side-mem-stat");
-
-function _memStatTesto(d) {
-  // I fatti mai usati sono il numero che conta: dopo un mese a zero
-  // vuol dire che non servono. Mostrarli e' il motivo per cui l'indice
-  // esiste.
-  const ind = d.indice;
-  if (!ind || ind.errore) return "";
-  const kb = Math.round((ind.byte_file || 0) / 1024);
-  let s = `${ind.totale} fatti indicizzati`;
-  if (kb) s += ` · ${kb} KB`;
-  if (ind.mai_usati) s += ` · ${ind.mai_usati} mai cercati`;
-  return s;
-}
-
-async function caricaSideMemoria() {
-  if (!sideMemElenco) return;
-  try {
-    const resp = await fetch("/api/memoria");
-    const d = await leggiJson(resp);
-    if (!resp.ok) {
-      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + resp.status); sideMsg.className = "small rosso side-msg"; }
-      return;
-    }
-    // (la riga col percorso del file non c'è più in sidebar: era rumore
-    // tecnico e l'elemento che sbordava sopra SKILL — resta solo in Opzioni)
-    if (sideMemStat) sideMemStat.textContent = _memStatTesto(d);
-    sideMemElenco.replaceChildren();
-    const fatti = d.fatti || [];
-    if (!fatti.length) {
-      const li = document.createElement("li");
-      li.className = "small dim side-mem-vuoto";
-      li.textContent = "Nessun fatto ricordato.";
-      sideMemElenco.appendChild(li);
-      return;
-    }
-    for (const fatto of fatti) {
-      const li = document.createElement("li");
-      li.className = "side-mem-riga";
-
-      const testo = document.createElement("span");
-      testo.className = "side-mem-fatto";
-      testo.textContent = fatto;
-      li.appendChild(testo);
-
-      const via = document.createElement("button");
-      via.className = "side-mem-via";
-      via.textContent = "\u00d7";
-      via.title = "Dimentica";
-      via.addEventListener("click", async () => {
-        try {
-          const r = await fetch("/api/memoria/elimina", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fatto: fatto }),
-          });
-          const rd = await leggiJson(r);
-          if (!r.ok) {
-            if (sideMsg) { sideMsg.textContent = rd.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
-            return;
-          }
-          if (sideMsg) { sideMsg.textContent = rd.tolto ? "dimenticato" : "non era in memoria"; sideMsg.className = "small dim side-msg"; }
-          await caricaSideMemoria();
-        } catch (e) {
-          if (sideMsg) { sideMsg.textContent = "non riesco: " + e; sideMsg.className = "small rosso side-msg"; }
-        }
-      });
-      li.appendChild(via);
-      sideMemElenco.appendChild(li);
-    }
-  } catch (e) {
-    if (sideMsg) { sideMsg.textContent = "memoria non raggiungibile: " + e; sideMsg.className = "small rosso side-msg"; }
-  }
-}
-
-async function sideMemRicorda() {
-  const fatto = (sideMemInput.value || "").trim();
-  if (!fatto) return;
-  try {
-    const r = await fetch("/api/memoria/aggiungi", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fatto: fatto }),
-    });
-    const d = await leggiJson(r);
-    if (!r.ok) {
-      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
-      return;
-    }
-    sideMemInput.value = "";
-    if (sideMsg) { sideMsg.textContent = d.nuovo ? "ricordato" : "era gi\u00e0 in memoria"; sideMsg.className = "small dim side-msg"; }
-    await caricaSideMemoria();
-  } catch (e) {
-    if (sideMsg) { sideMsg.textContent = "non riesco: " + e; sideMsg.className = "small rosso side-msg"; }
-  }
-}
-
-if (sideMemAggiungi) sideMemAggiungi.addEventListener("click", sideMemRicorda);
-if (sideMemInput) {
-  sideMemInput.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") sideMemRicorda();
-  });
-}
-
-// La ricerca nella memoria. FTS5 dal server, con debounce: senza, una
-// ricerca a ogni tasto su 5000 fatti e' una richiesta per carattere.
-let _memTimer = null;
-async function sideMemRicerca() {
-  if (!sideMemElenco) return;
-  const q = (sideMemCerca.value || "").trim();
-  if (!q) { await caricaSideMemoria(); return; }
-  try {
-    const r = await fetch("/api/memoria/cerca", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: q, limite: 30 }),
-    });
-    const d = await leggiJson(r);
-    if (!r.ok) {
-      if (sideMsg) { sideMsg.textContent = d.error || ("errore " + r.status); sideMsg.className = "small rosso side-msg"; }
-      return;
-    }
-    if (sideMemStat) sideMemStat.textContent = _memStatTesto(d);
-    sideMemElenco.replaceChildren();
-    const trovati = d.risultati || [];
-    if (!trovati.length) {
-      const li = document.createElement("li");
-      li.className = "small dim side-mem-vuoto";
-      li.textContent = "Nessun fatto trovato.";
-      sideMemElenco.appendChild(li);
-      return;
-    }
-    for (const x of trovati) {
-      const li = document.createElement("li");
-      li.className = "side-mem-riga";
-      const testo = document.createElement("span");
-      testo.className = "side-mem-fatto";
-      testo.textContent = x.testo;
-      if (x.importante) {
-        const segno = document.createElement("span");
-        segno.className = "side-mem-imp";
-        segno.textContent = "★";
-        segno.title = "nel prompt di ogni conversazione";
-        li.appendChild(segno);
-      }
-      li.appendChild(testo);
-      const via = document.createElement("button");
-      via.className = "side-mem-via";
-      via.textContent = "×";
-      via.title = "Dimentica";
-      via.addEventListener("click", async () => {
-        try {
-          const rr = await fetch("/api/memoria/elimina", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fatto: x.testo }),
-          });
-          if (!rr.ok) return;
-          await sideMemRicerca();
-        } catch (e) { /* la ricerca resta com'è */ }
-      });
-      li.appendChild(via);
-      sideMemElenco.appendChild(li);
-    }
-  } catch (e) {
-    if (sideMsg) { sideMsg.textContent = "ricerca fallita: " + e; sideMsg.className = "small rosso side-msg"; }
-  }
-}
-
-if (sideMemCerca) {
-  sideMemCerca.addEventListener("input", () => {
-    if (_memTimer) clearTimeout(_memTimer);
-    _memTimer = setTimeout(sideMemRicerca, 250);
-  });
-  sideMemCerca.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") { ev.preventDefault(); sideMemRicerca(); }
-    if (ev.key === "Escape") {
-      sideMemCerca.value = "";
-      caricaSideMemoria();
-    }
-  });
-}
-
-// ------------------------------------------------------ pagina Capacità
 //
 // Modale, non pannello laterale: è un posto dove si VA a guardare e da
 // cui si esce. Due tab, skill e strumenti, dallo stesso endpoint.
@@ -2829,24 +2820,14 @@ if (btnCapacita) btnCapacita.addEventListener("click", apriCapacita);
 const capClose = $("capacita-close");
 if (capClose) capClose.addEventListener("click", chiudiCapacita);
 
-document.addEventListener("keydown", (ev) => {
-  if (ev.key === "Escape" && capacita && !capacita.classList.contains("hidden")) {
-    chiudiCapacita();
-  }
-});
-
-// Click sullo sfondo chiude: è il gesto che ci si aspetta da un modale.
-if (capacita) {
-  capacita.addEventListener("click", (ev) => {
-    if (ev.target === capacita) chiudiCapacita();
-  });
-}
-
-for (const t of document.querySelectorAll(".cap-tab")) {
-  t.addEventListener("click", () => {
-    capTab = t.dataset.tab;
-    for (const o of document.querySelectorAll(".cap-tab")) {
-      o.classList.toggle("attiva", o.dataset.tab === capTab);
+// Due tab, un solo elenco: il clic cambia la sorgente e ridisegna.
+for (const t of ["skill", "tool"]) {
+  const b = $("cap-tab-" + t);
+  if (b) b.addEventListener("click", () => {
+    capTab = t;
+    for (const u of ["skill", "tool"]) {
+      const bu = $("cap-tab-" + u);
+      if (bu) bu.classList.toggle("attiva", u === t);
     }
     disegnaCapacita();
   });
@@ -3024,13 +3005,12 @@ if (sideBtn) {
 
 // Caricamento all'avvio, in FONDO di proposito. Stava subito dopo la
 // dichiarazione di `sidebar`, ma `caricaSide` tocca `sideSkill`,
-// `sideElenco` e `sideMemElenco`, che sono `const` dichiarate più sotto:
+// `sideElenco` e `sideSkill`, che sono `const` dichiarate più sotto:
 // in temporal dead zone il riferimento lancia e le liste restano vuote
 // — senza errori in console, perché la funzione è hoisted e sembra
 // chiamabile.
 if (sidebar && !sidebar.hasAttribute("hidden")) {
   caricaSide();
-  caricaSideMemoria();
 }
 
 // --------------------------------------------- cercare nelle conversazioni
@@ -3323,6 +3303,10 @@ if (btnDeps) btnDeps.addEventListener("click", async () => {
     btnDeps.textContent = prev;
   }
 });
+
+// ------------------------------------------------- documentazione (nuova scheda)
+const btnDocs = $("btn-docs");
+if (btnDocs) btnDocs.addEventListener("click", () => window.open("/docs", "_blank", "noopener"));
 
 // ------------------------------------------------- diagnostica allowlisted
 const btnDiag = $("btn-diagnosi");

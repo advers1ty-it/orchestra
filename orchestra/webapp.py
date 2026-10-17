@@ -1591,13 +1591,27 @@ class Handler(BaseHTTPRequestHandler):
             from . import keys as keys_mod
             from .providers import NO_KEY_PROVIDERS
             cat_ = self.app.catalog
+            # Nous non ha una chiave da scrivere: si collega via Orchestra.
+            # Senza questa riga il badge dice "nessuna chiave" anche quando
+            # si e' collegati — e chi legge cerca una chiave che non esiste.
+            servizi_gratis = []
+            for _sg in keys_mod.FREE_SERVICES:
+                if _sg.get("id") == "nous":
+                    try:
+                        from . import nous_auth as _na
+                        _tok, _base = _na.get_nous_credentials(self.app.env)
+                    except Exception:
+                        _tok = None
+                    _sg = dict(_sg)
+                    _sg["connesso"] = bool(_tok)
+                servizi_gratis.append(_sg)
             # Niente motori locali qui: sono una richiesta di rete a
             # localhost che puo' costare un timeout, e le chiavi non
             # devono aspettarle. Vengono in /api/locali, che il browser
             # chiede per conto suo.
             self._json({
                 "chiavi": keys_mod.stato(ENV_PATH, self.app.env),
-                "servizi_gratis": keys_mod.FREE_SERVICES,
+                "servizi_gratis": servizi_gratis,
                 "nota_gratis": keys_mod.NOTA_FREE,
                 "catalogo": {
                     "modelli": len(cat_.models) if cat_ is not None else 0,
@@ -2075,7 +2089,8 @@ class Handler(BaseHTTPRequestHandler):
         # nessuna chiave e l'app resta bloccata per sempre.
         if path in ("/api/nous/auth/start", "/api/chiavi",
                     "/api/provider", "/api/memoria/cerca",
-                    "/api/memoria/aggiungi", "/api/memoria/elimina"):
+                    "/api/memoria/aggiungi", "/api/memoria/elimina",
+                    "/api/memoria/modifica"):
             s = self.app.session  # puo' essere None: non la usano
         else:
             s = self._need_session()
@@ -2146,6 +2161,19 @@ class Handler(BaseHTTPRequestHandler):
                               "token": a.token_stimati} for a in allegati],
                 "token": sum(a.token_stimati for a in allegati),
             })
+        elif path == "/api/steer":
+            testo = (body.get("testo") or "").strip()
+            if not testo:
+                self._json({"error": "testo vuoto"}, 400)
+                return
+            if len(testo) > 2000:
+                self._json({"error": "troppo lungo (max 2000 caratteri)"}, 400)
+                return
+            ok = s.steer(testo)
+            if not ok:
+                self._json({"error": "coda steer piena (max 5)"}, 400)
+                return
+            self._json({"ok": True})
         elif path == "/api/cancel":
             self._json({"ok": s.cancel()})
         elif path == "/api/storico":
@@ -2281,6 +2309,17 @@ class Handler(BaseHTTPRequestHandler):
             from .memoria import stato as stato_memoria
             self._json({"ok": True, "nuovo": nuovo, **stato_memoria()})
 
+        elif path == "/api/memoria/modifica":
+            from .memoria import memoria
+            vecchio = (body.get("vecchio") or "").strip()
+            nuovo_testo = (body.get("nuovo") or "").strip()
+            if not vecchio or not nuovo_testo:
+                self._json({"error": "vecchio o nuovo vuoto"}, 400)
+                return
+            fatto = memoria().modifica(vecchio, nuovo_testo)
+            from .memoria import stato as stato_memoria
+            self._json({"ok": True, "modificato": fatto, **stato_memoria()})
+
         elif path == "/api/memoria/elimina":
             from .memoria import memoria
             fatto = (body.get("fatto") or "").strip()
@@ -2412,8 +2451,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "id": r.id, "percorso": target,
                         "in_attesa": in_atting})
         elif path == "/api/permesso":
-            # La risposta a una domanda di permesso. Tre scelte, e
-            # nient'altro: "una_volta", "sessione", "mai". Una scelta
+            # La risposta a una domanda di permesso. Quattro scelte, e
+            # nient'altro: "una_volta", "sessione", "sempre", "mai". Una scelta
             # sconosciuta viene trattata come "mai" — se il pulsante non
             # e' arrivato, il caso sicuro e' negare.
             rid = (body.get("id") or "").strip()
@@ -2421,7 +2460,7 @@ class Handler(BaseHTTPRequestHandler):
             if not rid:
                 self._json({"error": "manca l'id della richiesta"}, 400)
                 return
-            if scelta not in ("una_volta", "sessione", "mai"):
+            if scelta not in ("una_volta", "sessione", "sempre", "mai"):
                 self._json({"error": f"scelta non valida: {scelta}"}, 400)
                 return
             gate = self.app.gate
@@ -2669,12 +2708,22 @@ class Handler(BaseHTTPRequestHandler):
                 risposta.update(risultato)
             self._json(risposta)
         elif path == "/api/nous/auth/start":
-            import threading
             from . import nous_auth
+            # force=True richiede una riconnessione voluta: senza, chi e'
+            # gia' collegato non puo' piu' rifare il flusso, perche' il primo
+            # controllo del token risponde "connected" e il bottone
+            # "Ricollega" non farebbe mai nulla. Scaduto o revocato il token,
+            # force e' l'unico modo per ripartire senza toccare i file.
+            forza = str(body.get("force") or "").lower() in ("1", "true", "yes", "si")
             token, base = nous_auth.get_nous_credentials(self.app.env)
-            if token:
+            if token and not forza:
                 self._json({"ok": True, "connected": True, "base": base})
                 return
+            if forza and token:
+                try:
+                    nous_auth.rimuovi_auth(self.app.env)
+                except Exception:
+                    pass
             flow = getattr(self.app, "_nous_flow", None)
             if flow and not flow.get("done") and not flow.get("error"):
                 dev = flow["device"]

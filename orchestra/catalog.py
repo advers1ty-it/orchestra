@@ -28,6 +28,7 @@ import json
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Any, Literal
+from .dati import percorso
 
 # Le categorie sono nostre e servono al routing. Ogni benchmark task
 # ne dichiara una, cosi' i risultati si possono aggregare per uso.
@@ -214,27 +215,9 @@ class Catalog:
 
     @staticmethod
     def _store_path(provider: str) -> str:
-        import os
+        # I dati stanno dove dice dati.py: niente percorso qui.
 
-        base = os.environ.get("ORCHESTRA_HOME")
-        if not base:
-            home = os.environ.get("HERMES_HOME") or os.path.expanduser("~")
-            # HERMES_HOME punta gia' alla cartella dati app. Appiattirla
-            # sotto ancora "AppData/Local/hermes" produceva un percorso
-            # doppio tipo
-            #   ...\hermes\AppData\Local\hermes\orchestra\catalog_x.json
-            # che funziona (salvataggio e lettura puntano allo stesso
-            # posto) ma mette i dati in una cartella che nessuno cerca.
-            # Se la base finisce gia' per app, si aggiunge solo
-            # "orchestra".
-            if os.name == "nt":
-                se_hermes = home.rstrip("\\/").lower().endswith("hermes")
-                base = (os.path.join(home, "orchestra") if se_hermes
-                        else os.path.join(home, "AppData", "Local", "hermes", "orchestra"))
-            else:
-                base = os.path.join(home, ".orchestra")
-        os.makedirs(base, exist_ok=True)
-        return os.path.join(base, f"catalog_{provider}.json")
+        return percorso(f"catalog_{provider}.json")
 
     @classmethod
     def fetch(cls, provider: str) -> "Catalog":

@@ -12,6 +12,10 @@
 - Task e Tool → attiva profili (base/ricerca/skill/pieno).
 - Dipendenze: pulsante "Dipendenze" per installare `ddgs`.
 
+## Steer e Stop
+- Steer: durante un turno compare una barra sopra il campo; il messaggio arriva al modello dopo il tool in corso, senza fermare il turno (max 5 per turno).
+- Stop: il pulsante ■ accanto a Invia ferma il turno; i tool non ancora eseguiti ricevono un risultato "cancellato".
+
 ## Goal autonomo
 - pulsante "Obiettivo": scrivi obiettivo + Avvia.
 - stato/output live, Stop disponibile.

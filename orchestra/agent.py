@@ -94,6 +94,10 @@ class AgentState:
     compactions: int = 0
     stopped_because: str = ""
     usage_by_model: dict[str, int] = field(default_factory=dict)
+    # Steer: messaggi iniettati durante il turno
+    steer_queue: list[str] = field(default_factory=list)
+    steer_count: int = 0
+    steer_max: int = 5
 
 
 class Agent:
@@ -113,6 +117,7 @@ class Agent:
             on_event: Callable[[str, dict[str, Any]], None] | None = None,
             fallback_chain: list[ChainEntry] | None = None,
         ) -> None:
+            self._cancel_flag = False
             self.provider = provider
             self.registry = registry
             self.system_prompt = system_prompt
@@ -166,6 +171,10 @@ class Agent:
                 self.config.budget_limits)
 
             # -- utility interne ---------------------------------------------------
+
+    def _cancel_requested(self) -> bool:
+        """Verifica se è stata richiesta la cancellazione."""
+        return self._cancel_flag
 
     def _emit(self, kind: str, **data: Any) -> None:
         self.on_event(kind, data)
@@ -319,6 +328,17 @@ class Agent:
                 return
         self.state.messages.insert(0, Message(role="system", content=nuovo))
 
+    def steer(self, testo: str) -> bool:
+        """Inietta un messaggio durante il turno in corso."""
+        if len(self.state.steer_queue) >= self.state.steer_max:
+            return False
+        self.state.steer_queue.append(testo)
+        return True
+
+    def request_cancel(self) -> None:
+        """Richiede la cancellazione del turno in corso."""
+        self._cancel_flag = True
+
     def run(
         self,
         user_input: str,
@@ -383,6 +403,26 @@ class Agent:
                 return self.state
 
             self._maybe_compact()
+
+            # --- steer: inietta messaggi esistenti dal queue ---
+            if self.state.steer_queue:
+                testo = self.state.steer_queue.pop(0)
+                self.state.steer_count += 1
+                self.state.messages.append(Message(
+                    role="tool",
+                    content=(
+                        f"[MESSAGGIO DURANTE IL LAVORO — steer #{self.state.steer_count}]\n"
+                        f"{testo}\n"
+                        f"\n"
+                        f"Riconsidera il tuo lavoro alla luce di questa informazione. "
+                        f"Continua da dove eri rimasto."
+                    ),
+                    name="__steer__",
+                ))
+                self._emit("steer", testo=testo, count=self.state.steer_count)
+                # Se il modello stava per concludere, lo steer lo fa ripensare:
+                # non fare il check di chiusura, vai direttamente alla chiamata
+                continue
 
             # --- chiamata al modello, con retry su errori transitori
             #
@@ -490,7 +530,31 @@ class Agent:
 
             # --- caso 1: il modello ha chiesto tool -> esegui e continua
             if resp.wants_tools:
-                for tc in resp.tool_calls:
+                chiamate = list(resp.tool_calls)
+                for i, tc in enumerate(chiamate):
+                    if self._cancel_requested():
+                        # Ogni tool_call deve avere il suo risultato,
+                        # anche quelle mai eseguite: un cancel non puo'
+                        # lasciare buchi nella sequenza.
+                        for pendente in chiamate[i:]:
+                            self.state.messages.append(
+                                Message(
+                                    role="tool",
+                                    content="Cancellato dall'utente prima dell'esecuzione.",
+                                    tool_call_id=pendente.id,
+                                    name=pendente.name,
+                                )
+                            )
+                            self._emit(
+                                "tool_end",
+                                name=pendente.name,
+                                result="cancellato",
+                                ok=False,
+                                id=pendente.id,
+                                consecutive_errors=self.state.consecutive_errors,
+                            )
+                        self.state.stopped_because = "canceled_da_should_continue"
+                        return self.state
                     args = tc.parsed_args()
                     self.state.tool_calls_made += 1
                     # `id` va nei due eventi: e' il modo perche' la UI

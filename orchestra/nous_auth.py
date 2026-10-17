@@ -24,18 +24,26 @@ from typing import Any
 
 PORTAL_BASE_URL = "https://portal.nousresearch.com"
 INFERENCE_DEFAULT = "https://inference-api.nousresearch.com/v1"
-CLIENT_ID = "hermes-cli"
+CLIENT_ID = "orchestra"
 SCOPE = "inference:invoke"
 SKEW_SECONDS = 120
 
 
 def auth_file_path(env: dict[str, str] | None = None) -> Path:
+    """Dove teniamo il collegamento a Nous.
+
+    Nella cartella dati di Orchestra, come gli altri file di stato: un
+    token di accesso non e' codice e non ha senso vivere nel repo, dove
+    finirebbe in un commit o in una copia dell'albero. L'override resta,
+    per chi deve puntare altrove.
+    """
     env = env or {}
     for key in ("NOUS_AUTH_PATH", "ORCHESTRA_NOUS_AUTH_PATH"):
         val = env.get(key) or os.environ.get(key)
         if val:
             return Path(val)
-    return Path(__file__).resolve().parent / "nous_auth.json"
+    from .dati import percorso
+    return Path(percorso("nous_auth.json"))
 
 
 def load_auth(env: dict[str, str] | None = None) -> tuple[dict[str, Any] | None, Path]:
@@ -47,6 +55,24 @@ def load_auth(env: dict[str, str] | None = None) -> tuple[dict[str, Any] | None,
     if not isinstance(data, dict) or not data.get("access_token"):
         return None, p
     return data, p
+
+
+def rimuovi_auth(env: dict[str, str] | None = None) -> bool:
+    """Toglie il collegamento a Nous. Restituisce True se c'era qualcosa.
+
+    E' la via per riconnettersi quando il token e' scaduto o revocato
+    fuori da Orchestra: senza, il controllo del token in /auth/start
+    rispondeva sempre "connected" e il flusso non si poteva mai ripetere.
+    Non solleva mai: se il file non c'e' o non si puo' scrivere, e' False.
+    """
+    p = auth_file_path(env)
+    try:
+        p.unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
 
 
 def _parse_dt(value: Any) -> datetime | None:

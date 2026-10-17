@@ -9,7 +9,7 @@ origine: base
 
 # Memory
 
-Memory (`memoria` tool: cerca, aggiungi, elenca, elimina)
+Memory (`memoria` tool: cerca, aggiungi, modifica, elenca, elimina)
 survives sessions. What enters it shapes every future turn:
 write little, write well.
 
@@ -20,6 +20,10 @@ write little, write well.
 - `aggiungi`: one standalone sentence per fact, with the
   subject explicit ("The project builds with..."). No
   pronouns pointing at this conversation.
+- `modifica` when a fact is stale or half-wrong: rewrite it in
+  place. Do NOT `elimina` + `aggiungi` — that loses the date and
+  the origin, and you end up with a duplicate the dedup cannot
+  see.
 - `elenca` to audit: if you cannot defend an entry's future
   usefulness in one sentence, `elimina` it.
 

@@ -10,18 +10,19 @@ file, due turni sovrapposti non si corrompono, e leggere le ultime N
 righe di una conversazione lunga non vuol dire caricarla tutta.
 
 Le sessioni stanno accanto ai cataloghi, in
-`~/AppData/Local/hermes/orchestra/`: stessa cartella, stessa logica --
+`%LOCALAPPDATA%\orchestra` (vedi `dati.py`): stessa cartella,
 dati di Orchestra che nessuno va a cercare in D:\\orchestra.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import threading
 import time
 from typing import Any
+
+from .dati import percorso
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessioni (
@@ -94,17 +95,7 @@ def _frammento(testo: str, parola: str, intorno: int = 180) -> str:
 
 def percorso_db() -> str:
     """Lo stesso metodo dei cataloghi, così i dati stanno in un posto solo."""
-    base = os.environ.get("ORCHESTRA_HOME")
-    if not base:
-        home = os.environ.get("HERMES_HOME") or os.path.expanduser("~")
-        if os.name == "nt":
-            se_hermes = home.rstrip("\\/").lower().endswith("hermes")
-            base = (os.path.join(home, "orchestra") if se_hermes
-                    else os.path.join(home, "AppData", "Local", "hermes", "orchestra"))
-        else:
-            base = os.path.join(home, ".orchestra")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, "storico.db")
+    return percorso("storico.db")
 
 
 class Storico:

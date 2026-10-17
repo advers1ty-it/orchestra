@@ -65,7 +65,7 @@ async function send() {
 }
 
 async function cancel() {
-  btnCancel.disabled = true;
+  if (typeof btnStop !== "undefined" && btnStop) btnStop.disabled = true;
   try { await fetch("/api/cancel", { method: "POST" }); } catch {}
 }
 
@@ -321,8 +321,27 @@ on(input, "keydown", (e) => {
 });
 btnSend.onclick = send;
 if (btnAllega) btnAllega.disabled = !ready;
-btnCancel.onclick = cancel;
-btnReset.onclick = reset;
+if (typeof btnStop !== "undefined" && btnStop) btnStop.onclick = cancel;
+
+// Steer: inietta un messaggio al modello durante il lavoro
+// (steerBar/steerInput/steerSend sono dichiarati in core.js)
+function inviaSteer() {
+  const testo = steerInput.value.trim();
+  if (!testo) return;
+  steerInput.value = "";
+  fetch("/api/steer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ testo })
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) alert(d.error || "Steer fallito");
+  });
+  steerInput.focus();
+}
+if (steerSend) steerSend.onclick = inviaSteer;
+if (steerInput) steerInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); inviaSteer(); }
+});
 
 connect();
 // Opzioni si caricano QUI, non solo quando apri il pannello. I
@@ -364,6 +383,19 @@ function showVersion(v) {
 // La diagnosi dopo il fatto: ogni turno lascia una traccia su disco, e
 // qui si riapre "perché è andato com'è andato" senza ripeterlo. Una riga
 // per turno recente; al click, la sequenza esatta degli eventi.
+// Codici di esito in parole: l'utente legge "completato",
+// non "risposta_finale".
+function etichettaEsito(esito) {
+  return {
+    risposta_finale: "completato",
+    max_iterations: "fermato al limite",
+    canceled_da_should_continue: "annullato",
+    budget_exceeded: "budget finito",
+    gira_a_vuoto: "girava a vuoto",
+    troppi_errori_consecutivi: "troppi errori",
+    verifica_fallita: "verifica fallita",
+  }[esito || ""] || esito || "?";
+}
 async function caricaSideTracce() {
   const ul = $("side-tracce");
   if (!ul) return;
@@ -374,7 +406,7 @@ async function caricaSideTracce() {
     if (!tracce.length) {
       const li = document.createElement("li");
       li.className = "small dim";
-      li.textContent = "Nessuna traccia ancora.";
+      li.textContent = "Nessun compito registrato ancora: il primo apparirà qui.";
       ul.appendChild(li);
       return;
     }
@@ -389,7 +421,7 @@ async function caricaSideTracce() {
       const classe = esito === "risposta_finale" ? "ok" : "attenzione";
       const titolo = document.createElement("span");
       titolo.className = "side-testo";
-      titolo.textContent = `${quando} · ${esito} · ${t.tool_chiamate} tool`;
+      titolo.textContent = `${quando} · ${etichettaEsito(esito)} · ${t.tool_chiamate} tool`;
       const meta = document.createElement("span");
       meta.className = "side-meta";
       meta.textContent = t.errori ? `${t.errori} errori` : `${t.n_eventi} eventi`;
@@ -415,7 +447,7 @@ async function apriTraccia(id, btn) {
     intest.textContent =
       `#${t.riepilogo.id} · ${t.riepilogo.modello || "?"} · ` +
       `${t.riepilogo.iterazioni} iter · ${t.riepilogo.token} tok · ` +
-      `${t.riepilogo.durata_s.toFixed(1)}s · ${t.riepilogo.esito}`;
+      `${t.riepilogo.durata_s.toFixed(1)}s · ${etichettaEsito(t.riepilogo.esito)}`;
     det.appendChild(intest);
     const ol = document.createElement("ol");
     ol.className = "side-traccia-eventi";

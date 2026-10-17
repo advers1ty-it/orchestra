@@ -361,6 +361,8 @@ header select { max-width: 230px; }
   font-size: 12.5px;
 }
 .opzioni-riepilogo { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.gratis-gruppo { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 10px; }
+.gratis-gruppo:first-child { margin-top: 0; }
 
 /* Servizio e modello in testa al pannello Opzioni: sono la
    configurazione, e sepolti fra dodici chiavi sparivano. */
@@ -1253,7 +1255,21 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 #sidebar.ridotta .side-testa,
 #sidebar.ridotta .side-azioni,
 #sidebar.ridotta .side-sez,
-#sidebar.ridotta .side-msg { display: none; }
+#sidebar.ridotta .side-msg,
+#sidebar.ridotta .side-elenco,
+#sidebar.ridotta .side-cerca-campi { display: none; }
+
+/* Rotaia: solo a sidebar ridotta, un'icona per sezione. */
+.side-rail { display: none; }
+#sidebar.ridotta .side-rail {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 4px; align-items: center;
+}
+.side-rail button {
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  font-size: 17px; padding: 5px 7px; cursor: pointer;
+}
+.side-rail button:hover { border-color: var(--border); }
 
 #sidebar.ridotta .side-elenco {
   padding: 6px 4px;
@@ -1285,6 +1301,38 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 
 /* La stella sui fatti importanti: stessa forma del pin della cronologia,
    così vuol dire la stessa cosa — "questo resta in cima". */
+/* Modale della memoria: la lista in sidebar e' un sommario di una riga,
+   e leggerla lì non serve a nulla. Qui si sfoglia, si cerca, si corregge. */
+.mem-modal { position:fixed; inset:0; background:rgba(0,0,0,.78);
+  display:none; align-items:center; justify-content:center; z-index:2002; }
+.mem-modal.show { display:flex; }
+.mem-modal-box { background:var(--card,#14161c); color:var(--fg,#eee);
+  border:1px solid var(--border,#333); border-radius:12px;
+  width:880px; max-width:94vw; height:80vh; display:flex; flex-direction:column; padding:14px; }
+.mem-modal-corpo { flex:1; overflow-y:auto; min-height:0; }
+.mem-cerca-riga { display:flex; gap:6px; margin-bottom:10px; }
+.mem-cerca-riga input { flex:1; min-width:0; }
+.mem-lista { flex:1; overflow-y:auto; border:1px solid var(--border,#2c313a);
+  border-radius:8px; padding:6px; }
+.mem-item { display:flex; align-items:flex-start; gap:6px; padding:6px 8px;
+  border-bottom:1px solid var(--border,#262b33); font-size:12.5px; line-height:1.45; }
+.mem-item:last-child { border-bottom:0; }
+.mem-item.imp { background:rgba(255,196,0,.06); }
+.mem-item .stella { color:var(--accent); flex-shrink:0; width:14px; }
+.mem-item .txt { flex:1; min-width:0; white-space:pre-wrap; word-break:break-word; }
+.mem-item .via { color:var(--dim,#8a9099); font-size:10.5px; flex-shrink:0; }
+.mem-item .btns { display:flex; gap:4px; flex-shrink:0; }
+.mem-item .btns button { background:var(--panel-2,rgba(255,255,255,.05));
+  color:var(--fg,#eee); border:1px solid var(--border,#333); border-radius:6px;
+  font-size:11px; padding:3px 7px; cursor:pointer; }
+.mem-item .btns button:hover { background:var(--panel-3,rgba(255,255,255,.12)); }
+.mem-edit { display:none; width:100%; box-sizing:border-box; margin-top:4px;
+  font:inherit; font-size:12.5px; min-height:52px; resize:vertical; }
+.mem-edit.open { display:block; }
+.mem-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:10px; }
+.mem-foot button { font-size:12px; padding:6px 14px; }
+.mem-vuoto { padding:16px; text-align:center; color:var(--dim,#8a9099); font-size:12px; }
+
 .side-mem-imp {
   color: var(--accent);
   font-size: 11px;
@@ -1582,9 +1630,15 @@ select:disabled {
 }
 .side-tracce {
   flex: 1 1 0;
-  min-height: 30px;
+  min-height: 80px;
   overflow-y: auto;
 }
+/* Ripartizione sidebar: memoria e skill sono fisse e compatte (il vero
+   contenuto sta nei modali), le tracce prendono lo spazio che resta. */
+#side-sez-memoria { flex: 0 0 auto; }
+#side-sez-skill { flex: 0 0 auto; }
+#side-sez-tracce { flex: 2 1 0; }
+.side-traccia-dettaglio { max-height: 45%; overflow-y: auto; }
 
 /* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non
    basta: tiene interi i figli ma la sezione schiacciata resta più corta

@@ -40,17 +40,20 @@ from typing import Any
 SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL", "ORCHESTRA_REASONING", "ORCHESTRA_BUDGET", "ORCHESTRA_MAX_ITERS", "ORCHESTRA_CONTEXT_LIMIT")
 
 WRITABLE: dict[str, str] = {
+    # Ordine di visualizzazione: prima il predefinito, poi le chiavi
+    # con piano gratis, poi il resto. Scritte per nome, mai per
+    # posizione: riordinare non rompe niente.
     "OPENROUTER_API_KEY": "OpenRouter",
     "GROQ_API_KEY": "Groq",
-    "NVIDIA_API_KEY": "NVIDIA NIM",
-    "TOGETHER_API_KEY": "Together",
     "CEREBRAS_API_KEY": "Cerebras",
     "MISTRAL_API_KEY": "Mistral",
-    "HF_TOKEN": "Hugging Face",
+    "NVIDIA_API_KEY": "NVIDIA NIM",
+    "TOGETHER_API_KEY": "Together",
     "GEMINI_API_KEY": "Google AI Studio",
+    "HF_TOKEN": "Hugging Face",
     "OPENAI_API_KEY": "OpenAI",
-    "NOUS_API_KEY": "Nous Research (token)",
     "ARTIFICIAL_ANALYSIS_KEY": "Artificial Analysis",
+    "NOUS_API_KEY": "Nous Research (token manuale)",
     "ORCHESTRA_PROVIDER": "Provider predefinito",
     "ORCHESTRA_MODEL": "Modello predefinito",
     "ORCHESTRA_REASONING": "Livello reasoning",
@@ -68,6 +71,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     # ---- senza chiave, funzionano subito ----
     {
         "id": "ollama",
+        "gruppo": "Sul tuo computer",
         "nome": "Ollama",
         "costo": "gratis, sul tuo computer",
         "chiave": False,
@@ -77,10 +81,11 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "lmstudio",
+        "gruppo": "Sul tuo computer",
         "nome": "LM Studio",
         "costo": "gratis, sul tuo computer",
         "chiave": False,
-        "cosa": "Come Ollama, con un'interfaccia. Lo stesso motore, lo stesso nessun costo.",
+        "cosa": "Come Ollama ma con un'interfaccia grafica: modelli sul tuo computer, nessun costo, niente rete.",
         "requisiti": "LM Studio installato.",
         "come": " lmstudio.ai",
     },
@@ -98,26 +103,29 @@ FREE_SERVICES: list[dict[str, Any]] = [
     # niente, senza che nessuno dica perche'.
     {
         "id": "openrouter",
+        "gruppo": "Gratis con chiave",
         "nome": "OpenRouter",
         "costo": "quasi tutto gratis",
         "chiave": True,
-        "cosa": "Scelta enorme di modelli, e 16-17 varianti :free. Usata insieme a una a pagamento per il fallback.",
+        "cosa": "Scelta enorme di modelli, con molte varianti gratis. I piani gratis hanno limiti giornalieri: per un uso intenso serve una chiave con credito.",
         "requisiti": "Account. Serve una chiave.",
         "come": " openrouter.ai/keys",
-        "avvertenza": "I :free sono limitati a 20 richieste al minuto e 50 al giorno senza accredito; 1000 al giorno dopo 10 dollari di credito. Ecco perche' i benchmark si fermano con HTTP 429.",
+        "avvertenza": "I modelli gratis sono limitati a 20 richieste al minuto e 50 al giorno senza accredito; 1000 al giorno dopo 10 dollari di credito.",
     },
     {
         "id": "nvidia",
+        "gruppo": "Gratis con chiave",
         "nome": "NVIDIA Build",
         "costo": "gratis con chiave",
         "chiave": True,
-        "cosa": "Il free tier piu' generoso in numero di modelli, e modelli di punta recenti. Utile per il benchmark.",
+        "cosa": "Il piano gratis piu' ampio per numero di modelli, con modelli recenti di punta.",
         "requisiti": "Account NVIDIA Developer. Serve una chiave.",
         "come": " build.nvidia.com",
-        "avvertenza": "L'elenco contiene molti modelli ritirati: su 80, solo 6 rispondono davvero. Se un modello ti da' 404 o 410 e' quello, non Orchestra.",
+        "avvertenza": "Alcuni modelli elencati sono ritirati e rispondono 404 o 410: e' il catalogo, non un errore di Orchestra.",
     },
     {
         "id": "together",
+        "gruppo": "Gratis con chiave",
         "nome": "Together AI",
         "costo": "gratis con chiave, con limiti",
         "chiave": True,
@@ -127,15 +135,17 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "groq",
+        "gruppo": "Gratis con chiave",
         "nome": "Groq",
         "costo": "gratis con limiti",
         "chiave": True,
-        "cosa": "I piu' veloci in assoluto sui modelli che serve. Quattro modelli dichiarano di non fare tool-calling e vengono esclusi.",
+        "cosa": "I piu' veloci in assoluto sui modelli supportati. Quelli senza supporto agli strumenti non compaiono in Orchestra.",
         "requisiti": "Account. Serve una chiave.",
         "come": " console.groq.com/keys",
     },
     {
         "id": "cerebras",
+        "gruppo": "Gratis con chiave",
         "nome": "Cerebras",
         "costo": "gratis con limiti",
         "chiave": True,
@@ -145,6 +155,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "mistral",
+        "gruppo": "Gratis con chiave",
         "nome": "Mistral",
         "costo": "gratis con limiti",
         "chiave": True,
@@ -154,59 +165,63 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "huggingface",
+        "gruppo": "Gratis con chiave",
         "nome": "Hugging Face",
         "costo": "gratis con token, con limiti",
         "chiave": True,
-        "cosa": "Inferenza su migliaia di modelli open, con un free tier fra i piu' generosi in numero di richieste. Resta raggiungibile anche quando gli altri servizi ti bloccano.",
+        "cosa": "Inferenza su migliaia di modelli open, con un piano gratis fra i piu' ampi per numero di richieste.",
         "requisiti": "Account Hugging Face. Serve un token.",
         "come": " huggingface.co/settings/tokens",
-        "avvertenza": "L'API e' condivisa: quando e' carica risponde 'models are overloaded'. Non e' un modello scarso, e' una coda.",
+        "avvertenza": "L'API e' condivisa: quando e' molto usata risponde che i modelli sono sovraccarichi. Riprova dopo qualche minuto.",
     },
     {
         "id": "google",
+        "gruppo": "Gratis con chiave",
         "nome": "Google AI Studio",
         "costo": "gratis con chiave, con limiti",
         "chiave": True,
         "cosa": "Gemini. Il piano gratis con quota giornaliera, senza carta.",
         "requisiti": "Account Google. Serve una chiave.",
         "come": " aistudio.google.com/apikey",
-        "avvertenza": "Non e' Vertex AI: quello chiede un progetto GCP e una carta. Qui si parla solo di AI Studio.",
+        "avvertenza": "Vale solo per AI Studio. Vertex AI e' un altro servizio e chiede progetto e carta.",
     },
     {
         "id": "nous",
+        "gruppo": "Collegamento diretto",
         "nome": "Nous Research",
         "costo": "gratis con collegamento Orchestra, con limiti",
         "chiave": False,
         "cosa": "Accesso diretto all'inference API di Nous (Pareto, LFM, Gemini, ecc.), con il modello free nous/welcome e, su account, ai modelli a pagamento.",
-        "requisiti": "Collegamento automatico via Orchestra su questo computer, oppure NOUS_API_KEY impostato a mano.",
-        "come": " python -m orchestra.cli auth nous",
+        "requisiti": "Si collega da solo con il pulsante qui sotto, oppure con un token manuale messo in Servizi.",
+        "come": " premi «Collega Nous» qui sotto",
     },
 {
         "id": "anthropic",
+        "gruppo": "A pagamento",
         "nome": "Anthropic",
         "costo": "a pagamento",
         "chiave": True,
-        "cosa": "Claude nativo via Messages API. Richiede chiave e carta; modelli Claude 3.5 / opus / haiku.",
+        "cosa": "I modelli Claude diretti dal produttore.",
         "requisiti": "Account Anthropic con carta. Serve una chiave.",
         "come": " console.anthropic.com/settings/keys",
     },
     {
         "id": "openai",
+        "gruppo": "A pagamento",
         "nome": "OpenAI",
         "costo": "a pagamento",
         "chiave": True,
-        "cosa": "Per confronto: quanto paghi davvero quando un modello non basta. Non c'e' piano gratis.",
+        "cosa": "Il riferimento a pagamento, utile per confrontare quanto costano gli altri.",
         "requisiti": "Account con carta. Serve una chiave.",
         "come": " platform.openai.com/api-keys",
     },
 ]
 
 
-NOTA_FREE = ("Rilevato il 30 settembre 2026. I free tier cambiano spesso: "
-             "prima di basarci un prodotto, ricontrolla la pagina del "
-             "servizio. 'Gratis' vuol dire 'un piano gratis con limiti': "
-             "fuori Ollama e LM Studio, tutti gli altri chiedono una "
-             "chiave, e alcuni una carta.")
+NOTA_FREE = ("I piani gratis cambiano spesso: se un limite non torna, "
+             "ricontrolla la pagina del servizio. 'Gratis' vuol dire "
+             "'un piano gratis con limiti': fuori Ollama e LM Studio, "
+             "tutti gli altri chiedono una chiave, e alcuni una carta.")
 
 
 def _leggi_righe(path: str) -> list[str]:

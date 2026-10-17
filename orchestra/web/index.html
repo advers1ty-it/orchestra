@@ -76,7 +76,6 @@
   <button id="btn-side" class="ghost" title="Cronologia e skill (Ctrl+B)"
           aria-label="Apri il pannello laterale">&#9776;</button>
   <div class="grow"></div>
-  <button id="btn-capacita" class="ghost" title="Skill e strumenti">Capacit&agrave;</button>
   <button id="btn-opzioni" class="ghost" title="Chiavi API e servizi gratuiti">Opzioni</button>
   <button id="btn-bench" class="ghost">Benchmark</button>
   <button id="btn-goal" class="ghost" title="Obiettivo autonomo">Obiettivo</button>
@@ -124,10 +123,6 @@
         <option value="max">max</option>
       </select>
     <span id="scope-note" class="scope-note"></span>
-
-  <div class="dot" id="dot"></div>
-  <button id="btn-cancel" disabled>Annulla</button>
-  <button id="btn-reset">Nuova</button>
 </header>
 
 <!-- Permessi: l'agente vuole uscire dalla cartella di lavoro.
@@ -144,6 +139,7 @@
     <div class="permesso-permetti">
       <button id="permesso-una" class="primary">Solo questa volta</button>
       <button id="permesso-ses" class="ghost">Per questa sessione</button>
+      <button id="permesso-sempre" class="ghost">Sempre</button>
       <button id="permesso-mai" class="ghost pericolo">Mai</button>
     </div>
     <div class="permesso-nota dim small">La sessione dura due ore, poi la domanda
@@ -503,11 +499,17 @@
 
   <div class="centro">
 <aside id="sidebar" hidden>
+    <!-- Ridotta, la sidebar diventa questa rotaia: un'icona per sezione.
+         Il clic riapre e porta alla sezione. -->
+    <nav id="side-rail" class="side-rail" aria-label="Sezioni del pannello">
+      <button data-sez="side-elenco" title="Cronologia">🕘</button>
+      <button data-sez="side-sez-memoria" title="Memoria">🧠</button>
+      <button data-sez="side-sez-skill" title="Skill">🧰</button>
+      <button data-sez="side-sez-tracce" title="Tracce">📼</button>
+    </nav>
     <div class="side-testa">
       <div class="side-testata">
         <span class="side-titolo">Cronologia</span>
-        <button id="side-riduci" class="ghost side-x" title="Riduci il pannello"
-                aria-label="Riduci il pannello">&minus;</button>
       </div>
     </div>
 
@@ -523,9 +525,10 @@
              placeholder="Cerca nelle conversazioni..." spellcheck="false" />
     </div>
 
-    <div class="side-sez">
+    <div class="side-sez side-sez-memoria" id="side-sez-memoria">
       <div class="side-testata">
         <span class="side-titolo">Memoria</span>
+        <button id="side-mem-tutti" class="side-cap-btn" title="Sfoglia, cerca e correggi tutti i fatti indicizzati">Tutti i fatti</button>
       </div>
       <div class="side-mem-campi">
         <input id="side-mem-input" type="text" placeholder="Fatto da ricordare..." />
@@ -542,26 +545,20 @@
               <input id="memoria-percorso" />
             </div>
       </div>
-      <div class="side-mem-campi">
-        <input id="side-mem-cerca" type="text" placeholder="Cerca nella memoria..." />
-      </div>
-      <p class="small dim side-mem-stat" id="side-mem-stat"></p>
-      <ul id="side-mem-elenco" class="side-mem-elenco"></ul>
     </div>
 
-    <div class="side-sez">
+    <div class="side-sez side-sez-skill" id="side-sez-skill">
       <div class="side-testata">
         <span class="side-titolo">Skill</span>
         <button id="side-cap" class="side-cap-btn">Apri tutte le capacit&agrave;</button>
       </div>
-      <ul id="side-skill" class="side-skill"></ul>
     </div>
 
-    <div class="side-sez">
+    <div class="side-sez side-sez-tracce" id="side-sez-tracce">
       <div class="side-testata">
         <span class="side-titolo">Tracce</span>
       </div>
-      <p class="small dim">Perché un turno è andato com'è andato, senza ripeterlo.</p>
+      <p class="small dim">La scatola nera: cosa ha fatto l'agente in ogni compito — strumenti usati, errori, perché si è fermato. Clicca per riaprire, senza rifarlo.</p>
       <ul id="side-tracce" class="side-tracce"></ul>
       <div id="side-traccia-dettaglio" class="side-traccia-dettaglio" hidden></div>
     </div>
@@ -583,7 +580,14 @@
         <span aria-hidden="true">✓</span><span class="sr">Verifica</span>
       </button>
       <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
+      <div class="dot" id="dot" title="verde = pronto, giallo = al lavoro"></div>
       <button class="primary" id="btn-send" disabled>Invia</button>
+      <button class="ghost" id="btn-stop" title="Ferma il lavoro" aria-label="Ferma il lavoro" disabled>■</button>
+    </div>
+    <!-- steer: messaggio al modello mentre lavora (barra visibile solo durante il lavoro) -->
+    <div id="steer-bar" class="steer-bar" hidden>
+      <input id="steer-input" placeholder="Guida il modello mentre lavora…" autocomplete="off">
+      <button id="steer-send" class="ghost">Guida</button>
     </div>
     <!-- Gli allegati attesi stanno qui, SOPRA il campo: si vedono
          mentre scrivi, e il conto in token e' accanto al nome. Un
@@ -700,6 +704,26 @@
   </div>
   <div id="goal-output" class="goal-output"></div>
   <div id="goal-list" class="goal-list"></div>
+</div>
+<div id="mem-modal" class="mem-modal" hidden>
+  <div class="mem-modal-box">
+    <div class="panel-head">
+      <div><b>Memoria</b> <span class="dim">fatti indicizzati, sfoglia, cerca e correggi</span></div>
+      <div>
+        <button id="mem-trova" class="ghost" title="Cerca">&#8634;</button>
+        <button id="mem-chiudi" class="ghost">Chiudi</button>
+      </div>
+    </div>
+    <div class="mem-modal-corpo">
+      <div class="mem-cerca-riga">
+        <input id="mem-cerca" type="text" placeholder="Cerca nella memoria..." spellcheck="false" />
+        <button id="mem-annulla-cerca" class="ghost" title="Pulisci" hidden>&times;</button>
+      </div>
+      <p class="small dim" id="mem-stat"></p>
+      <div id="mem-lista" class="mem-lista"></div>
+      <p class="small dim" id="mem-msg"></p>
+    </div>
+  </div>
 </div>
 </body>
 </html>

@@ -951,6 +951,7 @@ class Session:
         if not self._busy:
             return False
         self._cancel.set()
+        self.agent.request_cancel()
         self.bridge.emit("cancel_requested", {})
         return True
 
@@ -975,6 +976,8 @@ class Session:
             self.agent.state.compactions = 0
             self.agent.state.stopped_because = ""
             self.agent.state.usage_by_model = {}
+            self.agent.state.steer_queue = []
+            self.agent.state.steer_count = 0
             # Nuova conversazione = nuova riga nello storico, ma la si crea
             # QUANDO c'è qualcosa da salvarci, non adesso. Prima la creava
             # subito (`_nuova_sessione_db`), e ogni "nuova chat" o reset
@@ -984,6 +987,10 @@ class Session:
             # Così la cronologia mostra solo conversazioni vere.
             self._sessione_id = None
         self.bridge.emit("reset", {})
+
+    def steer(self, testo: str) -> bool:
+        """Inietta un messaggio durante il turno in corso."""
+        return self.agent.steer(testo)
 
     def wait(self, timeout: float | None = None) -> bool:
         """Attende la fine del turno in corso. Per i test e lo shutdown."""

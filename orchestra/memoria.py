@@ -37,8 +37,21 @@ import re
 import threading
 import time
 from typing import Any
+from .dati import percorso
 
-PERCORSO_MEMORIA = os.path.join(os.path.dirname(__file__), "memory.md")
+def _percorso_memoria() -> str:
+    """Dove sta il file di memoria.
+
+    Nella cartella dati di Orchestra (vedi dati.py): un file che l'agente
+    modifica da solo non deve vivere dentro il repo sorgente, dove un
+    `git status` lo vede come modifica e un `git checkout` lo cancella.
+    Se il file c'e' gia' accanto al modulo (installazioni vecchie), si
+    legge da li' una volta e poi si scrive nel nuovo posto.
+    """
+    return percorso("memory.md")
+
+
+PERCORSO_MEMORIA = _percorso_memoria()
 
 # Quanto può essere lunga la memoria prima di essere tagliata. Non è un
 # limite artistico: sopra una certa dimensione la memoria ruba spazio al
@@ -284,6 +297,49 @@ class Memoria:
             if tolto:
                 self.scrivi("".join(fuori))
             return tolto
+
+    def modifica(self, vecchio: str, nuovo: str) -> bool:
+        """Sostituisce il testo di un fatto, tenendo origine e data.
+
+        `elimina` + `aggiungi` perderebbe la data (quella nuova sarebbe
+        oggi) e l'origine, che sono l'unica traccia di quando e da dove
+        il fatto e' arrivato. Qui si riscrive solo la parte di testo e si
+        lasciano intatti i marcatori in coda.
+
+        Ritorna False se il fatto non c'e', o se il nuovo testo e' vuoto.
+        """
+        nuovo = " ".join((nuovo or "").split()).strip()
+        vecchio = (vecchio or "").strip()
+        if not nuovo or not vecchio:
+            return False
+        with self._lock:
+            testo = self.leggi()
+            righe = testo.splitlines(keepends=True)
+            fuori, fatto = [], False
+            for riga in righe:
+                corpo = riga.strip().lstrip("-*").strip()
+                if not fatto and (corpo == vecchio or vecchio in corpo):
+                    # la coda e' "  _origine_  <!-- data -->": la si stacca
+                    # dal corpo per riattaccarla al testo nuovo.
+                    coda = ""
+                    m = re.search(r"(\s*_[^_]+_\s*<!--.*?-->\s*|\s*<!--.*?-->\s*|\s*_[^_]+_\s*)$", corpo)
+                    if m:
+                        coda = m.group(1)
+                    indent = riga[:len(riga) - len(riga.lstrip())]
+                    # il terminatore di riga vive in `riga`, non in
+                    # `corpo` (che e' strippato): va riattaccato a mano,
+                    # o il fatto modificato si incolla al successivo.
+                    term = riga[len(riga.rstrip("\r\n")):]
+                    fuori.append(f"{indent}- {nuovo}{coda}{term}")
+                    fatto = True
+                    continue
+                fuori.append(riga)
+            if fatto:
+                self.scrivi("".join(fuori))
+                # il set anti-duplicato ha in cache il testo vecchio:
+                # va buttato o il fatto modificato resta "gia' visto".
+                self._visti = None
+            return fatto
 
     def fatti(self) -> list[str]:
         """I fatti uno per uno, senza la marcatura.
