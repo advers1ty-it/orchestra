@@ -49,9 +49,18 @@ if _os.path.isdir(_tools_dir) and _os.path.isfile(_tools_file):
     except Exception:
         pass
 
+# Se la cartella orchestra/tools/ esiste ma manca __init__.py (es. aggiornamento
+# parziale da GitHub), la crea vuota così Python la riconosce come package.
+_tools_init = _os.path.join(_tools_dir, "__init__.py")
+if _os.path.isdir(_tools_dir) and not _os.path.isfile(_tools_init):
+    try:
+        open(_tools_init, "w", encoding="utf-8").close()
+    except Exception:
+        pass
+
 from .tools import SYSTEM_PROMPT, default_registry
 
-__version__ = "0.5.16"
+__version__ = "0.5.17"
 
 __all__ = [
     "LLMResponse", "Message", "Tool", "ToolCall", "ToolRegistry",
