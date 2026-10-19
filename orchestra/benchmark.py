@@ -36,6 +36,7 @@ import os
 import re
 import shutil
 import importlib
+import threading
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable
@@ -409,8 +410,19 @@ def run_task(
     registry: ToolRegistry | None = None,
     workdir: str | None = None,
     max_iterations: int = 10,
+    on_progress: Callable[[], None] | None = None,
+    timeout_s: float = 1500,
 ) -> RunResult:
-    """Esegue un task e verifica il risultato. Non solleva mai."""
+    """Esegue un task e verifica il risultato. Non solleva mai.
+
+    Con un tetto di tempo: se l'agent non finisce entro `timeout_s`
+    (modello inchiodato, streaming appeso), il task fallisce invece
+    di bloccare tutto il benchmark. Il thread orfano resta daemon e
+    muore col processo; la variabile ORCHESTRA_ROOT viene comunque
+    ripristinata, quindi quel thread — se mai si sblocca — risolve
+    la root del task successivo. E' un compromesso: l'alternativa e'
+    non avere nessun tetto, e un benchmark che non finisce mai.
+    """
     from .providers import ProviderError, build_provider
 
     work = workdir or os.path.join(
@@ -418,6 +430,23 @@ def run_task(
     )
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work, exist_ok=True)
+    # Potatura: le cartelle dei run vecchi restano per diagnosi, ma non
+    # per sempre — trecento run da qualche KB l'uno sono disordine, non
+    # storia. Oltre i sette giorni si buttano, al meglio (mai un errore).
+    try:
+        _potatura = os.path.dirname(work)
+        _adesso = time.time()
+        for _nome in os.listdir(_potatura):
+            _p = os.path.join(_potatura, _nome)
+            if not os.path.isdir(_p) or _p == work:
+                continue
+            try:
+                if _adesso - os.path.getmtime(_p) > 7 * 86400:
+                    shutil.rmtree(_p, ignore_errors=True)
+            except OSError:
+                pass
+    except OSError:
+        pass
     prev_root = os.environ.get("ORCHESTRA_ROOT")
     os.environ["ORCHESTRA_ROOT"] = work
 
@@ -426,9 +455,42 @@ def run_task(
         if task.setup:
             task.setup(work)
         prov = build_provider(provider_name, model=model, env=env)
+        def _segnala(kind: str, data: dict) -> None:
+            # Ogni evento e' vita: il watchdog del benchmark misura
+            # l'attivita' vera (per iterazione), non il completamento
+            # del task. Senza, un task lento di 10 minuti sembra fermo.
+            if on_progress is not None:
+                try:
+                    on_progress()
+                except Exception:
+                    pass
         agent = Agent(prov, registry or default_registry(), BENCH_PROMPT,
-                      LoopConfig(max_iterations=max_iterations, context_limit=60_000))
-        agent.run(task.prompt)
+                      LoopConfig(max_iterations=max_iterations, context_limit=60_000),
+                      on_event=_segnala if on_progress is not None else None)
+        esito: list = []
+        def _gira() -> None:
+            try:
+                agent.run(task.prompt)
+            except Exception as e:  # noqa: BLE001 - vedi sotto, non si perde
+                esito.append(e)
+        filo = threading.Thread(target=_gira, daemon=True,
+                                name=f"bench-{task.id}")
+        filo.start()
+        filo.join(timeout=timeout_s)
+        if filo.is_alive():
+            if timeout_s < 90:
+                quanto = f"{int(timeout_s)} secondi"
+            else:
+                quanto = f"{int(timeout_s // 60)} minuti"
+            return RunResult(
+                model=model, task_id=task.id, category=task.category,
+                passed=False, detail="", seconds=time.time() - t0,
+                prompt_tokens=0, completion_tokens=0, cost_usd=0.0,
+                tool_calls=0, tool_errors=0, stopped_because="timeout",
+                error=f"timeout: task non finito in {quanto}",
+            )
+        if esito:
+            raise esito[0]
         st = agent.state
         passed, detail = task.verify(work)
         return RunResult(

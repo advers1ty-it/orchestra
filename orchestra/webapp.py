@@ -750,9 +750,13 @@ class OrchestraApp:
                         self._bench["modelli"].append(name)
                     self._bench["last_progress"] = time.monotonic()
                     for t in tasks:
+                        def _avanza(b=self._bench):
+                            # Ogni evento dell'agent e' un passo: il
+                            # watchdog misura vita vera, non task finiti.
+                            b["last_progress"] = time.monotonic()
                         r = run_task(t, provider_name=self.env.get("ORCHESTRA_PROVIDER", "openrouter"),
                                      model=mid, env=dict(os.environ, **self.env),
-                                     max_iterations=10)
+                                     max_iterations=10, on_progress=_avanza)
                         results.append(r)
                         if r.unusable:
                             # il provider lo riserva ad altri client: inutile
