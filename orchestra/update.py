@@ -17,9 +17,17 @@ ripiego se un giorno il repo tornasse privato.
 
 from __future__ import annotations
 
+import os
+import sys
+
+if __name__ == "__main__" and os.path.dirname(os.path.abspath(__file__)) in sys.path:
+    # Eseguito come file, la sua cartella e' in sys.path e copre la
+    # stdlib (orchestra/types.py oscura types): si toglie di mezzo
+    # prima di qualsiasi altro import.
+    sys.path.remove(os.path.dirname(os.path.abspath(__file__)))
+
 import io
 import json
-import os
 import shutil
 import tempfile
 import urllib.request
@@ -76,9 +84,22 @@ def radice_installazione() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def versione_locale() -> str:
-    from . import __version__
-    return __version__
+def versione_locale(root: str | None = None) -> str:
+    """Versione installata, letta dal file senza importare l'app.
+
+    Non usare import qui: questo modulo deve girare anche quando l'app
+    e' rotta (e' proprio allora che l'update serve di piu').
+    """
+    base = os.path.abspath(root or radice_installazione())
+    p = os.path.join(base, "orchestra", "__init__.py")
+    try:
+        with open(p, encoding="utf-8") as fh:
+            testo = fh.read()
+    except OSError:
+        return "sconosciuta"
+    import re
+    m = re.search(r"""__version__\s*=\s*["']([^"']+)["']""", testo)
+    return m.group(1) if m else "sconosciuta"
 
 
 def leggi_token() -> str:
@@ -136,12 +157,13 @@ def ultima_release(repo: str, token: str | None) -> InfoRelease:
     return InfoRelease(tag=tag, versione=versione_da_tag(tag), zip_url=zip_url)
 
 
-def controlla(repo: str, token: str | None = None) -> dict:
+def controlla(repo: str, token: str | None = None,
+              root: str | None = None) -> dict:
     """Dice se c'e' un aggiornamento, senza scaricare niente."""
     if token is None:
         token = token_se_disponibile()
     rel = ultima_release(repo, token)
-    loc = versione_locale()
+    loc = versione_locale(root)
     return {"locale": loc, "remota": rel.versione, "tag": rel.tag,
             "aggiornamento": rel.versione != loc, "zip_url": rel.zip_url}
 
@@ -171,8 +193,22 @@ def _radice_zip(nomi: list[str]) -> str:
     return radice + "/"
 
 
+# Estensioni di codice: solo queste partecipano alla pulizia dei file
+# obsoleti. Dati, log, chiavi e stato (.md/.db/.json/.log/.env/...)
+# non si toccano mai, nemmeno se non sono piu' nella release.
+_EXT_CODICE = {".py", ".pyw", ".js", ".jsx", ".ts", ".html", ".htm",
+               ".css", ".bat", ".cmd", ".ps1"}
+
+
 def applica(zip_path: str, root: str | None = None) -> dict:
-    """Applica uno zip release sopra root, con backup e conserve."""
+    """Applica uno zip release sopra root, con backup e conserve.
+
+    Oltre a copiare i file nuovi, rimuove il codice obsoleto: file con
+    estensione di codice che non sono piu' nella release e non sono
+    conservati (es. orchestra/tools.py dopo il passaggio a tools/).
+    Senza questa pulizia, un file vecchio resta accanto alla cartella
+    nuova e Python importa quello sbagliato — app morta all'avvio.
+    """
     root = os.path.abspath(root or radice_installazione())
     with zipfile.ZipFile(zip_path) as z:
         nomi = z.namelist()
@@ -204,9 +240,39 @@ def applica(zip_path: str, root: str | None = None) -> dict:
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(os.path.join(dp, fn), dst)
                     copiati.append(rel_path)
+            # --- pulizia del codice obsoleto ---
+            nuovi = set()
+            for n in nomi:
+                if n.startswith(base) and not n.endswith("/"):
+                    nuovi.add(os.path.normpath(n[len(base):]))
+            top_zip = {p.split(os.sep)[0] for p in nuovi}
+            nome_backup = os.path.basename(backup)
+            rimossi = []
+            for dp, _dirs, files in os.walk(root):
+                rel_dp = os.path.relpath(dp, root)
+                if rel_dp == ".":
+                    top = None  # file in radice: si valutano uno a uno
+                else:
+                    top = rel_dp.split(os.sep)[0]
+                    if top == nome_backup or top not in top_zip:
+                        continue
+                for fn in files:
+                    rel_path = os.path.normpath(os.path.join(rel_dp, fn))
+                    if rel_path in nuovi or _conservare(rel_path):
+                        continue
+                    if os.path.splitext(fn)[1].lower() not in _EXT_CODICE:
+                        continue
+                    try:
+                        os.remove(os.path.join(dp, fn))
+                        rimossi.append(rel_path)
+                    except OSError:
+                        pass
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-    return {"file": len(copiati), "backup": backup if os.path.isdir(backup) else ""}
+    esito = {"file": len(copiati), "backup": backup if os.path.isdir(backup) else ""}
+    if rimossi:
+        esito["rimossi"] = rimossi
+    return esito
 
 
 def aggiorna(repo: str, token: str | None = None,
@@ -214,7 +280,7 @@ def aggiorna(repo: str, token: str | None = None,
     """Controlla, scarica e applica. Torna il resoconto."""
     if token is None:
         token = token_se_disponibile()
-    info = controlla(repo, token)
+    info = controlla(repo, token, root=root)
     if not info["aggiornamento"]:
         return {"aggiornato": False, **info}
     fd, tmpzip = tempfile.mkstemp(suffix=".zip", prefix="orchestra-rel-")
@@ -228,3 +294,48 @@ def aggiorna(repo: str, token: str | None = None,
         except OSError:
             pass
     return {"aggiornato": True, **info, **esito}
+
+
+if __name__ == "__main__":
+    # Uso standalone: `python orchestra/update.py --auto --root <dir>`.
+    # Non importa l'app di proposito: deve girare anche quando l'app
+    # e' rotta (e' proprio allora che serve aggiornare).
+    import argparse
+    _p = argparse.ArgumentParser(prog="update.py",
+                                 description="Aggiorna Orchestra da GitHub.")
+    _p.add_argument("--auto", action="store_true",
+                    help="aggiorna solo se c'e' una versione nuova")
+    _p.add_argument("--check", action="store_true",
+                    help="mostra locale/remota senza scaricare")
+    _p.add_argument("--repo", default="advers1ty-it/orchestra")
+    _p.add_argument("--root", default=None,
+                    help="cartella installazione (default: directory corrente)")
+    _p.add_argument("--token", default=None)
+    _a = _p.parse_args()
+    _root = os.path.abspath(_a.root or os.getcwd())
+    try:
+        if _a.check:
+            _info = controlla(_a.repo, _a.token, root=_root)
+            print(f"locale {_info['locale']} · remota {_info['remota']}"
+                  + (" · AGGIORNAMENTO DISPONIBILE" if _info["aggiornamento"]
+                     else " · aggiornato"))
+        elif _a.auto:
+            _info = controlla(_a.repo, _a.token, root=_root)
+            if not _info["aggiornamento"]:
+                print(f"già aggiornato ({_info['locale']})")
+            else:
+                print(f"aggiornamento {_info['locale']} -> {_info['remota']}...")
+                _esito = aggiorna(_a.repo, _a.token, root=_root)
+                print(f"aggiornato alla {_esito['remota']} ({_esito['file']} file)")
+                for _r in _esito.get("rimossi") or []:
+                    print(f"  rimosso obsoleto: {_r}")
+        else:
+            _esito = aggiorna(_a.repo, _a.token, root=_root)
+            if not _esito["aggiornato"]:
+                print(f"già aggiornato ({_esito['locale']})")
+            else:
+                print(f"aggiornato {_esito['locale']} -> {_esito['remota']} "
+                      f"({_esito['file']} file)")
+    except UpdateError as _e:
+        print(f"update: {_e}", file=sys.stderr)
+        sys.exit(1)

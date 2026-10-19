@@ -143,6 +143,44 @@ class ToolRegistry:
     def nomi_attivi(self) -> list[str]:
         return sorted(self._attivi)
 
+    # ---- alias inglesi: Session e Agent parlano questa API ----
+    def register(self, tool: Tool, *, active: bool = True) -> "ToolRegistry":
+        self.registra(tool)
+        if active:
+            self.attiva(tool.name)
+        return self
+
+    def get(self, nome: str) -> Tool | None:
+        return self.tool(nome)
+
+    def all_names(self) -> list[str]:
+        return sorted(self._tool)
+
+    def activate(self, *names: str) -> None:
+        for n in names:
+            self.attiva(n)
+
+    def deactivate(self, *names: str) -> None:
+        for n in names:
+            self.disattiva(n)
+
+    @property
+    def active(self) -> list[Tool]:
+        return [self._tool[n] for n in sorted(self._attivi) if n in self._tool]
+
+    def api_payload(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.schema,
+                },
+            }
+            for t in self.active
+        ]
+
 
 # ---------------------------------------------------------------------------
 # SYSTEM_PROMPT

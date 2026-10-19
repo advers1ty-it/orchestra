@@ -83,7 +83,13 @@ exit /b 0
 
 :aggiorna
 echo  Controllo aggiornamenti...
-"%PYEXE%" -m orchestra.cli update --auto
+rem Standalone di proposito: non importa l'app, cosi' aggiorna anche
+rem quando l'app e' rotta (e' proprio allora che serve).
+if exist "%CD%\orchestra\update.py" (
+  "%PYEXE%" "%CD%\orchestra\update.py" --auto --root "%CD%"
+) else (
+  "%PYEXE%" -m orchestra.cli update --auto
+)
 if errorlevel 1 echo  [AVVISO] Aggiornamento non riuscito, continuo con la versione locale.
 exit /b 0
 
