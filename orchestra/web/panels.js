@@ -227,6 +227,7 @@ let benchTimer = null;
 function openBench() {
   benchPanel.classList.remove("hidden");
   pollBench();
+  caricaRouting();
 }
 function closeBench() {
   benchPanel.classList.add("hidden");
@@ -1747,6 +1748,40 @@ function scegliModello() {
 }
 
 on($("routing-go"), "click", scegliModello);
+
+// Interruttore dell'automatico: la scelta manuale dal menu in alto lo
+// spegne, da qui si riaccende. Senza, il menu sarebbe decorativo.
+async function caricaRouting() {
+  const box = $("routing-auto");
+  if (!box) return;
+  try {
+    const r = await fetch("/api/routing");
+    const d = await r.json();
+    if (r.ok) box.checked = !!d.routing;
+  } catch (e) { /* resta com'e' */ }
+}
+on($("routing-auto"), "change", async () => {
+  const box = $("routing-auto");
+  const out = $("routing-out");
+  try {
+    const r = await fetch("/api/routing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attivo: !!box.checked }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (out) out.textContent = d.error || "errore";
+      box.checked = !box.checked;
+      return;
+    }
+    box.checked = !!d.routing;
+    if (out) out.textContent = d.routing ? "automatica accesa" : "automatica spenta: resta il modello scelto";
+  } catch (e) {
+    if (out) out.textContent = "connessione fallita: " + e;
+    box.checked = !box.checked;
+  }
+});
 
 // -------------------------------------------------------------- Prior
 // L'API /api/prior esisteva da prima ma nessuno la chiamava: la

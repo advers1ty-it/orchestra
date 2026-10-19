@@ -1347,6 +1347,13 @@ class Handler(BaseHTTPRequestHandler):
             # task ha sbagliato" senza doverlo ripetere.
             from .traccia import ultime
             self._json({"tracce": ultime(limite=50)})
+        elif path == "/api/routing":
+            # Stato dell'instradamento automatico (il POST sta in do_POST).
+            if self.app.session is None:
+                self._json({"error": "nessuna sessione"}, 409)
+                return
+            self._json({"routing": bool(
+                getattr(self.app.session, "_routing_attivo", False))})
         elif path.startswith("/api/tracce/"):
             try:
                 tid = int(path.rsplit("/", 1)[-1])
@@ -2384,7 +2391,32 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:  # noqa: BLE001 - chiave o provider
                 self._json({"error": f"{type(e).__name__}: {e}"}, 400)
                 return
-            self._json({"ok": True, "model": model_id})
+            # Scelta manuale: da qui il modello resta. L'instradamento
+            # automatico risceglierebbe a ogni invio (spesso il vecchio),
+            # rendendo il menu una decorazione: si spegne, e si riaccende
+            # dal pannello Benchmark.
+            routing = True
+            if self.app.session is not None:
+                try:
+                    self.app.session.instradamento_attivo(False)
+                    routing = False
+                except Exception:
+                    pass
+            self._json({"ok": True, "model": model_id, "routing": routing})
+        elif path == "/api/routing":
+            # POST {attivo: bool}: interruttore dell'instradamento
+            # automatico (lo stato si legge in GET).
+            if self.app.session is None:
+                self._json({"error": "nessuna sessione"}, 409)
+                return
+            attivo = bool((body.get("attivo") if isinstance(body, dict) else None))
+            try:
+                self.app.session.instradamento_attivo(attivo)
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": str(e)}, 400)
+                return
+            self._json({"ok": True, "routing": bool(
+                getattr(self.app.session, "_routing_attivo", False))})
         elif path == "/api/bench":
             sample = body.get("sample", 3)
             try:

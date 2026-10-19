@@ -332,6 +332,7 @@ class Session:
                 "stopped_because": st.stopped_because,
                 "usage_by_model": dict(st.usage_by_model),
                 "messages": messaggi,
+                "routing": bool(self._routing_attivo),
             }
 
     def set_system_prompt(self, prompt: str) -> None:

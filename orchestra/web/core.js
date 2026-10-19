@@ -517,6 +517,13 @@ function handle(kind, d) {
       // primo: e' l'unico evento che blocca tutto il resto.
       mostraPermesso(d);
       break;
+    case "model_changed":
+      // Il modello e' cambiato da solo (router o fallback): il bottone
+      // in alto deve dirlo, altrimenti mostra il vecchio mentre il
+      // nuovo sta gia' lavorando.
+      loadModels();
+      addText("system", `modello → ${d.model || "?"} (automatico)`);
+      break;
     case "turn_start":
       // segnalava l'inizio del turno. Non crea piu' nulla: il blocco
       // finiva sopra il messaggio dell'utente e la risposta finiva dentro.
@@ -927,8 +934,10 @@ on(modelPick, "change", async () => {
     const d = await r.json();
     if (!r.ok) { addText("error", d.error || `errore ${r.status}`); return; }
     // la conversazione continua, ma annotiamo il cambio: senza, domani non
-    // si sa che metà della chat l'ha scritta un modello diverso
-    addText("system", `modello → ${id}`);
+    // si sa che metà della chat l'ha scritta un modello diverso.
+    // La scelta manuale spegne l'automatico (vedi /api/model): lo si
+    // scrive, o sembra che il menu non faccia niente al turno dopo.
+    addText("system", d.routing === false ? `modello → ${id} (automatico spento)` : `modello → ${id}`);
     // Il limite di compattazione segue il modello (75% della sua
     // finestra): senza ricaricare, la nota nelle Opzioni mostra il
     // valore vecchio e sembra che il cambio non faccia niente.
