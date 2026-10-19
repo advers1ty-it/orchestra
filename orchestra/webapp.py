@@ -32,6 +32,8 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+import shutil
+
 from . import __version__
 from .agent import LoopConfig
 from .providers import (ProviderError, ambiente, build_provider,
@@ -970,10 +972,25 @@ class OrchestraApp:
             self._storico = None
 
     @classmethod
+    def _pulizia_tools_obsoleti(cls) -> None:
+        """Rimuove il vecchio orchestra/tools.py se la cartella orchestra/tools/
+        esiste gia'. Senza questo, Python sceglie il file e ignora il package,
+        rompendo l'import di orchestra.tools.memoria e degli altri tool."""
+        here = os.path.dirname(os.path.abspath(__file__))
+        vecchio_file = os.path.join(here, "tools.py")
+        nuova_cartella = os.path.join(here, "tools")
+        if os.path.isfile(vecchio_file) and os.path.isdir(nuova_cartella):
+            try:
+                os.remove(vecchio_file)
+            except OSError:
+                pass  # se non si puo' rimuovere, l'errore emergera' dopo
+
+    @classmethod
     def create(cls) -> "OrchestraApp":
         """Costruisce l'app, o la mette in stato di errore se il provider
         non e' configurato. La UI deve poter mostrare l'errore invece di
         fallire all'avvio."""
+        cls._pulizia_tools_obsoleti()
         env = ambiente(ENV_PATH)
         try:
             app = cls(
