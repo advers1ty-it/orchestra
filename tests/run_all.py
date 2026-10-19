@@ -33,6 +33,9 @@ SUITES = [
     ("sessione", "test_session.py", True),
     ("webapp", "test_webapp.py", True),
     ("webapp-modelli", "test_webapp_models.py", True),
+    # Ogni import deve risolvere su un file tracciato: _guard.py ha
+    # dimostrato che un file ignorato rompe solo le installazioni.
+    ("file-tracciati", "test_file_tracciati.py", True),
     ("frontend", "test_frontend_split.py", True),
     ("ui", "test_ui.py", True),
     ("istruzioni", "test_istruzioni.py", True),

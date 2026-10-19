@@ -17,7 +17,7 @@
 .prova/
 .venv/
 _ goals_fallback/
-_*.py
+/_*.py
 __pycache__/
 _bench/
 _delega_prova/
