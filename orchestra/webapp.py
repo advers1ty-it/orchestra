@@ -1555,6 +1555,17 @@ class Handler(BaseHTTPRequestHandler):
                 "active": [t.name for t in reg.active],
                 "total": len(reg.all_names()),
             })
+        elif path == "/api/nous/auth/disconnect":
+            # Scollega: dimentica il token device-flow. La chiave manuale
+            # in .env non si tocca (e' configurazione, non collegamento).
+            from . import nous_auth
+            try:
+                tolto = nous_auth.rimuovi_auth(self.app.env)
+            except Exception:
+                tolto = False
+            self.app._nous_flow = None
+            self._json({"ok": True, "disconnected": bool(tolto)})
+            return
         elif path == "/api/nous/auth/status":
             from . import nous_auth
             token, base = nous_auth.get_nous_credentials(self.app.env)

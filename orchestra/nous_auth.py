@@ -168,6 +168,30 @@ def _refresh(auth: dict[str, Any], path: Path) -> dict[str, Any]:
     return auth
 
 
+def refresh_forzato(env: dict[str, str] | None = None) -> str | None:
+    """Rinnova il token Nous adesso, senza guardare la scadenza.
+
+    Serve a chi ha appena preso un 401: il token in memoria e' morto
+    ma quello sul disco dice di essere ancora valido (orologi, skew,
+    revoche). Non solleva mai: torna il token nuovo o None, e il
+    chiamante decide (di solito: riprova una volta, poi errore vero).
+
+    Con NOUS_API_KEY manuale non fa niente: quella chiave non si
+    rinnova, se e' sbagliata e' sbagliata.
+    """
+    env = env or {}
+    if str(env.get("NOUS_API_KEY") or os.environ.get("NOUS_API_KEY", "")).strip():
+        return None
+    auth, path = load_auth(env)
+    if not auth or not str(auth.get("refresh_token") or "").strip():
+        return None
+    try:
+        auth = _refresh(auth, path)
+    except Exception:
+        return None
+    return str(auth.get("access_token") or "").strip() or None
+
+
 def get_nous_credentials(env: dict[str, str] | None = None) -> tuple[str | None, str | None]:
     """Restituisce (token, base_url) oppure (None, None). Non solleva mai."""
     env = env or {}

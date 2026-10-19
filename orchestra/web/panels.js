@@ -1281,7 +1281,15 @@ function schedaGratis(s) {
       btn.disabled = true;
       stato.textContent = "avvio…";
       try {
-        const r = await fetch("/api/nous/auth/start", { method: "POST" });
+        // Ricollega deve ripartire da zero: senza force, il server
+        // vede il token vecchio e risponde "già collegato" — il
+        // bottone sembrava solo ricaricare la pagina.
+        const corpo = gia ? { force: true } : {};
+        const r = await fetch("/api/nous/auth/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpo),
+        });
         const dd = await leggiJson(r);
         if (!r.ok) {
           stato.textContent = "errore: " + (dd.error || r.status);
@@ -1322,6 +1330,29 @@ function schedaGratis(s) {
     });
     box.appendChild(btn);
     box.appendChild(stato);
+    if (gia) {
+      const scollega = el("button", "ghost", "Scollega");
+      scollega.title = "Dimentica il collegamento (la chiave manuale in .env resta)";
+      scollega.addEventListener("click", async () => {
+        if (!confirm("Scollegare Nous Research da questo computer?")) return;
+        scollega.disabled = true;
+        try {
+          const r = await fetch("/api/nous/auth/disconnect", { method: "POST" });
+          const dd = await leggiJson(r);
+          if (!r.ok || !dd.disconnected) {
+            stato.textContent = "errore: " + (dd.error || "niente da scollegare");
+            scollega.disabled = false;
+            return;
+          }
+          stato.textContent = "scollegato";
+          caricaOpzioni();
+        } catch (e) {
+          stato.textContent = "connessione fallita: " + e;
+          scollega.disabled = false;
+        }
+      });
+      box.appendChild(scollega);
+    }
     d.appendChild(box);
   }
   return d;

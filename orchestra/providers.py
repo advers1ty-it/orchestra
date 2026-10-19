@@ -17,6 +17,7 @@ import shutil
 import sys
 import urllib.request
 import urllib.error
+from collections.abc import Callable
 from typing import Any
 
 from .types import LLMResponse, Message, ToolCall, new_id
@@ -135,6 +136,7 @@ class OpenAICompatAdapter:
         name: str = "openai-compat",
         timeout: int = 120,
         extra_headers: dict[str, str] | None = None,
+        refresh_key: Callable[[], str | None] | None = None,
     ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -142,10 +144,32 @@ class OpenAICompatAdapter:
         self.model = model
         self.timeout = timeout
         self.extra_headers = extra_headers or {}
+        # Chiave di scorta: su 401 la si prova una volta prima di
+        # arrendersi (token Nous scaduto a server acceso, vedi sotto).
+        self.refresh_key = refresh_key
+
+    def _chiave_fresca(self) -> bool:
+        """Chiede una chiave nuova e la installa. True se e' cambiata.
+
+        Solo per provider con rinnovo (Nous): gli altri non passano
+        refresh_key e qui non si fa niente. Non solleva mai: se il
+        rinnovo fallisce, il chiamante segnala il 401 originale.
+        """
+        if self.refresh_key is None:
+            return False
+        try:
+            nuova = self.refresh_key()
+        except Exception:
+            return False
+        if nuova and nuova != self.api_key:
+            self.api_key = nuova
+            return True
+        return False
 
     # -- trasporto ---------------------------------------------------------
 
-    def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post(self, path: str, payload: dict[str, Any],
+              _retry: bool = True) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
         body = json.dumps(payload).encode("utf-8")
         headers = {
@@ -166,6 +190,11 @@ class OpenAICompatAdapter:
                 detail = e.read().decode("utf-8")[:500]
             except Exception:
                 pass
+            # 401 con rinnovo: il token e' scaduto mentre il server era
+            # acceso (l'adapter nasce col token di allora). Una sola
+            # seconda chance con la chiave fresca, poi l'errore vero.
+            if e.code == 401 and _retry and self._chiave_fresca():
+                return self._post(path, payload, _retry=False)
             # "only available on agentic harnesses": il provider riserva il
             # modello a un elenco chiuso di client. Non e' un errore da
             # ritentare e non dice niente sulla qualita' del modello, quindi
@@ -301,7 +330,7 @@ class OpenAICompatAdapter:
             return risposta
 
     def _post_stream(self, path: str, payload: dict[str, Any],
-                     emetti) -> LLMResponse:
+                     emetti, _retry: bool = True) -> LLMResponse:
         """Fa la chiamata in streaming e ricompone la risposta.
 
         I chunk arrivano come `data: {...}` e finiscono con `data: [DONE]`.
@@ -330,6 +359,11 @@ class OpenAICompatAdapter:
             # provider non ha.
             if e.code == 400 and "stream" in (detail or "").lower():
                 raise _StreamNonSupportato(detail)
+            # Come in _post: un 401 puo' essere il token scaduto a server
+            # acceso. Nessun chunk e' ancora partito, quindi si puo'
+            # riaprire lo stream da capo con la chiave fresca, una volta.
+            if e.code == 401 and _retry and self._chiave_fresca():
+                return self._post_stream(path, payload, emetti, _retry=False)
             raise ProviderError(
                 f"{self.name}: HTTP {e.code} — {detail or e.reason}",
                 retryable=e.code in RETRYABLE_STATUS,
@@ -842,6 +876,9 @@ def build_provider(
             api_key=token,
             model=model or default_model,
             name=name,
+            # Il token scade a server acceso: su 401 si rinnova e si
+            # riprova una volta, invece di chiedere un riavvio.
+            refresh_key=lambda: nous_auth.refresh_forzato(env),
         )
     if name not in KNOWN_PROVIDERS:
         raise KeyError(f"provider sconosciuto: {name}. Disponibili: {list(KNOWN_PROVIDERS)}")
