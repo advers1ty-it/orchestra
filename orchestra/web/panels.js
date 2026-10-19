@@ -1093,7 +1093,21 @@ function disegnaPermessi(st) {
     });
   }
   for (const p of st.negati || []) {
-    aggiungi("Negato: " + p, "ko");
+    const riga = aggiungi("Negato: " + p, "ko");
+    const dim = el("button", "ghost piccolo", "Dimentica");
+    dim.title = "Dimentica il 'mai': la prossima volta chiede di nuovo";
+    riga.appendChild(dim);
+    on(dim, "click", async () => {
+      try {
+        const r = await fetch("/api/permessi", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ revoca: p }),
+        });
+        const d = await r.json();
+        disegnaPermessi(d.stato || st);
+      } catch (e) { /* resta com'e' */ }
+    });
   }
 }
 

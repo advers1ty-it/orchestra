@@ -25,48 +25,11 @@ def _root() -> Path:
     return _ROOT
 
 
-def _percorso_fuori(percorso: str | Path) -> bool:
-    """True se il percorso esce dalla root del progetto."""
-    p = Path(percorso).resolve()
-    try:
-        p.relative_to(_ROOT)
-        return False
-    except ValueError:
-        return True
-
-
-def _safe_path(percorso: str | Path) -> Path:
-    """Restituisce il percorso risolto se dentro la root, altrimenti solleva ValueError."""
-    p = Path(percorso).resolve()
-    try:
-        p.relative_to(_ROOT)
-    except ValueError:
-        raise ValueError(f"Percorso fuori dalla root del progetto: {percorso}")
-    return p
-
-
-# ---------------------------------------------------------------------------
-# Gate di accesso alla shell
-# ---------------------------------------------------------------------------
-
-_gate = True  # True = shell consentita
-
-
-def set_permission_gate(consenti: bool) -> None:
-    """Attiva o disabilita l'esecuzione di comandi shell."""
-    global _gate
-    _gate = bool(consenti)
-
-
-def _check_shell_access() -> None:
-    """Solleva PermissionError se la shell è bloccata."""
-    if not _gate:
-        raise PermissionError("Esecuzione comandi shell disabilitata")
-
-
-def _detect_posix_shell() -> bool:
-    """True se il sistema supporta shell POSIX."""
-    return os.name != "nt"
+# Il gate vero sta in ._guard: qui si riesporta solo, perche' webapp lo
+# importa da qui (`from .tools import set_permission_gate`). La versione
+# booleana che stava qui prima intercettava la chiamata e il gate vero
+# restava None: tutti i tool negavano all'istante senza mai chiedere.
+from ._guard import set_permission_gate  # noqa: E402,F401
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 PKG = ROOT / "orchestra"
 
 PASS, FAIL = [], []
@@ -72,6 +73,15 @@ for mod in moduli:
                     f"{mod.relative_to(ROOT).as_posix()} -> .{nodo.module} (file assente)")
 
 check("import tutti tracciati", not mancanti, "; ".join(mancanti[:5]))
+
+print("[2] Il gate importato da .tools e' quello vero (._guard)")
+try:
+    from orchestra.tools import set_permission_gate as spg_tools
+    from orchestra.tools._guard import set_permission_gate as spg_guard
+    check("stesso gate", spg_tools is spg_guard,
+          ".tools ne ha uno diverso: i tool negano senza chiedere")
+except Exception as e:  # noqa: BLE001
+    check("stesso gate", False, str(e)[:80])
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

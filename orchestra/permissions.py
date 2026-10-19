@@ -324,10 +324,12 @@ class Gate:
             }
 
     def revoca(self, percorso: str) -> bool:
-        """Toglie un permesso concesso (sessione o sempre)."""
+        """Toglie un permesso concesso (sessione/sempre) o dimentica un "mai"."""
         k = self._chiave(Path(str(percorso)))
         with self._lock:
             tolto = self._sessione.pop(k, None) is not None
             tolto = k in self._sempre or tolto
             self._sempre.discard(k)
+            tolto = k in self._negati or tolto
+            self._negati.discard(k)
         return tolto
