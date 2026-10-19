@@ -22,8 +22,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .memoria import memoria as _memoria_file
-from .memoria_indice import indice_memoria
+from ..memoria import memoria as _memoria_file
+from ..memoria_indice import indice_memoria
 
 
 def memoria():
@@ -40,7 +40,7 @@ def memoria():
         return _memoria_file()
 
 
-from .types import Tool
+from ..types import Tool
 
 # Quanto entra nel system prompt senza che nessuno chieda niente.
 # TETTO_CARATTERI in memoria.py è 20.000: qui siamo a un ventesimo, ed è

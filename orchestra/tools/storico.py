@@ -23,8 +23,8 @@ sessione: con l'id si può aprire, e il titolo dice se è quella giusta.
 
 from __future__ import annotations
 
-from .storico import storico
-from .types import Tool
+from ..storico import storico
+from ..types import Tool
 
 
 def tool_storico_cerca() -> Tool:

@@ -3221,23 +3221,83 @@ function chiudiOnboarding() {
   try { localStorage.setItem("orchestra.onboard.done", "1"); } catch (e) {}
 }
 
-async function avviaObiettivo(o) {
+let _onboardSel = null;
+
+function mostraDettagli(cat) {
+  _onboardSel = cat;
+  const d = document.getElementById('onboard-details');
+  const dcat = document.getElementById('onboard-details-cat');
+  const dcat2 = document.getElementById('onboard-details-cat2');
+  const din = document.getElementById('onboard-details-input');
+  if (dcat) dcat.textContent = cat.t;
+  if (dcat2) dcat2.textContent = cat.t;
+  if (din) din.placeholder = 'es. ' + cat.d;
+  // nascondi primo backdrop, mostra secondo
+  document.getElementById('onboard').style.display = 'none';
+  document.getElementById('onboard').hidden = true;
+  d.style.display = '';
+  d.hidden = false;
+  if (din) din.focus();
+}
+
+function tornaIndietro() {
+  _onboardSel = null;
+  document.getElementById('onboard-details').style.display = 'none';
+  document.getElementById('onboard-details').hidden = true;
+  document.getElementById('onboard').style.display = '';
+  document.getElementById('onboard').hidden = false;
+}
+
+async function avviaDalDettaglio() {
+  const inp = document.getElementById('onboard-details-input');
+  const txt = (inp && inp.value || '').trim();
+  if (!txt) { inp && inp.focus(); return; }
+  const cat = _onboardSel;
+  const obiettivo = cat ? cat.d + '. ' + txt : txt;
+  const profile = (cat && cat.profile) || 'auto';
   try {
-    await fetch("/api/tools/profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile: o.profile || "auto" }),
+    const r = await fetch('/api/goal/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ obiettivo, profile, kind: 'goal' }),
+    });
+    const j = await r.json();
+    if (!r.ok) {
+      alert('Avvio fallito: ' + (j.error || 'sconosciuto'));
+      return;
+    }
+    // chiudi entrambi i backdrop
+    chiudiOnboarding();
+    // imposta il campo input con l'obiettivo e avvia
+    const input = document.getElementById('input');
+    if (input) { input.value = obiettivo; if (typeof autoGrow === 'function') autoGrow(); }
+    // avvia il goal via scheduler o direttamente
+    if (typeof send === 'function') {
+      // il goal è già stato avviato dal backend, ma mostriamo l'obiettivo
+      const ev = new Event('input');
+      input && input.dispatchEvent(ev);
+    }
+  } catch (e) {
+    alert('Errore di rete: ' + e.message);
+  }
+}
+
+async function avviaObiettivo(o) {
+  // imposta profile e scope, poi mostra dettagli invece di inviare subito
+  try {
+    await fetch('/api/tools/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: o.profile || 'auto' }),
     });
   } catch (e) { /* best effort */ }
-  if (typeof applicaScope === "function" && o.scope) {
-    const sp = document.getElementById("scope-pick");
+  if (typeof applicaScope === 'function' && o.scope) {
+    const sp = document.getElementById('scope-pick');
     if (sp) { sp.value = o.scope; }
     try { applicaScope(o.scope); } catch (e) {}
   }
-  const inp = document.getElementById("input");
-  if (inp) { inp.value = o.prompt; if (typeof autoGrow === "function") autoGrow(); inp.focus(); }
-  chiudiOnboarding();
-  if (typeof send === "function") { send(); }
+  // mostra schermata dettagli invece di inviare subito
+  mostraDettagli(o);
 }
 
 function mostraOnboarding(forza) {
@@ -3281,6 +3341,18 @@ if (btnOnboard) {
     mostraOnboarding(true);
   });
 }
+// handler per schermata dettagli
+const btnDettagliBack = $("onboard-back");
+if (btnDettagliBack) btnDettagliBack.addEventListener("click", tornaIndietro);
+const btnDettagliAvvia = $("onboard-avvia");
+if (btnDettagliAvvia) btnDettagliAvvia.addEventListener("click", avviaDalDettaglio);
+const dettagliInput = $("onboard-details-input");
+if (dettagliInput) dettagliInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    avviaDalDettaglio();
+  }
+});
 
 
 

@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from .types import Tool
-from .web_tools import _html_a_testo, _titolo
+from ..types import Tool
+from .web import _html_a_testo, _titolo
 
 
 def _browser_exe() -> str | None:

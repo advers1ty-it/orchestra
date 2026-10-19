@@ -22,7 +22,7 @@ import os
 from typing import Any
 
 import orchestra.skills as sk
-from orchestra.types import Tool
+from ..types import Tool
 
 
 def _indice() -> sk.Indice:

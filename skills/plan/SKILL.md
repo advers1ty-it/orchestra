@@ -5,6 +5,7 @@ version: 1.0.0
 author: Orchestra
 categoria: base
 origine: base
+volte_usata: 1
 ---
 
 # Plan

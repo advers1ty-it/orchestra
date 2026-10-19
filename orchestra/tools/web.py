@@ -32,7 +32,7 @@ import re
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from .types import Tool
+from ..types import Tool
 
 # Quanto prendiamo da una pagina. Una risposta troppo lunga torna al
 # modello come muro di testo e costa token senza che legga la metà; troppo

@@ -841,7 +841,7 @@ class OrchestraApp:
         # di uso avvelena il contesto di ogni richiesta, comprese quelle
         # che non c'entrano niente con quello che c'è salvato. Il tool
         # costa solo quando si usa.
-        from .memoria_tools import blocco_prompt
+        from .tools.memoria import blocco_prompt
         prompt_con_memoria = SYSTEM_PROMPT
         importanti = blocco_prompt()
         if importanti:
@@ -2268,7 +2268,7 @@ class Handler(BaseHTTPRequestHandler):
             # Ricerca FTS5 dalla UI. `conta_usi=False`: cercare per
             # controllare non vuol dire che il fatto serva, e contarlo
             # inquinerebbe la statistica che dice cosa è morto.
-            from .memoria_tools import memoria as mem
+            from .tools.memoria import memoria as mem
             from .memoria import stato as stato_memoria
             q = (body.get("query") or "").strip()
             m = mem()

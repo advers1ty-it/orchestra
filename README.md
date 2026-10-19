@@ -55,7 +55,7 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 | `goal.py` | Obiettivi persistenti, scheduler, retry |
 | `delega.py` / `recupero.py` | Sub-agenti e politiche di retry |
 | `accettazione.py` | Gate di completamento e criteri dichiarativi |
-| `tools.py` | Tool concreti + profili |
+| `tools/` | Pacchetto dei tool: `__init__.py` registro e profili, `_guard.py` le guardie condivise, un modulo per tool |
 | `providers.py` | Adapter provider OpenAI-compatibili |
 | `context.py` | Conteggio token e compaction |
 | `session.py` | Ponte loop sincrono / consumatori asincroni |

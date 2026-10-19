@@ -124,9 +124,16 @@ print("\n[7] run_shell eredita lo stesso vincolo")
 # il percorso e' il vincolo reale: se l'agente usa la shell per
 # arrivare dove non potrebbe, deve comunque chiedere. Verifichiamo che
 # il controllo esista sul tool, non solo sulle funzioni di file.
-sorgente = open(
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                 "orchestra", "tools.py"), encoding="utf-8").read()
+# `tools` e' un pacchetto, non un file: i controlli stanno in file diversi
+# (le guardie in _guard.py, run_shell nel suo modulo). Leggere tutti i
+# file del pacchetto e verificare la proprieta' sul totale: il test
+# controlla che la guardia ESISTA, non dove sta scritta.
+_pkg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "orchestra", "tools")
+sorgente = chr(10).join(
+    open(os.path.join(_pkg, f), encoding="utf-8").read()
+    for f in sorted(os.listdir(_pkg)) if f.endswith(".py")
+)
 check("_safe_path e' usata dai tool su file",
       sorgente.count("_safe_path(") >= 4, str(sorgente.count("_safe_path(")))
 check("run_shell chiede anche lui",

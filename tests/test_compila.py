@@ -32,7 +32,12 @@ def check(nome, cond, dettaglio=""):
 
 
 print("[1] Ogni modulo del pacchetto deve compilare")
-moduli = sorted(p for p in PKG.glob("*.py"))
+# rglob, non glob: `tools` e' un PACCHETTO (orchestra/tools/*.py), e un
+# glob piatto lo ignorerebbe — il test smetterebbe di controllare i
+# moduli nuovi senza dirlo, che e' esattamente il difetto che esiste
+# per prevenire.
+moduli = sorted(p for p in PKG.rglob("*.py")
+                if "__pycache__" not in p.parts)
 check("ci sono moduli da controllare", len(moduli) > 5, str(len(moduli)))
 for p in moduli:
     try:
@@ -48,7 +53,8 @@ print("\n[2] E devono anche importare")
 for nome in ("cli", "webapp", "session", "catalog", "providers", "agent",
              "delega", "routing", "permissions", "tools", "benchmark",
              "punteggio"):
-    if not (PKG / f"{nome}.py").exists():
+    # `tools` e' un pacchetto: non esiste tools.py, esiste tools/__init__.py
+    if not ((PKG / f"{nome}.py").exists() or (PKG / nome).is_dir()):
         continue
     sys.path.insert(0, str(ROOT))
     try:

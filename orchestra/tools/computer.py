@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .types import Tool
+from ..types import Tool
 
 
 def _consento(azione: str, dettagli: str) -> bool:
