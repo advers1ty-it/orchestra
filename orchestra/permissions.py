@@ -238,7 +238,14 @@ class Gate:
         if not p.is_absolute():
             p = (self.root / percorso).resolve()
         else:
-            p = p.resolve() if p.exists() else Path(os.path.normpath(str(p)))
+            # p.exists() su un path di sistema (C:\Windows\System32\config\SAM)
+            # solleva PermissionError, non False: "accesso negato" non e'
+            # "non esiste". Il gate deve NEGARE quei path, non morire.
+            try:
+                esiste = p.exists()
+            except OSError:
+                esiste = False
+            p = p.resolve() if esiste else Path(os.path.normpath(str(p)))
 
         # 1. dentro la root: nessuna domanda, e' il posto di lavoro
         if self.dentro_root(p):

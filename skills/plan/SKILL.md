@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Use when a job is too big to do freehand. Write the plan to .orchestra/plans/ first, execute nothing.
+description: Use when a job is too big to do freehand. Write the plan to plans/ first, execute nothing.
 version: 1.0.0
 author: Orchestra
 categoria: base
@@ -17,7 +17,7 @@ execute later. Never both at once.
 
 1. Read the relevant files with `read_file` before proposing
    steps: a plan written without looking at the code is a wish.
-2. Create `.orchestra/plans/<slug>.md` with `write_file`:
+2. Create `plans/<slug>.md` with `write_file`:
    - **Goal**: one sentence, measurable.
    - **Context**: what you already know (files, constraints,
      past decisions).
@@ -35,5 +35,6 @@ execute later. Never both at once.
   with one hidden: split it.
 - If writing reveals missing information, put it under risks
   instead of inventing it.
-- The plan lives in the repo (`.orchestra/plans/`): the next
-  session finds it instead of starting over.
+- The plan lives in the repo (`plans/`): the next session finds it
+  instead of starting over. It stays out of git: a plan is
+  scaffolding, not source.

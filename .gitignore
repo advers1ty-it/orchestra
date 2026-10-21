@@ -31,7 +31,8 @@ orchestra/budget_global.json
 memoria_indice.db
 orchestra/memory.md
 orchestra/memoria_config.json
-nul*\ntests/_run_*.js
+nul*
+tests/_run_*.js
 orchestra.err.log
 orchestra.err.log.1
 orchestra.log
@@ -58,3 +59,9 @@ tests/_dati_test/permessi.json
 # La cartella di lavoro del test della shell: la usa per il file di
 # prova con gli accenti.
 _probe3/
+# I piani della skill 'plan': restano in locale, non sono roba da
+# pubblicare. La skill continua a scriverli qui.
+plans/
+# La cartella di stato '.orchestra' dentro il progetto: non e' la
+# cartella dati (quella sta in AppData), e non serve a nulla.
+.orchestra/

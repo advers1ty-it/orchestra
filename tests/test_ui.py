@@ -75,8 +75,10 @@ print("\n[2] Sintassi JavaScript (Node esegue davvero il codice)")
 tmp = os.path.join(tempfile.gettempdir(), "orchestra_ui_check.js")
 with open(tmp, "w", encoding="utf-8") as f:
     f.write(js)
-r = subprocess.run(["node", "--check", tmp], capture_output=True, text=True, timeout=60)
-check("JS sintatticamente valido", r.returncode == 0, r.stderr[:300])
+r = subprocess.run(["node", "--check", tmp], capture_output=True, timeout=60)
+_r_out = r.stdout.decode("utf-8", "replace")
+_r_err = r.stderr.decode("utf-8", "replace")
+check("JS sintatticamente valido", r.returncode == 0, _r_err[:300])
 
 # lo stesso per i CSS: nessun controllo nativo, cerchiamo sbilanciamenti
 check("CSS: graffe bilanciate", css.count("{") == css.count("}"),
@@ -460,12 +462,14 @@ tmp2 = os.path.join(tempfile.gettempdir(), "orchestra_ui_probe.js")
 with open(tmp2, "w", encoding="utf-8") as f:
     f.write(script)
 
-r = subprocess.run(["node", tmp2], capture_output=True, text=True, timeout=90)
-if r.returncode != 0 or not r.stdout.strip():
-    check("probe eseguita", False, (r.stderr or "")[:400])
+r = subprocess.run(["node", tmp2], capture_output=True, timeout=90)
+_r_out = r.stdout.decode("utf-8", "replace")
+_r_err = r.stderr.decode("utf-8", "replace")
+if r.returncode != 0 or not _r_out.strip():
+    check("probe eseguita", False, (_r_err or "")[:400])
     res = {}
 else:
-    res = json.loads(r.stdout.strip().splitlines()[-1])
+    res = json.loads(_r_out.strip().splitlines()[-1])
     check("probe eseguita senza eccezioni", "ERROR" not in res, res.get("ERROR", ""))
 
 print("\n[5] Comportamento degli handler")
@@ -565,19 +569,21 @@ const R = {};
 _f = _tf.mktemp(suffix=".js")
 with open(_f, "w", encoding="utf-8") as fh:
     fh.write(harness + _fake_fetch + _ui_js + _probe9)
-_r = _sp.run(["node", _f], capture_output=True, text=True, timeout=90)
+_r = _sp.run(["node", _f], capture_output=True, timeout=90)
+_r_out = _r.stdout.decode("utf-8", "replace")
+_r_err = _r.stderr.decode("utf-8", "replace")
 os.unlink(_f)
 _r9 = {}
 _PREFIX = "PROBE9__"   # 8 caratteri: find() + len, non una costante magica
-for _line in _r.stdout.splitlines():
+for _line in _r_out.splitlines():
     _i = _line.find(_PREFIX)
     if _i >= 0:
         try:
             _r9 = json.loads(_line[_i + len(_PREFIX):])
         except json.JSONDecodeError as e:
             print(f"  [debug] non parsabile: {_line[_i:_i+120]!r} ({e})")
-if not _r9 and _r.stderr:
-    print(f"  [debug] stderr: {(_r.stderr or '')[:300]}")
+if not _r9 and _r_err:
+    print(f"  [debug] stderr: {(_r_err or '')[:300]}")
 check("selettore popolato", _r9.get("opzioni") == 3, str(_r9.get("opzioni")))
 check("selettore abilitato", _r9.get("disabled") is False, str(_r9.get("disabled")))
 check("etichette con contesto e prezzo",
@@ -619,10 +625,12 @@ const R = {};
 _f2 = _tf.mktemp(suffix=".js")
 with open(_f2, "w", encoding="utf-8") as fh:
     fh.write(harness + _fail_fetch + _ui_js + _probe_fail)
-_r2 = _sp.run(["node", _f2], capture_output=True, text=True, timeout=90)
+_r2 = _sp.run(["node", _f2], capture_output=True, timeout=90)
+_r2_out = _r2.stdout.decode("utf-8", "replace")
+_r2_err = _r2.stderr.decode("utf-8", "replace")
 os.unlink(_f2)
 _r9b = {}
-for _line in _r2.stdout.splitlines():
+for _line in _r2_out.splitlines():
     _i = _line.find(_PREFIX)
     if _i >= 0:
         try:
