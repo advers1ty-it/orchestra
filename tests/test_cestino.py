@@ -22,7 +22,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE = "http://127.0.0.1:8737"
+BASE = f"http://127.0.0.1:{os.environ.get('ORCHESTRA_TEST_PORT', '8737')}"
 PASS, FAIL = [], []
 
 

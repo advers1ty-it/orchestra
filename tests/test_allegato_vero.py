@@ -28,7 +28,7 @@ import json
 import urllib.error
 import urllib.request
 
-BASE = "http://127.0.0.1:8737"
+BASE = f"http://127.0.0.1:{os.environ.get('ORCHESTRA_TEST_PORT', '8737')}"
 PASS, FAIL = [], []
 
 

@@ -12,7 +12,8 @@ import socket
 import sys
 import time
 
-HOST, PORT = "127.0.0.1", 8737
+import os
+HOST, PORT = "127.0.0.1", int(os.environ.get("ORCHESTRA_TEST_PORT", "8737"))
 
 
 def raw_get(sock, path):

@@ -25,7 +25,7 @@ import urllib.request
 from urllib.parse import urlparse
 
 CDP = "http://127.0.0.1:9333"
-PORT = 8737
+PORT = int(os.environ.get("ORCHESTRA_TEST_PORT", "8737"))
 PASS, FAIL = [], []
 
 

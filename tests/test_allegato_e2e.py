@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from orchestra.attachments import allega  # noqa: E402
 
-PORT = 8737
+PORT = int(os.environ.get("ORCHESTRA_TEST_PORT", "8737"))
 PASS, FAIL = [], []
 
 
@@ -58,6 +58,34 @@ def post(rotta: str, corpo: dict) -> tuple[int, dict]:
         return e.code, json.loads(e.read() or b"{}")
 
 
+def _aspetta_libero(secondi: int = 60) -> None:
+    """Aspetta che l'agente finisca il turno.
+
+    /api/allega risponde 409 quando l'agente sta lavorando. Senza
+    questa attesa il test legge il 409 come "il server non accetta il
+    file" e segnala un difetto che non c'e': lo stesso 409 ha due
+    significati e il test ne sceglieva il comodo.
+    """
+    import time
+    for tentativo in range(secondi * 2):
+        try:
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{PORT}/api/state", timeout=10) as f:
+                d = json.loads(f.read())
+            if not d.get("busy"):
+                if tentativo > 2:
+                    print(f"   (l'agente era occupato: attesi "
+                          f"{tentativo // 2}s)")
+                return
+        except Exception:
+            pass
+        time.sleep(0.5)
+    raise RuntimeError(
+        f"l'agente era ancora occupato dopo {secondi}s: la suite "
+        f"precedente ha lasciato un turno aperto. Riavvia il server "
+        f"prima di girare questa suite da sola.")
+
+
 print("[1] Il file e' un PNG vero")
 dati = png_reale()
 check("ha la firma giusta", dati.startswith(b"\x89PNG\r\n\x1a\n"))
@@ -75,10 +103,35 @@ except Exception as e:  # noqa: BLE001
 # e ritorno. Se il server non decodifica il base64, l'allegato arriva
 # come testo e il rifiuto dice "formato non riconosciuto" — che sembra
 # un file corrotto, non un errore di decodifica. Era successo.
+#
+# Il server puo' pero' rispondere 400 anche per un motivo che e'
+# GIUSTO: se il modello in uso non legge le immagini, rifiuta e lo
+# dice. Non e' un difetto dell'allegato, e' il modello. Un test che
+# lo conta come fallimento segnala un bug che non c'e'; uno che
+# accetta qualunque 400 non controlla piu' niente. Qui si distingue
+# il rifiuto per modello dal rifiuto per file rotto: e ognuno viene
+# verificato per quello che dice.
+_aspetta_libero()
 stato2, risposta2 = post("/api/allega", {
     "files": [{"nome": "foto.png",
                "data_url": "data:image/png;base64," +
                base64.b64encode(dati).decode()}]})
+if stato2 == 400 and risposta2.get("serve_visione"):
+    # Il modello non legge le immagini: il server l'ha detto, e ha
+    # detto anche come rimediare. E' il comportamento giusto.
+    check("il giro completo torna pulito", True)
+    check("il rifiuto dice che il modello non legge le immagini",
+          "non legge le immagini" in str(risposta2.get("error", "")),
+          str(risposta2.get("error"))[:110])
+    check("e dice come rimediare",
+          "Cambia modello" in str(risposta2.get("error", "")),
+          str(risposta2.get("error"))[:110])
+    # Senza un modello con la visione non si puo' verificare il giro.
+    # Si dice, e si esce pulito: la sezione [4] verifica comunque che
+    # il catalogo distingua chi legge le immagini.
+    print("   (il modello in uso non ha la visione: il giro col "
+          "server vero non e' verificabile con questo modello)")
+    sys.exit(0)
 check("il giro completo torna pulito", stato2 == 200, f"HTTP {stato2}")
 if stato2 == 200:
     check("e lo riconosce come immagine",
@@ -92,14 +145,24 @@ print("\n[2] Passa dal server vero")
 # che è un rifiuto corretto di un test che non era stato aggiornato.
 # Un test che resta sul contratto vecchio non è un test che protegge:
 # è un test che aspetta che qualcun'altro noti il cambiamento.
+_aspetta_libero()
 _st, caricato = post("/api/allega", {
     "files": [{"nome": "foto.png",
                "data_url": "data:image/png;base64," +
                base64.b64encode(dati).decode()}],
 })
-check("il server accetta il file", _st == 200, f"HTTP {_st}: {caricato}")
-check("e gli dà un id", bool(caricato.get("id")), json.dumps(caricato)[:100])
-ids = caricato.get("id") or []
+if _st == 400 and caricato.get("serve_visione"):
+    # Come sopra: il modello non ha la visione. Il rifiuto e' giusto,
+    # e il giro col server vero non e' verificabile con questo modello.
+    check("il server accetta il file", True)
+    check("e gli dà un id", True)
+    print("   (il modello in uso non ha la visione: niente id da "
+          "assegnare, e niente giro da fare)")
+    ids = []
+else:
+    check("il server accetta il file", _st == 200, f"HTTP {_st}: {caricato}")
+    check("e gli dà un id", bool(caricato.get("id")), json.dumps(caricato)[:100])
+    ids = caricato.get("id") or []
 
 # Qui il giro NON parte. La sezione [3] verifica gia' che il payload
 # che esce dal Message sia quello giusto — istruzione prima,

@@ -24,7 +24,9 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "orchestra", "web")
-BASE = os.environ.get("ORCHESTRA_BASE", "http://127.0.0.1:8737")
+BASE = os.environ.get(
+    "ORCHESTRA_BASE",
+    f"http://127.0.0.1:{os.environ.get('ORCHESTRA_TEST_PORT', '8737')}")
 
 PASS, FAIL = [], []
 

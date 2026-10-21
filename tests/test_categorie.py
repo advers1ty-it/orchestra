@@ -74,7 +74,8 @@ import json  # noqa: E402
 import urllib.request  # noqa: E402
 
 try:
-    with urllib.request.urlopen("http://127.0.0.1:8737/api/categorie", timeout=20) as f:
+    porta = os.environ.get("ORCHESTRA_TEST_PORT", "8737")
+    with urllib.request.urlopen(f"http://127.0.0.1:{porta}/api/categorie", timeout=20) as f:
         dati = json.load(f)
     server = {c["id"]: c["tasks"] for c in dati["categorie"]}
     check("il conteggio del server coincide con i task registrati",

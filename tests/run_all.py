@@ -15,6 +15,7 @@ from _esito import (  # noqa: E402
     OK, FALLITO, NON_PARTITO, CRASH, NON_AVVENUTO, esegui,
 )
 from _sanita import controlla as controlla_import  # noqa: E402
+from _server import avvia as avvia_server  # noqa: E402
 
 # I test NON devono toccare la cronologia dell'utente. Ogni test che
 # chiama `Session.send()` fa girare il worker, che salva il turno nello
@@ -127,15 +128,55 @@ else:
     print("  OK  tutti i moduli di test importano\n")
 
 results = []
-for name, script, required in SUITES:
-    print(f"\n{'='*66}\n>>> {name.upper()}\n{'='*66}")
-    esito = esegui(os.path.join(HERE, script), cwd=os.path.dirname(HERE))
-    # L'output del test si rivede: e' la prova, non un riassunto.
-    sys.stdout.write(esito.stdout or "")
-    if esito.stderr:
-        sys.stderr.write(esito.stderr)
-    esito.nome = name
-    results.append((name, esito, required))
+# --------------------------------------------------------------------------
+# IL SERVER DI TEST
+# --------------------------------------------------------------------------
+# Le suite che parlano col server vero hanno bisogno che qualcosa
+# risponda. Prima dipendevano dal server di sviluppo che stava gia'
+# acceso sulla 8737, e se non c'era fallivano con "connessione rifiutata",
+# che sembrava un difetto del codice. Se invece c'era ma con un turno
+# aperto, fallivano con 409 — "occupato" — che e' un'altra cosa, e
+# sembrava un difetto ancora piu' strano.
+#
+# Nessuna delle due versioni era giusta, perche' in entrambi i casi il
+# test segnalava un difetto che non c'era. Un test che segnala difetti
+# inesistenti e' peggio di un test assente: fa perdere tempo a guardarli.
+#
+# Qui il server parte da solo, su una porta libera, e la porta la dice
+# l'ambiente (ORCHESTRA_TEST_PORT). Ogni suite la legge. Se il server non
+# parte, lo si dice e le suite HTTP non girano: ma lo si dice PRIMA,
+# non sotto forma di un fallback di connettivita' mascherato da test.
+# --------------------------------------------------------------------------
+server, motivo = avvia_server()
+if server is None:
+    print(f"  ATTENZIONE: il server di test non e' partito — {motivo}")
+    print("  Le suite HTTP non potranno girare: i loro fallimenti "
+          "non saranno verdi.\n")
+else:
+    print(f"  server di test su {server.porta} "
+          f"(home: {server.home})\n")
+
+ambiente = dict(os.environ)
+if server is not None:
+    ambiente["ORCHESTRA_TEST_PORT"] = str(server.porta)
+
+try:
+    for name, script, required in SUITES:
+        print(f"\n{'='*66}\n>>> {name.upper()}\n{'='*66}")
+        esito = esegui(os.path.join(HERE, script), cwd=os.path.dirname(HERE),
+                       env=ambiente)
+        # L'output del test si rivede: e' la prova, non un riassunto.
+        sys.stdout.write(esito.stdout or "")
+        if esito.stderr:
+            sys.stderr.write(esito.stderr)
+        esito.nome = name
+        results.append((name, esito, required))
+finally:
+    # Il server si chiude SEMPRE: anche se una suite e' morta, o se il
+    # runner viene fermato. Un server lasciato vivo occupa la porta e
+    # fa fallire la corsa successiva per un motivo che non c'entra.
+    if server is not None:
+        server.chiudi()
 
 print(f"\n{'='*66}\nRIEPILOGO\n{'='*66}")
 failed = []

@@ -49,3 +49,6 @@ venv/
 orchestra/agent.py.new
 # Appunti di release, temporanei: stanno solo in locale.
 _RELEASE_*.md
+# La home del server di test: la cronologia che le suite HTTP scrivono
+# non e' quella dell'utente, e non ha senso nel repository.
+tests/_dati_test_server/

@@ -66,7 +66,8 @@ console.log(JSON.stringify(fuori));
 
 print("[1] Il catalogo reale, non un esempio")
 try:
-    with urllib.request.urlopen("http://127.0.0.1:8737/api/models", timeout=20) as f:
+    porta = os.environ.get("ORCHESTRA_TEST_PORT", "8737")
+    with urllib.request.urlopen(f"http://127.0.0.1:{porta}/api/models", timeout=20) as f:
         dati = json.load(f)
 except Exception as e:  # noqa: BLE001
     print("  server non raggiungibile:", e)

@@ -21,7 +21,8 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = "http://127.0.0.1:8737"
+PORT = int(os.environ.get("ORCHESTRA_TEST_PORT", "8737"))
+BASE = f"http://127.0.0.1:{PORT}"
 PASS, FAIL = [], []
 
 
@@ -52,12 +53,12 @@ def ascolta():
     che e' l'unica cosa che conta qui.
     """
     try:
-        s = socket.create_connection(("127.0.0.1", 8737), timeout=180)
+        s = socket.create_connection(("127.0.0.1", PORT), timeout=180)
         s.sendall(
-            b"GET /api/stream HTTP/1.1\r\n"
-            b"Host: 127.0.0.1:8737\r\n"
-            b"Accept: text/event-stream\r\n"
-            b"Connection: keep-alive\r\n\r\n")
+            (f"GET /api/stream HTTP/1.1\r\n"
+             f"Host: 127.0.0.1:{PORT}\r\n"
+             f"Accept: text/event-stream\r\n"
+             f"Connection: keep-alive\r\n\r\n").encode())
         sse_ok.set()
         buf = b""
         while not stop.is_set():
