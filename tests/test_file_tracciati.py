@@ -33,9 +33,25 @@ def check(nome, cond, dettaglio=""):
 
 
 print("[1] Ogni import relativo risolve su un file tracciato da git")
-tracciati = set(subprocess.run(
-    ["git", "ls-files", "*.py"], capture_output=True, text=True,
-    cwd=str(ROOT)).stdout.split())
+# `git ls-files` funziona solo in un checkout. Un'installazione non e'
+# un repo git: li' il controllo che conta non e' "il file e' tracciato"
+# ma "il file ESISTE". Senza questa distinzione il test segnalava come
+# mancanti tutti i moduli di un'installazione — un difetto che non
+# esiste, in una directory che non e' un repo.
+_git = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"],
+                      capture_output=True, text=True, cwd=str(ROOT))
+in_repo = _git.returncode == 0 and _git.stdout.strip() == "true"
+
+if in_repo:
+    tracciati = set(subprocess.run(
+        ["git", "ls-files", "*.py"], capture_output=True, text=True,
+        cwd=str(ROOT)).stdout.split())
+    print("     (checkout git: si controlla anche la tracciatura)")
+else:
+    # Non e' un repo: si controlla solo che il file ci sia.
+    tracciati = {p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*.py")
+                 if "__pycache__" not in p.parts}
+    print("     (non e' un checkout git: si controlla l'esistenza del file)")
 moduli = sorted(p for p in PKG.rglob("*.py") if "__pycache__" not in p.parts)
 check("moduli trovati", bool(moduli), "nessun .py sotto orchestra/")
 
@@ -72,7 +88,8 @@ for mod in moduli:
                 mancanti.append(
                     f"{mod.relative_to(ROOT).as_posix()} -> .{nodo.module} (file assente)")
 
-check("import tutti tracciati", not mancanti, "; ".join(mancanti[:5]))
+check("import tutti tracciati" if in_repo else "import tutti presenti",
+      not mancanti, "; ".join(mancanti[:5]))
 
 print("[2] Il gate importato da .tools e' quello vero (._guard)")
 try:

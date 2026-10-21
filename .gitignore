@@ -55,3 +55,6 @@ tests/_dati_test_server/
 # I permessi che i test scrivono: sono generati, e contengono i path
 # temporanei di ogni run. Non sono roba da versionare.
 tests/_dati_test/permessi.json
+# La cartella di lavoro del test della shell: la usa per il file di
+# prova con gli accenti.
+_probe3/
