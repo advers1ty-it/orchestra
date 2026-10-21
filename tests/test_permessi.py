@@ -29,9 +29,34 @@ def check(nome, cond, dettaglio=""):
 
 root = tempfile.mkdtemp(prefix="root-")
 fuori = tempfile.mkdtemp(prefix="fuori-")
-file_fuori = os.path.join(fuori, "segreto.txt")
-with open(file_fuori, "w", encoding="utf-8") as f:
-    f.write("contenuto")
+
+# I permessi "sempre" e "mai" sopravvivono al riavvio: stanno su disco,
+# nella cartella dati dell'installazione. Senza questo, il test scriverebbe
+# sui permessi VERI dell'utente — e peggio, ogni sezione qui sotto
+# erediterebbe i permessi della sezione precedente, perche' il path e'
+# lo stesso. Ogni sezione ha quindi il suo path, e la cartella dati e'
+# una copia temporanea.
+_HOME_TEST = tempfile.mkdtemp(prefix="perm-home-")
+os.environ["ORCHESTRA_HOME"] = _HOME_TEST
+
+
+def _nuovo(nome):
+    p = os.path.join(fuori, nome)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("contenuto")
+    return p
+
+
+file_fuori = _nuovo("segreto.txt")
+file_una_volta = _nuovo("una-volta.txt")
+file_mai = _nuovo("mai.txt")
+file_sessione = _nuovo("sessione.txt")
+file_inesistente = _nuovo("inesistente.txt")
+file_inesistente2 = _nuovo("inesistente2.txt")
+file_rompente = _nuovo("rompente.txt")
+file_rompente2 = _nuovo("rompente2.txt")
+file_thread = _nuovo("thread.txt")
+file_revocato = _nuovo("revocato.txt")
 
 print("\n[1] Dentro la root: nessuna domanda")
 g = Gate(root=root)
@@ -79,42 +104,44 @@ def chiedi_una(r):
 
 
 g5 = Gate(root=root, chiedi=chiedi_una)
-ok1 = g5.chiedi_all_utente(file_fuori, "leggere")
-ok2 = g5.chiedi_all_utente(file_fuori, "leggere")
+ok1 = g5.chiedi_all_utente(file_una_volta, "leggere")
+ok2 = g5.chiedi_all_utente(file_una_volta, "leggere")
 check("la prima volta e' concessa", ok1 is True)
 check("la seconda volta e' concessa", ok2 is True)
 check("ha chiesto due volte", len(chiamate) == 2, str(len(chiamate)))
 check("non resta memoria del consenso",
-      g5.valuta(file_fuori, "leggere") == "chiedi")
+      g5.valuta(file_una_volta, "leggere") == "chiedi")
 
 print("\n[6] 'Per sessione' concede una volta sola")
 g6 = Gate(root=root, chiedi=lambda r: Risposta("sessione"))
-check("prima: concesso", g6.chiedi_all_utente(file_fuori, "leggere") is True)
+check("prima: concesso", g6.chiedi_all_utente(file_sessione, "leggere") is True)
 check("seconda: concesso senza chiedere",
-      g6.chiedi_all_utente(file_fuori, "leggere") is True)
-check("valuta() dice concesso", g6.valuta(file_fuori, "leggere") == "concesso")
+      g6.chiedi_all_utente(file_sessione, "leggere") is True)
+check("valuta() dice concesso", g6.valuta(file_sessione, "leggere") == "concesso")
 check("ha chiesto una volta sola", g6.stato()["sessione"], str(g6.stato()))
 
 print("\n[7] 'Mai' nega e ricorda")
 g7 = Gate(root=root, chiedi=lambda r: Risposta("mai"))
-check("prima: negato", g7.chiedi_all_utente(file_fuori, "leggere") is False)
+check("prima: negato", g7.chiedi_all_utente(file_mai, "leggere") is False)
 check("seconda: negato senza chiedere",
-      g7.chiedi_all_utente(file_fuori, "leggere") is False)
+      g7.chiedi_all_utente(file_mai, "leggere") is False)
 check("il consenso e' sparito dalla lista", not g7.stato()["sessione"])
 check("il rifiuto e' ricordato", g7.stato()["negati"], str(g7.stato()["negati"]))
 
 print("\n[8] Una risposta inesistente non concede niente")
 g8 = Gate(root=root, chiedi=lambda r: Risposta("per_sempre_eroico"))
 check("risposta sconosciuta = negato",
-      g8.chiedi_all_utente(file_fuori, "leggere") is False)
+      g8.chiedi_all_utente(file_inesistente, "leggere") is False)
 g8b = Gate(root=root, chiedi=lambda r: Risposta(""))
 check("risposta vuota = negato",
-      g8b.chiedi_all_utente(file_fuori, "leggere") is False)
+      g8b.chiedi_all_utente(file_inesistente2, "leggere") is False)
 
 print("\n[9] Se nessuno puo' rispondere, si nega")
 g9 = Gate(root=root, chiedi=None)
 check("senza canale di conferma si nega",
       g9.chiedi_all_utente(file_fuori, "leggere") is False)
+# 'file_fuori' qui non e' mai stato concesso per sempre: e' quello della
+# sezione [2], che non ha premuto 'sempre'.
 
 
 def chiedi_che_esplode(r):
@@ -123,7 +150,7 @@ def chiedi_che_esplode(r):
 
 g9b = Gate(root=root, chiedi=chiedi_che_esplode)
 check("se la domanda fallisce si nega",
-      g9b.chiedi_all_utente(file_fuori, "leggere") is False)
+      g9b.chiedi_all_utente(file_rompente, "leggere") is False)
 
 print("\n[9b] Un canale rotto si dichiara, non si nasconde")
 # Il caso peggiore non e' negare per errore: e' negare per errore
@@ -143,7 +170,7 @@ g9c = Gate(root=root, chiedi=lambda r: (_ for _ in ()).throw(
     AttributeError("'Session' object has no attribute 'emit'")))
 buf = io.StringIO()
 with contextlib.redirect_stderr(buf):
-    esito = g9c.chiedi_all_utente(file_fuori, "leggere")
+    esito = g9c.chiedi_all_utente(file_rompente2, "leggere")
 check("l'errore del canale porta a negare", esito is False)
 check("ma viene dichiarato", "[permessi]" in buf.getvalue()
       and "AttributeError" in buf.getvalue(),
@@ -156,13 +183,13 @@ vecchio = P.SESSIONE_SECONDI
 P.SESSIONE_SECONDI = 0.2
 try:
     g10 = Gate(root=root, chiedi=lambda r: Risposta("sessione"))
-    g10.chiedi_all_utente(file_fuori, "leggere")
+    g10.chiedi_all_utente(file_sessione, "leggere")
     check("subito dopo, ancora concesso",
-          g10.valuta(file_fuori, "leggere") == "concesso")
+          g10.valuta(file_sessione, "leggere") == "concesso")
     time.sleep(0.35)
     check("dopo la scadenza chiede di nuovo",
-          g10.valuta(file_fuori, "leggere") == "chiedi",
-          g10.valuta(file_fuori, "leggere"))
+          g10.valuta(file_sessione, "leggere") == "chiedi",
+          g10.valuta(file_sessione, "leggere"))
 finally:
     P.SESSIONE_SECONDI = vecchio
 
@@ -199,16 +226,16 @@ def chiedi_reale(r):
 
 g12 = Gate(root=root, chiedi=chiedi_reale)
 check("il consenso arriva da un altro thread",
-      g12.chiedi_all_utente(file_fuori, "leggere") is True)
+      g12.chiedi_all_utente(file_thread, "leggere") is True)
 
 print("\n[12] Revocare un permesso")
 g13 = Gate(root=root, chiedi=lambda r: Risposta("sessione"))
-g13.chiedi_all_utente(file_fuori, "leggere")
-check("prima di revocare e' concesso", g13.valuta(file_fuori, "leggere") == "concesso")
-g13.revoca(file_fuori)
+g13.chiedi_all_utente(file_revocato, "leggere")
+check("prima di revocare e' concesso", g13.valuta(file_revocato, "leggere") == "concesso")
+g13.revoca(file_revocato)
 check("dopo la revoca chiede di nuovo",
-      g13.valuta(file_fuori, "leggere") == "chiedi",
-      g13.valuta(file_fuori, "leggere"))
+      g13.valuta(file_revocato, "leggere") == "chiedi",
+      g13.valuta(file_revocato, "leggere"))
 
 print("\n[13] Il permesso su una cartella vale per quello che c'e' dentro")
 # Concedere "Documenti" senza questo non serve: il primo `ls
@@ -251,6 +278,7 @@ check("ma dentro .ssh resta negato",
 
 shutil.rmtree(root, ignore_errors=True)
 shutil.rmtree(fuori, ignore_errors=True)
+shutil.rmtree(_HOME_TEST, ignore_errors=True)
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

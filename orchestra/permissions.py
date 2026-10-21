@@ -32,6 +32,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -124,6 +125,46 @@ class Gate:
         self._negati: set[str] = set()
         self._lock = threading.Lock()
         self._contatore = 0
+        # Quelli di sopra stanno in memoria, e il Gate vive sul processo
+        # del server: senza questo, un "sempre" concesso dal vivo
+        # sparirebbe al riavvio, e l'utente che aveva premuto "sempre"
+        # si ritroverebbe a veder chiedere di nuovo, per sempre.
+        # "per sessione" invece NON viene salvato: per definizione
+        # finisce con la sessione.
+        self._carica_persistenza()
+
+    # -- persistenza ---------------------------------------------------------
+
+    def _carica_persistenza(self) -> None:
+        """Rilegge i permessi "sempre" e "mai" dal disco.
+
+        Fallisce in silenzio: se il file non c'e' e' la prima volta, e
+        se e' corrotto si riparte vuoti. In entrambi i casi il gate
+        funziona. Perdere un permesso e' una seccatura; non poter
+        lavorare e' un guasto.
+        """
+        try:
+            from . import permessi_persistenza as _pp
+            dati = _pp.carica()
+        except Exception:  # noqa: BLE001
+            return
+        with self._lock:
+            self._sempre.update(dati.get("sempre", []))
+            self._negati.update(dati.get("negati", []))
+
+    def _salva_persistenza(self) -> None:
+        """Scrive su disco i permessi che devono sopravvivere al riavvio."""
+        try:
+            from . import permessi_persistenza as _pp
+            with self._lock:
+                sempre = set(self._sempre)
+                negati = set(self._negati)
+            _pp.salva(sempre, negati)
+        except Exception:  # noqa: BLE001
+            # Salvare i permessi non puo' mai far fallire un'operazione
+            # che l'utente ha autorizzato. Se il disco e' pieno, il
+            # permesso vale lo stesso per questa sessione.
+            pass
 
     # -- helpers ------------------------------------------------------------
 
@@ -285,16 +326,27 @@ class Gate:
         if scelta == "una_volta":
             return True
         k = self._chiave(Path(str(percorso)))
+        concesso = False
+        da_salvare = False
         with self._lock:
             if scelta == "sessione":
                 self._sessione[k] = time.time() + SESSIONE_SECONDI
-                return True
-            if scelta == "sempre":
+                concesso = True
+            elif scelta == "sempre":
                 self._sempre.add(k)
-                return True
-            # "mai", o qualsiasi risposta non riconosciuta
-            self._negati.add(k)
-        return False
+                concesso = True
+                da_salvare = True
+            else:
+                # "mai", o QUALSIASI risposta non riconosciuta. Il
+                # default e' negare: una risposta che non capiamo non
+                # e' un permesso, e non puo' essere "sempre" perche'
+                # nessuno l'ha scritta.
+                self._negati.add(k)
+                concesso = False
+                da_salvare = True
+        if da_salvare:
+            self._salva_persistenza()
+        return concesso
 
     def rispondi(self, richiesta_id: str, scelta: str) -> bool:
         """Risponde a una domanda in attesa. True se qualcuno aspettava."""
@@ -332,4 +384,7 @@ class Gate:
             self._sempre.discard(k)
             tolto = k in self._negati or tolto
             self._negati.discard(k)
+        # anche la revoca va salvata: se non la salvo, il riavvio
+        # rimetterebbe su disco il permesso che l'utente ha tolto.
+        self._salva_persistenza()
         return tolto

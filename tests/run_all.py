@@ -59,6 +59,7 @@ SUITES = [
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),
+    ("permessi-persistenza", "test_permessi_persistenza.py", True),
     ("permesso-shell", "test_permesso_shell.py", True),
     ("eventi-bridge", "test_eventi_bridge.py", True),
     ("eventi-client", "test_eventi_client.py", True),
