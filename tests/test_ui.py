@@ -91,6 +91,14 @@ check("ci sono id da usare", len(wanted) >= 8, str(len(wanted)))
 
 print("\n[4] Logica degli handler, con DOM finto")
 # Estraiamo le funzioni che ci interessano e le esercitiamo con un DOM finto.
+#
+# Il regex del selettore per attributo sta in una costante a parte, e
+# non dentro la stringa: e' codice JavaScript, e i suoi backslash sono
+# escape JavaScript (\[ \w \]). Dentro una stringa Python non grezza
+# diventerebbero "escape non validi" — un SyntaxWarning che non dice
+# niente del codice, ma che ogni volta che gira la suite fa dire
+# "qui c'e' qualcosa che non torna" quando invece e' a posto.
+_REGEX_ATTRIBUTO = r'    const m = /^\[([\w-]+)="?([^"\]]*)"?\]$/.exec(sel);'
 harness = """
 // --- DOM finto, minimo ma sufficiente ---
 class ClassList {
@@ -126,7 +134,7 @@ class El {
   set className(v){
     this._className = String(v);
     this._cl = new ClassList();
-    String(v).split(/\s+/).filter(Boolean).forEach(c => this._cl.add(c));
+    String(v).split(/\\s+/).filter(Boolean).forEach(c => this._cl.add(c));
   }
   get className(){ return this._className || ""; }
   set textContent(v){ this._text=String(v); this.children=[]; }
@@ -151,7 +159,7 @@ class El {
       const r = this._find(c => c.classList && c.classList.contains(cls), []);
       return r[0] || null;
     }
-    const m = /^\[([\w-]+)="?([^"\]]*)"?\]$/.exec(sel);
+@@REGEX_ATTRIBUTO@@
     if (m) {
       const r = this._find(c => c._attrs && c._attrs[m[1]] === m[2], []);
       return r[0] || null;
@@ -212,6 +220,13 @@ class El {
   set onclick(f){ this._on["click"]=f; }
   get onclick(){ return this._on["click"]; }
   scrollIntoView(){}
+  // focus() e' una API del DOM vero, e la UI la chiama: setBusy mette
+  // il cursore nella barra "steer" appena parte un turno, e senza questo
+  // metodo il probe muore con "focus is not a function" — e tutto quello
+  // che viene dopo (21 asserzioni) cade per una riga di mock mancante.
+  focus(){ this._focussed = true; }
+  blur(){ this._focussed = false; }
+  select(){}
 }
 globalThis.CSS = { escape: (s) => String(s).replace(/["\\\\]/g, "\\\\$&") };
 const _els = {};
@@ -298,6 +313,12 @@ globalThis.autoGrow = () => {};
 
 const out = {};
 """
+# La riga del regex sta in una costante raw (vedi sopra): qui si mette
+# al suo posto. Un segnaposto esplicito e' meglio di un "%s" o di un
+# "{x}": se il testo del regex cambia, si vede che il segnaposto
+# esiste ancora e non viene sostituito in silenzio.
+harness = harness.replace("@@REGEX_ATTRIBUTO@@", _REGEX_ATTRIBUTO)
+assert "@@REGEX_ATTRIBUTO@@" not in harness, "il regex non e' stato inserito"
 
 # Eseguiamo lo script del browser dentro l'harness, catturando il risultato
 probe = """

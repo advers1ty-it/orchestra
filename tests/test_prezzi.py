@@ -102,7 +102,7 @@ tmp = os.path.join(os.environ.get("TEMP", "."), "_cat.json")
 with open(tmp, "w", encoding="utf-8") as f:
     json.dump(modelli, f)
 def numero(testo: str) -> float:
-    """Il primo numero di una stringa etichettata.
+    r"""Il primo numero di una stringa etichettata.
 
     Non un [^\d.] globale: quello prendeva anche il "10k" finale e il
     punto medio del separatore, e restituiva 0.00801 invece di 0.008.

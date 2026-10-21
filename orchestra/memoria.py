@@ -16,11 +16,23 @@ TRE STRATI, in ordine di costo e di danno se sbagliano:
    messo da parte invece di buttarlo. Recupero, non invenzione: quelle
    parole il modello le ha gia' dette.
 
-3. ESTRAZIONE DEI FATTI -- a fine sessione, un modello rilegge la
+3. ESTRAZIONE DEI FATTI -- a fine turno, un modello rilegge la
    conversazione e ne tira fuori le cose da ricordare. L'unico strato
-   che PUO' SBAGLIARE, perche' genera contenuto nuovo. Percio':
-   spento di default, e mai sovrascrive -- aggiunge con un timestamp,
-   cosi' un fatto vecchio e uno nuovo si distinguono.
+   che PUO' SBAGLIARE, perche' genera contenuto nuovo. Percio' non
+   sovrascrive mai: aggiunge con un timestamp, cosi' un fatto vecchio
+   e uno nuovo si distinguono.
+
+   ACCESO, e non piu' spento. Prima le funzioni che lo fanno
+   (`estrai_fatti`, `applica_fatti`) esistevano ma nessuno le chiamava:
+   la memoria era passiva e ricordava solo quello che l'agente
+   registrava a mano. Ora gira a fine turno, in un thread secco — il
+   turno non aspetta, e un'estrazione fallita non rovina un turno
+   riuscito.
+
+   Ogni fatto porta con se' il PROGETTO da cui e' nato. La memoria
+   resta un archivio solo, ma interrogabile per progetto: un fatto
+   del sito ristorante e uno della app parrucchieri convivono e si
+   distinguono.
 
 REGISTRO DEI PROVIDER
 
@@ -71,6 +83,43 @@ FINESTRA_RELOAD = 10.0
 _RE_DATA = re.compile(r"\s*<!--.*?-->\s*$")
 _RE_FONTE = re.compile(r"\s*_[^_]+_\s*$")
 _RE_ALTA = re.compile(r"\s*\[alta\]\s*$", re.IGNORECASE)
+# L'etichetta del progetto. Sta in una parentesi quadra come `[alta]`,
+# e per una ragione precisa: il file e' scritto e letto anche da un
+# essere umano, e `[progetto:sito-ristorante]` si capisce guardandolo.
+# La fonte resta nella sintassi `_origine_`, che e' gia' li'.
+_RE_PROGETTO = re.compile(r"\s*\[progetto:([^\]]*)\]\s*$", re.IGNORECASE)
+
+
+def _pulizia_riga(corpo: str) -> tuple[str, str, str]:
+    """Toglie la marcatura da una riga di fatto. Torna (testo, fonte, progetto).
+
+    Si toglie tutto, in un ciclo, finche' la riga non cambia piu'. Il
+    motivo e' l'ordine: la fonte e la data stanno in coda, e il progetto
+    sta in mezzo. Applicare le regex una volta sola, in un ordine solo,
+    lascia metà della marcatura dentro il testo quando i marcatori si
+    presentano in ordine diverso da quello atteso — e un marcatore
+    rimasto dentro il fatto finisce nel prompt, dove il modello lo legge
+    come parte della conoscenza.
+    """
+    testo = corpo
+    fonte = ""
+    progetto = ""
+    for _ in range(6):
+        prima = testo
+        m = _RE_PROGETTO.search(testo)
+        if m:
+            progetto = (m.group(1) or "").strip()
+            testo = _RE_PROGETTO.sub("", testo)
+        testo = _RE_DATA.sub("", testo)
+        m2 = _RE_FONTE.search(testo)
+        if m2:
+            fonte = (m2.group(0) or "").strip().strip("_").strip()
+            testo = _RE_FONTE.sub("", testo)
+        testo = _RE_ALTA.sub("", testo)
+        testo = testo.strip()
+        if testo == prima:
+            break
+    return testo, fonte, progetto
 
 
 class Memoria:
@@ -198,7 +247,7 @@ class Memoria:
             self._ultima_lettura = time.time()
 
     def aggiungi(self, fatto: str, origine: str = "",
-                 importante: bool = False) -> bool:
+                 importante: bool = False, progetto: str = "") -> bool:
         """Aggiunge un fatto. Mai sovrascrive.
 
         `importante` lo mette nella sezione `## Importanti`, che è quella
@@ -208,6 +257,12 @@ class Memoria:
         provato due volte, con il marcatore che finiva dentro il testo o
         veniva mangiato dalla pulizia della fonte.
 
+        `progetto` è l'etichetta che dice DA QUALE progetto viene il
+        fatto. Va dentro la riga, non in un campo a parte: il file è la
+        verità, e un file di testo con un fatto per riga non ha dove
+        tenere un campo. L'etichetta è anche ciò che permette a un
+        archivio condiviso di essere interrogato per progetto.
+
         Ritorna False se il fatto c'era già: duplicare la memoria la fa
         crescere senza che diventi più precisa, e un fatto ripetuto tre
         volte conta il triplo nel contesto senza dire niente di più.
@@ -215,6 +270,7 @@ class Memoria:
         fatto = " ".join((fatto or "").split()).strip()
         if not fatto:
             return False
+        progetto = (progetto or "").strip()
         with self._lock:
             # Il confronto va fatto sui fatti PULITI, non sulle righe
             # grezze: una riga scritta da `aggiungi` porta dietro la data
@@ -227,12 +283,13 @@ class Memoria:
             # l'86% del tempo sta lì — 2,6 milioni di chiamate a re.sub.
             if self._visti is None:
                 self._visti = set(self.fatti())
-            fatto_pulito = _RE_DATA.sub("", _RE_FONTE.sub("", _RE_ALTA.sub("", fatto)))
-            fatto_pulito = fatto_pulito.strip()
+            fatto_pulito = _pulizia_riga(fatto)[0]
             if fatto_pulito in self._visti:
                 return False
             self._visti.add(fatto_pulito)
             riga_nuova = f"- {fatto}"
+            if progetto:
+                riga_nuova += f"  [progetto:{progetto}]"
             if origine:
                 riga_nuova += f"  _{origine}_"
             riga_nuova += f"  <!-- {time.strftime('%Y-%m-%d')} -->\n"
@@ -277,8 +334,11 @@ class Memoria:
             if not r.startswith("-"):
                 continue
             corpo = r.lstrip("-").strip()
-            corpo = re.sub(r"\s*<!--.*?-->\s*$", "", corpo)
-            corpo = re.sub(r"\s*_[^_]+_\s*$", "", corpo)
+            # stessa pulizia di `fatti()`: se le due regole divergono,
+            # un fatto importante finisce col testo comprensivo di
+            # marcatori e gli altri no — e il modello vede due lingue
+            # diverse per lo stesso archivio.
+            corpo = _pulizia_riga(corpo)[0]
             if corpo:
                 fuori.append(corpo)
         return fuori
@@ -319,10 +379,21 @@ class Memoria:
             for riga in righe:
                 corpo = riga.strip().lstrip("-*").strip()
                 if not fatto and (corpo == vecchio or vecchio in corpo):
-                    # la coda e' "  _origine_  <!-- data -->": la si stacca
-                    # dal corpo per riattaccarla al testo nuovo.
+                    # la coda e' "  [progetto:x]  _origine_  <!-- data -->":
+                    # la si stacca dal corpo per riattaccarla al testo
+                    # nuovo. Il progetto fa parte della coda perche' e'
+                    # un marcatore come gli altri: perderlo significa
+                    # che un fatto modificato esce dal suo progetto, e
+                    # da lì non e' piu' ritrovabile con gli altri.
                     coda = ""
-                    m = re.search(r"(\s*_[^_]+_\s*<!--.*?-->\s*|\s*<!--.*?-->\s*|\s*_[^_]+_\s*)$", corpo)
+                    m = re.search(
+                        r"(\s*\[progetto:[^\]]*\]\s*"
+                        r"\s*_[^_]+_\s*<!--.*?-->\s*"
+                        r"|\s*\[progetto:[^\]]*\]\s*_[^_]+_\s*"
+                        r"|\s*\[progetto:[^\]]*\]\s*"
+                        r"|\s*_[^_]+_\s*<!--.*?-->\s*"
+                        r"|\s*<!--.*?-->\s*"
+                        r"|\s*_[^_]+_\s*)$", corpo)
                     if m:
                         coda = m.group(1)
                     indent = riga[:len(riga) - len(riga.lstrip())]
@@ -364,19 +435,65 @@ class Memoria:
                 if not r.startswith("-"):
                     continue
                 corpo = r.lstrip("-").strip()
-                # toglie il commento HTML con la data e la fonte
-                corpo = _RE_DATA.sub("", corpo)
-                corpo = _RE_FONTE.sub("", corpo)
-                # e la marcatura di priorità. Se resta qui finisce dentro
-                # il testo del fatto: il confronto anti-duplicato di
-                # `aggiungi` non trova corrispondenza e il duplicato viene
-                # scritto lo stesso — provato, "Ricordato".
-                corpo = _RE_ALTA.sub("", corpo)
+                # toglie il commento HTML con la data, la fonte, la
+                # marcatura di priorità e l'etichetta del progetto. La
+                # pulizia sta in un posto solo: se ogni lettore si fa
+                # le regex per conto proprio le regole divergono, e un
+                # marcatore che una riga lascia dentro finisce nel
+                # testo del fatto — e da lì nel prompt, dove il modello
+                # lo legge come conoscenza.
+                corpo = _pulizia_riga(corpo)[0]
                 if corpo:
                     fuori.append(corpo)
             self._cache_fatti = fuori
             self._cache_fatti_chiave = chiave
             return fuori
+
+    def fatti_per_progetto(self, progetto: str) -> list[str]:
+        """I fatti che vengono da un progetto.
+
+        Il punto di tutto: la memoria e' condivisa, ma non ogni fatto
+        serve a ogni progetto. Un archivio unico che risponde " tutto"
+        a ogni domanda non e' una memoria, e' un mucchio. Qui si
+        restituisce il sottoinsieme che riguarda il progetto chiesto.
+
+        Un progetto vuoto significa "tutti i fatti": e' il modo
+        normale di chiedere, e non ha senso che "nessun progetto"
+        valga "nessun fatto".
+        """
+        progetto = (progetto or "").strip().lower()
+        if not progetto:
+            return self.fatti()
+        fuori = []
+        with self._lock:
+            testo = self.leggi()
+        for riga in testo.splitlines():
+            r = riga.strip()
+            if not r.startswith("-"):
+                continue
+            corpo = r.lstrip("-").strip()
+            testo_fatto, _fonte, prog = _pulizia_riga(corpo)
+            if prog.lower() == progetto and testo_fatto:
+                fuori.append(testo_fatto)
+        return fuori
+
+    def progetti(self) -> list[str]:
+        """I progetti di cui la memoria ha qualcosa.
+
+        Vengono dai fatti, non da una tabella: il file e' la verita',
+        e un progetto che ha solo un fatto e' un progetto che esiste.
+        """
+        visti: dict[str, int] = {}
+        with self._lock:
+            testo = self.leggi()
+        for riga in testo.splitlines():
+            r = riga.strip()
+            if not r.startswith("-"):
+                continue
+            _t, _f, prog = _pulizia_riga(r.lstrip("-").strip())
+            if prog:
+                visti[prog] = visti.get(prog, 0) + 1
+        return sorted(visti)
 
 
 # -- registro dei backend --------------------------------------------------
@@ -441,11 +558,11 @@ def estrai_fatti(conversazione: str, provider: Any) -> list[str]:
     va visto prima di fidarsi: per questo `applica_fatti` è una funzione
     separata, e non lo fa da sola.
     """
-    from .providers import LLMResponse  # noqa: F401  (per il tipo)
+    from .types import Message
     try:
         prompt = PROMPT_ESTRAZIONE.format(conversazione=conversazione[-8000:])
         resp = provider.chat(
-            [{"role": "user", "content": prompt}],
+            [Message(role="user", content=prompt)],
             tools=None,
         )
         testo = (getattr(resp, "content", "") or "").strip()
@@ -464,14 +581,59 @@ def estrai_fatti(conversazione: str, provider: Any) -> list[str]:
     return fatti[:10]
 
 
-def applica_fatti(fatti: list[str], origine: str = "sessione") -> int:
-    """Mette i fatti in memoria. Ritorna quanti erano nuovi."""
+def applica_fatti(fatti: list[str], origine: str = "sessione",
+                 progetto: str = "") -> int:
+    """Mette i fatti in memoria. Ritorna quanti erano nuovi.
+
+    `progetto` va passato a `aggiungi` e non messo nella `origine`: sono
+    due cose diverse. L'origine dice DA CHI viene il fatto (sessione,
+    agente, mano dell'utente), il progetto dice A QUALE PROGETTO
+    appartiene. Se il progetto viaggiasse dentro la fonte, il filtro
+    per progetto non avrebbe niente su cui lavorare — e il sintomo
+    sarebbe "il progetto e' sparito", che sembra un problema di
+    ricerca e invece e' un problema di scrittura.
+    """
     m = memoria()
     nuovi = 0
     for f in fatti:
-        if m.aggiungi(f, origine=origine):
+        if m.aggiungi(f, origine=origine, progetto=progetto):
             nuovi += 1
     return nuovi
+
+
+def estrai_e_ricorda(conversazione: str, provider: Any,
+                     progetto: str = "") -> int:
+    """Estrae i fatti dalla conversazione e li mette in memoria.
+
+    E' il pezzo che mancava: `estrai_fatti` e `applica_fatti` esistevano
+    da sole, ma nessuno le chiamava. La memoria non ricordava niente da
+    sola — l'unico modo perché un fatto arrivasse era che l'agente
+    chiamasse il tool `memoria` con `azione=aggiungi`, e cioe' che se
+    ne ricordasse. Un agente non si ricorda le cose da solo.
+
+    Qui il turno chiama questa funzione e non deve pensarci: estrae,
+    scrive, e restituisce quanti fatti nuovi sono entrati. Zero se il
+    provider non risponde, se il turno era vuoto, o se non c'era niente
+    da ricordare — che sono tre cose diverse, ma per il chiamante
+    contano tutte e zero.
+
+    Il `progetto` entra nella riga come etichetta. Non e' un
+    requisito per ricordare: e' quello che permette a un archivio
+    condiviso di rispondere "cosa serve per IL progetto su cui
+    sto lavorando" invece di "tutto quello che Orchestra sa".
+    """
+    if not (conversazione or "").strip():
+        return 0
+    try:
+        fatti = estrai_fatti(conversazione, provider)
+    except Exception:
+        return 0
+    if not fatti:
+        return 0
+    try:
+        return applica_fatti(fatti, origine="sessione", progetto=progetto)
+    except Exception:
+        return 0
 
 
 def contesto_memoria() -> str:

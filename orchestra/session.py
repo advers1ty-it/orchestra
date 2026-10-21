@@ -270,6 +270,17 @@ class Session:
         # riempirebbe il DB di conversazioni finte).
         self._sessione_id: int | None = None
 
+        # Il progetto su cui si sta lavorando. Ogni fatto che nasce da
+        # un turno porta questa etichetta, ed e' quello che permette
+        # di chiedere alla memoria "cosa serve per QUESTO progetto"
+        # invece di "tutto quello che Orchestra sa".
+        #
+        # Stringa vuota = nessun progetto, e i fatti si salvano senza
+        # etichetta. Non e' un caso speciale: e' il modo normale di
+        # lavorare, e i fatti senza progetto restano raggiungibili
+        # con ogni ricerca.
+        self.progetto: str = ""
+
         self.agent = Agent(
             provider,
             registry,
@@ -278,6 +289,15 @@ class Session:
             summarize=summarize,
             on_event=self.bridge.emit,
         )
+        # L'agente deve conoscere il progetto fin dall'inizio: e' lui
+        # che mette il blocco del progetto nel prompt e che sa quale
+        # filtro passare al tool `memoria`. Senza questa riga, il
+        # progetto lo sa solo la sessione — e quindi i fatti vengono
+        # etichettati ma il modello non li cerca col filtro giusto.
+        try:
+            self.agent.progetto = self.progetto
+        except Exception:
+            pass
 
     # -- stato -------------------------------------------------------------
 
@@ -334,6 +354,69 @@ class Session:
                 "messages": messaggi,
                 "routing": bool(self._routing_attivo),
             }
+
+    def imposta_progetto(self, progetto: str) -> str:
+        """Cambia il progetto su cui si lavora. Ritorna quello nuovo.
+
+        Va fatto in un posto solo, e non settando l'attributo a mano:
+        il progetto vive su due oggetti — la sessione (che etichetta i
+        fatti) e l'agente (che deve saperlo per cercarli). Se uno dei
+        due resta indietro, la memoria etichetta col progetto vecchio
+        mentre il modello cerca col nuovo: fatti che non si
+        ritrovano, senza che nessuno dica perche'.
+
+        Il prompt viene ricalcolato subito, non al turno dopo: se
+        l'utente cambia progetto e scrive "ora il menu", il modello
+        deve gia' sapere di essere nel progetto nuovo.
+
+        Il progetto vuoto e' legittimo: si lavora senza progetto, e i
+        fatti non vengono etichettati. Non e' un errore.
+
+        QUI si sposta anche la root: il progetto non e' solo
+        un'etichetta, e' la cartella in cui si scrive. La root sta nel
+        thread, e il thread del turno e' un thread suo — quindi la
+        root viene impostata dentro `_esegui_turno`, dove il thread
+        esiste gia'. Qui si tiene il NOME, che e' quello che serve
+        alla memoria e al prompt.
+        """
+        progetto = (progetto or "").strip()
+        with self._lock:
+            self.progetto = progetto
+            try:
+                self.agent.progetto = progetto
+            except Exception:
+                pass
+            try:
+                self.agent._aggiorna_prompt()
+            except Exception:
+                pass
+        return progetto
+
+    def _prepara_root(self) -> None:
+        """Mette la root di questo thread sul progetto giusto.
+
+        Va fatto nel thread del turno, non quando si cambia progetto:
+        il thread che cambia il progetto e' quello della richiesta
+        HTTP, non quello che eseguira' i tool. Impostare la root li'
+        non cambierebbe nulla, perche' il tool la legge nel suo thread.
+
+        Se il progetto non e' registrato, la root resta quella
+        globale: e' il caso normale, e lavorare dentro la cartella
+        di installazione e' sempre lecito.
+        """
+        try:
+            from . import progetti as _pr
+            nome = (getattr(self, "progetto", "") or "").strip()
+            if not nome:
+                _pr._set_root_sessione("", "")
+                return
+            percorso = _pr.percorso_di(nome)
+            if not percorso:
+                _pr._set_root_sessione("", "")
+                return
+            _pr._set_root_sessione(percorso, nome)
+        except Exception:  # noqa: BLE001
+            pass
 
     def set_system_prompt(self, prompt: str) -> None:
         """Cambia le istruzioni di sistema a sessione avviata.
@@ -701,6 +784,20 @@ class Session:
     def _esegui_turno(self, user_input: str, allegati: list,
                       reg: Any) -> None:
         allegati = allegati or []
+        # Se il testo nomina un progetto, si cambia progetto. E' il
+        # meccanismo che fa diventare "oggi lavoriamo al sito
+        # ristorante" una frase che FA qualcosa.
+        #
+        # Poi la root: va rimessa DOPO il riconoscimento, perche' e'
+        # il riconoscimento a poter cambiare il progetto, e quindi
+        # la cartella in cui si scrive. La root preparata prima
+        # rifletterebbe il progetto vecchio, e l'agente scriverebbe
+        # nella cartella sbagliata per un turno intero.
+        try:
+            self._riconosci_progetto(user_input)
+        except Exception:  # noqa: BLE001
+            pass
+        self._prepara_root()
         if allegati:
             # Si dice subito quanto costeranno. Un allegato da 12 MB
             # diventa una richiesta da 40.000 token, e scoprirlo dalla
@@ -716,6 +813,10 @@ class Session:
                 from .tools import applica_profilo, profilo_per_testo
                 nome = self.agent.config.tool_profile
                 if nome == "auto":
+                    # L'auto si specializza sul testo del turno: il registro
+                    # viene rifatto a ogni turno, e quello che conta e' che
+                    # gli strumenti disponibili corrispondano a quello che
+                    # sta per succedere.
                     nome = profilo_per_testo(user_input)
                 applica_profilo(self.agent.registry, nome)
             except Exception:
@@ -801,6 +902,7 @@ class Session:
             # completa che non lo era. `stopped_because` dice com'è
             # andata, e resta nel DB accanto ai messaggi.
             self._salva_su_disco()
+            self._ricorda_turno()
             # `busy` va azzerato PRIMA di emettere `idle`, non dopo: la UI
             # usa `idle` come segnale per riabilitare l'input, e se arrivasse
             # prima dello stato reale accetterebbe un messaggio che il server
@@ -889,6 +991,154 @@ class Session:
 
     def _should_continue(self, state: AgentState) -> bool:
         return not self._cancel.is_set()
+
+    def _ricorda_turno(self) -> int:
+        """Alla fine del turno, la conversazione diventa memoria.
+
+        Questo e' il pezzo che mancava. `estrai_fatti` e `applica_fatti`
+        esistevano in `memoria.py` da tempo, ma nessuno le chiamava: la
+        memoria non ricordava niente da sola. L'unico modo perché un
+        fatto arrivasse era che l'agente si ricordasse di chiamare il
+        tool `memoria` con `azione=aggiungi` — e un agente non si
+        ricorda le cose da solo.
+
+        Si chiama qui, nel `finally` di `_esegui_turno`, perche' e' il
+        punto in cui il turno e' finito: anche un turno annullato a
+        meta' ha prodotto una domanda e una risposta parziale, e
+        quello che c'e' da imparare c'e'.
+
+        Non blocca il turno: l'estrazione chiama il provider, e un
+        provider lento aggiungerebbe secondi a ogni risposta. Va in un
+        thread secco, e il suo fallimento non tocca niente: una memoria
+        che non ha imparato niente e' un turno che ha funzionato lo
+        stesso.
+
+        Ritorna 0 SEMPRE, e non per un difetto: il lavoro avviene nel
+        thread, e il chiamante non puo' saperlo al momento della
+        chiamata. Un numero qui sarebbe un numero inventato — e un
+        numero inventato in un resoconto e' peggio di nessun numero.
+
+        Il progetto e' quello attivo. Ogni fatto che nasce porta
+        quell'etichetta, e cosi un archivio condiviso resta
+        interrogabile per progetto.
+        """
+        try:
+            testo = self._testo_per_estrazione()
+            if not testo:
+                return 0
+            from .memoria import estrai_e_ricorda
+            progetto = getattr(self, "progetto", "") or ""
+            provider = self.agent.provider
+        except Exception:
+            # La memoria non deve mai far cadere un turno riuscito.
+            return 0
+
+        # In un thread, perche' l'estrazione chiama il provider e un
+        # provider lento aggiungerebbe secondi a ogni risposta. Il
+        # thread e' "secco": non blocca nessuno e il suo fallimento
+        # non tocca niente — una memoria che non ha imparato niente
+        # e' un turno che ha funzionato lo stesso.
+        #
+        # Il risultato non viene aspettato: il turno e' gia' finito e
+        # l'utente non aspetta che la memoria si riempia. Il fatto
+        # sara' li' per il turno successivo, che e' quando serve.
+        def _lavora() -> None:
+            try:
+                estrai_e_ricorda(testo, provider, progetto=progetto)
+            except Exception:
+                pass
+
+        try:
+            t = threading.Thread(target=_lavora, daemon=True,
+                                name="orchestra-memoria")
+            t.start()
+        except Exception:
+            pass
+        return 0
+
+    def _riconosci_progetto(self, testo: str) -> str:
+        """Se il testo nomina un progetto, cambia progetto. Ritorna il nome.
+
+        Il meccanismo che rende "oggi lavoriamo al sito ristorante"
+        una frase che fa qualcosa, e non una frase che il modello
+        interpreta da solo.
+
+        Il perche' non e' "il modello capisce": un modello che vede
+        "sito ristorante" in un prompt e in un progetto registrato
+        PUO' capirlo, e PUO' sbagliare — e quando sbaglia scrive
+        nel progetto sbagliato. Il costo di quell'errore e' alto
+        (file sovrascritti, fatti etichettati sul progetto sbagliato)
+        e non e' visibile subito.
+
+        Quindi: il riconoscimento e' fatto QUI, deterministicamente,
+        e il modello viene avvisato. Se il testo nomina piu'
+        progetti non si sceglie: si chiede. Una domanda all'utente
+        costa un secondo; un file scritto nella cartella sbagliata
+        costa di piu'.
+
+        Un progetto gia' attivo non viene cambiato per un testo che
+        lo nomina: e' gia' quello su cui si sta lavorando.
+        """
+        try:
+            from . import progetti as _pr
+        except Exception:  # noqa: BLE001
+            return ""
+        try:
+            nome, motivo = _pr.riconosci(testo)
+        except Exception:  # noqa: BLE001
+            return ""
+        if not nome:
+            return ""
+        attuale = (getattr(self, "progetto", "") or "").strip()
+        if attuale and attuale.lower() == nome.lower():
+            return attuale
+        # Il progetto deve esistere: `riconosci` lavora solo sui
+        # progetti registrati, quindi questo e' solo una difesa.
+        if not _pr.percorso_di(nome):
+            return attuale
+        try:
+            self.imposta_progetto(nome)
+            _pr.tocca(nome)
+            self.bridge.emit("progetto_cambiato", {
+                "progetto": nome,
+                "percorso": _pr.percorso_di(nome),
+                "motivo": motivo,
+            })
+        except Exception:  # noqa: BLE001
+            return attuale
+        return nome
+
+    def _testo_per_estrazione(self) -> str:
+        """La conversazione da rileggere per tirare fuori i fatti.
+
+        Solo i messaggi dell'utente e dell'assistente: i risultati dei
+        tool sono rumore per l'estrattore (sonooutput di programmi, non
+        frasi dell'utente), e mandargli tuttoCosta token e diluisce la
+        conversazione.
+
+        Solo l'ULTIMO scambio, pero'. Una sessione lunga ha cento
+        messaggi, e rileggerli tutti a ogni turno fa due cose sbagliate:
+        costa token, e fa rileggere all'estrattore fatti che il
+        modello aveva gia' imparato — con il rischio che ne tragga
+        duplicati o che perda il filo di quello che e' successo ADESSO.
+
+        Il limite di 8000 caratteri c'e' comunque, come rete di
+        sicurezza: un singolo messaggio enorme non deve portare il
+        prompt dell'estrattore a 500 KB.
+        """
+        scambio: list[str] = []
+        for m in reversed(self.agent.state.messages):
+            if m.role not in ("user", "assistant"):
+                continue
+            t = (m.content or "").strip()
+            if not t:
+                continue
+            scambio.append(f"{m.role}: {t}")
+            # l'ultimo scambio e' la domanda piu' la risposta: due
+            # messaggi. Oltre, si sta rileggendo la sessione intera.
+            if len(scambio) >= 2:
+                break
+        return "\n".join(reversed(scambio))[-8000:]
 
     # -- recupero da un modello che non regge il tool-calling ---------------
     #

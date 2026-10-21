@@ -1,0 +1,174 @@
+{
+  "provider": "groq",
+  "saved_at": 1790777860.988936,
+  "models": {
+    "openai/gpt-oss-safeguard-20b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    },
+    "whisper-large-v3-turbo": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1790764580.52913,
+      "supports_tools": false
+    },
+    "meta-llama/llama-prompt-guard-2-22m": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    },
+    "whisper-large-v3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1790764580.5291276,
+      "supports_tools": false
+    },
+    "allam-2-7b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1790764580.5291224,
+      "supports_tools": false
+    },
+    "qwen/qwen3.8-27b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    },
+    "canopylabs/orpheus-arabic-saudi": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    },
+    "openai/gpt-oss-120b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    },
+    "meta-llama/llama-prompt-guard-2-86m": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    },
+    "canopylabs/orpheus-v1-english": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    },
+    "openai/gpt-oss-20b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0
+    }
+  }
+}

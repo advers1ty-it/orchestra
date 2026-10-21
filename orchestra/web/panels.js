@@ -1137,9 +1137,18 @@ on($("permessi-prova"), "click", async () => {
     });
     const d = await r.json();
     if (!r.ok) { permessiMsg.textContent = d.error || "errore"; return; }
-    permessiMsg.textContent = d.in_attesa
-      ? "domanda partita: dovrebbe comparire il riquadro"
-      : "nessun riquadro: ricarica con Ctrl+F5, la pagina è vecchia";
+    if (d.in_attesa) {
+      permessiMsg.textContent = "domanda partita: dovrebbe comparire il riquadro";
+    } else {
+      // La diagnosi del server dice perche': valutazione, canale
+      // assente, errore. Senza, "non funziona" e' una pista cieca.
+      const g = d.diagnosi || {};
+      const perche = g.errore ? "errore: " + g.errore
+        : g.valuta && g.valuta !== "chiedi" ? "valutazione: " + g.valuta + " (non si chiede proprio)"
+        : g.ha_chiedi === false ? "canale assente: il server non puo' chiedere (riavvialo)"
+        : "domanda partita e rientrata subito: ricarica con Ctrl+F5, la pagina è vecchia";
+      permessiMsg.textContent = "nessun riquadro: " + perche;
+    }
     permessiMsg.className = "small " + (d.in_attesa ? "verde" : "rosso");
     caricaPermessi();
   } catch (e) {
@@ -2613,7 +2622,6 @@ if (memoriaNuovo) {
 
 const sidebar = $("sidebar");
 const sideElenco = $("side-elenco");
-const sideSkill = $("side-skill");
 const sideMsg = $("side-msg");
 const sideBtn = $("btn-side");
 
@@ -2671,7 +2679,12 @@ function _sideData(ts) {
 async function caricaSide() {
   if (!sideElenco) return;
   if (sideMsg) { sideMsg.textContent = "caricamento..."; sideMsg.className = "small dim side-msg"; }
-  await Promise.all([caricaSideSessioni(), caricaSideSkill(), caricaSideTracce()]);
+  // Anche i progetti: la lista dei progetti registrati e' nella
+  // sidebar, e deve essere aggiornata quando la sidebar si apre —
+  // un progetto registrato in un'altra finestra non apparirebbe
+  // altrimenti, e l'utente lo crederebbe perso.
+  await Promise.all([caricaSideSessioni(), caricaSideTracce(),
+                      caricaProgetti()]);
   if (sideMsg) { sideMsg.textContent = ""; sideMsg.className = "small dim side-msg"; }
 }
 
@@ -2788,45 +2801,6 @@ async function caricaSideSessioni() {
   }
 }
 
-async function caricaSideSkill() {
-  if (!sideSkill) return;
-  try {
-    const d = await skillPost({ azione: "elenca" });
-    if (!d || d.error) return;
-    const lista = [...(d.lista_scaricate || []), ...(d.lista_generate || [])]
-      .filter(s => s && s.nome)
-      .slice(0, 24);
-    sideSkill.replaceChildren();
-    if (!lista.length) {
-      const li = document.createElement("li");
-      li.className = "small dim";
-      li.style.padding = "4px 6px";
-      li.textContent = "Nessuna skill installata.";
-      sideSkill.appendChild(li);
-      return;
-    }
-    for (const s of lista) {
-      const li = document.createElement("li");
-      li.className = "side-skill-riga";
-      const nome = document.createElement("span");
-      nome.className = "side-skill-nome";
-      nome.textContent = s.nome;
-      nome.title = s.descrizione || "";
-      const apri = document.createElement("button");
-      apri.className = "side-apri-pagina";
-      apri.textContent = "apri";
-      apri.title = "Apri la pagina della skill";
-      apri.addEventListener("click", () => apriPaginaSkill(s.nome));
-      li.appendChild(nome);
-      li.appendChild(apri);
-      sideSkill.appendChild(li);
-    }
-  } catch (e) {
-    // Le skill non sono un requisito: la cronologia resta il pezzo
-    // principale, e un errore qui non deve svuotarla.
-  }
-}
-
 function apriPaginaSkill(nome) {
   // Pagina dedicata costruita col DOM. Il testo di una skill arriva da un
   // file: scriverlo dentro una stringa concatenata lo farebbe interpretare
@@ -2894,9 +2868,11 @@ function chiudiCapacita() {
   if (capacita) capacita.classList.add("hidden");
 }
 
-const btnCapacita = $("btn-capacita");
-if (btnCapacita) btnCapacita.addEventListener("click", apriCapacita);
-
+// Il bottone che apre Capacita' e' il "side-cap" nella sidebar, agganciato
+// piu' in basso. Un secondo aggancio su un id che il markup non ha non
+// e' innocuo: e' un bottone che non esiste, e il giorno in cui qualcuno
+// rimette quell'id per sbaglio non si accorge che il bottone vero e' un
+// altro.
 const capClose = $("capacita-close");
 if (capClose) capClose.addEventListener("click", chiudiCapacita);
 
@@ -3083,15 +3059,16 @@ if (sideBtn) {
   else allargaSide();
 })();
 
-// Caricamento all'avvio, in FONDO di proposito. Stava subito dopo la
-// dichiarazione di `sidebar`, ma `caricaSide` tocca `sideSkill`,
-// `sideElenco` e `sideSkill`, che sono `const` dichiarate più sotto:
-// in temporal dead zone il riferimento lancia e le liste restano vuote
-// — senza errori in console, perché la funzione è hoisted e sembra
-// chiamabile.
-if (sidebar && !sidebar.hasAttribute("hidden")) {
-  caricaSide();
-}
+// Il caricamento all'avvio e' in FONDO del file, non qui. Stava qui,
+// subito dopo la dichiarazione di `sidebar`, ma `caricaSide` tocca
+// anche `sideSkill`, `sideElenco` e i `prog*` dei progetti, che sono
+// `const` dichiarate piu' sotto: in temporal dead zone il riferimento
+// lancia e le liste restano vuote — senza errori in console, perche'
+// la funzione e' hoisted e sembra chiamabile.
+//
+// La regola e' una sola: nessun `const` puo' essere letto prima della
+// sua dichiarazione, e le dichiarazioni stanno in fondo. Per questo
+// la chiamata sta in fondo anche lei.
 
 // --------------------------------------------- cercare nelle conversazioni
 //
@@ -3775,3 +3752,298 @@ on("goal-sched", "click", async () => {
     if (goalStatus) goalStatus.textContent = "errore: " + e;
   }
 });
+
+// ------------------------------------------------------------- il progetto
+//
+// Il progetto dice su CHE COSA si sta lavorando, e DOVE. Non e' solo
+// un'etichetta: e' la cartella in cui l'agente scrive, e il confine
+// di sicurezza si sposta con lui.
+//
+// Il campo e' un input con datalist perche' i progetti sono pochi e
+// hanno nomi che l'utente conosce ("sito ristorante"): un menu a
+// tendina non farebbe la differenza, e un input vuoto CANCELLARE
+// l'etichetta e' una azione che l'utente vuole poter fare.
+const progInput = $("side-progetto-input");
+const progLista = $("side-progetto-lista");
+const progFatti = $("side-progetto-fatti");
+const progOk = $("side-progetto-ok");
+
+function _progettoLabel() {
+  if (!progInput) return "";
+  return (progInput.value || "").trim();
+}
+
+async function caricaProgetto() {
+  if (!progInput) return;
+  try {
+    const r = await fetch("/api/progetto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return;
+    const attivo = d.attivo || "";
+    // Il campo mostra il progetto attivo. Solo se l'utente non sta
+    // scrivendo: altrimenti gli si cancella il testo sotto le dita
+    // mentre preme OK.
+    if (document.activeElement !== progInput) {
+      progInput.value = attivo;
+    }
+    if (progLista) {
+      progLista.innerHTML = "";
+      (d.progetti || []).forEach((p) => {
+        const o = document.createElement("option");
+        o.value = p;
+        progLista.appendChild(o);
+      });
+    }
+    if (progFatti) {
+      if (attivo) {
+        progFatti.textContent = d.n_fatti
+          ? (d.n_fatti + (d.n_fatti === 1 ? " fatto" : " fatti") + " di «" + attivo + "»")
+          : ("nessun fatto per «" + attivo + "»");
+      } else {
+        progFatti.textContent = "la memoria è condivisa: i fatti senza progetto valgono per tutti";
+      }
+    }
+  } catch (e) {
+    if (progFatti) progFatti.textContent = "non riesco a leggere i progetti";
+  }
+}
+
+async function impostaProgetto() {
+  if (!progInput) return;
+  const nome = _progettoLabel();
+  if (progFatti) progFatti.textContent = "salvo...";
+  try {
+    const r = await fetch("/api/progetto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ progetto: nome }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (progFatti) progFatti.textContent = d.error || ("errore " + r.status);
+      return;
+    }
+    await caricaProgetto();
+  } catch (e) {
+    if (progFatti) progFatti.textContent = "errore: " + e;
+  }
+}
+
+if (progOk) progOk.addEventListener("click", impostaProgetto);
+if (progInput) {
+  // Invio nel campo = OK. Il pulsante ci sarebbe gia', ma digitare e
+  // premere Invio e' il gesto che si fa senza pensarci, e un campo
+  // che lo richiede e' un campo che si lascia mezzo compilato.
+  progInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      impostaProgetto();
+    }
+  });
+}
+
+// ------------------------------------------------- la sezione Progetti
+//
+// I progetti registrati, con la cartella di ciascuno e quanti file
+// hanno toccato. Registrare un progetto e' una cosa che fai una
+// volta; aprire un progetto e' una cosa che fai ogni volta che
+// inizi a lavorare. Per questo la sezione sta separata dal campo
+// qui sopra.
+const progElenco = $("side-progetti");
+const progNuovoNome = $("side-progetto-nuovo-nome");
+const progNuovoPercorso = $("side-progetto-nuovo-percorso");
+const progNuovoAlias = $("side-progetto-nuovo-alias");
+const progNuovoOk = $("side-progetto-nuovo-ok");
+const progFileBox = $("side-progetti-file");
+
+async function caricaProgetti() {
+  if (!progElenco) return;
+  try {
+    const r = await fetch("/api/progetti");
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return;
+    progElenco.innerHTML = "";
+    const progetti = d.progetti || [];
+    if (!progetti.length) {
+      const li = document.createElement("li");
+      li.className = "small dim";
+      li.textContent = "nessun progetto registrato";
+      progElenco.appendChild(li);
+      return;
+    }
+    progetti.forEach((p) => {
+      const li = document.createElement("li");
+      if (p.attivo) li.classList.add("attivo");
+
+      const riga = document.createElement("div");
+      riga.className = "riga";
+      const nome = document.createElement("span");
+      nome.className = "nome";
+      nome.textContent = p.nome;
+      riga.appendChild(nome);
+
+      const apri = document.createElement("button");
+      apri.className = "primary";
+      apri.textContent = p.attivo ? "attivo" : "apri";
+      apri.title = "Lavora in questo progetto";
+      apri.addEventListener("click", async () => {
+        if (progInput) progInput.value = p.nome;
+        await impostaProgetto();
+      });
+      riga.appendChild(apri);
+
+      const file = document.createElement("button");
+      file.className = "ghost";
+      file.textContent = "file";
+      file.title = "I file toccati in questo progetto";
+      file.addEventListener("click", () => caricaFileProgetto(p.nome));
+      riga.appendChild(file);
+
+      const via = document.createElement("button");
+      via.className = "ghost";
+      via.textContent = "×";
+      via.title = "Dimentica questo progetto";
+      via.addEventListener("click", async () => {
+        try {
+          await fetch("/api/progetti/elimina", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nome: p.nome }),
+          });
+          await caricaProgetti();
+          await caricaProgetto();
+        } catch (e) { /* la lista si ricarica comunque */ }
+      });
+      riga.appendChild(via);
+
+      li.appendChild(riga);
+
+      const perc = document.createElement("div");
+      perc.className = "perc";
+      perc.textContent = p.percorso || "";
+      li.appendChild(perc);
+
+      // Gli alias: gli altri nomi dello stesso progetto. Si vedono
+      // perche' sono l'informazione che permette a Orchestra di
+      // capire "let's work on the restaurant site" — e se l'utente
+      // non li vede, non sa che quella frase funziona.
+      const alias = p.alias || [];
+      if (alias.length) {
+        const al = document.createElement("div");
+        al.className = "perc dim";
+        al.textContent = "anche: " + alias.join(", ");
+        li.appendChild(al);
+      }
+
+      const nf = document.createElement("div");
+      nf.className = "n-file";
+      const n = p.n_file || 0;
+      nf.textContent = n + (n === 1 ? " file toccato" : " file toccati");
+      li.appendChild(nf);
+
+      progElenco.appendChild(li);
+    });
+  } catch (e) {
+    if (progElenco) progElenco.innerHTML = "";
+  }
+}
+
+async function caricaFileProgetto(nome) {
+  if (!progFileBox) return;
+  try {
+    const r = await fetch("/api/progetti/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ progetto: nome }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return;
+    progFileBox.hidden = false;
+    progFileBox.innerHTML = "";
+    const file = d.file || [];
+    if (!file.length) {
+      const p = document.createElement("div");
+      p.className = "small dim";
+      p.textContent = "nessun file toccato in «" + nome + "»";
+      progFileBox.appendChild(p);
+      return;
+    }
+    file.forEach((f) => {
+      const riga = document.createElement("div");
+      riga.className = "riga";
+      const path = document.createElement("span");
+      path.textContent = f.path;
+      const az = document.createElement("span");
+      az.className = "azione";
+      az.textContent = f.azione;
+      riga.appendChild(path);
+      riga.appendChild(az);
+      progFileBox.appendChild(riga);
+    });
+  } catch (e) {
+    if (progFileBox) progFileBox.textContent = "non riesco a leggere i file";
+  }
+}
+
+if (progNuovoOk) {
+  progNuovoOk.addEventListener("click", async () => {
+    const nome = (progNuovoNome && progNuovoNome.value || "").trim();
+    const percorso = (progNuovoPercorso && progNuovoPercorso.value || "").trim();
+    // Gli alias: gli altri nomi dello stesso progetto. Vanno nel
+    // body, e senza di loro il riconoscimento in un'altra lingua
+    // non funziona — un progetto chiamato "Sito Ristorante" non
+    // contiene la parola "restaurant".
+    const alias = (progNuovoAlias && progNuovoAlias.value || "").trim();
+    if (!nome || !percorso) {
+      if (progFatti) progFatti.textContent = "serve il nome e la cartella";
+      return;
+    }
+    try {
+      const r = await fetch("/api/progetti/registra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: nome, percorso: percorso, alias: alias }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (progFatti) progFatti.textContent = d.errore || ("errore " + r.status);
+        return;
+      }
+      if (progNuovoNome) progNuovoNome.value = "";
+      if (progNuovoPercorso) progNuovoPercorso.value = "";
+      if (progNuovoAlias) progNuovoAlias.value = "";
+      if (progInput) progInput.value = nome;
+      await impostaProgetto();
+      await caricaProgetti();
+    } catch (e) {
+      if (progFatti) progFatti.textContent = "errore: " + e;
+    }
+  });
+}
+
+// Il primo caricamento. Lo script ha `defer`, quindi il DOM e' gia'
+// pronto qui: non serve aspettare nessun evento.
+//
+// Senza questo il campo parte vuoto anche se un progetto e' attivo —
+// e il peggio e' che sembra che non ce ne sia nessuno. Un progetto
+// attivo che non si vede e' un progetto che non esiste.
+caricaProgetto();
+caricaProgetti();
+
+// E la sidebar, che adesso puo' chiamare `caricaProgetti` senza
+// cadere nella temporal dead zone: `progElenco` e gli altri `prog*`
+// sono `const` dichiarate piu' sopra, e qui sono gia' inizializzate.
+//
+// Sta qui e non al suo posto naturale per la stessa ragione del
+// commento che c'e' piu' in alto: la funzione e' hoisted, ma le
+// variabili che tocca no. La lista dei progetti, infatti, si vedeva
+// vuota e la console diceva "Cannot access 'progElenco' before
+// initialization" — l'errore piu' rumoroso del gruppo, perche' la
+// promessa rifiutata parte da una riga che sembra innocua.
+if (sidebar && !sidebar.hasAttribute("hidden")) {
+  caricaSide();
+}

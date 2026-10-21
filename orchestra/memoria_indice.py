@@ -58,10 +58,16 @@ CREATE TABLE IF NOT EXISTS fatti (
     origine   TEXT NOT NULL DEFAULT '',
     creata    REAL NOT NULL,
     scade     REAL,                      -- NULL = non scade mai
-    usi       INTEGER NOT NULL DEFAULT 0
+    usi       INTEGER NOT NULL DEFAULT 0,
+    progetto  TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_scade ON fatti(scade);
+
+-- L'indice per progetto. Serve a chiedere "cosa serve per QUESTO
+-- progetto" senza scaricare tutto: e' la differenza fra un archivio
+-- che risponde e uno che ammette di essere stato sfitto.
+CREATE INDEX IF NOT EXISTS idx_fatti_progetto ON fatti(progetto);
 
 -- La tabella FTS5 è SEPARATA e speculare: contiene lo stesso testo, ma
 -- indicizzato. Non si cerca sulla tabella dei fatti, si cerca qui e si
@@ -131,9 +137,31 @@ class IndiceMemoria:
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.executescript(SCHEMA)
+            self._migra_progetto()
             self._conn.commit()
         self._ultimo_file = 0.0
         self.ricostruisci_se_cambiato()
+
+    def _migra_progetto(self) -> None:
+        """Aggiunge la colonna `progetto` a un indice nato prima di lei.
+
+        `CREATE TABLE IF NOT EXISTS` non aggiunge colonne a una tabella
+        che esiste gia': su un DB creato prima, la colonna manca e ogni
+        query che la nomina fallisce. Il sintomo sarebbe una ricerca
+        che restituisce zero su un archivio pieno — cioe' la memoria
+        che sembra svuota.
+
+        Percio' si guarda se la colonna c'e' e, se non c'e', si
+        aggiunge. Idempotente: la seconda volta non fa niente.
+        """
+        try:
+            righe = self._conn.execute("PRAGMA table_info(fatti)").fetchall()
+            colonne = {r["name"] for r in righe}
+            if "progetto" not in colonne:
+                self._conn.execute(
+                    "ALTER TABLE fatti ADD COLUMN progetto TEXT NOT NULL DEFAULT ''")
+        except Exception:  # noqa: BLE001
+            pass
 
     def chiudi(self) -> None:
         with self._lock:
@@ -183,26 +211,50 @@ class IndiceMemoria:
         2. Non si può fidare del confronto su mtime: se l'indice è stato
            buttato, il file non è cambiato e la ricostruzione non scatta.
            Da qui il `forza`.
+
+        Il progetto si legge dal file, non da un campo dell'indice: il
+        file e' la verita'. Per farlo serve la riga intera, non il
+        testo pulito — quindi qui si rilegge il file riga per riga, che
+        e' quello che `ricostruisci` fa gia' in ogni caso.
         """
+        from .memoria import _pulizia_riga
+
         importanti = self.sorgente.importanti()
         gia_importanti = set(importanti)
         # `fatti()` torna tutto: si toglie chi è importante, o lo si
         # riscrive con importante=0 più sotto
         altri = [f for f in self.sorgente.fatti() if f not in gia_importanti]
+
+        # Il progetto di ogni fatto, letto dalla riga grezza.
+        progetti: dict[str, str] = {}
+        try:
+            for riga in self.sorgente.leggi().splitlines():
+                r = riga.strip()
+                if not r.startswith("-"):
+                    continue
+                corpo = r.lstrip("-").strip()
+                testo_pulito, _fonte, prog = _pulizia_riga(corpo)
+                if testo_pulito and prog:
+                    progetti[testo_pulito] = prog
+        except Exception:  # noqa: BLE001
+            pass
+
         with self._lock:
             self._conn.execute("DELETE FROM fatti")
             adesso = time.time()
             for testo in importanti:
-                self._inserisci(testo, importante=True, creata=adesso)
+                self._inserisci(testo, importante=True, creata=adesso,
+                                progetto=progetti.get(testo, ""))
             for testo in altri:
-                self._inserisci(testo, importante=False, creata=adesso)
+                self._inserisci(testo, importante=False, creata=adesso,
+                                progetto=progetti.get(testo, ""))
             self._conn.commit()
         return len(importanti) + len(altri)
 
     def _inserisci(self, testo: str, *, importante: bool,
                    origine: str = "", creata: float | None = None,
                    scade_giorni: int | None = None,
-                   usi: int = 0) -> None:
+                   usi: int = 0, progetto: str = "") -> None:
         """Scrive nel file e poi nell'indice. Mai solo nell'indice.
 
         L'ordine conta: se il file è la verità, va scritto per primo. Se
@@ -213,13 +265,15 @@ class IndiceMemoria:
         for pezzo in chunk_testo(testo):
             scade = (time.time() + scade_giorni * 86400) if scade_giorni else None
             self._conn.execute(
-                "INSERT INTO fatti (testo, importante, origine, creata, scade, usi)"
-                " VALUES (?, ?, ?, ?, ?, ?)"
+                "INSERT INTO fatti (testo, importante, origine, creata, scade, usi,"
+                " progetto) VALUES (?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(testo) DO UPDATE SET"
                 "   importante = excluded.importante,"
-                "   scade = COALESCE(excluded.scade, fatti.scade)",
+                "   scade = COALESCE(excluded.scade, fatti.scade),"
+                "   progetto = CASE WHEN excluded.progetto <> ''"
+                "                   THEN excluded.progetto ELSE fatti.progetto END",
                 (pezzo, 1 if importante else 0, origine,
-                 creata or time.time(), scade, usi))
+                 creata or time.time(), scade, usi, progetto))
 
     # -- contratto comune --------------------------------------------------
 
@@ -239,7 +293,8 @@ class IndiceMemoria:
 
     def aggiungi(self, fatto: str, origine: str = "",
                  importante: bool = False,
-                 scade_giorni: int | None = None) -> bool:
+                 scade_giorni: int | None = None,
+                 progetto: str = "") -> bool:
         """Scrive nel FILE, poi allinea l'indice.
 
         Ritorna False se il fatto c'era già: duplicare non fa crescere
@@ -249,11 +304,12 @@ class IndiceMemoria:
         if not fatto:
             return False
         nuovo = self.sorgente.aggiungi(fatto, origine=origine,
-                                       importante=importante)
+                                       importante=importante,
+                                       progetto=progetto)
         if nuovo:
             with self._lock:
                 self._inserisci(fatto, importante=importante, origine=origine,
-                                scade_giorni=scade_giorni)
+                                scade_giorni=scade_giorni, progetto=progetto)
                 self._conn.commit()
             # il file è cambiato: al prossimo ricostruisci_se_cambiato il
             # fatto c'è già e l'indice resta allineato
@@ -296,6 +352,48 @@ class IndiceMemoria:
                 pass
         return cambiato
 
+    def fatti_per_progetto(self, progetto: str) -> list[str]:
+        """I fatti di un progetto.
+
+        Si chiede al FILE, non all'indice: la verita' dei fatti e' la
+        riga di testo, e la colonna `progetto` nell'indice e' uno
+        specchio che va tenuto allineato a mano.
+
+        Il file e' anche la risposta completa: `IndiceMemoria.fatti()`
+        restituisce solo i fatti NON importanti, mentre sul file ci sono
+        anche quelli. Un filtro per progetto che perdesse gli
+        importanti darebbe un archivio che nasconde proprio i fatti
+        che il modello vede nel prompt — e il dubbio che ne nasce
+        ("l'ho perso?") costa piu' del fatto stesso.
+        """
+        metodo = getattr(self.sorgente, "fatti_per_progetto", None)
+        if callable(metodo):
+            try:
+                return metodo(progetto)
+            except Exception:  # noqa: BLE001
+                pass
+        # Backend senza il metodo: si filtra qui, sull'indice.
+        if not progetto:
+            return self.fatti() + self.importanti()
+        fuori = []
+        for r in self._query(
+                "SELECT testo FROM fatti WHERE LOWER(progetto) = LOWER(?)",
+                (progetto,)):
+            testo = r["testo"]
+            if testo and testo not in fuori:
+                fuori.append(testo)
+        return fuori
+
+    def progetti(self) -> list[str]:
+        """I progetti di cui la memoria ha qualcosa."""
+        metodo = getattr(self.sorgente, "progetti", None)
+        if callable(metodo):
+            try:
+                return metodo()
+            except Exception:  # noqa: BLE001
+                pass
+        return []
+
     def leggi(self) -> str:
         """Il file, non l'indice: la verità è quella."""
         return self.sorgente.leggi()
@@ -318,49 +416,89 @@ class IndiceMemoria:
     # -- quello che il file non sa fare ------------------------------------
 
     def cerca(self, query: str = "", limite: int = 10,
-              conta_usi: bool = True) -> list[dict[str, Any]]:
+              conta_usi: bool = True,
+              progetto: str = "") -> list[dict[str, Any]]:
         """Ricerca full-text con rank. FTS5, non sottostringa.
 
         `conta_usi` si può spegnere per le ricerche dalla UI: consultare
         un fatto per controllarlo non vuol dire che serva, e contarlo
         inquinerebbe la statistica che decide cosa proporre di togliere.
+
+        `progetto` filtra per progetto. Vuoto = tutti i progetti, che
+        e' il default: la memoria e' condivisa, e chiedere "tutto" e'
+        una domanda legittima.
+
+        Il filtro va nella WHERE e non dopo: filtrare in Python
+        significherebbe prendere i primi N e poi scartarne metà,
+        restituendo meno di quanto chiesto — e sembrerebbe che la
+        memoria non abbia niente.
         """
         self.ricostruisci_se_cambiato()
         q = (query or "").strip()
+        progetto = (progetto or "").strip()
         adesso = time.time()
         with self._lock:
             if not q:
-                righe = self._conn.execute(
-                    "SELECT * FROM fatti WHERE scade IS NULL OR scade > ?"
-                    " ORDER BY importante DESC, creata DESC LIMIT ?",
-                    (adesso, limite)).fetchall()
+                if progetto:
+                    righe = self._conn.execute(
+                        "SELECT * FROM fatti WHERE (scade IS NULL OR scade > ?)"
+                        "   AND LOWER(progetto) = LOWER(?)"
+                        " ORDER BY importante DESC, creata DESC LIMIT ?",
+                        (adesso, progetto, limite)).fetchall()
+                else:
+                    righe = self._conn.execute(
+                        "SELECT * FROM fatti WHERE scade IS NULL OR scade > ?"
+                        " ORDER BY importante DESC, creata DESC LIMIT ?",
+                        (adesso, limite)).fetchall()
             else:
                 # Le parole si quotano: una query con un apostrofo o un
                 # trattino fa fallire la sintassi MATCH, e la ricerca
                 # tornerebbe vuota invece di dire che non ha trovato.
                 parole = q.split()
                 frase = " AND ".join(f'"{p}"' for p in parole)
+                # La colonna `progetto` va selezionata a mano: senza,
+                # il risultato non dice da quale progetto viene.
+                campi = ("f.rowid AS rowid, f.testo AS testo,"
+                         " f.importante AS importante, f.origine AS origine,"
+                         " f.creata AS creata, f.scade AS scade, f.usi AS usi,"
+                         " f.progetto AS progetto")
+                filtri = "fatti_fts MATCH ? AND (f.scade IS NULL OR f.scade > ?)"
+                argomenti: list[Any] = [frase, adesso]
+                if progetto:
+                    # LOWER da entrambe le parti: il confronto di SQLite
+                    # sulle stringhe e' case-sensitive, e il filtro sul
+                    # file (`fatti_per_progetto`) e' case-insensitive.
+                    # Senza questo, lo stesso progetto written in due
+                    # modi diversi ("Sito" e "sito") dava due risultati
+                    # diversi — e il sintomo sarebbe "il progetto non
+                    # e' stato trovato" quando invece c'era.
+                    filtri += " AND LOWER(f.progetto) = LOWER(?)"
+                    argomenti.append(progetto)
+                argomenti.append(limite)
                 try:
                     # rowid va selezionato a mano: la JOIN con f.* non lo
                     # porta, e senza non si può aggiornare il contatore
                     # d'uso del fatto trovato.
                     righe = self._conn.execute(
-                        "SELECT f.rowid AS rowid, f.testo AS testo,"
-                        " f.importante AS importante, f.origine AS origine,"
-                        " f.creata AS creata, f.scade AS scade, f.usi AS usi"
-                        " FROM fatti_fts"
+                        f"SELECT {campi} FROM fatti_fts"
                         " JOIN fatti f ON f.rowid = fatti_fts.rowid"
-                        " WHERE fatti_fts MATCH ?"
-                        "   AND (f.scade IS NULL OR f.scade > ?)"
+                        f" WHERE {filtri}"
                         " ORDER BY rank, f.importante DESC LIMIT ?",
-                        (frase, adesso, limite)).fetchall()
+                        tuple(argomenti)).fetchall()
                 except sqlite3.OperationalError:
                     # query malformata (sintassi FTS5): si torna a una
                     # ricerca semplice, che è meglio di un errore
-                    righe = [r for r in self._conn.execute(
-                        "SELECT * FROM fatti WHERE scade IS NULL OR scade > ?",
-                        (adesso,)).fetchall()
-                        if q.lower() in r["testo"].lower()][:limite]
+                    if progetto:
+                        righe = [r for r in self._conn.execute(
+                            "SELECT * FROM fatti WHERE (scade IS NULL OR scade > ?)"
+                            "   AND LOWER(progetto) = LOWER(?)",
+                            (adesso, progetto)).fetchall()
+                            if q.lower() in r["testo"].lower()][:limite]
+                    else:
+                        righe = [r for r in self._conn.execute(
+                            "SELECT * FROM fatti WHERE scade IS NULL OR scade > ?",
+                            (adesso,)).fetchall()
+                            if q.lower() in r["testo"].lower()][:limite]
             if righe and conta_usi:
                 for r in righe:
                     self._conn.execute("UPDATE fatti SET usi = usi + 1 WHERE rowid = ?",

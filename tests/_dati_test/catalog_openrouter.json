@@ -1,0 +1,6930 @@
+{
+  "provider": "openrouter",
+  "saved_at": 1791218862.3423843,
+  "models": {
+    "inclusionai/ling-3.1-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1791218862.3423796,
+      "frazioni": {
+        "app": 0,
+        "code": 0,
+        "extraction": 0,
+        "instruction": 0,
+        "js": 0,
+        "reasoning": 0,
+        "tool_use": 0,
+        "web": 0,
+        "writing": 0
+      },
+      "task_per_cat": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      }
+    },
+    "apodex/apodex-1.1-mini:free": {
+      "scores": {
+        "app": 1.0,
+        "code": 1.0,
+        "extraction": 1.0,
+        "instruction": 1.0,
+        "js": 1.0,
+        "reasoning": 0.6,
+        "tool_use": 1.0,
+        "web": 1.0,
+        "writing": 1.0
+      },
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1791193116.6200814,
+      "frazioni": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 3,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      },
+      "task_per_cat": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      }
+    },
+    "unbiased/pareto-26.10-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6.1-sol-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6.1-sol": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-5.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-5.5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "typesafe/jev-router": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "perceptron/perceptron-mk1.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "fireworks/ember-1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5.3-prime": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.8-max-prime": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "aion-labs/aion-3.5-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "aion-labs/aion-3.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "upstage/solar-mini4": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "cohere/command-a-plus": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-luna-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-luna-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-luna": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-luna:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-sol-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-sol-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-sol": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-sol:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-5.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-5.5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "xiaomi/mimo-v2.6-pro-ultraspeed": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "xiaomi/mimo-v2.6-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "xiaomi/mimo-v2.6-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "x-ai/grok-4.7": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.8-omni-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "prism-ml/ternary-bonsai-2-27b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5.3-flashx": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "unbiased/pareto": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~deepseek/deepseek-pro-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~deepseek/deepseek-flash-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~openai/gpt-astra-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~openai/gpt-sol-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~openai/gpt-terra-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~openai/gpt-luna-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "sakana/fugu-ultra-v2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "sakana/fugu-max": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "inclusionai/ling-3.0-flash-vl": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v4.1-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v4.1-flash:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "inception/mercury-2.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nex-agi/nex-n2.5-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-astra": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-astra:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-astra-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-6-astra-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "inclusionai/ling-3.0-flash-sante:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.8-max-0902": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta/muse-spark-1.3-contributor": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta/muse-spark-1.3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.8-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.8-flash:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-fable-5.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-fable-5.1:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "ibm-granite/granite-4.2-8b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "tencent/hy4-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "inclusionai/ling-3.0-flash-fin": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~z-ai/glm-flash-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.8-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5.3-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5.3-flash:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta/muse-spark-1.2-contributor": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v4-flash-vision-exp": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~z-ai/glm-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5.3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5.3:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.8-27b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.8-27b:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "dots-studio/dots-3-note-preview:free": {
+      "scores": {
+        "app": 1.0,
+        "code": 1.0,
+        "extraction": 1.0,
+        "instruction": 1.0,
+        "js": 1.0,
+        "reasoning": 1.0,
+        "tool_use": 0.75,
+        "web": 1.0,
+        "writing": 1.0
+      },
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1791190043.1918004,
+      "frazioni": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 3,
+        "web": 5,
+        "writing": 5
+      },
+      "task_per_cat": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      }
+    },
+    "google/gemini-3.7-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.7-flash:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "bytedance-seed/seed-2-1-turbo": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.8-2.4t-a95b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "bytedance-seed/seed-2.0-code": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v4-pro-0813": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "x-ai/grok-4.6": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "liquid/lfm-2.5-2.6b:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3.5-lightning": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3.5-lightning:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "sakana/sakana-namazu": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "upstage/solar-pro4": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta/muse-glimmer-30b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta/muse-spark-1.2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~deepseek/deepseek-v4-flash-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v4-flash-0731": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "thinkingmachines/inkling-small": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "thinkingmachines/inkling-small:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.7-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "inclusionai/ling-3.0-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "poolside/laguna-s-2.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "poolside/laguna-s-2.1:free": {
+      "scores": {
+        "app": 0.6,
+        "code": 0.8333333333333334,
+        "extraction": 1.0,
+        "instruction": 1.0,
+        "js": 1.0,
+        "reasoning": 0.6,
+        "tool_use": 0.75,
+        "web": 1.0,
+        "writing": 0.8
+      },
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1791195881.658442,
+      "frazioni": {
+        "app": 3,
+        "code": 5,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 3,
+        "tool_use": 3,
+        "web": 5,
+        "writing": 4
+      },
+      "task_per_cat": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      }
+    },
+    "google/gemini-3.6-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.6-flash:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.5-flash-lite": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.5-flash-lite:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meituan/longcat-2.0": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "thinkingmachines/inkling": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "thinkingmachines/inkling:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openrouter/auto-beta": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k3:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta/muse-spark-1.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "kwaipilot/kat-coder-pro-v2.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-luna-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-luna-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-luna": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-luna:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-terra-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-terra-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-terra": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-terra:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-sol-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-sol-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-sol": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.6-sol:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "x-ai/grok-4.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~x-ai/grok-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "aion-labs/aion-3.0-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "aion-labs/aion-3.0": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "tencent/hy3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "poolside/laguna-xs-2.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "poolside/laguna-xs-2.1:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "sakana/fugu-ultra": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3-pro-image": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "cohere/north-mini-code:free": {
+      "scores": {
+        "app": 0.8,
+        "code": 0.8333333333333334,
+        "extraction": 1.0,
+        "instruction": 0.4,
+        "js": 1.0,
+        "tool_use": 0.5,
+        "web": 0.8,
+        "writing": 1.0
+      },
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1791190854.156829,
+      "frazioni": {
+        "app": 4,
+        "code": 5,
+        "extraction": 4,
+        "instruction": 2,
+        "js": 5,
+        "reasoning": 0,
+        "tool_use": 2,
+        "web": 4,
+        "writing": 5
+      },
+      "task_per_cat": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      }
+    },
+    "z-ai/glm-5.2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k2.7-code": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~anthropic/claude-fable-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-fable-5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-fable-5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3-ultra-550b-a55b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3-ultra-550b-a55b:free": {
+      "scores": {
+        "app": 1.0,
+        "code": 1.0,
+        "extraction": 0.75,
+        "instruction": 1.0,
+        "js": 1.0,
+        "reasoning": 1.0,
+        "tool_use": 1.0,
+        "web": 1.0,
+        "writing": 1.0
+      },
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1791194297.5584295,
+      "frazioni": {
+        "app": 5,
+        "code": 6,
+        "extraction": 3,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      },
+      "task_per_cat": {
+        "app": 5,
+        "code": 6,
+        "extraction": 4,
+        "instruction": 5,
+        "js": 5,
+        "reasoning": 5,
+        "tool_use": 4,
+        "web": 5,
+        "writing": 5
+      }
+    },
+    "qwen/qwen3.7-plus": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "minimax/minimax-m3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "stepfun/step-3.7-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.8": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.8:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.7-max": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "x-ai/grok-build-0.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.5-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.5-flash:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.1-flash-lite": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.1-flash-lite:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-chat-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "x-ai/grok-4.3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "x-ai/grok-4.3:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-medium-3-5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-medium-3-5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~anthropic/claude-haiku-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~openai/gpt-mini-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~google/gemini-pro-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~moonshotai/kimi-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~google/gemini-flash-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~anthropic/claude-sonnet-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-plus-20260420": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.6-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.6-35b-a3b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.6-max-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.6-27b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.5-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.5-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v4-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v4-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "tencent/hy3-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "xiaomi/mimo-v2.5-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "xiaomi/mimo-v2.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "~anthropic/claude-opus-latest": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k2.6": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.7": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.7:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemma-4-26b-a4b-it": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemma-4-26b-a4b-it:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemma-4-31b-it": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemma-4-31b-it:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.6-plus": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5v-turbo": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "arcee-ai/trinity-large-thinking": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "x-ai/grok-4.20": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "rekaai/reka-edge": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "minimax/minimax-m2.7": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4-nano": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4-nano:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4-mini:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-small-2603": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-small-2603:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5-turbo": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3-super-120b-a12b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3-super-120b-a12b:free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "bytedance-seed/seed-2.0-lite": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-9b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.4:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "inception/mercury-2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.1-flash-lite-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "bytedance-seed/seed-2.0-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-35b-a3b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-27b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-122b-a10b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-flash-02-23": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.1-pro-preview-customtools": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.3-codex": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "aion-labs/aion-2.0": {
+      "scores": {
+        "reasoning": 0.8
+      },
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 1791033035.9313655,
+      "frazioni": {
+        "reasoning": 4
+      },
+      "task_per_cat": {
+        "reasoning": 5
+      }
+    },
+    "google/gemini-3.1-pro-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3.1-pro-preview:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-4.6": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-4.6:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-plus-02-15": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3.5-397b-a17b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "minimax/minimax-m2.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-max-thinking": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.6": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.6:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-coder-next": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openrouter/free": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "stepfun/step-3.5-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k2.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "upstage/solar-pro-3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-audio": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-audio-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-4.7-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.2-codex": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "bytedance-seed/seed-1.6-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "bytedance-seed/seed-1.6": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "minimax/minimax-m2.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-4.7": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3-flash-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-3-flash-preview:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "nvidia/nemotron-3-nano-30b-a3b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.2-chat": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.2-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.2-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.2:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/devstral-2512": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "relace/relace-search": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-4.6v": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.1-codex-max": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "amazon/nova-2-lite-v1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/ministral-14b-2512": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/ministral-8b-2512": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/ministral-8b-2512:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/ministral-3b-2512": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-large-2512": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-large-2512:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v3.2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.1:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.1-codex": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5.1-codex-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k2-thinking": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "amazon/nova-premier-v1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/voxtral-small-24b-2507": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-oss-safeguard-20b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "minimax/minimax-m2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-vl-32b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-haiku-4.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-haiku-4.5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-vl-8b-thinking": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-vl-8b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-vl-30b-a3b-thinking": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-vl-30b-a3b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-4.6": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-4.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-4.5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v3.2-exp": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-vl-235b-a22b-thinking": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-vl-235b-a22b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-max": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-coder-plus": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-v3.1-terminus": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-coder-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-next-80b-a3b-thinking": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-next-80b-a3b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen-plus-2025-07-28": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k2-0905": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-30b-a3b-thinking-2507": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-chat-v3.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-medium-3.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-medium-3.1:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-4.5v": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5-mini:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5-nano": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-5-nano:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-oss-120b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-oss-120b:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-oss-20b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-oss-20b:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-opus-4.1:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/codestral-2508": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/codestral-2508:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-coder-30b-a3b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-30b-a3b-instruct-2507": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-4.5": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "z-ai/glm-4.5-air": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-235b-a22b-thinking-2507": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-coder": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-2.5-flash-lite": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-2.5-flash-lite:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-235b-a22b-2507": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "moonshotai/kimi-k2": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-small-3.2-24b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "minimax/minimax-m1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-2.5-flash": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-2.5-flash:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-2.5-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-2.5-pro:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o3-pro": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemini-2.5-pro-preview": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-r1-0528": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "anthropic/claude-sonnet-4": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-medium-3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-30b-a3b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-8b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-14b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-32b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen3-235b-a22b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o4-mini-high": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o3": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o3:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o4-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o4-mini:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4.1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4.1:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4.1-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4.1-mini:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4.1-nano": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4.1-nano:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta-llama/llama-4-maverick": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta-llama/llama-4-scout": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-chat-v3-0324": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-small-3.1-24b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemma-3-12b-it": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "google/gemma-3-27b-it": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-saba": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o3-mini-high": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen-plus": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o3-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o3-mini:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-r1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "deepseek/deepseek-chat": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/o1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta-llama/llama-3.3-70b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "amazon/nova-lite-v1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "amazon/nova-micro-v1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "amazon/nova-pro-v1": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o-2024-11-20": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-large-2407": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen-2.5-7b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "qwen/qwen-2.5-72b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "cohere/command-r-08-2024": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "cohere/command-r-plus-08-2024": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "sao10k/l3.1-euryale-70b": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o-2024-08-06": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta-llama/llama-3.1-70b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "meta-llama/llama-3.1-8b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-nemo": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o-mini": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o-mini-2024-07-18": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o-mini:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o-2024-05-13": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4o:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mixtral-8x22b-instruct": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4-turbo": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4-turbo:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "mistralai/mistral-large": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-3.5-turbo-0613": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openrouter/auto": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-3.5-turbo-16k": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-3.5-turbo": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-3.5-turbo:batch": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    },
+    "openai/gpt-4": {
+      "scores": {},
+      "capabilities": {
+        "code": "unknown",
+        "reasoning": "unknown",
+        "writing": "unknown",
+        "extraction": "unknown",
+        "instruction": "unknown",
+        "tool_use": "unknown",
+        "js": "unknown",
+        "web": "unknown",
+        "app": "unknown"
+      },
+      "last_measured": 0.0,
+      "frazioni": {},
+      "task_per_cat": {}
+    }
+  }
+}

@@ -121,6 +121,11 @@ class Agent:
             self.provider = provider
             self.registry = registry
             self.system_prompt = system_prompt
+            # Il progetto su cui si lavora. Va sull'agente e non solo sulla
+            # sessione perche' e' l'agente a dover cercare i fatti giusti:
+            # la sessione etichetta quelli che nascono, l'agente deve
+            # sapere quale filtro usare per recuperarli.
+            self.progetto: str = ""
             self.config = config or LoopConfig()
             self.summarize = summarize
             self.on_event = on_event or (lambda kind, data: None)
@@ -295,20 +300,90 @@ class Agent:
 
     # -- il loop -----------------------------------------------------------
 
-    def _aggiorna_prompt(self) -> None:
-        """Riscrive il messaggio di sistema con le skill di adesso.
+    def _blocco_progetto(self) -> str:
+        """Il pezzo di prompt che dice su quale progetto si lavora.
 
-        Ma solo se ce ne sono. Senza skill il prompt resta identico,
-        carattere per carattere: un test che verifica "il system
-        prompt non e' mai perso" confronta l'uguaglianza esatta, e
-        aggiungere anche solo una riga vuota lo faceva fallire — e il
-        sintomo sarebbe stato "la compaction perde il prompt", che e'
-        falso. In quel caso si faceva cercare un bug nella
-        compattazione, che era perfettamente funzionante.
+        E' quello che rende il progetto utile al MODELLO, e non solo
+        alla memoria. Senza questa riga l'agente non sa che sta
+        lavorando al sito del ristorante: la memoria ha i fatti
+        etichettati, ma il modello non sa di doverli cercare — e quindi
+        non li cerca.
+
+        Dice anche che il progetto si puo' cambiare. Senza, un modello
+        che vede "progetto: sito-ristorante" puo' pensare che non si
+        possa cambiare, e l'utente che dice "adesso passiamo
+        all'app parrucchieri" riceve un "non posso".
+
+        Vuoto se non c'e' un progetto: e' il caso normale, e in quel
+        caso il prompt resta identico carattere per carattere.
+        """
+        progetto = (getattr(self, "progetto", "") or "").strip()
+        if not progetto:
+            return ""
+        return (
+            f"\n\n---\n"
+            f"Stai lavorando al progetto «{progetto}», e i tuoi file "
+            f"vanno in quella cartella: e' li' che il tool `read_file` "
+            f"e `write_file` leggono e scrivono, senza che tu debba "
+            f"scrivere il percorso per esteso.\n"
+            f"I fatti di memoria che appartengono a questo progetto "
+            f"sono marcati [progetto:{progetto}]. Il tool `memoria` "
+            f"li cerca gia' col filtro giusto da solo: non devi "
+            f"passare progetto='{progetto}' — ma se lo passi, e' la "
+            f"stessa cosa. I fatti senza progetto valgono per "
+            f"ogni progetto, e tornano insieme a quelli giusti.\n"
+            f"Se l'utente cambia progetto, lo dice: e' il momento in "
+            f"cui la cartella e i fatti cambiano."
+        )
+
+    def _ha_i_tool_skill(self) -> bool:
+        """I tool per leggere e cercare le skill sono attivi?
+
+        Il prompt delle skill e' un insieme di istruzioni ("skill_leggi
+        <nome>"), e un'istruzione che punta a un tool assente non e'
+        un'istruzione: e' una promessa che il sistema non puo' mantenere.
+        Il modello la segue, e riceve "tool inesistente" — che sembra un
+        bug dell'agente, ma e' il prompt che ha sbagliato.
+
+        Il caso in cui accade: il profilo "auto" sceglie "base" per un
+        testo che non parla di skill, e "base" non contiene i tool skill.
+        Il prompt li elencava lo stesso, e ogni turno ricominciava cosi'.
+        """
+        try:
+            attivi = {t.name for t in self.registry.active}
+        except Exception:
+            # Se non si puo' sapere, si presume che ci siano: senza tool
+            # skill il prompt e' un pezzo in piu', e il modello puo'
+            # ignorarlo. Il contrario (bloccare le skill quando i tool
+            # ci sono) toglierebbe una capacita' che funziona.
+            return True
+        return bool(attivi & {"skill_leggi", "skill_cerca"})
+
+    def _aggiorna_prompt(self) -> None:
+        """Riscrive il messaggio di sistema con le skill e il progetto.
+
+        Ma solo se ce ne sono. Senza skill E senza progetto il prompt
+        resta identico, carattere per carattere: un test che verifica
+        "il system prompt non e' mai perso" confronta l'uguaglianza
+        esatta, e aggiungere anche solo una riga vuota lo faceva
+        fallire — e il sintomo sarebbe stato "la compaction perde il
+        prompt", che e' falso. In quel caso si faceva cercare un bug
+        nella compattazione, che era perfettamente funzionante.
 
         Fallisce in silenzio e lascia il prompt come era: un errore
         qui non deve fermare il turno.
         """
+        # Le skill si annunciano SOLO se i loro tool sono attivi.
+        #
+        # Il prompt delle skill dice "skill_leggi <nome>" e "skill_cerca
+        # <parole>": sono istruzioni, non informazioni. Se il tool non e'
+        # fra gli attivi, l'agente le esegue e riceve "tool inesistente" —
+        # un'istruzione che il sistema stesso ha scritto e che il sistema
+        # rende impossibile da seguire.
+        #
+        # Il caso reale: con il profilo "auto", profilo_per_testo sceglie
+        # "base" per un testo che non parla di skill, e "base" non
+        # contiene i tool skill. Il prompt li elencava lo stesso.
         try:
             import orchestra.skills as sk
             ultimo = ""
@@ -316,12 +391,21 @@ class Agent:
                 if m.role == "user" and m.content:
                     ultimo = m.content
                     break
-            extra = sk.Indice().prompt(ultimo[:2000])
+            if self._ha_i_tool_skill():
+                extra = sk.Indice().prompt(ultimo[:2000])
+            else:
+                extra = ""
         except Exception:
-            return
-        if not extra:
-            return                      # nessuna skill: prompt identico
-        nuovo = self.system_prompt + extra
+            extra = ""
+        try:
+            progetto = self._blocco_progetto()
+        except Exception:
+            progetto = ""
+        if not extra and not progetto:
+            return                      # niente da aggiungere: identico
+        # Il progetto viene DOPO le skill: le skill dicono COME
+        # lavorare, il progetto dice SU COSA.
+        nuovo = self.system_prompt + extra + progetto
         for m in self.state.messages:
             if m.role == "system":
                 m.content = nuovo

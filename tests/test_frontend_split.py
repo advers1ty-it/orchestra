@@ -99,6 +99,19 @@ check("ogni sorgente si annuncia", all(
     "__diagFiles" in src for src in sources.values()),
     "un file non ha il marcatore: non si puo' sapere se e' partito")
 
+# La temporal dead zone colpisce quando una funzione che legge una
+# `const` viene CHIAMATA prima che la `const` sia dichiarata. Il
+# runtime te lo dice in una console ("Cannot access 'progElenco'
+# before initialization") e la promise si rifiuta: la pagina resta
+# viva, la lista resta vuota, e un test che guarda solo "il bundle ha
+# girato" dice che va tutto bene.
+#
+# Il controllo e' a runtime, non statico: e' il trappola sotto
+# (__rifiutate) a beccarlo, perche' a runtime la chiamata a livello
+# di file esegue davvero prima della dichiarazione. Uno statico
+# dovrebbe indovinare quali chiamate sono "a livello di file", e
+# sbaglia.
+
 # harness: DOM finto, ma con lo scope condiviso che ha il browser
 harness = """
 const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","stats","conn","ver","ragionamento",
@@ -113,6 +126,9 @@ const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","sta
              "btn-side","sidebar","side-cap","side-cerca","side-elenco","side-mem-aggiungi","side-mem-cerca","side-mem-elenco",
              "side-mem-input","side-mem-stat","side-msg","side-nuova","side-ricarica","side-riduci","side-skill","side-tracce",
              "side-traccia-dettaglio",
+              "side-progetto-input","side-progetto-lista","side-progetto-ok","side-progetto-fatti",
+              "side-sez-progetti","side-progetti","side-progetto-nuovo-nome","side-progetto-nuovo-percorso",
+              "side-progetto-nuovo-ok","side-progetti-file","side-progetto-nuovo-alias",
              "memoria-aggiungi","memoria-elenco","memoria-msg","memoria-nuovo","memoria-percorso",
              "skill-cartella","skill-categorie","skill-cestino","skill-cestino-nota","skill-filtro","skill-generate",
              "skill-generate-nota","skill-importa","skill-ricarica","skill-riepilogo","skill-scaricate","skill-svuota","skill-vista",
@@ -249,8 +265,42 @@ globalThis.addEventListener = function () {};
 globalThis.getComputedStyle = function () { return {}; };
 globalThis.CSS = { escape: function (s) { return String(s); } };
 globalThis.EventSource = class { constructor(u) { this.url = u; } close() {} };
+// Le promesse rifiutate NON fanno fallire il bundle: il codice va avanti
+// e la pagina sembra funzionante. Il sintomo era una lista che restava
+// vuota e una riga in console ("PROMESSA RIFIUTATA: Cannot access
+// 'progElenco' before initialization") — l'unico posto in cui si vedeva.
+// Senza questa trappola il test diceva "tutto va bene" mentre la coda
+// dei progetti non c'era.
+globalThis.__rifiutate = [];
+process.on("unhandledRejection", function (e) {
+  const msg = String((e && e.message) || e);
+  globalThis.__rifiutate.push(msg);
+  // Stampata su una riga a parte: il test legge l'ULTIMA riga SPLIT,
+  // e una rejection emessa dopo quella stampa non ci arriverebbe.
+  // Su una riga propria la vede comunque, quando arriva.
+  console.log("SPLITREJ" + JSON.stringify(msg));
+});
 globalThis.addEventListener = function () {};
 globalThis.setInterval = function () { return 0; };
+// setTimeout resta FINTO, come prima: e' quello che il bundle
+// si aspetta, e i suoi timer non devvero girare davvero in un test
+// (uno di quelli crashava Node, e il test moriva per quello invece
+// di dire perche').
+//
+// Ma il PROBE ha bisogno di tempo vero: e' l'attesa che serve alle
+// promise del bundle per assestarsi, ed e' proprio li' che la
+// temporal dead zone si manifesta. Senza, la rejection non arriva
+// mai e il test passerebbe senza vedere nulla.
+// Il timer di Node viene salvato PRIMA: sovrascrivendolo, la
+// funzione chiamerebbe se stessa all'infinito.
+const _setTimeoutNode = setTimeout;
+globalThis.__setTimeoutReale = function (f, t) { return _setTimeoutNode(f, t); };
+globalThis.setTimeout = function () { return 0; };
+// clearTimeout deve essere coerente col setTimeout finto: se il
+// bundle chiama clearTimeout su un id che non e' un timer vero,
+// Node lo accetta, ma se il timer e' finto e il clear no', non
+// succede niente. Coerenza, non funzionalita'.
+globalThis.clearTimeout = function () { return 0; };
 globalThis.clearInterval = function () {};
 globalThis.fetch = async function (u) {
   if (u === "/api/models")
@@ -274,19 +324,65 @@ const OUT = { errore: null };
   }
   const fn = {};
   for (const n of ["loadModels","setBusy","addText","handle","send","openBench",
-                   "renderStats","connect","showBanner","addTool","cancel","reset"])
-    fn[n] = typeof eval(n);
+                   "renderStats","connect","showBanner","addTool","cancel","reset"]) {
+    try { fn[n] = typeof eval(n); } catch (e) { fn[n] = "ASSENTE: " + e.message; }
+  }
   const vr = {};
-  for (const n of ["log","main","input","btnSend","btnCancel","btnReset","dot","stats","conn","modelPick"])
-    vr[n] = typeof eval(n);
+  for (const n of ["log","main","input","btnSend","btnCancel","btnReset","dot","stats","conn","modelPick"]) {
+    try { vr[n] = typeof eval(n); } catch (e) { vr[n] = "ASSENTE: " + e.message; }
+  }
   OUT.fn = fn; OUT.vr = vr;
   OUT.goalFn = {};
-  for (const n of ["goalGate","goalRiga","caricaGoal"])
-    OUT.goalFn[n] = typeof eval(n);
-  OUT.gateOk = goalGate({status:"done", last_output:"fatto"}).testo;
-  OUT.gateKo = goalGate({status:"failed", error:"accettazione fallita: stop anomalo: max_iterations"}).testo;
-  OUT.gateParz = goalGate({status:"done", last_output:"[parziale accettato: stop anomalo: max_iterations]" + String.fromCharCode(10) + "quasi"}).testo;
-  OUT.gateAttesa = goalGate({status:"pending"}).testo;
+  for (const n of ["goalGate","goalRiga","caricaGoal"]) {
+    try { OUT.goalFn[n] = typeof eval(n); } catch (e) { OUT.goalFn[n] = "ASSENTE: " + e.message; }
+  }
+  // Il percorso dei progetti, perche' e' l'ultima cosa aggiunta e
+  // tocca una `const` dichiarata in fondo al file: se il caricamento
+  // parte PRIMA della dichiarazione, la promise si rifiuta e la lista
+  // dei progetti resta vuota — senza che nessun errore fermi il bundle.
+  // Il tipo di ogni simbolo, senza far crashare il probe: se uno
+  // manca, `eval(n)` su un nome inesistente lancia ReferenceError e
+  // il probe muore PRIMA di stampare — e allora il test non dice
+  // niente, solo "13 falliti" senza spiegazione.
+  OUT.progFn = {};
+  for (const n of ["caricaProgetto","caricaProgetti","impostaProgetto"]) {
+    try { OUT.progFn[n] = typeof eval(n); }
+    catch (e) { OUT.progFn[n] = "ASSENTE: " + e.message; }
+  }
+  try { OUT.progElenco = typeof eval("progElenco"); }
+  catch (e) { OUT.progElenco = "ASSENTE: " + e.message; }
+  // Il bundle deve SAPERE che il progetto e' cambiato: e' l'evento
+  // che dice all'utente in che cartella si sta scrivendo. Un bundle
+  // che non lo ascolta cambia cartella in silenzio, e l'utente
+  // crede di lavorare da una parte mentre i file finiscono altrove.
+  OUT.progEvent = typeof eval("handle");
+  if (OUT.progEvent === "function") {
+    // Si chiama davvero: se il ramo nel switch non esiste, non
+    // succede nulla e non si vede. Il testo della nota e' la prova
+    // che il ramo c'e'.
+    try {
+      const _prima = log.children.length;
+      handle("progetto_cambiato", {progetto:"Sito Ristorante", percorso:"D:/lavori/sito"});
+      OUT.progNota = (log.children.length > _prima)
+        ? (log.children[log.children.length-1].textContent || "") : "";
+    } catch (e) { OUT.progNota = "ERRORE: " + e.message; }
+  }
+  // Il tempo alle promise: e' quello che serve a una rejection
+  // (temporal dead zone) per manifestarsi. Il timer qui e' quello
+  // VERO, non quello finto del bundle: e' l'unico posto in cui
+  // deve scadere.
+  await new Promise(function (r) { globalThis.__setTimeoutReale(r, 60); });
+  // Anche i gate: se `goalGate` non esiste, il probe muore qui e
+  // non stampa niente. Ogni chiamata e' protetta, cosi' il test
+  // dice QUALE pezzo manca invece di tacere.
+  try {
+    OUT.gateOk = goalGate({status:"done", last_output:"fatto"}).testo;
+    OUT.gateKo = goalGate({status:"failed", error:"accettazione fallita: stop anomalo: max_iterations"}).testo;
+    OUT.gateParz = goalGate({status:"done", last_output:"[parziale accettato: stop anomalo: max_iterations]" + String.fromCharCode(10) + "quasi"}).testo;
+    OUT.gateAttesa = goalGate({status:"pending"}).testo;
+  } catch (e) {
+    OUT.gateErrore = String(e && e.message || e);
+  }
   const mp = REG["model-pick"];
   OUT.opzioni = mp.children.length;
   OUT.disabled = mp.disabled;
@@ -297,32 +393,91 @@ const OUT = { errore: null };
 """
 
 # scope condiviso: i file concatenati ed eseguiti insieme, come nel browser
-joined = "\n;\n".join(sources[name] for name in BUNDLE_ORDER)
+def _esegui(src_map):
+    """Esegue il bundle e restituisce (out, rifiutate, stderr)."""
+    f = tempfile.mktemp(suffix=".js")
+    with open(f, "w", encoding="utf-8") as fh:
+        fh.write(harness + "\n;\n".join(src_map[n] for n in BUNDLE_ORDER)
+                 + "\n" + "try {\n" + probe + "\n} catch (e) {\n"
+                 + '  console.log("SPLIT" + JSON.stringify({crash: String(e && e.stack || e)}));\n'
+                 + "}\n")
+    res = subprocess.run(["node", f], capture_output=True, text=True, timeout=120)
+    o, rej = {}, []
+    for line in res.stdout.splitlines():
+        if line.startswith("SPLITREJ"):
+            rej.append(json.loads(line[8:]))
+        elif line.startswith("SPLIT"):
+            o = json.loads(line[5:])
+    rej.extend(o.pop("rifiutate", []) or [])
+    o["rifiutate"] = rej
+    return o, rej, (res.stderr or ""), f
 
-prog = (harness + joined + "\n"
-        + "try {\n" + probe + "\n} catch (e) {\n"
-        + '  console.log("SPLIT" + JSON.stringify({crash: String(e && e.stack || e)}));\n'
-        + "}\n")
-f = tempfile.mktemp(suffix=".js")
-with open(f, "w", encoding="utf-8") as fh:
-    fh.write(prog)
-r = subprocess.run(["node", f], capture_output=True, text=True, timeout=120)
-# Il file resta su disco se il probe non risponde: leggerlo dice
-# l'errore vero, e "NESSUN OUTPUT" da solo non dice dove guardare.
-pass  # il file resta
 
-out = {}
-for line in r.stdout.splitlines():
-    if line.startswith("SPLIT"):
-        out = json.loads(line[5:])
+out, rifiutate, stderr, f = _esegui(sources)
 
 if not out:
     print("\n[2] Esecuzione")
     print("  NESSUN OUTPUT — il probe non e' arrivato in fondo")
-    for line in (r.stderr or "").splitlines()[:10]:
+    for line in (stderr or "").splitlines()[:10]:
         print("   ", line)
     print(f"\nPASS {len(PASS)}  FAIL {len(FAIL) + 1}")
     sys.exit(1)
+
+# Il crash e' un esito, non un dettaglio: senza questa riga il test
+# diceva "13 falliti" senza dire COSA era rotto, e quei 13 falliti
+# erano tutti la conseguenza di un unico errore a monte. Un bundle
+# che muore prima del probe non ha nessuna funzione da valutare.
+if out.get("crash"):
+    print("\n[2] Esecuzione")
+    print("  IL BUNDLE E' CRASHATO:")
+    for line in str(out.get("crash")).splitlines()[:12]:
+        print("   ", line)
+    print(f"\nPASS {len(PASS)}  FAIL {len(FAIL) + 1}")
+    print("FALLITI: ['il bundle e' crashato'] +", FAIL)
+    sys.exit(1)
+
+# ------------------------------------------------------------ la trappola
+# Un test che non puo' fallire non vale niente. Questo qui potrebbe
+# passare sempre, anche se la trappola non scattasse piu': basterebbe
+# che nessuno guardi. Per evitare che diventi un costume falso, il
+# test esegue il bundle UNA SECONDA VOLTA su una copia con il
+# difetto introdotto apposta (una `const` letta prima della sua
+# dichiarazione), e pretende che quella copia venga segnalata.
+#
+# Se la copia col difetto non viene segnalata, la trappola e' rotta
+# e il test lo dice: meglio un rosso che un verde che non guarda.
+print("\n[2b] La trappola: se ne accorge davvero?")
+_mutato = dict(sources)
+_prima = _mutato["panels.js"]
+# La chiamata PRIMA della dichiarazione di `progElenco`: e' il difetto
+# che c'era, ridotto al minimo.
+_mutato["panels.js"] = _prima.replace(
+    'const progElenco = $("side-progetti");',
+    # Una funzione ASINCRONA che legge la `const` prima della sua
+    # dichiarazione: e' il difetto reale. Non un errore sincrono a
+    # livello di file, che crasherebbe il bundle e produrrebbe un
+    # altro sintomo — la temporal dead zone dentro una promise si
+    # manifesta come rifiuto, e il rifiuto e' il sintomo che la
+    # trappola deve vedere.
+    # Il `catch` NON deve essere messo: se lo si mette, la rejection
+    # viene gestita e `unhandledRejection` non la vede — la
+    # trappola diventerebbe cieca proprio nel caso che deve
+    # controllare. Qui si lascia propagare, che e' il comportamento
+    # del difetto vero.
+    'async function _tdz() { return progElenco; }\n'
+    'if (sidebar) { _tdz(); }\n'
+    'const progElenco = $("side-progetti");')
+if _mutato["panels.js"] == _prima:
+    print("  SKIP — il marcatore del difetto non e' piu' nel sorgente")
+else:
+    _o2, _rej2, _err2, _f2 = _esegui(_mutato)
+    _beccata = bool(_rej2) or bool(_o2.get("crash")) \
+        or any("progElenco" in str(m) for m in _rej2)
+    check("la trappola vede il difetto introdotto", _beccata,
+          "il bundle col difetto non ha prodotto nessuna rejection: "
+          "la trappola non serve a niente")
+    if _beccata and _rej2:
+        print(f"   [trappola] {_rej2[0][:110]}")
 
 print("\n[2] Esecuzione reale dei file, nell'ordine di index.html")
 fn = out.get("fn", {})
@@ -341,6 +496,33 @@ check("opzioni vere", all(t == "option" for t in out.get("tagPrimi", [""])),
       str(out.get("tagPrimi")))
 check("opzioni con value", all(out.get("valori") or []), str(out.get("valori")))
 
+print("\n[3b] I progetti: le funzioni ci sono e nessuna promise si rifiuta")
+pf = out.get("progFn", {})
+check("caricaProgetto definita", pf.get("caricaProgetto") == "function", str(pf))
+check("caricaProgetti definita", pf.get("caricaProgetti") == "function", str(pf))
+check("impostaProgetto definita", pf.get("impostaProgetto") == "function", str(pf))
+check("l'elenco dei progetti esiste", out.get("progElenco") != "undefined",
+      "progElenco non esiste: il campo non e' nel DOM")
+# Il cambio di progetto deve essere DETTO. Senza questo ramo, la
+# cartella in cui si scrive cambia in silenzio: l'utente crede di
+# stare da una parte e i file finiscono dall'altra.
+_nota = out.get("progNota", "")
+check("il cambio di progetto viene annunciato",
+      "Sito Ristorante" in _nota, f"la nota dice: {_nota!r}")
+check("l'annuncio dice DOVE si scrive",
+      "D:/lavori/sito" in _nota, f"la nota dice: {_nota!r}")
+# I simboli che il bundle deve esporre: se uno manca, il probe lo
+# dice per nome invece di tacere.
+_assenti = [k for k, v in list(pf.items()) + list(out.get("goalFn", {}).items())
+            if isinstance(v, str) and v.startswith("ASSENTE")]
+check("nessun simbolo assente nel bundle", not _assenti, str(_assenti))
+if out.get("gateErrore"):
+    print(f"   [gate] {out.get('gateErrore')}")
+# La promessa rifiutata e' l'unico sintomo di un `const` letto troppo
+# presto: la lista resta vuota e la console si riempie. Qui si vede.
+rifiutate = out.get("rifiutate", [])
+check("nessuna promessa rifiutata", not rifiutate, "; ".join(rifiutate[:3]))
+
 print("\n[4] Pannello goal: funzioni e gate visivo")
 gf = out.get("goalFn", {})
 check("goalGate definita", gf.get("goalGate") == "function", str(gf))
@@ -353,8 +535,8 @@ check("gate parziale dichiarato",
       out.get("gateParz") == "gate: parziale", str(out.get("gateParz")))
 check("gate in attesa su pending",
       out.get("gateAttesa") == "gate: in attesa", str(out.get("gateAttesa")))
-if r.stderr.strip():
-    print("   [stderr]", r.stderr.strip().splitlines()[0][:200])
+if stderr.strip():
+    print("   [stderr]", stderr.strip().splitlines()[0][:200])
 
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

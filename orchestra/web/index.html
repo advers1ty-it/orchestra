@@ -504,6 +504,7 @@
          Il clic riapre e porta alla sezione. -->
     <nav id="side-rail" class="side-rail" aria-label="Sezioni del pannello">
       <button data-sez="side-elenco" title="Cronologia">🕘</button>
+      <button data-sez="side-sez-progetti" title="Progetti">📁</button>
       <button data-sez="side-sez-memoria" title="Memoria">🧠</button>
       <button data-sez="side-sez-skill" title="Skill">🧰</button>
       <button data-sez="side-sez-tracce" title="Tracce">📼</button>
@@ -524,6 +525,52 @@
     <div class="side-cerca-campi">
       <input id="side-cerca" type="text"
              placeholder="Cerca nelle conversazioni..." spellcheck="false" />
+    </div>
+
+    <!-- Il progetto attivo. Sta SOPRA le sezioni perche' riguarda
+         tutto: la memoria e' condivisa, ma i fatti che servono sono
+         quelli di questo progetto, e il modello lo cerca con il filtro.
+
+         Un progetto non e' solo un'etichetta: e' la CARTELLA in cui
+         l'agente scrive. Il confine di sicurezza si sposta con lui,
+         e per questo il campo e' qui sopra: e' la cosa che riguarda
+         tutta la sessione, non una sezione fra le altre. -->
+    <div class="side-progetto">
+      <label class="small dim" for="side-progetto-input">Progetto</label>
+      <div class="side-progetto-riga">
+        <input id="side-progetto-input" type="text" list="side-progetto-lista"
+               placeholder="nessun progetto" spellcheck="false" />
+        <datalist id="side-progetto-lista"></datalist>
+        <button id="side-progetto-ok" class="primary" title="Imposta il progetto attivo">OK</button>
+      </div>
+      <div id="side-progetto-fatti" class="small dim"></div>
+    </div>
+
+    <!-- I progetti: la sezione dove si registrano e si aprono. Sta
+         come sezione propria perche' registrarne uno e' un'azione
+         diversa dal cambiare il progetto attivo: registrarlo e' una
+         cosa che fai una volta, cambiarlo e' una cosa che fai ogni
+         volta che inizi a lavorare. -->
+    <div class="side-sez side-sez-progetti" id="side-sez-progetti">
+      <div class="side-testata">
+        <span class="side-titolo">Progetti</span>
+      </div>
+      <p class="small dim">Le cartelle su cui Orchestra lavora. Ogni progetto ha i suoi file, le sue conversazioni e i suoi fatti in memoria.</p>
+      <ul id="side-progetti" class="side-progetti"></ul>
+      <div class="side-progetto-nuovo">
+        <input id="side-progetto-nuovo-nome" type="text" placeholder="Nome del progetto" spellcheck="false" />
+        <input id="side-progetto-nuovo-percorso" type="text" placeholder="Cartella (D:\lavori\mio-progetto)" spellcheck="false" />
+        <!-- Gli alias: altri nomi per lo stesso progetto. Servono
+             perche' i nomi non si possono tradurre da soli: un
+             progetto chiamato "Sito Ristorante" non contiene la parola
+             "restaurant", e nessun algoritmo puo' tirare a indovinare
+             che sono la stessa cosa. Con l'alias, "restaurant site"
+             trova il progetto. Separati da virgola. -->
+        <input id="side-progetto-nuovo-alias" type="text"
+               placeholder="Alias: restaurant site, menu, sito" spellcheck="false" />
+        <button id="side-progetto-nuovo-ok" class="primary">Registra</button>
+      </div>
+      <div id="side-progetti-file" class="side-progetti-file" hidden></div>
     </div>
 
     <div class="side-sez side-sez-memoria" id="side-sez-memoria">

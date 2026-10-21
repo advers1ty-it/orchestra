@@ -36,7 +36,6 @@ const log = $("log"), main = $("main"), input = $("input");
 const btnSend = $("btn-send"), btnStop = $("btn-stop");
 const steerBar = $("steer-bar"), steerInput = $("steer-input"), steerSend = $("steer-send");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
-const work = $("work"), workTxt = $("work-txt");
 const modelPick = $("model-pick");
 const reasoningPick = $("reasoning-pick");
 // id -> modello. Il popup del selettore serve il punteggio di una
@@ -134,9 +133,6 @@ function setBusy(v) {
   busy = v;
   dot.className = "dot" + (v ? " busy" : " ok");
   // Il pallino e' sempre li': verde a riposo, giallo mentre lavora.
-  // L'etichetta compare solo durante il lavoro, per non aggiungere
-  // rumore quando non c'e' niente da dire.
-  if (workTxt) workTxt.hidden = !v;
   input.disabled = !ready || v;
   btnSend.disabled = !ready || v;
   // La graffetta segue la chat: durante un turno la richiesta e' gia'
@@ -681,6 +677,24 @@ function handle(kind, d) {
                      errore: "errore"}[d.esito] || d.esito;
       addNote(`delega a un sub-agente (${d.modello || "senza modello"}, ` +
               `${d.passi || 0} passi): ${esito} — "${String(d.obiettivo || "").slice(0, 70)}"`);
+      break;
+    }
+    case "progetto_cambiato": {
+      // Il progetto non e' un'etichetta: e' la cartella in cui si
+      // scrive. Se cambia senza dirlo, l'utente crede di stare
+      // lavorando da una parte e i file finiscono dall'altra — e il
+      // danno e' nel suo progetto.
+      //
+      // Per questo il messaggio dice DOVE, non solo quale progetto:
+      // la cartella e' la cosa che l'utente deve poter controllare.
+      const dove = d.percorso ? ` — ${d.percorso}` : "";
+      addNote(`progetto: ${d.progetto || "?"}${dove}`);
+      // Il campo della sidebar mostra il progetto attivo: se non
+      // viene aggiornato qui, resta quello vecchio e la UI mente.
+      try {
+        if (typeof caricaProgetto === "function") caricaProgetto();
+        if (typeof caricaProgetti === "function") caricaProgetti();
+      } catch (e) { /* la sidebar si aggiorna al prossimo giro */ }
       break;
     }
     case "log":

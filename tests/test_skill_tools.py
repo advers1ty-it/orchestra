@@ -14,7 +14,13 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import orchestra.skills as sk
-import orchestra.skill_tools as st
+# I tool delle skill stanno in orchestra/tools/ dal 0.5.14 ("tutti i tool
+# nel pacchetto orchestra/tools/"). Il test importava ancora il vecchio
+# orchestra.skill_tools: un ModuleNotFoundError che lo faceva uscire
+# subito — e un test che non parte non e' un test rosso, e' un test
+# assente. Nessuno se ne era accorto perche' il runner riportava la
+# suite come fallita e si credeva che il difetto fosse altrove.
+from orchestra.tools import skill as st
 from orchestra.tools import default_registry
 
 PASS, FAIL = [], []
@@ -64,6 +70,44 @@ r = default_registry()
 for n in ("skill_cerca", "skill_leggi", "skill_genera", "skill_importa"):
     check(f"{n} registrato", n in r)
     check(f"  e attivo", r.get(n) is not None and n in [t.name for t in r.active])
+
+# Il registro DEVE arrivare intatto: nessun profilo applicato dentro
+# default_registry(). Prima se ne applicava uno ("base"), e "base" non
+# contiene i tool skill: li disattivava. Il prompt di sistema pero' li
+# prometteva lo stesso (skills.Indice().prompt() elenca "skill_leggi" e
+# "skill_cerca" a ogni turno). Il modello leggeva l'istruzione, la
+# eseguiva, e riceveva "tool inesistente": un'istruzione che il sistema
+# stesso aveva scritto e che il sistema rendeva impossibile da seguire.
+#
+# Il sintomo era fuorviante: il tool c'era, si poteva chiamare a mano,
+# e rispondeva. Solo il MODELLO non lo trovava, e il motivo sembrava un
+# bug dell'agente.
+from orchestra.tools import _PROFILI, applica_profilo  # noqa: E402
+
+attivi = [t.name for t in r.active]
+fuori_base = [n for n in _PROFILI["base"] if n not in attivi]
+check("nessun profilo applicato alla costruzione",
+      not fuori_base, f"disattivati dal profilo base: {fuori_base}")
+# E il registro non deve aver perso nessuno: un profilo applicato al
+# posto sbagliato disattiva, e "disattivato" e "assente" sembrano la
+# stessa cosa da lontano.
+check("registrati e attivi sono gli stessi",
+      sorted(attivi) == sorted(r.all_names()),
+      f"attivi {len(attivi)}, registrati {len(r.all_names())}")
+
+# Un profilo scelto esplicitamente, pero', disattiva davvero: il
+# profilo e' lo STATO del registro, non un'aggiunta. Chi sceglie
+# "base" vuole dire "senza skill".
+r2 = default_registry()
+applica_profilo(r2, "base")
+check("il profilo 'base' scelto a mano disattiva i tool skill",
+      "skill_leggi" not in [t.name for t in r2.active],
+      str([t.name for t in r2.active])[:110])
+r3 = default_registry()
+applica_profilo(r3, "skill")
+check("il profilo 'skill' scelto a mano li attiva",
+      "skill_leggi" in [t.name for t in r3.active],
+      str([t.name for t in r3.active])[:110])
 # Ogni tool deve dire il suo schema: uno senza 'required' accetta
 # chiamate vuote e fallisce con un errore invece di chiedere.
 for n in ("skill_cerca", "skill_leggi", "skill_genera", "skill_importa"):

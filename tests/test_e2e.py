@@ -21,7 +21,9 @@ WORK = os.path.join(ROOT, "_probe")
 os.environ["ORCHESTRA_ROOT"] = WORK
 
 from orchestra import Agent, LoopConfig, build_provider, load_env  # noqa: E402
-from orchestra.providers import ProviderError  # noqa: E402
+from orchestra.providers import (  # noqa: E402
+    KNOWN_PROVIDERS, NO_KEY_PROVIDERS, ProviderError,
+)
 from orchestra.tools import default_registry  # noqa: E402
 
 PASS, FAIL, SKIP = [], [], []
@@ -42,10 +44,41 @@ env.update(load_env(os.path.join(ROOT, "orchestra", ".env")))
 
 provider_name = env.get("ORCHESTRA_PROVIDER", "")
 model = env.get("ORCHESTRA_MODEL", "")
-if not env.get("OPENROUTER_API_KEY" if provider_name == "openrouter" else ""):
-    skip("provider", f"nessuna chiave per {provider_name}")
+
+# La chiave si cerca con la mappa dei provider, non con una condizione
+# scritta a mano. Prima c'era
+#
+#     env.get("OPENROUTER_API_KEY" if provider_name == "openrouter" else "")
+#
+# e per ogni provider diverso da openrouter si cercava la chiave "":
+# che non esiste, quindi la chiave non c'e' MAI, e questo controllo non
+# scattava mai. L'e2e partiva anche senza chiave, e quando il provider
+# non rispondeva il fallimento sembrava un difetto dell'agente.
+#
+# Il nome dell'env var e' in KNOWN_PROVIDERS, ed e' li' che va letto:
+# due copie della mappa sono due copie che divergono.
+_voce = KNOWN_PROVIDERS.get(provider_name)
+if _voce is None:
+    skip("provider", f"provider sconosciuto: {provider_name}")
     print(f"\nSKIP TUTTO: configura orchestra/.env prima.\nPASS {len(PASS)} FAIL {len(FAIL)} SKIP {len(SKIP)}")
     sys.exit(0)
+
+_base_url, _env_chiave, _default_model = _voce
+# Una env var CHIAVE VUOTA vuol dire "questo provider non vuole una
+# chiave" (modelli locali): non e' un errore, e non si salta niente.
+#
+# Nous e' un caso a parte: puo' autenticarsi col collegamento OAuth
+# senza NOUS_API_KEY, quindi chiedere la env var e fermare la corsa
+# sarebbe sbagliato — si lascia decidere a build_provider, che conosce
+# quel percorso.
+if (provider_name != "nous" and _env_chiave
+        and provider_name not in NO_KEY_PROVIDERS
+        and not (env.get(_env_chiave) or "").strip()):
+    skip("provider", f"nessuna chiave per {provider_name} ({_env_chiave})")
+    print(f"\nSKIP TUTTO: configura orchestra/.env prima.\nPASS {len(PASS)} FAIL {len(FAIL)} SKIP {len(SKIP)}")
+    sys.exit(0)
+if not model:
+    model = _default_model
 
 shutil.rmtree(WORK, ignore_errors=True)
 os.makedirs(WORK, exist_ok=True)

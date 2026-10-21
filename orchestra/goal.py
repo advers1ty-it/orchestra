@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 from typing import Any
-from .dati import percorso
+from .dati import cartella_dati, percorso
 
 
 def _path() -> str:
@@ -46,7 +46,11 @@ def _load() -> list[dict[str, Any]]:
 
 
 def _save(goals: list[dict[str, Any]]) -> None:
-    os.makedirs(_home(), exist_ok=True)
+    # La cartella dei dati la crea `dati.py`, che e' l'unico che sa
+    # dove sta (ORCHESTRA_HOME, o l'hash dell'installazione). Qui
+    # prima c'era un `_home()` che non esisteva: il NameError arrivava
+    # alla prima scrittura, cioe' al primo obiettivo creato.
+    cartella_dati()
     tmp = _path() + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(goals, f, indent=2, ensure_ascii=False)

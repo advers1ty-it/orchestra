@@ -1,0 +1,36 @@
+import sys, os
+sys.path.insert(0, '.')
+from tests import test_delega as t
+from orchestra.delega import Delegatore, Figlio
+from tests.test_delega import FiglioFalso
+t.PASS, t.FAIL = [], []
+f = FiglioFalso('Il file contiene 42 righe.')
+d = Delegatore(lambda x: f)
+r = d.delega('quante righe ha risposta.txt?')
+t.check('ha risposto', r.ok, r.esito)
+t.check('testo', '42 righe' in r.testo)
+f2 = FiglioFalso('ok')
+d2 = Delegatore(lambda x: f2)
+d2.delega(' conta le righe ', ' il file e\' e\' risposta.txt ')
+t.check('contesto', 'risposta.txt' in f2.ricevuto[0])
+d3 = Delegatore(lambda x: (_ for _ in ()).throw(RuntimeError('provider chiuso')))
+r3 = d3.delega('qualcosa')
+t.check('errore', r3.esito == 'errore')
+r4 = Figlio('esaurito', '', passi=12, motivo='finito')
+t.check('esaurito non ok', not r4.ok)
+r5 = Figlio('risposto', '', passi=1)
+t.check('vuoto ok', r5.esito == 'risposto')
+d6 = Delegatore(lambda x: FiglioFalso(''))
+r6 = d6.delega('qualcosa')
+t.check('errore vuoto', r6.esito == 'errore')
+d7 = Delegatore(lambda x: FiglioFalso(), profondita=1)
+puo, perche_no = d7.puo_delegare()
+t.check('profondita', not puo and 'profondita massima' in perche_no)
+d8 = Delegatore(lambda x: FiglioFalso('ok', 3), max_figli=2)
+d8.delega('primo'); d8.delega('secondo'); r8c = d8.delega('terzo')
+t.check('tetto figli', r8c.esito == 'errore')
+t.check('conto', d8.n_figli == 2)
+t.check('resoconto', d8.resoconto().startswith('3 deleghe, 2 utili'))
+print('PASS:', len(t.PASS), 'FAIL:', len(t.FAIL))
+for f_ in t.FAIL:
+    print('FAIL:', f_)

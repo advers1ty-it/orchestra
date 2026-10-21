@@ -1015,7 +1015,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 
 .side-azioni button { flex: 1; }
 
-.side-elenco, .side-skill {
+.side-elenco {
   list-style: none; margin: 0; padding: 6px;
   overflow-y: auto;
   min-height: 0;
@@ -1037,7 +1037,6 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
    Da qui: anche le sezioni si spartiscono lo spazio, e dentro ognuna la
    propria lista scorre. */
 .side-elenco { flex: 1 1 0; min-height: 60px; }
-.side-skill { flex: 1 1 0; min-height: 50px; }
 .side-mem-elenco { flex: 1 1 0; min-height: 40px; }
 .side-sez { flex: 1 1 0; min-height: 0; }
 
@@ -1095,23 +1094,6 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 }
 .side-riga:hover .side-del { opacity: 1; }
 .side-del:hover { color: var(--danger, #c05050); }
-
-.side-skill-riga {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 6px;
-  padding: 4px 6px; border-radius: 6px;
-  font-size: 12.5px;
-}
-
-.side-skill-nome {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-.side-apri-pagina {
-  background: none; border: none; cursor: pointer;
-  color: var(--accent); font-size: 11px; flex-shrink: 0;
-  padding: 0;
-}
 
 /* Su schermi stretti la sidebar copre: sotto i 640px non c'è spazio
    per chat + pannello, e restringere la chat a 300px la rende illeggibile. */
@@ -1200,6 +1182,69 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .cap-vuoto { padding: 14px; color: var(--muted); font-size: 13px; }
 
 /* ---------- sidebar: memoria e resize ---------- */
+
+/* Il progetto attivo. Sta sopra le sezioni della sidebar perche'
+   riguarda tutto: la memoria e' condivisa, ma i fatti che servono sono
+   quelli di questo progetto. Un progetto non sposta nulla su disco:
+   e' un'etichetta, e si cambia con un click. */
+/* ---------- progetti ---------- */
+  .side-progetti { list-style: none; margin: 8px 0; padding: 0; }
+  .side-progetti li {
+    padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 6px; margin-bottom: 6px; background: var(--panel-2);
+  }
+  .side-progetti li.attivo { border-color: var(--accent); }
+  .side-progetti .nome { font-weight: 600; font-size: 13px; }
+  .side-progetti .perc {
+    font: 11px var(--mono); color: var(--muted);
+    overflow-wrap: anywhere;   /* un percorso Windows lungo non
+                                  deve far uscire la colonna */
+  }
+  .side-progetti .riga { display: flex; gap: 6px; align-items: center; }
+  .side-progetti .riga button { padding: 3px 8px; font-size: 11px; }
+  .side-progetti .n-file { font: 11px var(--mono); color: var(--muted); }
+  .side-progetto-nuovo {
+    display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+  }
+  .side-progetto-nuovo input {
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--fg); padding: 6px 8px; border-radius: 6px; font: 13px inherit;
+  }
+  .side-progetti-file {
+    margin-top: 8px; padding: 8px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--panel-2);
+    font: 11px var(--mono); max-height: 220px; overflow-y: auto;
+  }
+  .side-progetti-file .riga {
+    display: flex; gap: 6px; padding: 2px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .side-progetti-file .riga:last-child { border-bottom: none; }
+  .side-progetti-file .azione { color: var(--muted); flex: none; }
+
+  .side-progetto {
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line,#333) 70%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.side-progetto-riga { display: flex; gap: 6px; align-items: center; }
+.side-progetto-riga input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--line,#333) 80%, transparent);
+  background: color-mix(in srgb, var(--card,#1a1a1f) 80%, transparent);
+  color: inherit;
+}
+.side-progetto-riga input:focus {
+  outline: 1px solid var(--accent,#3a7bd5);
+}
+.side-progetto-riga button { padding: 4px 10px; }
+#side-progetto-fatti { min-height: 1em; }
 
 .side-mem-campi {
   display: flex; gap: 5px; padding: 0 12px 6px;
@@ -1354,15 +1399,6 @@ body.side-trascina { user-select: none; cursor: col-resize; }
   flex-shrink: 0;
   min-height: 0;
 }
-
-/* E la lista delle skill, se ha troppe righe, scrolla invece di
-   allargarsi: senza `overflow` esplicito la <ul> cresce e butta fuori
-   quello che viene dopo. */
-#side-skill {
-  overflow-y: auto;
-  min-height: 0;
-}
-
 
 .side-cerca-campi {
   padding: 0 10px 6px;

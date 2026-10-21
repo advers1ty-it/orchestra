@@ -83,13 +83,65 @@ def blocco_prompt() -> str:
 def tool_memoria() -> Tool:
     """Il tool. Quattro azioni, una per domanda diversa."""
 
-    def cerca(query: str = "", limite: int = 10) -> str:
-        """Cerca fra i fatti. È l'azione che sostituisce l'iniezione totale."""
+    def cerca(query: str = "", limite: int = 10,
+               progetto: str = "") -> str:
+        """Cerca fra i fatti. È l'azione che sostituisce l'iniezione totale.
+
+        `progetto` restringe la ricerca a un progetto. Vuoto = tutti, che
+        è il default: la memoria è condivisa e chiedere "tutto" è una
+        domanda legittima.
+
+        MA se c'e' un progetto attivo, il default non e' "tutti": e' il
+        progetto attivo. E' il punto di tutto il meccanismo — l'agente
+        che lavora sul sito del ristorante deve vedere i fatti del sito
+        del ristorante, senza dover dire "cerca con progetto=..." ogni
+        volta. Un modello che deve ricordarsi di passare un filtro
+        sbaglia: lo salta, e legge la memoria sbagliata.
+
+        Il filtro automatico e' pero' solo sul progetto: i fatti senza
+        progetto restano raggiungibili, perche' valgono per tutti.
+        """
+        progetto = (progetto or "").strip()
+        if not progetto:
+            try:
+                from .. import progetti as _pr
+                progetto = (_pr._root_progetto() or "").strip()
+            except Exception:  # noqa: BLE001
+                progetto = ""
         m = memoria()
-        tutti = m.fatti()
+        q = (query or "").strip().lower()
+        # L'indice FTS5 quando c'è: il backend su file non ha la
+        # ricerca per sottostringa, e su una memoria lunga scaricare
+        # tutto per ogni ricerca è il costo che l'indice serve a
+        # evitare. Se l'indice non c'è, si torna al file: meglio
+        # lento che muto.
+        cerca_indice = getattr(m, "cerca", None)
+        if callable(cerca_indice):
+            try:
+                righe = cerca_indice(q, limite=limite, progetto=progetto)
+                if righe:
+                    return "\n".join(f"- {r['testo']}" for r in righe[:limite])
+            except Exception:
+                pass
+        # L'indice non ha trovato niente: si prova sul file, e NON si
+        # dice subito "non trovato". L'FTS cerca tutte le parole insieme
+        # (AND), mentre il filtro sul file riprova anche con una parola
+        # sola: una domanda con due parole puo' benissimo trovare un
+        # fatto per la via corta. Dire "non trovato" dopo il solo primo
+        # tentativo e' dire una falsita' — e il modello smette di
+        # chiedere perche' e conclude che il fatto non esista.
+        # Il filtro per progetto vale anche nel percorso di riserva: se
+        # l'indice non ha trovato niente, il fallback sul file non deve
+        # tirare fuori i fatti degli ALTRI progetti. Se lo facesse, una
+        # ricerca per "sito-ristorante" mostrerebbe anche i fatti
+        # dell'app parrucchieri — e l'agente leggerebbe roba che non
+        # c'entra come se c'entrasse.
+        if progetto:
+            tutti = m.fatti_per_progetto(progetto)
+        else:
+            tutti = m.fatti()
         if not tutti:
             return "Nessun fatto in memoria."
-        q = (query or "").strip().lower()
         if not q:
             # senza query non è una ricerca: sono i più recenti, che è
             # quello che serve a chi non sa ancora cosa c'è
@@ -110,17 +162,35 @@ def tool_memoria() -> Tool:
             return f"Nessun fatto trovato per: {query}"
         return "\n".join(f"- {f}" for f in trovati[:limite])
 
-    def aggiungi(fatto: str = "", priorita: str = "") -> str:
-        """Aggiunge un fatto. `priorita` = "alta" lo mette nel prompt."""
+    def aggiungi(fatto: str = "", priorita: str = "",
+                progetto: str = "") -> str:
+        """Aggiunge un fatto. `priorita` = "alta" lo mette nel prompt.
+
+        Se il progetto non e' indicato, si usa quello attivo: e' il
+        progetto su cui l'agente sta lavorando, ed e' quello a cui il
+        fatto appartiene. Chiedere al modello di specificarlo ogni
+        volta e' chiedergli di ricordarsi una cosa che il sistema
+        gia' sa — e un modello che deve ricordarsi una cosa sbaglia.
+        """
         fatto = (fatto or "").strip()
         if not fatto:
             return "Fatto vuoto: non ho niente da ricordare."
+        progetto = (progetto or "").strip()
+        if not progetto:
+            try:
+                from .. import progetti as _pr
+                progetto = (_pr._root_progetto() or "").strip()
+            except Exception:  # noqa: BLE001
+                progetto = ""
         m = memoria()
         alta = priorita.strip().lower() == "alta"
-        nuovo = m.aggiungi(fatto, origine="agente", importante=alta)
+        nuovo = m.aggiungi(fatto, origine="agente", importante=alta,
+                           progetto=progetto)
         if not nuovo:
             return f"Era già in memoria: {fatto}"
-        return ("Ricordato" + (" (priorità alta)" if alta else "") + f": {fatto}")
+        return ("Ricordato" + (" (priorità alta)" if alta else "")
+                + (f" [progetto: {progetto}]" if progetto else "")
+                + f": {fatto}")
 
     def elimina(fatto: str = "") -> str:
         """Toglie un fatto. Non chiede conferma: la memoria è dell'utente."""
@@ -149,13 +219,14 @@ def tool_memoria() -> Tool:
 
     def handler(azione: str = "cerca", query: str = "", fatto: str = "",
                 priorita: str = "", limite: int = 10,
-                vecchio: str = "", nuovo: str = "") -> str:
+                vecchio: str = "", nuovo: str = "",
+                progetto: str = "") -> str:
         try:
             azione = (azione or "cerca").strip().lower()
             if azione == "cerca":
-                return cerca(query, limite)
+                return cerca(query, limite, progetto)
             if azione == "aggiungi":
-                return aggiungi(fatto, priorita)
+                return aggiungi(fatto, priorita, progetto)
             if azione == "elimina":
                 return elimina(query or fatto)
             if azione == "modifica":
@@ -219,6 +290,16 @@ def tool_memoria() -> Tool:
                 "limite": {
                     "type": "integer",
                     "description": "Quanti risultati. Default 10.",
+                },
+                "progetto": {
+                    "type": "string",
+                    "description": (
+                        "Il progetto a cui il fatto appartiene. Facoltativo: "
+                        "vuoto significa 'tutti i progetti'. Usalo per "
+                        "separare un fatto di un progetto dagli altri, così "
+                        "poi puoi chiedere solo quelli di quello che stai "
+                        "lavorando."
+                    ),
                 },
             },
         },

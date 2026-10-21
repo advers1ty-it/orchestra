@@ -10,7 +10,7 @@ file, due turni sovrapposti non si corrompono, e leggere le ultime N
 righe di una conversazione lunga non vuol dire caricarla tutta.
 
 Le sessioni stanno accanto ai cataloghi, in
-`%LOCALAPPDATA%\orchestra` (vedi `dati.py`): stessa cartella,
+`%LOCALAPPDATA%\\orchestra` (vedi `dati.py`): stessa cartella,
 dati di Orchestra che nessuno va a cercare in D:\\orchestra.
 """
 

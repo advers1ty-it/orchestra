@@ -146,6 +146,12 @@ class OrchestraApp:
         # deve sopravvivere fra una richiesta e l'altra: il tool che
         # chiede gira in un thread, la risposta arriva su un altro.
         self.gate = self._make_gate()
+        # La delega. `_collega_delega` costruisce la fabbrica del
+        # figlio e registra il tool: senza, l'agente non ha modo di
+        # chiedere un lavoro circoscritto. Va fatto qui, e non in un
+        # secondo momento, perche' il figlio eredita anche il
+        # PROGETTO del padre: e' il padre che sa in quale cartella
+        # si sta lavorando.
         # il catalogo viene caricato pigramente: `/models` lo chiede, la
         # chat no. Caricarlo all'avvio aggiungerebbe una chiamata di rete a
         # ogni start, anche quando l'utente vuole solo chattare.
@@ -214,6 +220,108 @@ class OrchestraApp:
     def gate_root(self) -> Any:
         from .tools import _root
         return _root()
+
+    def _rotta_progetti(self, percorso: str, corpo: dict[str, Any]) -> dict[str, Any] | None:
+        """Le rotte dei progetti. None = non e' una rotta di questo gruppo.
+
+        La sessione e' un pezzo solo: cambiando progetto si cambia
+        anche la cartella in cui si scrive, e quindi quello che segue
+        l'agente. Per questo l'impostazione del progetto e' su
+        `/api/progetto` (la sessione) e non qui: due porte per la
+        stessa cosa sarebbero due regole diverse.
+        """
+        if percorso == "/api/progetti/registra":
+            return self._api_progetti_registra(corpo)
+        if percorso == "/api/progetti/alias":
+            return self._api_progetti_alias(corpo)
+        if percorso == "/api/progetti/elimina":
+            return self._api_progetti_elimina(corpo)
+        if percorso == "/api/progetti/file":
+            return self._api_progetti_file(corpo)
+        if percorso == "/api/progetti":
+            return {"ok": True, "progetti": self._elenco_progetti(),
+                    "attivo": self._progetto_attivo()}
+        return None
+
+    def _api_progetti_registra(self, corpo: dict[str, Any]) -> dict[str, Any]:
+        """Registra (o aggiorna) un progetto."""
+        from . import progetti as _pr
+        nome = str(corpo.get("nome") or "").strip()
+        percorso = str(corpo.get("percorso") or "").strip()
+        if not nome or not percorso:
+            return {"ok": False, "errore": "nome e percorso sono obbligatori"}
+        try:
+            _pr.registra(nome, percorso,
+                        alias=str(corpo.get("alias") or ""),
+                        note=str(corpo.get("note") or ""))
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "errore": str(e)}
+        return {"ok": True, "progetti": self._elenco_progetti()}
+
+    def _api_progetti_alias(self, corpo: dict[str, Any]) -> dict[str, Any]:
+        """Cambia gli alias di un progetto.
+
+        Gli alias sono gli altri nomi dello stesso progetto, in un'altra
+        lingua o in un'altra forma. Servono perche' i nomi non si possono
+        tradurre da soli: un progetto chiamato "Sito Ristorante" non
+        contiene la parola "restaurant", e nessun algoritmo puo' tirare
+        a indovinare che sono la stessa cosa.
+        """
+        from . import progetti as _pr
+        nome = str(corpo.get("progetto") or "").strip()
+        if not nome:
+            return {"ok": False, "errore": "manca il progetto"}
+        riga = _pr.per_nome(nome)
+        if not riga:
+            return {"ok": False, "errore": f"progetto sconosciuto: {nome}"}
+        try:
+            _pr.registra(riga["nome"], riga["percorso"],
+                         note=riga.get("note") or "",
+                         alias=str(corpo.get("alias") or ""))
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "errore": str(e)}
+        return {"ok": True, "alias": _pr.alias_di(riga)}
+
+    def _api_progetti_elimina(self, corpo: dict[str, Any]) -> dict[str, Any]:
+        from . import progetti as _pr
+        nome = str(corpo.get("nome") or "").strip()
+        if not nome:
+            return {"ok": False, "errore": "manca il nome"}
+        _pr.elimina(nome)
+        return {"ok": True, "progetti": self._elenco_progetti()}
+
+    def _api_progetti_file(self, corpo: dict[str, Any]) -> dict[str, Any]:
+        """I file toccati, per progetto o tutti."""
+        from . import progetti as _pr
+        nome = str(corpo.get("progetto") or "").strip()
+        try:
+            file = _pr.file_toccati(nome)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "errore": str(e)}
+        return {"ok": True, "file": file, "progetto": nome}
+
+    def _progetto_attivo(self) -> str:
+        """Il nome del progetto attivo, o "" se non c'e'."""
+        if self.session is None:
+            return ""
+        return getattr(self.session, "progetto", "") or ""
+
+    def _elenco_progetti(self) -> list[dict[str, Any]]:
+        """I progetti registrati, con il file toccati."""
+        from . import progetti as _pr
+        out = []
+        for p in _pr.tutti():
+            item = dict(p)
+            item["attivo"] = (str(p.get("nome") or "").lower()
+                              == self._progetto_attivo().lower()
+                              and bool(self._progetto_attivo()))
+            # Gli alias come lista, non come stringa: la colonna e' una
+            # stringa separata da virgole, e chi la riceve non deve
+            # re-interpretare il formato. Due forme per lo stesso dato
+            # sono due cose che possono divergere.
+            item["alias"] = _pr.alias_di(p)
+            out.append(item)
+        return out
 
     def _carica_catalogo(self, forza: bool) -> Any:
         """Il lavoro vero. La property `catalog` e' il-wrapper.
@@ -892,6 +1000,29 @@ class OrchestraApp:
         env_chiavi = ambiente(ENV_PATH)
 
         def fabbrica(obiettivo: str):
+            # Il figlio nasce nel progetto in cui sta lavorando il
+            # padre. Due cose devono viaggiare: il NOME (e' quello
+            # che etichetta i fatti di memoria) e la CARTELLA (e' li'
+            # che il figlio scrive).
+            #
+            # Senza, un figlio che produce un file lo mette nella
+            # cartella di installazione: il padre riceve un "fatto"
+            # che riguarda un posto che non gli e' stato chiesto, e
+            # il progetto giusto resta vuoto. E' il tipo di difetto
+            # che non si vede finche' il progetto giusto e' pieno di
+            # file dell'altro.
+            progetto = ""
+            percorso = ""
+            try:
+                progetto = getattr(self.session, "progetto", "") or ""
+            except Exception:  # noqa: BLE001
+                progetto = ""
+            if progetto:
+                try:
+                    from . import progetti as _pr
+                    percorso = _pr.percorso_di(progetto)
+                except Exception:  # noqa: BLE001
+                    percorso = ""
             # il modello del figlio lo sceglie il Delegatore, non qui:
             # e' una decisione per compito, e farla qui la farebbe
             # sbagliata perche' qui non si sa ancora qual e' il compito
@@ -920,7 +1051,16 @@ class OrchestraApp:
             except (TypeError, ValueError):
                 passi_padre = 20
             passi_figlio = max(1, min(passi_padre, 50))
-            return Agent(
+            # La root del padre va impostata PRIMA di creare il
+            # figlio: il thread del padre e' un thread diverso da
+            # quello in cui il figlio girera', e la root sta nel
+            # thread. Impostarla qui, e' l'unico modo che funzioni.
+            try:
+                from . import progetti as _pr
+                _pr._set_root_sessione(percorso, progetto)
+            except Exception:  # noqa: BLE001
+                pass
+            figlio = Agent(
                 build_provider(nome_provider, model=modello, env=env_chiavi),
                 default_registry(),          # NUOVO: senza 'delega'
                 PROMPT_FIGLIO,
@@ -936,6 +1076,17 @@ class OrchestraApp:
                 on_event=lambda kind, data: self.session.bridge.emit(
                     "figlio", {"tipo": kind, **(data or {})}),
             )
+            # Il figlio sa su quale progetto lavora: e' lui che mette
+            # il blocco del progetto nel prompt e che etichetta i
+            # suoi fatti. Senza, il padre lavora sul sito del
+            # ristorante e il figlio scrive nella cartella di
+            # installazione.
+            try:
+                figlio.progetto = progetto
+                figlio._aggiorna_prompt()
+            except Exception:  # noqa: BLE001
+                pass
+            return figlio
 
         self.session._fabbrica_figlio = fabbrica
         # il catalogo serve al tariffario del figlio: senza i prezzi del
@@ -1293,7 +1444,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             cfg.verifica_compito = None
 
-    def do_GET(self) -> None:  # noqa: N802 - firma di BaseHTTPRequestHandler
+    def do_GET(self) -> None:
         path = self.path.split("?")[0]
         if path == "/":
             self._html(UI_PATH)
@@ -1664,11 +1815,24 @@ class Handler(BaseHTTPRequestHandler):
                                     "tool_profile", None)
                            if self.app.session is not None else None),
                 "budget": _budget_per_pannello(self.app.env),
+                # Il progetto attivo. Va nello stato e non solo in un
+                # endpoint dedicato: la UI deve poterlo mostrare senza
+                # fare una richiesta in piu' a ogni aggiornamento, e il
+                # modello deve sapere in che progetto e'.
+                "progetto": (getattr(self.app.session, "progetto", "")
+                             if self.app.session is not None else ""),
                 "max_iterations": (self.app.session.agent.config.max_iterations
                                    if self.app.session is not None else 12),
                 "context_limit": (self.app.session.agent.config.context_limit
                                   if self.app.session is not None else 120000),
                 })
+        elif path == "/api/progetti":
+            # L'elenco dei progetti registrati, e quale e' attivo.
+            # Va in GET e non in POST perche' e' una lettura, e la UI
+            # lo chiede all'avvio per riempire la lista.
+            self._json({"ok": True,
+                        "progetti": self.app._elenco_progetti(),
+                        "attivo": self.app._progetto_attivo()})
         elif path == "/api/locali":
             # Separato perche' e' lento per costruzione: si interrogano
             # motori in ascolto su localhost e una porta chiusa puo'
@@ -2129,7 +2293,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/nous/auth/start", "/api/chiavi",
                     "/api/provider", "/api/memoria/cerca",
                     "/api/memoria/aggiungi", "/api/memoria/elimina",
-                    "/api/memoria/modifica"):
+                    "/api/memoria/modifica", "/api/progetto"):
             s = self.app.session  # puo' essere None: non la usano
         else:
             s = self._need_session()
@@ -2305,19 +2469,21 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/memoria/cerca":
             # Ricerca FTS5 dalla UI. `conta_usi=False`: cercare per
-            # controllare non vuol dire che il fatto serva, e contarlo
+            # controllare non vuol dire che il facto serva, e contarlo
             # inquinerebbe la statistica che dice cosa è morto.
             from .tools.memoria import memoria as mem
             from .memoria import stato as stato_memoria
             q = (body.get("query") or "").strip()
+            progetto = (body.get("progetto") or "").strip()
             m = mem()
-            fuori: dict[str, Any] = {"query": q}
+            fuori: dict[str, Any] = {"query": q, "progetto": progetto}
             try:
                 righe = m.cerca(q, limite=int(body.get("limite") or 20),
-                                conta_usi=False)
+                                conta_usi=False, progetto=progetto)
                 fuori["risultati"] = [
                     {"testo": r["testo"], "usi": r["usi"],
-                     "importante": bool(r["importante"])} for r in righe]
+                     "importante": bool(r["importante"]),
+                     "progetto": r.get("progetto", "")} for r in righe]
                 st = m.statistiche()
                 fuori["indice"] = {"totale": st["totale"],
                                    "mai_usati": st["mai_usati"],
@@ -2325,28 +2491,81 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 # il backend a file non ha `cerca`: si torna al filtro per
                 # sottostringa, che è quello che faceva prima dell'indice
-                tutti = m.fatti() + m.importanti()
+                if progetto:
+                    tutti = m.fatti_per_progetto(progetto)
+                else:
+                    tutti = m.fatti() + m.importanti()
                 ql = q.lower()
                 fuori["risultati"] = [
-                    {"testo": f, "usi": 0, "importante": f in m.importanti()}
-                    for f in tutti if ql in f.lower()][:20]
+                    {"testo": f, "usi": 0, "importante": f in m.importanti(),
+                     "progetto": progetto} for f in tutti if ql in f.lower()][:20]
                 fuori["nota"] = "ricerca per sottostringa (indice non disponibile)"
             fuori.update(stato_memoria())
             self._json(fuori)
 
-        elif path == "/api/memoria":
-            from .memoria import stato as stato_memoria
-            self._json(stato_memoria())
-
         elif path == "/api/memoria/aggiungi":
+            # Aggiunge un fatto a mano, dalla barra laterale.
+            #
+            # Il progetto arriva dal corpo; se manca, si usa quello
+            # attivo. Cosi un fatto scritto a mano mentre si lavora sul
+            # sito ristorante finisce col suo etichetta senza che
+            # l'utente debba ripeterlo ogni volta.
             from .memoria import memoria
             fatto = (body.get("fatto") or "").strip()
             if not fatto:
                 self._json({"error": "fatto vuoto"}, 400)
                 return
-            nuovo = memoria().aggiungi(fatto, origine="manuale")
+            progetto = (body.get("progetto")
+                        or getattr(self.app.session, "progetto", "") or "").strip()
+            nuovo = memoria().aggiungi(fatto, origine="manuale",
+                                       progetto=progetto)
             from .memoria import stato as stato_memoria
             self._json({"ok": True, "nuovo": nuovo, **stato_memoria()})
+        elif path == "/api/memoria":
+            from .memoria import stato as stato_memoria
+            self._json(stato_memoria())
+
+        elif path == "/api/progetto":
+            # POST {progetto: nome}: imposta il progetto attivo.
+            # La risposta porta anche i progetti conosciuti (per il
+            # datalist) e quanti fatti ne ha: e' quello che il campo
+            # mostra sotto, e senza l'utente non sa se il progetto
+            # esiste davvero o e' solo una parola.
+            nome = str((body.get("progetto") or "")).strip()
+            try:
+                from . import progetti as _pr
+                if nome and not _pr.percorso_di(nome):
+                    return self._json({"error":
+                                       f"progetto sconosciuto: {nome}"}, 400)
+            except Exception as e:  # noqa: BLE001
+                return self._json({"error": str(e)}, 400)
+            if self.app.session is None:
+                return self._json({"error": "nessuna sessione"}, 409)
+            try:
+                self.app.session.imposta_progetto(nome)
+                if nome:
+                    from . import progetti as _pr
+                    _pr.tocca(nome)
+            except Exception as e:  # noqa: BLE001
+                return self._json({"error": str(e)}, 400)
+            n_fatti = 0
+            try:
+                from .memoria import memoria
+                n_fatti = len(memoria().fatti_per_progetto(nome))
+            except Exception:  # noqa: BLE001
+                n_fatti = 0
+            return self._json({
+                "ok": True,
+                "attivo": nome,
+                "n_fatti": n_fatti,
+                # QUI i progetti sono NOMI, non dizionari: e' la lista
+                # per il datalist del campo, che vuole stringhe. Il
+                # GET /api/progetti invece restituisce i dizionari
+                # interi, perche' li disegna. Due forme per lo stesso
+                # campo, ma su due endpoint diversi — e i due consumatori
+                # sono diversi.
+                "progetti": [p.get("nome") for p in self.app._elenco_progetti()],
+            })
 
         elif path == "/api/memoria/modifica":
             from .memoria import memoria
@@ -2369,6 +2588,12 @@ class Handler(BaseHTTPRequestHandler):
             from .memoria import stato as stato_memoria
             self._json({"ok": True, "tolto": tolto, **stato_memoria()})
 
+        elif path == "/api/progetti/registra":
+            self._json(self.app._api_progetti_registra(body))
+        elif path == "/api/progetti/elimina":
+            self._json(self.app._api_progetti_elimina(body))
+        elif path == "/api/progetti/file":
+            self._json(self.app._api_progetti_file(body))
         elif path == "/api/reset":
             try:
                 s.reset()
@@ -2487,15 +2712,27 @@ class Handler(BaseHTTPRequestHandler):
                 percorso=target, azione="leggere",
                 dettaglio="prova manuale, nessun file viene letto",
                 motivo="verifica del canale dei permessi")
+            # Diagnosi incorporata: se la domanda non arriva, la risposta
+            # dice PERCHE' (valutazione, canale assente, errore) invece
+            # di un "non funziona" muto.
+            esito: dict[str, Any] = {"valuta": None, "ha_chiedi": None,
+                                     "chiesto": False, "risposta": None,
+                                     "errore": None}
             def _prova_thread() -> None:
                 # passa da chiedi_all_utente con l'id che gia' conosciamo:
                 # e' l'unico percorso che registra la domanda in attesa,
                 # ed e' quello che usa davvero un tool. Chiamando chiedi a
                 # mano si verificherebbe meta' del canale.
                 try:
-                    gate.chiedi_all_utente(r.percorso, r.azione, r.dettaglio,
-                                           richiesta_id=r.id)
+                    esito["valuta"] = gate.valuta(r.percorso, r.azione,
+                                                  r.dettaglio)
+                    esito["ha_chiedi"] = gate.chiedi is not None
+                    ok = gate.chiedi_all_utente(r.percorso, r.azione, r.dettaglio,
+                                                richiesta_id=r.id)
+                    esito["chiesto"] = True
+                    esito["risposta"] = bool(ok)
                 except Exception as e:  # noqa: BLE001
+                    esito["errore"] = f"{type(e).__name__}: {e}"
                     from .permissions import _log_permesso
                     _log_permesso(f"prova fallita: {type(e).__name__}: {e}")
 
@@ -2513,7 +2750,7 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 time.sleep(0.05)
             self._json({"ok": True, "id": r.id, "percorso": target,
-                        "in_attesa": in_atting})
+                        "in_attesa": in_atting, "diagnosi": esito})
         elif path == "/api/permesso":
             # La risposta a una domanda di permesso. Quattro scelte, e
             # nient'altro: "una_volta", "sessione", "sempre", "mai". Una scelta
@@ -2641,13 +2878,15 @@ class Handler(BaseHTTPRequestHandler):
             val = (body.get("profile") if isinstance(body, dict) else None)
             val = (val or "").strip() if isinstance(val, str) else ""
             if val in ("", "none"):
+                # "nessun profilo" NON vuol dire "tutti i tool": vuol dire
+                # che il registro resta com'e'. Il profilo e' lo stato di
+                # un insieme di tool, e "nessuno" non e' un insieme.
                 cfg.tool_profile = None
-                applica_profilo(self.app.session.agent.registry, "pieno")
             elif val == "auto":
                 cfg.tool_profile = "auto"
-                # applica solo esplicitamente se possibile; l'auto si
-                # specializza al primo turno con testo.
-                applica_profilo(self.app.session.agent.registry, "pieno")
+                # L'auto si specializza al primo turno con il testo
+                # dell'utente: `profilo_per_testo` sceglie in base a
+                # quello che sta per succedere.
             else:
                 if val not in _PROFILI:
                     self._json({"error": f"profilo sconosciuto: {val}. " +

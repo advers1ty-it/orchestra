@@ -1,0 +1,10 @@
+Questo file non e' un test.
+
+E' un file di prova nato per una riparazione: durante la scrittura
+di orchestra/progetti.py un carattere si era corrotto e serviva un
+modo per verificare che la scrittura funzionasse. Il file e' rimasto
+vuoto perche' non c'era un modo per cancellarlo con gli strumenti
+a disposizione.
+
+Non e' importato da nessuna parte e non viene eseguito. Si puo'
+cancellare senza conseguenze.

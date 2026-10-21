@@ -34,6 +34,38 @@ from typing import Any
 # benchmark intero a 0.00: sembrava che i modelli fossero pessimi, quando
 # il codice non aveva mai scritto dove credevamo.
 def _root() -> Path:
+    """La cartella di lavoro di ADESSO.
+
+    Tre livelli, in quest'ordine:
+
+    1. La root del progetto attivo, se il thread ne ha una. Il
+       progetto e' per sessione, e la sessione gira in un thread suo:
+       e' il thread che sa in quale cartella si sta lavorando, e la
+       root sta in un `threading.local` per questo. Senza, due
+       sessioni aperte su due progetti diversi scriverebbero l'una
+       nella cartella dell'altra — e il confine di sicurezza
+       punterebbe al posto sbagliato.
+
+    2. ORCHESTRA_ROOT, se l'ambiente lo dice. E' la radice del
+       benchmark, che cambia a ogni task, e la radice della CLI.
+
+    3. La cartella corrente.
+
+    Il primo livello vince perche' e' il piu' specifico: chi ha
+    chiesto di lavorare in un progetto ha detto dove, e un progetto
+    dentro un benchmark e' un caso che non si da' (il benchmark non
+    registra progetti).
+    """
+    try:
+        from .. import progetti as _pr
+        specifica = _pr._root_sessione()
+    except Exception:  # noqa: BLE001
+        specifica = ""
+    if specifica:
+        try:
+            return Path(specifica).resolve()
+        except Exception:  # noqa: BLE001
+            pass
     return Path(os.environ.get("ORCHESTRA_ROOT", ".")).resolve()
 
 
@@ -68,7 +100,7 @@ def _safe_path(rel: str) -> Path:
     root = _root()
     p = (root / rel).resolve()
 
-    dentro = str(p).startswith(str(root))
+    dentro = _dentro_root(str(p))
     if dentro:
         return p
 
@@ -169,6 +201,39 @@ _SUSPICIOUS = (
 )
 
 
+def _dentro_root(candidato: str) -> bool:
+    """Il percorso e' dentro la root? Vale anche per i path assoluti.
+
+    Serve perche' un path assoluto NON e' fuori per definizione: puo'
+    essere dentro la root, e in quel caso e' il posto di lavoro. La
+    domanda "esce dalla root" ha una risposta sola per ogni path, e va
+    fatta guardando il path — non dedotta dal fatto che e' assoluto.
+
+    Il confronto e' su stringhe risolte, come in `_safe_path`: con
+    `startswith` secco, `D:\\orchestra2` passerebbe per dentro
+    `D:\\orchestra`. Il separatore finale evita quello.
+
+    La normalizzazione e' UGUALE per le due stringhe, e su Windows
+    tiene conto delle maiuscole: `D:\\Orchestra` e `d:\\orchestra` sono
+    la stessa cartella, e confrontarle diversamente darebbe "fuori" per
+    un path che e' dentro — cioe' la domanda di permesso sul file che
+    l'agente sta aprendo.
+    """
+    try:
+        p = Path(candidato)
+        if not p.is_absolute():
+            return False
+        root = str(_root())
+        dentro = str(p.resolve())
+        if os.name == "nt":
+            root = root.lower()
+            dentro = dentro.lower()
+        root = root.rstrip("\\/")
+        return dentro == root or dentro.startswith(root + os.sep)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _percorso_fuori(command: str) -> str:
     """Il percorso che il comando tocca ed esce dalla root, o "".
 
@@ -180,12 +245,22 @@ def _percorso_fuori(command: str) -> str:
     dire che non poteva toccare C:\\Users\\adver\\TraceAppNew senza che
     all'utente comparisse mai la domanda.
 
+    Un path DENTRO la root non e' un "fuori": e' il posto di lavoro,
+    e farlo scattare come se fosse fuori produceva due guai. In web
+    UI la domanda di permesso per un file del progetto (assurdo), e in
+    CLI — dove non c'e' nessuno a cui chiedere — il comando veniva
+    negato con un messaggio che diceva "fuori dalla cartella di
+    lavoro" per un percorso che era dentro. Negare il proprio progetto
+    perche' il percorso era assoluto e' un difetto che si vede subito,
+    e il messaggio che lo spiega e' falso.
+
     Approssimazione dichiarata: non e' un sandbox e non puo' esserlo
     qui dentro. Un `curl`, un `python -c` o una catena di pipe possono
     arrivare ovunque senza mai nominare un percorso. Quello che
-    facciamo e' fermare gli errori ovvi — `..`, un percorso assoluto,
-    la home — che sono anche la maggior parte degli incidenti reali, e
-    chiedere il permesso su quelli invece di negare in silenzio.
+    facciamo e' fermare gli errori ovvi — `..`, un percorso assoluto
+    FUORI dalla root, la home — che sono anche la maggior parte degli
+    incidenti reali, e chiedere il permesso su quelli invece di negare
+    in silenzio.
 
     Dichiararlo e' parte del lavoro: un controllo che sembra totale e
     non lo e' e' peggio di nessun controllo, perche' ci si fiderebbe
@@ -216,23 +291,44 @@ def _percorso_fuori(command: str) -> str:
         originale = command[m.start():m.end()]
         tradotto = come_windows(originale)
         if tradotto.lower() != originale.lower():
-            return tradotto
+            # Solo se e' davvero fuori dalla root: `/d/orchestra` e' il
+            # progetto, non un percorso esterno.
+            if not _dentro_root(tradotto):
+                return tradotto
     for m in re.finditer(r"[a-z]:[\\/](?:[^\s'\";|&)<>]{0,200})", low):
-        return command[m.start():m.end()].rstrip("/\\") or command[m.start():m.start() + 2]
+        # Solo se e' davvero FUORI: un path assoluto dentro la root
+        # e' il posto di lavoro, e farlo scattare come "fuori" produce
+        # una domanda di permesso per il file che l'agente sta
+        # semplicemente aprendo.
+        candidato = command[m.start():m.end()].rstrip("/\\")
+        if candidato and not _dentro_root(candidato):
+            return candidato or command[m.start():m.start() + 2]
     for m in re.finditer(r"/(?:users|home|root|mnt|media)/[^\s'\";|&)<>]{0,200}", low):
-        return come_windows(command[m.start():m.end()].rstrip("/"))
+        candidato = come_windows(command[m.start():m.end()].rstrip("/"))
+        if candidato and not _dentro_root(candidato):
+            return candidato
     if "../" in command or "..\\" in command:
         # si risolve solo il PRIMO token che sembra un percorso: passare
         # l'intero comando a resolve() lo tratta come un nome di file e
         # produce una destinazione sbagliata
         for m in re.finditer(r"[^\s'\";|&)<>]*\.\.[^\s'\";|&)<>]*", command):
             try:
-                return str((_root() / m.group(0)).resolve())
+                risolto = str((_root() / m.group(0)).resolve())
             except Exception:  # noqa: BLE001
                 return str(_root())
-        return str(_root())
+            # `..` che RISOLVE dentro la root non esce: e' un modo
+            # goffo di scrivere la stessa cartella. Solo se il
+            # risultato e' davvero fuori, e' un percorso esterno.
+            if not _dentro_root(risolto):
+                return risolto
+        return ""
     if low.startswith("~/"):
-        return os.path.expanduser("~")
+        # La home e' fuori dalla root solo se la root non E' la home.
+        # Un progetto dentro C:\\Users\\adver ha la home come
+        # antenato, e `~/documenti` non ne esce.
+        home = os.path.expanduser("~")
+        if not _dentro_root(home):
+            return home
     for pat in _SUSPICIOUS:
         if re.search(pat, low):
             return os.path.join(os.path.expanduser("~"), pat.strip("^$"))
@@ -246,6 +342,18 @@ def _check_shell_access(command: str) -> str | None:
     Ferma gli errori ovvi — il percorso esplicito e i file di credenziali —
     che sono anche la maggior parte degli incidenti reali. Un sandbox vero
     richiede isolamento a livello di processo e non sta in un tool handler.
+
+    Un percorso ASSOLUTO non e' automaticamente fuori: puo' essere
+    dentro la root, e li' e' il posto di lavoro. Bloccarli tutti
+    significa che `type D:\\orchestra\\README.md` viene negato come se
+    fosse un tentativo di uscire — e il messaggio diceva "il comando
+    contiene un percorso assoluto", che e' vero ma non e' il motivo
+    del rifiuto. Il confine che conta e' "dentro o fuori dalla root",
+    e si guarda il path.
+
+    Nota: questo controllo gira solo quando il gate non ha concesso
+    niente (vedi `run_shell`): con il gate, e' il gate a decidere, per
+   che' e' piu' severo e l'utente ha gia' risposto.
     """
     import re
 
@@ -253,17 +361,23 @@ def _check_shell_access(command: str) -> str | None:
 
     # 1) percorsi che escono dal root
     if "../" in command or "..\\" in command:
-        # ../ dentro il root è tecnicamente dentro, ma non vale la pena
-        # distinguere: il modello deve usare path puliti
-        return f"il comando contiene '..' (escape dal root): {command[:120]}"
+        # `..` che RISOLVE dentro la root non esce: e' un modo goffo
+        # di scrivere la stessa cartella. Solo se il risultato e'
+        # davvero fuori, e' un escape.
+        if _percorso_fuori(command):
+            return f"il comando contiene '..' (escape dal root): {command[:120]}"
 
-    # 2) percorsi assoluti Windows
-    if re.search(r"[a-z]:[\\/]", low):
-        return f"il comando contiene un percorso assoluto: {command[:120]}"
+    # 2) percorsi assoluti Windows: solo se escono davvero dalla root
+    for m in re.finditer(r"[a-z]:[\\/][^\s'\";|&<>]{0,200}", low):
+        candidato = command[m.start():m.end()].rstrip("/\\")
+        if candidato and not _dentro_root(candidato):
+            return f"il comando punta fuori dal progetto ({candidato}): {command[:120]}"
 
-    # 3) home esplicita
+    # 3) home esplicita: solo se la home e' davvero fuori
     if "/home/" in low or "/root/" in low or low.startswith("~/") or "/users/" in low:
-        return f"il comando punta fuori dal progetto: {command[:120]}"
+        home = os.path.expanduser("~")
+        if not _dentro_root(home):
+            return f"il comando punta fuori dal progetto: {command[:120]}"
 
     # 4) file di credenziali
     for pat in _SUSPICIOUS:

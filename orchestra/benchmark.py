@@ -464,7 +464,14 @@ def run_task(
                     on_progress()
                 except Exception:
                     pass
-        agent = Agent(prov, registry or default_registry(), BENCH_PROMPT,
+        # Il registro senza shell: vedi `_registro_benchmark`. Il
+        # benchmark misura una capacita' per task, con una verifica
+        # oggettiva: con la shell a disposizione un modello puo'
+        # produrre il file giusto e poi aggirare la verifica, e il
+        # punteggio misurerebbe "sa usare la shell" invece della
+        # categoria dichiarata.
+        reg = registry if registry is not None else _registro_benchmark()
+        agent = Agent(prov, reg, BENCH_PROMPT,
                       LoopConfig(max_iterations=max_iterations, context_limit=60_000),
                       on_event=_segnala if on_progress is not None else None)
         esito: list = []
@@ -597,6 +604,27 @@ def _trascrizione(messaggi: list[Any]) -> list[dict[str, Any]]:
     return passi
 
 
+def _registro_benchmark() -> ToolRegistry:
+    """Il registro del benchmark: come `base`, ma senza la shell.
+
+    `run_shell` e' in `base` per l'uso vero — un agente che scrive
+    codice deve poterlo eseguire. Ma il benchmark misura UNA capacita'
+    per task, con una verifica oggettiva sul file prodotto: se la
+    shell e' disponibile, un modello puo' produrre il file giusto e poi
+    aggirare la verifica, o spendere i suoi passi a fare cose che il
+    task non chiede. Il punteggio misurerebbe "sa usare la shell", che
+    non e' la categoria dichiarata — e il confronto fra modelli
+    finirebbe per confrontare due configurazioni diverse.
+
+    Il tool resta REATO e semplicemente disattivato: e' lo stesso
+    registro, con un tool in meno attivo. Niente copie, niente
+    divergenze future.
+    """
+    reg = default_registry()
+    reg.disattiva("run_shell")
+    return reg
+
+
 def run_manual(
     prompt: str,
     *,
@@ -625,7 +653,23 @@ def run_manual(
     t0 = time.time()
     try:
         prov = build_provider(provider_name, model=model, env=env)
-        agent = Agent(prov, registry or default_registry(), BENCH_PROMPT,
+        # Il registro del benchmark esclude `run_shell`.
+        #
+        # Non perche' sia pericoloso — qui la root e' la cartella del
+        # task e il gate e' None, quindi fuori da li' si nega e basta.
+        # Ma perche' UN BENCHMARK CHE MISURA UNA COSA ALLA VOLTA
+        # MISURARE DUE. Ogni task ha una verifica oggettiva: "il file
+        # contiene def fib e fib(10) vale 55". Con la shell a disposizione
+        # un modello puo' scrivere il file giusto e poi produrre il
+        # risultato a mano, o raggirare la verifica: il punteggio
+        # misurerebbe "sa usare la shell", che non e' la categoria che
+        # il task dichiara.
+        #
+        # E c'e' un secondo motivo, piu' semplice: il benchmark confronta
+        # i modelli. Se uno ne usa e un altro no, il confronto non e'
+        # piu' fra modelli ma fra due configurazioni diverse.
+        reg = registry if registry is not None else _registro_benchmark()
+        agent = Agent(prov, reg, BENCH_PROMPT,
                       LoopConfig(max_iterations=max_iterations, context_limit=60_000))
         agent.run(prompt)
         st = agent.state
