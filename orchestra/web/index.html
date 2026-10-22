@@ -620,22 +620,24 @@
   <footer>
   <div class="cwrap">
     <div class="row">
-      <button id="btn-allega" class="ghost" title="Allega una foto, un PDF o un file di testo" disabled>
-        <span aria-hidden="true">📎</span><span class="sr">Allega un file</span>
-      </button>
-      <button id="btn-verifica" class="ghost" title="Verifica il lavoro: controlla il risultato in modo oggettivo e, se non torna, rimanda indietro" disabled>
-        <span aria-hidden="true">✓</span><span class="sr">Verifica</span>
-      </button>
-      <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
-      <div class="dot" id="dot" title="verde = pronto, giallo = al lavoro"></div>
-      <button class="primary" id="btn-send" disabled>Invia</button>
-      <button class="ghost" id="btn-stop" title="Ferma il lavoro" aria-label="Ferma il lavoro" disabled>■</button>
+      <div class="chat-form" id="chat-form">
+        <button id="btn-allega" class="ghost" title="Allega una foto, un PDF o un file di testo" disabled>
+          <span aria-hidden="true">📎</span><span class="sr">Allega un file</span>
+        </button>
+        <button id="btn-verifica" class="ghost" title="Verifica il lavoro: controlla il risultato in modo oggettivo e, se non torna, rimanda indietro" disabled>
+          <span aria-hidden="true">✓</span><span class="sr">Verifica</span>
+        </button>
+        <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
+        <div class="dot" id="dot" title="verde = pronto, giallo = al lavoro"></div>
+        <button class="primary" id="btn-send" disabled>Invia</button>
+        <button class="ghost" id="btn-stop" title="Ferma il lavoro" aria-label="Ferma il lavoro" disabled>■</button>
+      </div>
     </div>
-    <!-- steer: messaggio al modello mentre lavora (barra visibile solo durante il lavoro) -->
-    <div id="steer-bar" class="steer-bar" hidden>
-      <input id="steer-input" placeholder="Guida il modello mentre lavora…" autocomplete="off">
-      <button id="steer-send" class="ghost">Guida</button>
-    </div>
+      <!-- steer: messaggio al modello mentre lavora (barra visibile solo durante il lavoro) -->
+      <div id="steer-bar" class="steer-bar" hidden>
+        <input id="steer-input" placeholder="Guida il modello mentre lavora…" autocomplete="off">
+        <button id="steer-send" class="ghost">Guida</button>
+      </div>
     <!-- Gli allegati attesi stanno qui, SOPRA il campo: si vedono
          mentre scrivi, e il conto in token e' accanto al nome. Un
          allegato da 40.000 token che scopri dalla risposta e' troppo
@@ -685,17 +687,6 @@
   </div>
 </div>
 
-  <div hidden aria-hidden="true" id="legacy-ui-ids">
-    <div id="storico-elenco"></div>
-    <div id="storico-msg"></div>
-    <button id="storico-nuova"></button>
-    <button id="storico-ricarica"></button>
-    <button id="memoria-aggiungi"></button>
-    <div id="memoria-elenco"></div>
-    <div id="memoria-msg"></div>
-    <button id="memoria-nuovo"></button>
-    <input id="memoria-percorso" />
-  </div>
 <div id="onboard" class="onboard-backdrop" hidden>
   <div class="onboard">
     <h2>Per cosa stai usando Orchestra oggi?</h2>

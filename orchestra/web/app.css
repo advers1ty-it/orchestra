@@ -165,6 +165,21 @@
   /* Le statistiche vanno in fondo a destra: sotto la chat, dove si
      guarda a lavoro finito. In testa erano un numero in piu' che
      spingeva i selettori e non diceva niente finche' non finiva. */
+  /* Steer: quando l'agente lavora, sostituisce il form chat. Ha lo stesso
+      layout (bottoni a sinistra, input al centro, dot a destra) e la
+      stessa larghezza, così non si sposta il layout. */
+  .chat-form { display: contents; }
+  /* L'attributo hidden deve vincere sui display qui sopra: senza,
+     la barra guida resta visibile da ferma e il form chat da occupato. */
+  #chat-form[hidden], #steer-bar[hidden] { display: none !important; }
+  .steer-bar { display: flex; gap: 10px; align-items: flex-end; }
+  .steer-bar input {
+    flex: 1; background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--accent-dim); border-radius: 8px;
+    padding: 10px 12px; font: 14px/1.5 inherit;
+    min-height: 46px; outline: none;
+  }
+  .steer-bar input:focus { border-color: var(--accent); }
   .hint .stat { margin-left: auto; }
   kbd {
     background: var(--panel-2); border: 1px solid var(--border);

@@ -132,16 +132,15 @@ function scrollDown() {
 function setBusy(v) {
   busy = v;
   dot.className = "dot" + (v ? " busy" : " ok");
-  // Il pallino e' sempre li': verde a riposo, giallo mentre lavora.
   input.disabled = !ready || v;
   btnSend.disabled = !ready || v;
-  // La graffetta segue la chat: durante un turno la richiesta e' gia'
-  // partita, e allegare un file adesso significherebbe che viaggia
-  // con il messaggio DOPO, senza che nessuno lo dica.
-  if (typeof btnAllega !== "undefined" && btnAllega) {
-    btnAllega.disabled = !ready || v;
-  }
-  if (btnStop) btnStop.disabled = !v;
+  if (typeof btnStop !== "undefined" && btnStop) btnStop.disabled = !v;
+  // Il pallino e' sempre li': verde a riposo, giallo mentre lavora.
+  // Durante il lavoro il form chat viene sostituito dalla steer bar:
+  // la stessa larghezza, la stessa posizione, niente scroll che
+  // sposta il layout.
+  const chatForm = document.getElementById("chat-form");
+  if (chatForm) chatForm.hidden = v;
   if (steerBar) steerBar.hidden = !v;
   if (steerInput && v) steerInput.focus();
   // Il bottone del modello segue il select: senza, durante un turno
@@ -639,10 +638,9 @@ function handle(kind, d) {
       addNote(`contesto compattato: ${d.tokens_before} → ${d.tokens_after} token ` +
               `(potati ${d.tools_pruned} tool, fusi ${d.history_merged} turni)`);
       break;
-    case "compaction_attempt":
-      addNote(`contesto sotto soglia (${d.tokens}/${d.limit} token): ` +
-              `il sistema sta lavorando, non c'è nulla da potare`);
-      break;
+    // Niente nota quando non c'e' nulla da potare: era rumore a ogni
+    // turno ("sotto soglia... sta lavorando") e si confondeva con un
+    // vero avanzamento. Solo la compattazione vera merita una riga.
 
     // Self-correzione: il loop "agisci → verifica oggettiva → correggi".
     // Va detto a schermo quando scatta: un controllo automatico che non
@@ -741,6 +739,9 @@ function handle(kind, d) {
       break;
     case "idle":
       setBusy(false);
+      // A fine turno arrivano i totali: la barra del contesto si
+      // aggiorna qui, non solo al reload della pagina.
+      if (typeof d.total_tokens === "number") renderStats(d);
       break;
   }
 }

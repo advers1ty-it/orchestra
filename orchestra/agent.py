@@ -152,6 +152,10 @@ class Agent:
             # che ricasca nello stesso annuncio viene corretta di nuovo —
             # ma lo STESSO turno non si auto-nudga all'infinito.
             self._nudge_fatto = False
+            # Turni di sole parole: quante risposte solo-testo di fila
+            # senza nessun tool. Alla terza si chiude onestamente invece
+            # di spacciare narrazione per lavoro fatto.
+            self._vuote_di_fila = 0
             # Self-correzione: contatore dei tentativi di verifica per
             # questo turno, e bandiera che scatta quando il tetto è stato
             # raggiunto (oltre, si chiude col lavoro imperfetto).
@@ -216,13 +220,18 @@ class Agent:
             self.state.compactions += 1
             self._emit("compaction", **report)
         else:
-            # La compattazione non ha fatto nulla: il contesto è sotto
-            # soglia. L'utente vede il sistema "piantato" perché non c'è
-            # nessun feedback. Questo evento dice che il sistema sta
-            # lavorando, anche se non fa nulla di visibile.
+            # Niente da potare: quasi sempre il contesto e' sotto soglia
+            # (e l'utente vede solo "piantato", quindi lo si dice). Ma i
+            # token giusti sono quelli ATTUALI (tokens_before), non il
+            # cumulato del turno: confrontare il totale con la finestra
+            # dice "605k/384k" e sembra sopra soglia mentre e' sotto.
+            # Se invece e' davvero sopra e non si puo' potare, lo si
+            # dice: e' un guaio diverso dal "tutto bene".
+            sopra = report["tokens_before"] > self.config.context_limit
             self._emit("compaction_attempt",
-                       tokens=self.state.total_tokens,
-                       limit=self.config.context_limit)
+                       tokens=report["tokens_before"],
+                       limit=self.config.context_limit,
+                       sopra_soglia=sopra)
 
     def _execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         """Esegue un tool e restituisce (testo, riuscito).
@@ -497,6 +506,7 @@ class Agent:
         # Il nudge e la verifica ripartono puliti a ogni turno: appartenevano
         # alla domanda di prima.
         self._nudge_fatto = False
+        self._vuote_di_fila = 0
         self._verifica_tentativo = 0
         self._verifica_esaurita = False
         self._chiamate_identiche = {}
@@ -662,6 +672,7 @@ class Agent:
                         return self.state
                     args = tc.parsed_args()
                     self.state.tool_calls_made += 1
+                    self._vuote_di_fila = 0  # ha agito: la fila riparte
                     # `id` va nei due eventi: e' il modo perche' la UI
                     # abbini il risultato al tool giusto quando in un turno
                     # ce n'e' piu' di uno con lo stesso nome.
@@ -715,25 +726,51 @@ class Agent:
             # chiamarli. Il flag `_nudge_fatto` garantisce che sia UNA
             # volta — un loop che si auto-nudga all'infinito sprecherebbe
             # token senza aggiungere niente.
-            if (self.state.tool_calls_made == 0
-                    and not self._nudge_fatto
-                    and self._annuncia_senza_fare(resp.content)):
-                self._nudge_fatto = True
-                self.state.messages.append(Message(
-                    role="tool",
-                    tool_call_id=new_id("nudge"),
-                    content=(
-                        "NOTA DEL SISTEMA: hai descritto il lavoro ma non hai "
-                        "ancora usato nessuno strumento. Se la richiesta "
-                        "richiede dati che non hai a memoria — il contenuto di "
-                        "file, lo stato del progetto, un fatto da verificare — "
-                        "chiama gli strumenti (list_dir, read_file, web_cerca) "
-                        "ORA. Se invece puoi rispondere solo con quello che sai, "
-                        "rispondi e basta: non serve ripetere l'annuncio."),
-                    name="__nudge__",
-                ))
-                self._emit("nudge", testo=resp.content[:120])
-                continue
+            #
+            # Ma UN nudge non basta al narratore a puntate ("cerco...",
+            # "ora aggiungo...", "ecco il piano..."): ogni giro sembra
+            # quasi lavoro e nessuno lo e'. Dopo il nudge, un secondo
+            # annuncio di fila chiude onestamente con "solo_parole":
+            # meglio un fallimento dichiarato che un "completato" che
+            # non ha completato niente. Le risposte vere (senza annunci,
+            # o dopo aver usato tool) non passano di qui.
+            if self.state.tool_calls_made == 0:
+                self._vuote_di_fila += 1
+                annuncio = self._annuncia_senza_fare(resp.content)
+                if annuncio and not self._nudge_fatto:
+                    self._nudge_fatto = True
+                    self.state.messages.append(Message(
+                        role="tool",
+                        tool_call_id=new_id("nudge"),
+                        content=(
+                            "NOTA DEL SISTEMA: hai descritto il lavoro ma non hai "
+                            "ancora usato nessuno strumento. Se la richiesta "
+                            "richiede dati che non hai a memoria — il contenuto di "
+                            "file, lo stato del progetto, un fatto da verificare — "
+                            "chiama gli strumenti (list_dir, read_file, web_cerca) "
+                            "ORA. Se invece puoi rispondere solo con quello che sai, "
+                            "rispondi e basta: non serve ripetere l'annuncio."),
+                        name="__nudge__",
+                    ))
+                    self._emit("nudge", testo=resp.content[:120])
+                    continue
+                if annuncio and self._nudge_fatto:
+                    # Secondo annuncio di fila dopo il nudge: non agira',
+                    # sta narrando. Chiudere come risposta_finale
+                    # mentirebbe ("completato" senza aver completato).
+                    self._emit("solo_parole",
+                               testo=resp.content[:120],
+                               giri=self._vuote_di_fila)
+                    self.state.stopped_because = "solo_parole"
+                    return self.state
+                if self._vuote_di_fila >= 4:
+                    # Rete di sicurezza per i giri con verifica: testi
+                    # veri ma mai un tool, a ripetizione, non e' lavoro.
+                    self._emit("solo_parole",
+                               testo=resp.content[:120],
+                               giri=self._vuote_di_fila)
+                    self.state.stopped_because = "solo_parole"
+                    return self.state
 
             # --- self-correzione: verificare prima di chiudere -------------
             #
@@ -807,10 +844,29 @@ class Agent:
             "analizz", "valuterò", "valutero", "iniziamo", "procedo",
             "esaminerò", "esaminero", "controllo", "verifico il",
             "leggo il", "esplor", "occupo la sessione", "mi occupo",
+            "cerco", "eseguo", "ecco il piano",
         )
         testa = t[:40].lower()
-        if not any(a in testa for a in ANNUNCI):
-            return False
+        if any(a in testa for a in ANNUNCI):
+            pass
+        else:
+            # Promessa di lavoro futuro a meta' frase ("ho il quadro, ora
+            # applico...", "provvedo subito"): il verbo non e' in testa ma
+            # il turno chiude lo stesso senza aver fatto niente. Si cerca
+            # nei primi 160 caratteri dei testi corti: una risposta vera e'
+            # piu' lunga o non promette azioni.
+            corpo = t[:160].lower()
+            if not (len(t) <= 220 and t.count("\n") < 3 and (
+                    any("ora " + v in corpo for v in (
+                        "applico", "applicare", "procedo", "modifico",
+                        "aggiorno", "sistemo", "correggo", "aggiungo",
+                        "creo", "scrivo", "leggo", "controllo", "verifico",
+                        "esamino", "inizio"))
+                    or any(p in corpo for p in (
+                        "sto per", "provvedo", "applico", "modifico",
+                        "aggiorno", "sistemo", "correggo", "aggiungo",
+                        "creo", "scrivo")))):
+                return False
         # se è lunga e ha struttura (elenchi, più righe), è una risposta
         if len(t) > 220 or t.count("\n") >= 3:
             return False

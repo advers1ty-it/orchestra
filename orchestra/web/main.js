@@ -394,6 +394,7 @@ function etichettaEsito(esito) {
     gira_a_vuoto: "girava a vuoto",
     troppi_errori_consecutivi: "troppi errori",
     verifica_fallita: "verifica fallita",
+    solo_parole: "solo parole, niente fatti",
   }[esito || ""] || esito || "?";
 }
 async function caricaSideTracce() {

@@ -354,6 +354,8 @@ class Session:
                 "usage_by_model": dict(st.usage_by_model),
                 "messages": messaggi,
                 "routing": bool(self._routing_attivo),
+                "context_limit": getattr(getattr(self.agent, "config", None),
+                                         "context_limit", 0) or 0,
             }
 
     def imposta_progetto(self, progetto: str) -> str:
@@ -912,7 +914,16 @@ class Session:
                 self._busy = False
                 now_free = True
             if now_free:
-                self.bridge.emit("idle", {"busy": False})
+                st = self.agent.state
+                self.bridge.emit("idle", {"busy": False,
+                    "iterations": st.iterations,
+                    "total_tokens": st.total_tokens,
+                    "tool_calls": st.tool_calls_made,
+                    "tool_errors": st.tool_errors,
+                    "compactions": st.compactions,
+                    "context_limit": getattr(
+                        getattr(self.agent, "config", None),
+                        "context_limit", 0) or 0})
 
     def _nuova_sessione_db(self) -> int:
         """Crea una riga nello storico e ne torna l'id."""
