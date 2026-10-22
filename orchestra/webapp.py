@@ -728,6 +728,8 @@ class OrchestraApp:
         prov = build_provider(provider_name, model=model_id, env=env)
         self.session.agent.provider = prov
         self.env["ORCHESTRA_MODEL"] = model_id
+        from . import keys as keys_mod
+        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
         # La catena di fallback va RICOSTRUITA sul nuovo modello. Senza,
         # la prima entry continua a puntare al modello di prima: quello
         # morto o inesistente viene chiamato per primo, risponde 404/410,
