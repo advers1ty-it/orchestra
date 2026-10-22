@@ -608,7 +608,6 @@
       </div>
       <p class="small dim">La scatola nera: cosa ha fatto l'agente in ogni compito — strumenti usati, errori, perché si è fermato. Clicca per riaprire, senza rifarlo.</p>
       <ul id="side-tracce" class="side-tracce"></ul>
-      <div id="side-traccia-dettaglio" class="side-traccia-dettaglio" hidden></div>
     </div>
 
     <p id="side-msg" class="small dim side-msg"></p>
@@ -764,6 +763,20 @@
   </div>
   <div id="goal-output" class="goal-output"></div>
   <div id="goal-list" class="goal-list"></div>
+</div>
+<!-- Le tracce: una riga per turno, e il dettaglio in un modale.
+     Aprirlo sotto la lista lo nascondeva sotto lo schermo: la lista
+     puo' essere lunga e il dettaglio finiva fuori dal viewport. -->
+<div id="traccia-modal" class="traccia-modal" hidden>
+  <div class="traccia-modal-box">
+    <div class="panel-head">
+      <div><b>Traccia</b> <span class="dim">la sequenza esatta degli eventi di quel turno</span></div>
+      <button id="traccia-chiudi" class="ghost">Chiudi</button>
+    </div>
+    <div class="traccia-modal-corpo">
+      <div id="side-traccia-dettaglio" class="side-traccia-dettaglio"></div>
+    </div>
+  </div>
 </div>
 <div id="mem-modal" class="mem-modal" hidden>
   <div class="mem-modal-box">

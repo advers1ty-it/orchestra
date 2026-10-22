@@ -434,13 +434,36 @@ async function caricaSideTracce() {
   } catch (e) { /* le tracce sono un extra: se non caricano, la sidebar vive */ }
 }
 
+// Il dettaglio sta in un modale: aperto sotto la lista finiva fuori
+// dal viewport, e il click sembrava non funzionare.
+function apriModaleTraccia() {
+  const m = $("traccia-modal");
+  if (!m) return;
+  m.hidden = false;
+  m.classList.add("show");
+}
+function chiudiModaleTraccia() {
+  const m = $("traccia-modal");
+  if (!m) return;
+  m.hidden = true;
+  m.classList.remove("show");
+}
+on($("traccia-chiudi"), "click", chiudiModaleTraccia);
+on($("traccia-modal"), "click", (e) => {
+  // click sul fondo (non sulla scatola) chiude
+  if (e.target === e.currentTarget) chiudiModaleTraccia();
+});
+document.addEventListener("keydown", (e) => {
+  const m = $("traccia-modal");
+  if (e.key === "Escape" && m && !m.hidden) chiudiModaleTraccia();
+});
+
 async function apriTraccia(id, btn) {
   const det = $("side-traccia-dettaglio");
   if (!det) return;
   try {
     const t = await (await fetch("/api/tracce/" + id)).json();
-    if (t.error) { det.textContent = t.error; det.hidden = false; return; }
-    det.hidden = false;
+    if (t.error) { det.textContent = t.error; apriModaleTraccia(); return; }
     det.replaceChildren();
     const intest = document.createElement("div");
     intest.className = "small dim";
@@ -468,8 +491,9 @@ async function apriTraccia(id, btn) {
       ol.appendChild(li);
     }
     det.appendChild(ol);
+    apriModaleTraccia();
   } catch (e) {
     det.textContent = "apertura traccia fallita: " + e;
-    det.hidden = false;
+    apriModaleTraccia();
   }
 }

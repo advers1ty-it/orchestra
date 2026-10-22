@@ -1616,14 +1616,16 @@ select:disabled {
    deve competere con la chat. */
 .side-tracce { list-style: none; margin: 0; padding: 0; }
 .side-traccia .side-meta { color: var(--muted, #999); }
-.side-traccia-dettaglio {
-  margin-top: 6px;
-  border-top: 1px solid var(--border, #333);
-  padding-top: 6px;
-  max-height: 260px;
-  overflow-y: auto;
-  font-size: 12px;
-}
+/* Il dettaglio vive in un modale: aperto sotto la lista, finiva fuori
+   dal viewport, e il click sembrava non funzionare. */
+.traccia-modal { position:fixed; inset:0; background:rgba(0,0,0,.78);
+  display:none; align-items:center; justify-content:center; z-index:2003; }
+.traccia-modal.show { display:flex; }
+.traccia-modal-box { background:var(--card,#14161c); color:var(--fg,#eee);
+  border:1px solid var(--border,#333); border-radius:12px;
+  width:880px; max-width:94vw; height:80vh; display:flex; flex-direction:column; padding:14px; }
+.traccia-modal-corpo { flex:1; overflow-y:auto; min-height:0; }
+.side-traccia-dettaglio { font-size: 12px; }
 .side-traccia-eventi { margin: 4px 0 0; padding-left: 18px; }
 .side-traccia-eventi li { margin: 1px 0; color: var(--fg, #ddd); }
 .side-traccia-ev.err { color: var(--danger, #c05050); }
@@ -1674,7 +1676,6 @@ select:disabled {
 #side-sez-memoria { flex: 0 0 auto; }
 #side-sez-skill { flex: 0 0 auto; }
 #side-sez-tracce { flex: 2 1 0; }
-.side-traccia-dettaglio { max-height: 45%; overflow-y: auto; }
 
 /* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non
    basta: tiene interi i figli ma la sezione schiacciata resta più corta

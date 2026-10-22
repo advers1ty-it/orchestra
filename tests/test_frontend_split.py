@@ -125,7 +125,7 @@ const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","sta
              "prior-copertura","prior-go","prior-out",
              "btn-side","sidebar","side-cap","side-cerca","side-elenco","side-mem-aggiungi","side-mem-cerca","side-mem-elenco",
              "side-mem-input","side-mem-stat","side-msg","side-nuova","side-ricarica","side-riduci","side-skill","side-tracce",
-             "side-traccia-dettaglio",
+             "side-traccia-dettaglio","traccia-modal","traccia-chiudi",
               "side-progetto-input","side-progetto-lista","side-progetto-ok","side-progetto-fatti",
               "side-sez-progetti","side-progetti","side-progetto-nuovo-nome","side-progetto-nuovo-percorso",
               "side-progetto-nuovo-ok","side-progetti-file","side-progetto-nuovo-alias",

@@ -58,6 +58,7 @@ SUITES = [
     ("file-tracciati", "test_file_tracciati.py", True),
     ("frontend", "test_frontend_split.py", True),
     ("ui", "test_ui.py", True),
+    ("traccia-modale", "test_traccia_modale.py", True),
     ("istruzioni", "test_istruzioni.py", True),
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
