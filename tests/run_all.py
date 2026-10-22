@@ -41,6 +41,12 @@ SUITES = [
     # Dopo lo stop, l'agente deve poter tornare a lavorare. Il flag di
     # cancel restava acceso e ogni tool veniva annullato prima di partire.
     ("cancel-recupero", "test_cancel_recupero.py", True),
+    # Un messaggio role="tool" senza tool_call_id rompe il Nous (e altri
+    # proxy): 400 "Missing required parameter: 'tool_call_id'". L'agente
+    # costruisce due messaggi di sistema (gira_a_vuoto e nudge) senza id:
+    # quando finiscono nel payload, la richiesta va in 400 e il modello
+    # non si riprende mai. Copre che OGNI messaggio tool ha un id.
+    ("nous-tool-call-id", "test_nous_tool_call_id.py", True),
     # La memoria che impara da sola. Era il pezzo mancante: l'estrazione
     # dei fatti esisteva ma nessuno la chiamava, e senza un test che
     # copre il "chiama il provider e mette in memoria" il difetto

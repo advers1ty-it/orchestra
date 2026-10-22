@@ -32,7 +32,7 @@ from .fallback import (
     get_chain_for_provider, should_fallback
 )
 from .budget import budget_guard, BudgetLimits
-from .types import LLMResponse, Message, ToolRegistry
+from .types import LLMResponse, Message, ToolRegistry, new_id
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(HERE, ".env")
@@ -612,6 +612,7 @@ class Agent:
                     self.state.messages.append(Message(
                         role="tool",
                         name="__sistema__",
+                        tool_call_id=new_id("sistema"),
                         content=(
                             f"STAI RIPETENDO la stessa chiamata `{nome_rip}` con gli "
                             f"stessi argomenti e torna sempre lo stesso errore. "
@@ -712,6 +713,7 @@ class Agent:
                 self._nudge_fatto = True
                 self.state.messages.append(Message(
                     role="tool",
+                    tool_call_id=new_id("nudge"),
                     content=(
                         "NOTA DEL SISTEMA: hai descritto il lavoro ma non hai "
                         "ancora usato nessuno strumento. Se la richiesta "

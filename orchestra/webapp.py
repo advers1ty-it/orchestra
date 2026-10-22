@@ -931,9 +931,16 @@ class OrchestraApp:
 
     @staticmethod
     def _make_session(provider_name: str, model: str) -> Session:
+        # Il fallback e' su ENV_PATH (.env), non su os.environ: quando si
+        # salva un'impostazione via API (es. /api/iterazioni) scrive in .env
+        # e in self.app.env, ma os.environ non viene aggiornato. Riavviando
+        # il server, questo codice leggeva os.environ (che non ha il valore)
+        # e perdeva il salvataggio. Ora legge la stessa fonte che usa il
+        # resto del server, cosi' il riavvio non cancella niente.
+        _env = load_env(ENV_PATH)
         def num(key: str, default: int) -> int:
             try:
-                return int(os.environ.get(key, default))
+                return int(_env.get(key, default))
             except (TypeError, ValueError):
                 return default
 
@@ -975,8 +982,8 @@ class OrchestraApp:
                     config=LoopConfig(max_iterations=num("ORCHESTRA_MAX_ITERS", 20),
                                                           context_limit=num("ORCHESTRA_CONTEXT_LIMIT", 120_000),
                                                           keep_recent=8,
-                                                          reasoning_level=os.environ.get("ORCHESTRA_REASONING", None),
-                                                          tool_profile=os.environ.get("ORCHESTRA_TOOL_PROFILE") or None),
+                                                          reasoning_level=_env.get("ORCHESTRA_REASONING") or None,
+                                                          tool_profile=_env.get("ORCHESTRA_TOOL_PROFILE") or None),
                 )
 
     def _collega_delega(self) -> None:
