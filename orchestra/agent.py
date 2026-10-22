@@ -215,6 +215,14 @@ class Agent:
         if report["tools_pruned"] or report["history_merged"]:
             self.state.compactions += 1
             self._emit("compaction", **report)
+        else:
+            # La compattazione non ha fatto nulla: il contesto è sotto
+            # soglia. L'utente vede il sistema "piantato" perché non c'è
+            # nessun feedback. Questo evento dice che il sistema sta
+            # lavorando, anche se non fa nulla di visibile.
+            self._emit("compaction_attempt",
+                       tokens=self.state.total_tokens,
+                       limit=self.config.context_limit)
 
     def _execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         """Esegue un tool e restituisce (testo, riuscito).

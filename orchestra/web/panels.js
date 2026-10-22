@@ -188,7 +188,7 @@ function disegnaProva(r) {
     fin.textContent = r.reply;
     provaOut.appendChild(fin);
   }
-  if (r.stopped_because && r.stopped_because !== "max_iterations") {
+  if (r.stopped_because) {
     const w = el("div", "prova-err");
     w.textContent = "fermato: " + r.stopped_because;
     provaOut.appendChild(w);

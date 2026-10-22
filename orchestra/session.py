@@ -346,6 +346,7 @@ class Session:
                 "busy": self._busy,
                 "iterations": st.iterations,
                 "total_tokens": st.total_tokens,
+                "context_limit": self.agent.config.context_limit,
                 "tool_calls": st.tool_calls_made,
                 "tool_errors": st.tool_errors,
                 "compactions": st.compactions,

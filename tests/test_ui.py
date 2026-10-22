@@ -222,6 +222,15 @@ class El {
   set onclick(f){ this._on["click"]=f; }
   get onclick(){ return this._on["click"]; }
   scrollIntoView(){}
+  // scrollHeight e scrollTop: la UI li usa per scrollare il log.
+  // Senza, `scrollDown` non fa niente e il test passa mentre il browser
+  // non scrolla mai — il bug di oggi, la snapshot che restava in alto.
+  get scrollHeight(){ return this._sh || 0; }
+  set scrollHeight(v){ this._sh = v; }
+  get scrollTop(){ return this._st || 0; }
+  set scrollTop(v){ this._st = v; }
+  get clientHeight(){ return this._ch || 0; }
+  set clientHeight(v){ this._ch = v; }
   // focus() e' una API del DOM vero, e la UI la chiama: setBusy mette
   // il cursore nella barra "steer" appena parte un turno, e senza questo
   // metodo il probe muore con "focus is not a function" — e tutto quello
@@ -454,6 +463,23 @@ try {
 } catch (e) {
   out.ERROR = e.message + " @ " + (e.stack||"").split("\\n")[1];
 }
+// --- REGRESSIONE: la snapshot scrolla in fondo anche se il log e' lungo.
+// Il bug di oggi: il log restava in alto perche' `scrollDown` controllava
+// "sei in fondo", e all'avvio non lo si e'. La snapshot e' il primo
+// caricamento, non un evento live: l'utente vede la pagina per la prima
+// volta e vuole gli ultimi messaggi, non dove aveva lasciato il log.
+const mainEl = mk("main");
+mainEl.scrollHeight = 5000;
+mainEl.scrollTop = 0;
+mainEl.clientHeight = 600;
+handle("snapshot", {ready:true, model:"m", provider:"p", busy:false, messages:[
+  {role:"user", content:"primo"},
+  {role:"assistant", content:"risposta lunga...".repeat(100)},
+  {role:"user", content:"secondo"},
+  {role:"assistant", content:"altra risposta lunga...".repeat(100)},
+]});
+out.snapshotScroll = mainEl.scrollTop;
+out.snapshotScrollHeight = mainEl.scrollHeight;
 console.log(JSON.stringify(out));
 """
 
@@ -504,6 +530,14 @@ check("snapshot con null: 3 messaggi (2 user + 1 assistant)",
       res.get("snapshotNullMsgs") == 3, str(res.get("snapshotNullMsgs")))
 check("snapshot con null: niente righe bianche",
       res.get("snapshotNullEmpty") == 0, str(res.get("snapshotNullEmpty")))
+# --- REGRESSIONE: la snapshot scrolla in fondo anche se il log e' lungo.
+# Il bug di oggi: il log restava in alto perche' `scrollDown` controllava
+# "sei in fondo", e all'avvio non lo si e'. La snapshot e' il primo
+# caricamento, non un evento live: l'utente vede la pagina per la prima
+# volta e vuole gli ultimi messaggi, non dove aveva lasciato il log.
+check("la snapshot porta in fondo il log",
+      res.get("snapshotScroll") == res.get("snapshotScrollHeight"),
+      f"scrollTop={res.get('snapshotScroll')}, scrollHeight={res.get('snapshotScrollHeight')}")
 check("due tool identici abbinati per id",
       res.get("abbinati") == "RISULTATO_UNO|RISULTATO_DUE #2",
       str(res.get("abbinati")))

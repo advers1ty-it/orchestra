@@ -168,6 +168,21 @@ function renderStats(s) {
 
   stats.textContent = "";
   if (!parts.length) { stats.textContent = "—"; return; }
+  // Barra di riempimento del contesto: mostra quanto manca alla
+  // compattazione. Il limite arriva dal server (non si calcola qui),
+  // e il colore dice se siamo vicini al limite. Senza questa barra,
+  // l'unica informazione è il numero di token — che si legge male
+  // quando il contesto è quasi pieno.
+  if (s.context_limit && s.total_tokens) {
+    const pct = Math.min(1, s.total_tokens / s.context_limit);
+    const bar = el("span", "ctx-bar");
+    const fill = el("i");
+    fill.style.width = Math.round(pct * 100) + "%";
+    fill.style.background = pct > 0.85 ? "var(--err)" :
+                           pct > 0.70 ? "var(--warn)" : "var(--ok)";
+    bar.appendChild(fill);
+    stats.appendChild(bar);
+  }
   // `sep`, non `dot`: `dot` e' il nome della variabile globale che setBusy
   // usa per lo stato di occupazione. Ombreggiarla qui funzionerebbe per
   // caso, ma renderebbe ogni lettura futura di setBusy un bug.
@@ -505,7 +520,11 @@ function handle(kind, d) {
         }
       });
       setBusy(!!d.busy);
-      scrollDown();
+      // La snapshot e' il primo caricamento, non un evento live: qui
+      // "sei in fondo" non ha senso, e infatti non scrollerebbe mai.
+      // L'utente vede la pagina per la prima volta e vuole gli
+      // ultimi messaggi, non dove aveva lasciato il log (che e' 0).
+      main.scrollTop = main.scrollHeight;
       break;
     }
     case "permission_request":
@@ -619,6 +638,10 @@ function handle(kind, d) {
     case "compaction":
       addNote(`contesto compattato: ${d.tokens_before} → ${d.tokens_after} token ` +
               `(potati ${d.tools_pruned} tool, fusi ${d.history_merged} turni)`);
+      break;
+    case "compaction_attempt":
+      addNote(`contesto sotto soglia (${d.tokens}/${d.limit} token): ` +
+              `il sistema sta lavorando, non c'è nulla da potare`);
       break;
 
     // Self-correzione: il loop "agisci → verifica oggettiva → correggi".
