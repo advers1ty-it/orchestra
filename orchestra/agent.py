@@ -469,8 +469,20 @@ class Agent:
         # e la lezione si impara da quello che succede con i doppi.
         self._aggiorna_prompt()
 
-        if self._budget_state:
-            self._budget_state.reset_task()
+        # Il cancel riguarda il turno IN CORSO, non tutti i turni futuri.
+        #
+        # `request_cancel()` accende `_cancel_flag`, e senza questo reset
+        # il flag restava acceso per sempre: dal primo stop in poi, ogni
+        # tool_call veniva annullato PRIMA di partire ("Cancellato
+        # dall'utente prima dell'esecuzione"). Il sintomo per l'utente
+        # era che dopo aver fermato una conversazione l'agente non potesse
+        # piu' fare niente tranne chattare, e che i permessi sembrassero
+        # rifiutati all'istante.
+        #
+        # Si resetta qui, all'inizio del turno, e non in `Session.send()`:
+        # l'agent puo' essere usato anche senza sessione (CLI, benchmark,
+        # delega), e il flag deve stare a posto ovunque.
+        self._cancel_flag = False
 
         if self._budget_state:
             self._budget_state.reset_task()

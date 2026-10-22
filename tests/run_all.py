@@ -38,6 +38,9 @@ SUITES = [
     ("shell", "test_shell.py", True),
     ("sicurezza", "test_security.py", True),
     ("sessione", "test_session.py", True),
+    # Dopo lo stop, l'agente deve poter tornare a lavorare. Il flag di
+    # cancel restava acceso e ogni tool veniva annullato prima di partire.
+    ("cancel-recupero", "test_cancel_recupero.py", True),
     # La memoria che impara da sola. Era il pezzo mancante: l'estrazione
     # dei fatti esisteva ma nessuno la chiamava, e senza un test che
     # copre il "chiama il provider e mette in memoria" il difetto
