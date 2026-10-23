@@ -562,6 +562,10 @@ class Agent:
                     content=resp.content,
                     tool_calls=resp.tool_calls,
                     tokens=resp.total_tokens,
+                    # Il ragionamento va conservato: i modelli che ragionano
+                    # sempre lo richiedono indietro ai turni successivi, e
+                    # senza il campo in `to_api()` rispondono 400.
+                    reasoning=resp.reasoning,
                 )
             )
             self._emit(

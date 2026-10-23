@@ -59,6 +59,12 @@ class Message:
     # metadati di conteggio per la compaction
     tokens: int = 0
     created_at: float = field(default_factory=time.time)
+    # Il ragionamento del modello, se arriva. I modelli che ragionano
+    # SEMPRE (Beam 1.0 in testa) lo richiedono indietro ai turni
+    # successivi: senza `reasoning_content` rispondono 400
+    # missing_required_parameter e i tool call si fermano al secondo
+    # giro. Si conserva qui per poterlo rimandare.
+    reasoning: str = ""
 
     def to_api(self) -> dict[str, Any]:
         """Converte nel formato OpenAI chat-completions.
@@ -95,6 +101,12 @@ class Message:
             msg["tool_call_id"] = self.tool_call_id
         if self.name:
             msg["name"] = self.name
+        # Il ragionamento va rimandato SOLO nei messaggi assistant e solo
+        # se non e' vuoto. Beam 1.0 lo richiede ai turni successivi; i
+        # gateway che non lo conoscono si aspettano il campo assente, e
+        # un `reasoning_content: ""` li manda in 400.
+        if self.reasoning and self.role == "assistant":
+            msg["reasoning_content"] = self.reasoning
         return msg
 
     def to_dict(self) -> dict[str, Any]:
@@ -111,6 +123,7 @@ class Message:
             name=d.get("name"),
             tokens=d.get("tokens", 0),
             created_at=d.get("created_at", time.time()),
+            reasoning=d.get("reasoning", "") or "",
         )
 
 

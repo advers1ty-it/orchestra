@@ -405,10 +405,11 @@ class OpenAICompatAdapter:
                 if not scelte:
                     continue
                 delta = scelte[0].get("delta") or {}
-                # Il ragionamento arriva in `reasoning` (OpenRouter) o in
-                # `reasoning_details` (altri gateway): si guardano tutti e
-                # due, o su metà dei provider il vuoto resta.
-                pezzo = delta.get("reasoning")
+                # Il ragionamento arriva in `reasoning` (OpenRouter), in
+                # `reasoning_content` (Reflection/DeepSeek) oppure in
+                # `reasoning_details` (altri gateway): si guardano tutti, o
+                # su metà dei provider il vuoto resta.
+                pezzo = delta.get("reasoning") or delta.get("reasoning_content")
                 if not pezzo:
                     dettagli = delta.get("reasoning_details")
                     if isinstance(dettagli, list):
@@ -510,6 +511,19 @@ class OpenAICompatAdapter:
             )
 
         usage = data.get("usage") or {}
+        # Il ragionamento: `reasoning` (OpenRouter), `reasoning_content`
+        # (Reflection/DeepSeek/altri) oppure `reasoning_details` (gateway
+        # che lo mandano come lista). Non si puo' fidarsi del primo solo:
+        # su Beam 1.0 arriva `reasoning_content` e senza leggerlo il campo
+        # resta vuoto, e i turni successivi non hanno piu' il ragionamento
+        # da rimandare.
+        ragionamento = msg.get("reasoning") or msg.get("reasoning_content") or ""
+        if not ragionamento:
+            dettagli = msg.get("reasoning_details")
+            if isinstance(dettagli, list):
+                ragionamento = "".join(
+                    str(x.get("text") or x.get("summary") or "")
+                    for x in dettagli if isinstance(x, dict))
         return LLMResponse(
             content=msg.get("content") or "",
             tool_calls=calls,
@@ -517,6 +531,7 @@ class OpenAICompatAdapter:
             prompt_tokens=usage.get("prompt_tokens") or 0,
             completion_tokens=usage.get("completion_tokens") or 0,
             finish_reason=ch.get("finish_reason") or "",
+            reasoning=ragionamento,
             raw=data,
         )
 
