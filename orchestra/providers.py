@@ -21,7 +21,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .types import LLMResponse, Message, ToolCall, new_id
-from .reasoning import build_reasoning_payload
+from .reasoning import build_preserve_payload, build_reasoning_payload
 from . import nous_auth
 
 
@@ -248,6 +248,9 @@ class OpenAICompatAdapter:
             reasoning_payload = build_reasoning_payload(self.name, self.model, reasoning_level)
             if reasoning_payload:
                 payload.update(reasoning_payload)
+            # Qwen thinking: senza `preserve_thinking` il modello scarta
+            # il ragionamento ai turni successivi e i tool call degrado.
+            payload.update(build_preserve_payload(self.model))
             if tools:
                 payload["tools"] = tools
                 payload["tool_choice"] = "auto"
@@ -308,6 +311,9 @@ class OpenAICompatAdapter:
                                                     reasoning_level)
         if reasoning_payload:
             payload.update(reasoning_payload)
+        # Qwen thinking: senza `preserve_thinking` il modello scarta il
+        # ragionamento ai turni successivi e i tool call degrado.
+        payload.update(build_preserve_payload(self.model))
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"

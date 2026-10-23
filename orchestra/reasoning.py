@@ -25,6 +25,7 @@ PROVIDER_REASONING = {
             "qwen/qwen3.8-27b": ["none", "default", "low", "medium", "high"],
         },
     },
+
     "nvidia": {
         "param": "reasoning_effort",
         "format": "string",
@@ -32,6 +33,15 @@ PROVIDER_REASONING = {
         "default": "medium",
         "model_allowlist": ["openai/gpt-oss-20b", "openai/gpt-oss-120b"],
         "requires_nim_config": True,  # documentation flag
+    },
+    # Nous Research serve Beam 1.0, che ragiona SEMPRE: non c'e' livello
+    # "none". I livelli sono quelli del chat template di Beam, e
+    # "minimal" e' il minimo che esiste (8 token di reasoning).
+    "nous": {
+        "param": "reasoning_effort",
+        "format": "string",
+        "levels": ["minimal", "low", "medium", "high", "xhigh", "max"],
+        "default": "medium",
     },
 }
 
@@ -136,3 +146,29 @@ def build_reasoning_payload(
 def get_provider_reasoning_info(provider: str) -> dict | None:
     """Get full reasoning config for a provider (for UI/catalog)."""
     return PROVIDER_REASONING.get(provider)
+
+
+# Modelli che vogliono il ragionamento RILETTO ai turni successivi ma
+# non lo fanno di default: serve un parametro esplicito.
+#
+# Non si manda a tutti i modelli "che ragionano": `preserve_thinking` e'
+# un parametro Qwen-specifico, e un gateway che non lo conosce risponde
+# 400. Per questo la scelta passa dal NOME del modello, non dal provider.
+PRESERVE_THINKING_HINTS = (
+    "qwen",      # Qwen3 thinking: serve preserve_thinking=true
+)
+
+
+def wants_preserve_thinking(model_id: str) -> bool:
+    """True se il modello vuole `preserve_thinking` per rileggere il ragionamento.
+
+    Il ragionamento arriva in `reasoning_content`; senza questo parametro
+    Qwen lo scarta ai turni successivi e i tool call degrado.
+    """
+    idbasso = (model_id or "").lower()
+    return any(hint in idbasso for hint in PRESERVE_THINKING_HINTS)
+
+
+def build_preserve_payload(model_id: str) -> dict:
+    """Il frammento di payload che fa rileggere il ragionamento, se serve."""
+    return {"preserve_thinking": True} if wants_preserve_thinking(model_id) else {}
