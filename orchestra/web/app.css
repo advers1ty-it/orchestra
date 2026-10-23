@@ -1253,16 +1253,17 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   .side-progetti-file .azione { color: var(--muted); flex: none; }
 
   .side-progetto {
-  padding: 8px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line,#333) 70%, transparent);
+  padding: 0 0 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.side-progetto-riga { display: flex; gap: 6px; align-items: center; }
-.side-progetto-riga input {
-  flex: 1;
-  min-width: 0;
+/* Il menu a tendina del progetto attivo. Occupa tutta la larghezza:
+   e' una scelta, non un campo da digitare, e la freccia deve essere
+   sempre visibile a destra. */
+#side-progetto-select {
+  width: 100%;
+  box-sizing: border-box;
   font-size: 13px;
   padding: 4px 8px;
   border-radius: 8px;
@@ -1270,10 +1271,9 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   background: color-mix(in srgb, var(--card,#1a1a1f) 80%, transparent);
   color: inherit;
 }
-.side-progetto-riga input:focus {
+#side-progetto-select:focus {
   outline: 1px solid var(--accent,#3a7bd5);
 }
-.side-progetto-riga button { padding: 4px 10px; }
 #side-progetto-fatti { min-height: 1em; }
 
 .side-mem-campi {
@@ -1705,7 +1705,8 @@ select:disabled {
    contenuto sta nei modali), le tracce prendono lo spazio che resta. */
 #side-sez-memoria { flex: 0 0 auto; }
 #side-sez-skill { flex: 0 0 auto; }
-#side-sez-tracce { flex: 2 1 0; }
+#side-sez-progetti { flex: 2 1 0; }
+#side-sez-tracce { flex: 1 1 0; }
 
 /* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non
    basta: tiene interi i figli ma la sezione schiacciata resta più corta
@@ -1761,3 +1762,34 @@ select:disabled {
 .gate-parziale { background: #7a5a1d; color: #ffe9b0; }
 .gate-attesa { background: #333; color: #bbb; }
 .goal-meta { font-size: 11px; opacity: .75; }
+
+/* ── Modal progetti ────────────────────────────────────────────
+   Stesso pattern dei modal esistenti (mem-modal, traccia-modal):
+   overlay fissato sopra tutto, box centrato, scroll interno.
+   Due colonne: sinistra lista + nuova <
+   ───────────────────────────────────────────────────────────── */
+.progetti-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.progetti-modal[hidden] { display: none; }
+.progetti-modal-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; width: min(760px, 94vw); height: min(78vh, 720px); display: flex; flex-direction: column; overflow: hidden; }
+.progetti-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.progetti-modal-titolo { font-weight: 600; font-size: 14px; }
+.progetti-modal-head .ghost { background: transparent; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+.progetti-modal-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.progetti-modal-col { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.progetti-modal-col:first-child { flex: 1 1 60%; border-right: 1px solid var(--border); }
+.progetti-modal-col:last-child { flex: 1 1 40%; overflow-y: auto; }
+.progetti-modal-titolo-col { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 10px 14px 4px; }
+.progetti-modal-lista { list-style: none; margin: 0; padding: 4px 14px; overflow-y: auto; flex: 1 1 auto; }
+.progetti-modal-lista li { border-bottom: 1px solid var(--border); padding: 6px 0; }
+.progetti-modal-lista li .riga { display: flex; align-items: center; gap: 6px; }
+.progetti-modal-lista li .riga .nome { font-weight: 500; }
+.progetti-modal-lista li .perc, .progetti-modal-lista li .dim { display: block; font-size: 11px; color: var(--muted); }
+.progetti-modal-lista li .n-file { font-size: 11px; color: var(--muted); padding-top: 2px; }
+.progetti-modal-lista li .ghost { padding: 2px 6px; font-size: 11px; }
+.progetti-modal-campi { display: flex; flex-direction: column; gap: 6px; padding: 8px 14px 14px; border-top: 1px solid var(--border); }
+.progetti-modal-campi input { padding: 6px 8px; font-size: 13px; }
+.progetti-modal-campi .primary { align-self: flex-start; }
+.progetti-modal-file { padding: 14px; overflow-y: auto; font-size: 12px; }
+.progetti-modal-file .riga { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.progetti-modal-file .riga .azione { color: var(--muted); font-size: 11px; }
+.progetti-modal-foot { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }

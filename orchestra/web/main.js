@@ -313,8 +313,8 @@ if (btnVerifica && verificaPop) {
   });
   // Cambiare tipo o file chiude il popover: la scelta è fatta, e
   // lasciarlo aperto copre il campo di scrittura.
-  $("verifica-tipo").addEventListener("change", apriChiudiVerifica);
-  $("verifica-file").addEventListener("change", apriChiudiVerifica);
+  on("verifica-tipo", "change", apriChiudiVerifica);
+  on("verifica-file", "change", apriChiudiVerifica);
 }
 on(input, "keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }

@@ -24,6 +24,7 @@ import time
 from typing import Any, Iterator
 
 from .agent import Agent, AgentState, LoopConfig
+from .context import count_tokens
 from .storico import storico
 from .types import Message, ToolRegistry
 
@@ -356,6 +357,12 @@ class Session:
                 "routing": bool(self._routing_attivo),
                 "context_limit": getattr(getattr(self.agent, "config", None),
                                          "context_limit", 0) or 0,
+                # La barra misura la FINESTRA, non la storia: il cumulato
+                # (total_tokens) cresce per sempre e la barra resterebbe
+                # rossa e piena anche a contesto vuoto. Qui va la
+                # dimensione attuale dei messaggi, la stessa che decide
+                # se compattare.
+                "context_tokens": count_tokens(self.agent.state.messages),
             }
 
     def imposta_progetto(self, progetto: str) -> str:
@@ -923,7 +930,8 @@ class Session:
                     "compactions": st.compactions,
                     "context_limit": getattr(
                         getattr(self.agent, "config", None),
-                        "context_limit", 0) or 0})
+                        "context_limit", 0) or 0,
+                    "context_tokens": count_tokens(self.agent.state.messages)})
 
     def _nuova_sessione_db(self) -> int:
         """Crea una riga nello storico e ne torna l'id."""

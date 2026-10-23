@@ -3759,22 +3759,27 @@ on("goal-sched", "click", async () => {
 // un'etichetta: e' la cartella in cui l'agente scrive, e il confine
 // di sicurezza si sposta con lui.
 //
-// Il campo e' un input con datalist perche' i progetti sono pochi e
-// hanno nomi che l'utente conosce ("sito ristorante"): un menu a
-// tendina non farebbe la differenza, e un input vuoto CANCELLARE
-// l'etichetta e' una azione che l'utente vuole poter fare.
-const progInput = $("side-progetto-input");
-const progLista = $("side-progetto-lista");
+// Il progetto attivo e' un menu a tendina: sceglierlo cambia subito
+// il progetto, niente bottone. Un select non puo' sembrare una ricerca
+// (era il difetto del vecchio input con "OK"), e l'azione e' immediata.
+// L'opzione "nessun progetto" CANCELLA l'etichetta: si puo' lavorare
+// senza progetto, e i fatti non vengono etichettati.
+//
+// Lo switch automatico (l'agente che riconosce il nome del progetto)
+// arriva dall'evento "progetto_cambiato", che chiama caricaProgetto():
+// qui il select viene aggiornato, cosi' resta coerente con quello che
+// l'agente ha scelto da solo.
+const progSelect = $("side-progetto-select");
 const progFatti = $("side-progetto-fatti");
-const progOk = $("side-progetto-ok");
 
+// Il valore del select: vuoto = nessun progetto.
 function _progettoLabel() {
-  if (!progInput) return "";
-  return (progInput.value || "").trim();
+  if (!progSelect) return "";
+  return (progSelect.value || "").trim();
 }
 
 async function caricaProgetto() {
-  if (!progInput) return;
+  if (!progSelect) return;
   try {
     const r = await fetch("/api/progetto", {
       method: "POST",
@@ -3784,19 +3789,26 @@ async function caricaProgetto() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return;
     const attivo = d.attivo || "";
-    // Il campo mostra il progetto attivo. Solo se l'utente non sta
-    // scrivendo: altrimenti gli si cancella il testo sotto le dita
-    // mentre preme OK.
-    if (document.activeElement !== progInput) {
-      progInput.value = attivo;
-    }
-    if (progLista) {
-      progLista.innerHTML = "";
+    // Ricostruisce il menu: "nessun progetto" + i progetti registrati.
+    // Solo se l'utente non sta scegliendo: altrimenti gli si cambia la
+    // selezione sotto le dita, nel momento stesso in cui la sta toccando.
+    if (document.activeElement !== progSelect) {
+      progSelect.innerHTML = "";
+      const vuoto = document.createElement("option");
+      vuoto.value = "";
+      vuoto.textContent = "nessun progetto";
+      progSelect.appendChild(vuoto);
       (d.progetti || []).forEach((p) => {
         const o = document.createElement("option");
         o.value = p;
-        progLista.appendChild(o);
+        o.textContent = p;
+        progSelect.appendChild(o);
       });
+    }
+    // Mette la selezione sul progetto attivo. Se l'utente sta scegliendo,
+    // il browser ha gia' il valore giusto: non lo sovrascrivo.
+    if (document.activeElement !== progSelect) {
+      progSelect.value = attivo;
     }
     if (progFatti) {
       if (attivo) {
@@ -3813,7 +3825,7 @@ async function caricaProgetto() {
 }
 
 async function impostaProgetto() {
-  if (!progInput) return;
+  if (!progSelect) return;
   const nome = _progettoLabel();
   if (progFatti) progFatti.textContent = "salvo...";
   try {
@@ -3833,17 +3845,10 @@ async function impostaProgetto() {
   }
 }
 
-if (progOk) progOk.addEventListener("click", impostaProgetto);
-if (progInput) {
-  // Invio nel campo = OK. Il pulsante ci sarebbe gia', ma digitare e
-  // premere Invio e' il gesto che si fa senza pensarci, e un campo
-  // che lo richiede e' un campo che si lascia mezzo compilato.
-  progInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      impostaProgetto();
-    }
-  });
+// Scegliere nel menu cambia subito il progetto: niente bottone, e
+// niente Invio. Il gesto e' la selezione stessa.
+if (progSelect) {
+  progSelect.addEventListener("change", impostaProgetto);
 }
 
 // ------------------------------------------------- la sezione Progetti
@@ -3853,26 +3858,32 @@ if (progInput) {
 // volta; aprire un progetto e' una cosa che fai ogni volta che
 // inizi a lavorare. Per questo la sezione sta separata dal campo
 // qui sopra.
-const progElenco = $("side-progetti");
-const progNuovoNome = $("side-progetto-nuovo-nome");
-const progNuovoPercorso = $("side-progetto-nuovo-percorso");
-const progNuovoAlias = $("side-progetto-nuovo-alias");
-const progNuovoOk = $("side-progetto-nuovo-ok");
-const progFileBox = $("side-progetti-file");
+// La sidebar tiene solo il menu a tendina del progetto attivo. Tutto il
+// resto — la lista, la cancellazione, la nuova <
+const progModal = $("progetti-modal"),
+  progModalLista = $("progetti-modal-lista"),
+  progModalNome = $("progetti-modal-nome"),
+  progModalPercorso = $("progetti-modal-percorso"),
+  progModalAlias = $("progetti-modal-alias"),
+  progModalOk = $("progetti-modal-registra"),
+  progModalFile = $("progetti-modal-file"),
+  progGestisci = $("side-progetti-gestisci"),
+  progChiudi = $("progetti-modal-chiudi"),
+  progChiudi2 = $("progetti-modal-chiudi2");
 
 async function caricaProgetti() {
-  if (!progElenco) return;
+  if (!progModalLista) return;
   try {
     const r = await fetch("/api/progetti");
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return;
-    progElenco.innerHTML = "";
+    progModalLista.replaceChildren();
     const progetti = d.progetti || [];
     if (!progetti.length) {
       const li = document.createElement("li");
       li.className = "small dim";
       li.textContent = "nessun progetto registrato";
-      progElenco.appendChild(li);
+      progModalLista.appendChild(li);
       return;
     }
     progetti.forEach((p) => {
@@ -3886,15 +3897,9 @@ async function caricaProgetti() {
       nome.textContent = p.nome;
       riga.appendChild(nome);
 
-      const apri = document.createElement("button");
-      apri.className = "primary";
-      apri.textContent = p.attivo ? "attivo" : "apri";
-      apri.title = "Lavora in questo progetto";
-      apri.addEventListener("click", async () => {
-        if (progInput) progInput.value = p.nome;
-        await impostaProgetto();
-      });
-      riga.appendChild(apri);
+      // Il pulsante "apri" non c'e' piu': il menu a tendina in alto
+      // sceglie il progetto attivo, e qui sarebbe ridondante. Restano
+      // "file" (vedi i file toccati) e "×" (dimentica il progetto).
 
       const file = document.createElement("button");
       file.className = "ghost";
@@ -3945,15 +3950,15 @@ async function caricaProgetti() {
       nf.textContent = n + (n === 1 ? " file toccato" : " file toccati");
       li.appendChild(nf);
 
-      progElenco.appendChild(li);
+      progModalLista.appendChild(li);
     });
   } catch (e) {
-    if (progElenco) progElenco.innerHTML = "";
+    if (progModalLista) progModalLista.innerHTML = "";
   }
 }
 
 async function caricaFileProgetto(nome) {
-  if (!progFileBox) return;
+  if (!progModalFile) return;
   try {
     const r = await fetch("/api/progetti/file", {
       method: "POST",
@@ -3962,14 +3967,13 @@ async function caricaFileProgetto(nome) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return;
-    progFileBox.hidden = false;
-    progFileBox.innerHTML = "";
+    progModalFile.innerHTML = "";
     const file = d.file || [];
     if (!file.length) {
-      const p = document.createElement("div");
+      const p = document.createElement("p");
       p.className = "small dim";
       p.textContent = "nessun file toccato in «" + nome + "»";
-      progFileBox.appendChild(p);
+      progModalFile.appendChild(p);
       return;
     }
     file.forEach((f) => {
@@ -3982,22 +3986,22 @@ async function caricaFileProgetto(nome) {
       az.textContent = f.azione;
       riga.appendChild(path);
       riga.appendChild(az);
-      progFileBox.appendChild(riga);
+      progModalFile.appendChild(riga);
     });
   } catch (e) {
-    if (progFileBox) progFileBox.textContent = "non riesco a leggere i file";
+    if (progModalFile) progModalFile.textContent = "non riesco a leggere i file";
   }
 }
 
-if (progNuovoOk) {
-  progNuovoOk.addEventListener("click", async () => {
-    const nome = (progNuovoNome && progNuovoNome.value || "").trim();
-    const percorso = (progNuovoPercorso && progNuovoPercorso.value || "").trim();
+if (progModalOk) {
+  progModalOk.addEventListener("click", async () => {
+    const nome = (progModalNome && progModalNome.value || "").trim();
+    const percorso = (progModalPercorso && progModalPercorso.value || "").trim();
     // Gli alias: gli altri nomi dello stesso progetto. Vanno nel
     // body, e senza di loro il riconoscimento in un'altra lingua
     // non funziona — un progetto chiamato "Sito Ristorante" non
     // contiene la parola "restaurant".
-    const alias = (progNuovoAlias && progNuovoAlias.value || "").trim();
+    const alias = (progModalAlias && progModalAlias.value || "").trim();
     if (!nome || !percorso) {
       if (progFatti) progFatti.textContent = "serve il nome e la cartella";
       return;
@@ -4013,10 +4017,10 @@ if (progNuovoOk) {
         if (progFatti) progFatti.textContent = d.errore || ("errore " + r.status);
         return;
       }
-      if (progNuovoNome) progNuovoNome.value = "";
-      if (progNuovoPercorso) progNuovoPercorso.value = "";
-      if (progNuovoAlias) progNuovoAlias.value = "";
-      if (progInput) progInput.value = nome;
+      if (progModalNome) progModalNome.value = "";
+      if (progModalPercorso) progModalPercorso.value = "";
+      if (progModalAlias) progModalAlias.value = "";
+      if (progSelect) progSelect.value = nome;
       await impostaProgetto();
       await caricaProgetti();
     } catch (e) {
@@ -4024,6 +4028,31 @@ if (progNuovoOk) {
     }
   });
 }
+
+// ── Modal progetti: apertura e chiusura ─────────────────────────
+// Stesso pattern del modal memoria: overlay fissato sopra tutto,
+// show/hide, Escape chiude. Il pulsante in testata della sidebar
+// ("Gestione") e i due pulsanti interni fanno la stessa cosa.
+function apriProgetti() {
+  if (!progModal) return;
+  progModal.hidden = false;
+  caricaProgetti();
+}
+function chiudiProgetti() {
+  if (!progModal) return;
+  progModal.hidden = true;
+}
+on(progGestisci, "click", apriProgetti);
+on(progChiudi, "click", chiudiProgetti);
+on(progChiudi2, "click", chiudiProgetti);
+if (progModal) {
+  progModal.addEventListener("click", (e) => {
+    if (e.target === progModal) chiudiProgetti();
+  });
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && progModal && !progModal.hidden) chiudiProgetti();
+});
 
 // Il primo caricamento. Lo script ha `defer`, quindi il DOM e' gia'
 // pronto qui: non serve aspettare nessun evento.

@@ -172,8 +172,14 @@ function renderStats(s) {
   // e il colore dice se siamo vicini al limite. Senza questa barra,
   // l'unica informazione è il numero di token — che si legge male
   // quando il contesto è quasi pieno.
-  if (s.context_limit && s.total_tokens) {
-    const pct = Math.min(1, s.total_tokens / s.context_limit);
+  // La barra misura la FINESTRA (messaggi attuali), non il cumulato
+  // del turno: il totale cresce per sempre e la resterebbe rossa e
+  // piena anche a contesto vuoto. Se il server vecchio non manda
+  // context_tokens, si ripiega sul totale come prima.
+  const finestra = (typeof s.context_tokens === "number")
+    ? s.context_tokens : (s.total_tokens || 0);
+  if (s.context_limit && finestra) {
+    const pct = Math.min(1, finestra / s.context_limit);
     const bar = el("span", "ctx-bar");
     const fill = el("i");
     fill.style.width = Math.round(pct * 100) + "%";

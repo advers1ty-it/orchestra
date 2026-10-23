@@ -527,50 +527,28 @@
              placeholder="Cerca nelle conversazioni..." spellcheck="false" />
     </div>
 
-    <!-- Il progetto attivo. Sta SOPRA le sezioni perche' riguarda
-         tutto: la memoria e' condivisa, ma i fatti che servono sono
-         quelli di questo progetto, e il modello lo cerca con il filtro.
+    <!-- I progetti: una sola sezione, piccola. Il progetto ATTIVO in
+         alto come menu a tendina — sceglierlo cambia subito il progetto
+         (e quindi la cartella in cui si scrive), niente bottone OK. La
+         lista dei progetti registrati, con cui li vedi e li togli. E i
+         campi in fondo per registrarne uno nuovo. Li stiamo insieme perche'
+         sono la stessa cosa: non e' una ricerca.
 
-         Un progetto non e' solo un'etichetta: e' la CARTELLA in cui
-         l'agente scrive. Il confine di sicurezza si sposta con lui,
-         e per questo il campo e' qui sopra: e' la cosa che riguarda
-         tutta la sessione, non una sezione fra le altre. -->
-    <div class="side-progetto">
-      <label class="small dim" for="side-progetto-input">Progetto</label>
-      <div class="side-progetto-riga">
-        <input id="side-progetto-input" type="text" list="side-progetto-lista"
-               placeholder="nessun progetto" spellcheck="false" />
-        <datalist id="side-progetto-lista"></datalist>
-        <button id="side-progetto-ok" class="primary" title="Imposta il progetto attivo">OK</button>
-      </div>
-      <div id="side-progetto-fatti" class="small dim"></div>
-    </div>
-
-    <!-- I progetti: la sezione dove si registrano e si aprono. Sta
-         come sezione propria perche' registrarne uno e' un'azione
-         diversa dal cambiare il progetto attivo: registrarlo e' una
-         cosa che fai una volta, cambiarlo e' una cosa che fai ogni
-         volta che inizi a lavorare. -->
+          Un progetto non e' solo un'etichetta: e' la CARTELLA in cui
+          l'agente scrive. Il confine di sicurezza si sposta con lui, e
+          per questo l'attivo sta qui sopra: e' la cosa che riguarda tutta
+          la sessione. Lo switch automatico (l'agente che riconosce il
+          nome del progetto) aggiorna questo menu, non lo sovrascrive. -->
     <div class="side-sez side-sez-progetti" id="side-sez-progetti">
       <div class="side-testata">
         <span class="side-titolo">Progetti</span>
+        <button id="side-progetti-gestisci" class="side-cap-btn">Gestione</button>
       </div>
-      <p class="small dim">Le cartelle su cui Orchestra lavora. Ogni progetto ha i suoi file, le sue conversazioni e i suoi fatti in memoria.</p>
-      <ul id="side-progetti" class="side-progetti"></ul>
-      <div class="side-progetto-nuovo">
-        <input id="side-progetto-nuovo-nome" type="text" placeholder="Nome del progetto" spellcheck="false" />
-        <input id="side-progetto-nuovo-percorso" type="text" placeholder="Cartella (D:\lavori\mio-progetto)" spellcheck="false" />
-        <!-- Gli alias: altri nomi per lo stesso progetto. Servono
-             perche' i nomi non si possono tradurre da soli: un
-             progetto chiamato "Sito Ristorante" non contiene la parola
-             "restaurant", e nessun algoritmo puo' tirare a indovinare
-             che sono la stessa cosa. Con l'alias, "restaurant site"
-             trova il progetto. Separati da virgola. -->
-        <input id="side-progetto-nuovo-alias" type="text"
-               placeholder="Alias: restaurant site, menu, sito" spellcheck="false" />
-        <button id="side-progetto-nuovo-ok" class="primary">Registra</button>
+      <div class="side-progetto">
+        <label class="small dim" for="side-progetto-select">Attivo</label>
+        <select id="side-progetto-select" title="Il progetto attivo. Sceglierlo cambia subito la cartella in cui si scrive"></select>
+        <div id="side-progetto-fatti" class="small dim"></div>
       </div>
-      <div id="side-progetti-file" class="side-progetti-file" hidden></div>
     </div>
 
     <div class="side-sez side-sez-memoria" id="side-sez-memoria">
@@ -606,7 +584,6 @@
       <div class="side-testata">
         <span class="side-titolo">Tracce</span>
       </div>
-      <p class="small dim">La scatola nera: cosa ha fatto l'agente in ogni compito — strumenti usati, errori, perché si è fermato. Clicca per riaprire, senza rifarlo.</p>
       <ul id="side-tracce" class="side-tracce"></ul>
     </div>
 
@@ -788,6 +765,38 @@
       <p class="small dim" id="mem-msg"></p>
     </div>
   </div>
+</div>
+    <!-- Il modal dei progetti: lista, cancellazione e nuova registrazione. -->
+         <div class="progetti-modal" id="progetti-modal" hidden>
+      <div class="progetti-modal-box">
+        <div class="progetti-modal-head">
+          <span class="progetti-modal-titolo">Gestione progetti</span>
+          <button id="progetti-modal-chiudi" class="ghost" title="Chiudi (Esc)">×</button>
+        </div>
+        <div class="progetti-modal-body">
+          <div class="progetti-modal-col">
+            <div class="progetti-modal-titolo-col">Progetti registrati</div>
+            <ul id="progetti-modal-lista" class="progetti-modal-lista"></ul>
+            <div class="progetti-modal-titolo-col">Nuovo progetto</div>
+            <div class="progetti-modal-campi">
+              <input id="progetti-modal-nome" type="text" placeholder="Nome del progetto" spellcheck="false" />
+              <input id="progetti-modal-percorso" type="text" placeholder="Cartella (D:\lavori\mio-progetto)" spellcheck="false" />
+              <input id="progetti-modal-alias" type="text" placeholder="Alias: restaurant site, menu, sito" spellcheck="false" />
+              <button id="progetti-modal-registra" class="primary">Registra</button>
+            </div>
+          </div>
+          <div class="progetti-modal-col">
+            <div class="progetti-modal-titolo-col">File toccati</div>
+            <div id="progetti-modal-file" class="progetti-modal-file">
+              <p class="small dim">Nessun file ancora. Clicca "file" accanto a un progetto.</p>
+            </div>
+          </div>
+        </div>
+        <div class="progetti-modal-foot">
+          <button id="progetti-modal-chiudi2" class="ghost">Chiudi</button>
+        </div>
+      </div>
+    </div>
 </div>
 </body>
 </html>
