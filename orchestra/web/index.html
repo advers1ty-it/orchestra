@@ -81,7 +81,6 @@
   <button id="btn-goal" class="ghost" title="Obiettivo autonomo">Obiettivo</button>
   <button id="btn-onboard" class="ghost" title="Mostra obiettivi iniziali">Cosa fai?</button>
   <button id="btn-docs" class="ghost" title="Documentazione">Docs</button>
-  <button id="btn-diagnosi" class="ghost" title="Diagnostica allowlisted">Diagnosi</button>
 
   <!-- Lo scopo sta PRIMA del modello, non in un pannello: la domanda
        "che lavoro stai facendo" viene prima di "con quale modello", e
@@ -198,6 +197,7 @@
               <button id="opz-tab-servizi" class="opzioni-tab" data-sez="servizi">Servizi</button>
               <button id="opz-tab-permessi" class="opzioni-tab" data-sez="permessi">Permessi</button>
               <button id="opz-tab-gratis" class="opzioni-tab" data-sez="gratis">Gratis</button>
+              <button id="opz-tab-diagnosi" class="opzioni-tab" data-sez="diagnosi">Diagnosi</button>
             </nav>
 
       <div class="opzioni-pannelli">
@@ -382,6 +382,32 @@
             <div id="locali-avviso" class="gratis-locale" style="display:none"></div>
             <div id="gratis-lista"></div>
           </div>
+        </section>
+
+        <!-- Diagnostica: i quattro comandi allowlisted girano dal server.
+             Prima erano un modal costruito a mano da JavaScript, aperto da
+             un pulsante in alto: un secondo overlay in più, con il suo
+             stile duplicato. Qui e' una sezione come le altre, e l'unica
+             cosa che resta del vecchio e' l'endpoint. -->
+        <section id="opz-sez-diagnosi" class="opz-sez" data-sez="diagnosi" hidden>
+          <div class="opzioni-diagnosi-testa">
+            <b>Diagnostica</b>
+            <span class="dim">comandi allowlisted: girano dal server, non dal
+              browser. L'output e' quello del comando, ultime 4000 righe.</span>
+          </div>
+          <div class="opzioni-diagnosi-azioni">
+            <label>Comando
+              <select id="diag-scelta">
+                <option value="doctor">doctor – verifica config/connessione</option>
+                <option value="model-list">model-list – modelli supportati</option>
+                <option value="bench-show">bench-show – task benchmark</option>
+                <option value="dipendenze">dipendenze – stato optional</option>
+              </select>
+            </label>
+            <button id="diag-run" class="primary">Esegui</button>
+          </div>
+          <textarea id="diag-out" rows="14" readonly spellcheck="false"
+                    placeholder="L'output del comando compare qui."></textarea>
         </section>
 
       </div>

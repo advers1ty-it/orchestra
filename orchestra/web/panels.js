@@ -3438,50 +3438,33 @@ const btnDocs = $("btn-docs");
 if (btnDocs) btnDocs.addEventListener("click", () => window.open("/docs", "_blank", "noopener"));
 
 // ------------------------------------------------- diagnostica allowlisted
-const btnDiag = $("btn-diagnosi");
-if (btnDiag) {
-  btnDiag.addEventListener("click", () => {
-    let modal = document.getElementById("diag-modal");
-    if (!modal) {
-      modal = document.createElement("div");
-      modal.id = "diag-modal";
-      modal.innerHTML = `
-        <div class="diag-modalbox">
-          <h3>Diagnostica (allowlisted)</h3>
-          <select id="diag-scelta">
-            <option value="doctor">doctor – verifica config/connessione</option>
-            <option value="model-list">model-list – modelli supportati</option>
-            <option value="bench-show">bench-show – task benchmark</option>
-            <option value="dipendenze">dipendenze – stato optional</option>
-          </select>
-          <button id="diag-run" class="primary">Esegui</button>
-          <button id="diag-close" class="ghost">Chiudi</button>
-          <textarea id="diag-out" rows="18" readonly></textarea>
-        </div>
-      `;
-      const style = document.createElement("style");
-      style.textContent = `
-        #diag-modal { position:fixed;inset:0;background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:2001; }
-        #diag-modal.show { display:flex; }
-        .diag-modalbox { background:var(--card,#1a1a1f); color:var(--fg,#eee); border:1px solid var(--border,#333); border-radius:12px; width:920px; max-width:92%; max-height:86vh; padding:16px; overflow:auto; }
-        .diag-modalbox select, #diag-out { width:100%; box-sizing:border-box; margin:8px 0; }
-        #diag-out { font-family:monospace; min-height:260px; background:#0b0f18; color:#dbe1ee; border:1px solid #333; }`;
-      document.head.appendChild(style);
-      document.body.appendChild(modal);
-      modal.querySelector("#diag-close").addEventListener("click", () => modal.classList.remove("show"));
-      modal.querySelector("#diag-run").addEventListener("click", async () => {
-        const sel = modal.querySelector("#diag-scelta").value;
-        const out = modal.querySelector("#diag-out");
-        out.value = 'Esecuzione ' + sel + '...\n';
-        try {
-          const r = await fetch("/api/diagnosi/run", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({comando: sel}) });
-          const d = await r.json().catch(() => ({}));
-          out.value = (d.output || d.error || JSON.stringify(d)).slice(-4000);
-          if (d.returncode && d.returncode !== 0) out.value += String.fromCharCode(10) + "[codice " + d.returncode + "]";
-        } catch (e) { out.value = "Errore: " + e; }
+// Era un modal costruito a mano da JavaScript e aperto da un pulsante in
+// alto: un overlay in piu', con stile duplicato e nessun collegamento con
+// il resto dell'interfaccia. Ora e' una sezione di Opzioni, e l'unica cosa
+// che resta del vecchio e' la chiamata all'endpoint. L'output NON si
+// accumula: eseguire due volte il comando deve dare due risultati, non
+// quattro.
+const diagScelta = $("diag-scelta");
+const diagRun = $("diag-run");
+const diagOut = $("diag-out");
+if (diagRun && diagOut) {
+  diagRun.addEventListener("click", async () => {
+    const sel = diagScelta ? diagScelta.value : "";
+    diagOut.value = "Esecuzione " + sel + "...";
+    try {
+      const d = await fetch("/api/diagnosi/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comando: sel }),
       });
+      const r = await d.json().catch(() => ({}));
+      diagOut.value = (r.output || r.error || JSON.stringify(r)).slice(-4000);
+      if (r.returncode && r.returncode !== 0) {
+        diagOut.value += String.fromCharCode(10) + "[codice " + r.returncode + "]";
+      }
+    } catch (e) {
+      diagOut.value = "Errore: " + e;
     }
-    modal.classList.add("show");
   });
 }
 
