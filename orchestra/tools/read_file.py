@@ -7,7 +7,7 @@ from ._guard import _safe_path
 
 
 def tool_read_file() -> Tool:
-    def handler(path: str, max_lines: int = 400, start_line: int = 1) -> str:
+    def handler(path: str, max_lines: int = 400, start_line: int = 1, end_line: int | None = None) -> str:
         p = _safe_path(path)
         if not p.exists():
             return f"NON ESISTE: {path}"
@@ -18,10 +18,21 @@ def tool_read_file() -> Tool:
             start_line = max(1, int(start_line or 1))
         except (TypeError, ValueError):
             start_line = 1
-        try:
-            max_lines = max(1, min(int(max_lines or 400), 2000))
-        except (TypeError, ValueError):
-            max_lines = 400
+        # end_line ha priorita' su max_lines: se il chiamante dice
+        # "dalla riga 50 alla riga 100", e' piu' preciso di "50 righe
+        # a partire dalla 50". Se e' None o 0, torna a max_lines.
+        if end_line is not None:
+            try:
+                end_line = int(end_line)
+            except (TypeError, ValueError):
+                end_line = None
+        if end_line is not None and end_line > 0:
+            max_lines = max(1, end_line - start_line + 1)
+        else:
+            try:
+                max_lines = max(1, min(int(max_lines or 400), 2000))
+            except (TypeError, ValueError):
+                max_lines = 400
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
         # start_line è 1-based, come i numeri che si vedono a schermo:
         # chiedere "riga 500" e ricevere dalla 501 è il tipo di errore che
@@ -52,8 +63,12 @@ def tool_read_file() -> Tool:
                 },
                 "max_lines": {
                     "type": "integer",
-                    "description": "Righe massime da leggere (default 400).",
+                    "description": "Righe massime da leggere (default 400). Ignorato se end_line e' specificato.",
                     "default": 400,
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "Riga finale da leggere (inclusiva). Se specificato, sovrascrive max_lines. Es: start_line=50, end_line=100 legge le righe 50-100.",
                 },
             },
             "required": ["path"],
