@@ -72,6 +72,7 @@
       <li><a href="#budget">Budget</a></li>
       <li><a href="#bugfix">Debug & stato</a></li>
       <li><a href="#deploy">Rilascio tester</a></li>
+      <li><a href="#dev">Appendice (sviluppatori)</a></li>
     </ul>
   </nav>
   <main>
@@ -209,18 +210,8 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 <section id="goal">
 <h2>Goal autonomi</h2>
 <p>Layer persistente <code>JSON</code> in <code>ORCHESTRA_HOME</code>. Stati: pending, running, done, failed, cancelled. I piani <code>kind=piano</code> sono contenitori: non eseguono agenti e si chiudono da soli quando i figli finiscono.</p>
-<pre><code>orchestra goal "obiettivo" [--profile ...] [--max-iterations N] [--depends-on A,B] [--priority N] [--max-attempts N] [--criteri JSON] [--recovery JSON]
-orchestra goals [--pronti]
-orchestra goal-next
-orchestra scheduler [--una-volta] [--interval N]
-POST /api/goal/start
-POST /api/goal/stop
-POST /api/goal/run-next
-GET  /api/goal/status
-GET  /api/goal/ready
-GET  /api/scheduler/status
-POST /api/scheduler/start
-POST /api/scheduler/stop</code></pre>
+<p><strong>Come si usa (interfaccia web):</strong> pulsante “Obiettivo” apre il pannello. Scrivi l’obiettivo, premi Avvia. Il goal parte in background e il pannello mostra stato, gate e ultimo output; clicca una riga per i dettagli. “Prossimo” esegue a mano il prossimo goal pronto; “Coda on/off” attiva lo scheduler automatico. Opzioni avanzate (profilo, kind, priorità, dipendenze, max iterazioni, criteri, recovery) sono collassate.</p>
+<p class="dim">Comandi CLI ed endpoint REST per questa funzione sono nell’appendice per sviluppatori.</p>
 <ul>
   <li>Thread daemon, massimo iterazioni (default 60), timeout pre-process massimo.</li>
   <li>Stop condition: risposta finale, fallimento provider/tool, max iterazioni, timeout.</li>
@@ -296,6 +287,49 @@ POST /api/scheduler/stop</code></pre>
   <li><code>Avvia-Orchestra.bat</code> aggiorna, avvia il server in background e apre il browser; se riaperto a server acceso chiede Apri / Riavvia / Ferma.</li>
   <li>Pubblicare un update: alza <code>__version__</code>, committa, <code>git tag vX.Y.Z &amp;&amp; git push --tags</code>, <code>gh release create vX.Y.Z --generate-notes</code>.</li>
   <li><code>orchestra update --check</code> controlla soltanto; chiavi e dati locali non vengono mai sovrascritti.</li>
+</ul>
+</section>
+
+<section id="dev">
+<h2>Appendice — per sviluppatori</h2>
+<p>Questa sezione raccoglie CLI, endpoint REST e note di rilascio. Serve a chi sviluppa o integra; l’utente finale non ne ha bisogno.</p>
+
+<h3>CLI — goal</h3>
+<pre><code>orchestra goal "obiettivo" [--profile ...] [--max-iterations N] [--depends-on A,B] [--priority N] [--max-attempts N] [--criteri JSON] [--recovery JSON]
+orchestra goals [--pronti]
+orchestra goal-next
+orchestra scheduler [--una-volta] [--interval N]</code></pre>
+
+<h3>Endpoint REST — goal</h3>
+<pre><code>POST /api/goal/start
+POST /api/goal/stop
+POST /api/goal/run-next
+GET  /api/goal/status
+GET  /api/goal/ready
+GET  /api/scheduler/status
+POST /api/scheduler/start
+POST /api/scheduler/stop</code></pre>
+
+<h3>Endpoint REST — steer & cancel</h3>
+<pre><code>POST /api/steer   { "testo": "..." }
+POST /api/cancel</code></pre>
+
+<h3>Avvio & configurazione CLI</h3>
+<pre><code>python3 -m orchestra.cli doctor
+python3 -m orchestra.cli web [--no-browser] [--port 8737]
+python3 -m orchestra.cli chat
+python3 -m orchestra.cli auth nous
+python3 kill_ports.py 8737</code></pre>
+
+<h3>Rilascio</h3>
+<p>Alza <code>__version__</code> in <code>orchestra/__init__.py</code>, committa, tagga, pubblica release. Vedi memoria del progetto.</p>
+
+<h3>Debug & stato</h3>
+<ul>
+  <li>Serve su 127.0.0.1:8737 di default.</li>
+  <li>HTTP 000 → worker morto.</li>
+  <li>Piu' processi sulla stessa porta → comportamento intermittente.</li>
+  <li>HC: <code>/docs</code>, <code>/api/dipendenze/stato</code>.</li>
 </ul>
 </section>
 
