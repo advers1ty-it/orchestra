@@ -1523,9 +1523,19 @@ const scopeNote = $("scope-note");
 const MIN_PER_CONSIGLIARE = 2;
 
 function misuratiPer(scope) {
+  const attuale = (typeof modelPick !== "undefined" && modelPick) ? modelPick.value : "";
   return tuttiModelli
     .filter((m) => typeof (m.scores || {})[scope] === "number")
-    .sort((a, b) => b.scores[scope] - a.scores[scope]);
+    .sort((a, b) => {
+      const d = b.scores[scope] - a.scores[scope];
+      if (d !== 0) return d;
+      // a parità di punteggio non spostare chi è già in uso: non c'è
+      // miglioramento reale da proporre
+      const aAtt = a.id === attuale ? 0 : 1;
+      const bAtt = b.id === attuale ? 0 : 1;
+      if (aAtt !== bAtt) return aAtt - bAtt;
+      return String(a.id).localeCompare(String(b.id));
+    });
 }
 
 function migliorePer(scope) {
@@ -1561,7 +1571,12 @@ function applicaScope(scope) {
   }
   const best = candidati[0];
   const attuale = modelPick.value;
-  if (attuale === best.id) {
+  const punteggioAttuale = (attuale && (tuttiModelli.find((m) => m.id === attuale) || {}).scores || {})[scope];
+  // a parità (o se l'attuale ha già il massimo) non c'è motivo di proporre
+  // un cambio: spostarsi su un modello con lo stesso punteggio non migliora
+  // nulla e genera confusione
+  if (attuale === best.id ||
+      (typeof punteggioAttuale === "number" && punteggioAttuale >= best.scores[scope])) {
     scopeNote.textContent = "già il migliore per " + nome;
     scopeNote.className = "scope-note ok";
     return;
