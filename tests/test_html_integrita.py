@@ -105,6 +105,92 @@ pericolosi2 = re.findall(r'\$\("[^"]+"\)\.on\w+\s*=', bundle)
 check("nessun handler assegnato direttamente a un $()", not pericolosi2,
       f"{len(pericolosi2)} occorrenze: {pericolosi2[:3]}")
 
+print("\n[5] I blocchi di primo livello stanno davvero nel body")
+# Un </div> mancante non e' un errore di sintassi: il file resta valido,
+# il server risponde 200, il CSS si applica. Ma il parser HTML5 chiude
+# al posto tuo l'elemento rimasto aperto, e TUTTO quello che segue
+# finisce dentro di lui. E' successo con #onboard: la barra degli
+# obiettivi e i tre modali (tracce, memoria, progetti) diventarono suoi
+# figli, e siccome #onboard e' hidden con display:none !important i
+# modali si aprivano e restavano invisibili. Il sintomo era "i modali
+# non si aprono" e il JavaScript era innocente: nessun errore, nessun
+# avviso, `hidden=false` e `display:flex` corretti.
+#
+# La lezione: il posto di un blocco si verifica guardando il DOM, non
+# il sorgente. Qui si ricostruisce l'albero come farebbe il browser.
+from html.parser import HTMLParser
+
+VUOTI = {"area", "base", "br", "col", "embed", "hr", "img", "input",
+         "link", "meta", "param", "source", "track", "wbr"}
+# Elementi che il browser chiude da solo quando ne inizia uno nuovo:
+# senza, il controllo segnalerebbe squilibri che il browser non ha.
+CHIUDONO_P = {"p", "div", "ul", "ol", "table", "section", "h1", "h2",
+              "h3", "h4", "h5", "h6", "form", "blockquote"}
+
+
+class Albero(HTMLParser):
+    """La catena dei genitori, con le stesse regole del browser."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.pila = []
+        self.genitori = {}
+        self.orfani = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in CHIUDONO_P and self.pila and self.pila[-1][0] == "p":
+            self.pila.pop()
+        if tag in VUOTI:
+            if a.get("id"):
+                self.genitori[a["id"]] = [t for t, _, _ in self.pila]
+            return
+        self.pila.append((tag, a.get("id"), a.get("class", "")))
+        if a.get("id"):
+            self.genitori[a["id"]] = [t for t, _, _ in self.pila[:-1]]
+
+    def handle_endtag(self, tag):
+        if tag in VUOTI:
+            return
+        for i in range(len(self.pila) - 1, -1, -1):
+            if self.pila[i][0] == tag:
+                del self.pila[i:]
+                return
+        self.orfani.append(tag)
+
+
+with open(ui, encoding="utf-8") as f:
+    sorgente = f.read()
+
+albero = Albero()
+albero.feed(sorgente)
+albero.close()
+
+aperti = len(re.findall(r"<div\b", sorgente))
+chiusi = len(re.findall(r"</div>", sorgente))
+check("i <div> aperti e chiusi sono pari", aperti == chiusi,
+      f"{aperti} aperti, {chiusi} chiusi")
+check("nessun tag di chiusura orfano", not albero.orfani, str(albero.orfani[:5]))
+
+# I blocchi che devono stare appesi al body: se uno finisce dentro un
+# altro, il suo hidden lo nasconde per sempre.
+PRIMO_LIVELLO = ["onboard", "onboard-details", "goal-bar", "traccia-modal",
+                 "mem-modal", "progetti-modal"]
+for _id in PRIMO_LIVELLO:
+    catena = albero.genitori.get(_id)
+    check(f"#{_id} e' figlio del body",
+          catena is not None and catena and catena[-1] == "body",
+          f"genitori: {catena}")
+
+# E il caso generale: nessun blocco di primo livello puo' finire dentro
+# un elemento che nasconde tutto.
+NASCOSTI = {"onboard", "onboard-details"}
+for _id, _catena in albero.genitori.items():
+    dentro = [t for t in _catena if t in NASCOSTI]
+    if dentro:
+        check(f"#{_id} non sta dentro un contenitore nascosto", False,
+              f"dentro {dentro}")
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)
