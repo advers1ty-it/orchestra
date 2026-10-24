@@ -49,7 +49,8 @@ def _run_pw(script: str, timeout: int = 30) -> tuple[int, str, str]:
         r = subprocess.run(
             [ps, "-NoProfile", "-NonInteractive",
              "-ExecutionPolicy", "Bypass", "-Command", script],
-            text=True, capture_output=True, timeout=timeout)
+            text=True, capture_output=True, timeout=timeout,
+            encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         return 1, "", f"timeout {timeout}s"
     except Exception as e:  # noqa: BLE001

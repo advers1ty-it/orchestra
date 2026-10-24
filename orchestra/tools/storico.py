@@ -81,6 +81,7 @@ def tool_storico_cerca() -> Tool:
                 "limite": {"type": "integer",
                            "description": "Quanti risultati. Default 10."},
             },
+            "required": ["query"],
         },
         handler=handler,
     )

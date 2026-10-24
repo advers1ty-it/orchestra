@@ -108,7 +108,8 @@ def tool_browser_render() -> Tool:
                  f"--user-data-dir={work}",
                  "--disable-background-networking",
                  "--dump-dom", u],
-                text=True, capture_output=True, timeout=40)
+                text=True, capture_output=True, timeout=40,
+                encoding="utf-8", errors="replace")
         except subprocess.TimeoutExpired:
             return f"timeout: il browser non ha risposto in 40 s per {u}"
         except Exception as e:  # noqa: BLE001
@@ -175,7 +176,8 @@ def tool_browser_screenshot() -> Tool:
                "--no-first-run", "--disable-extensions",
                "--hide-scrollbars", "--disable-background-networking", u]
         try:
-            r = subprocess.run(cmd, text=True, capture_output=True, timeout=40)
+            r = subprocess.run(cmd, text=True, capture_output=True, timeout=40,
+                               encoding="utf-8", errors="replace")
         except subprocess.TimeoutExpired:
             return f"timeout (40 s) generando screenshot di {u}"
         except Exception as e:  # noqa: BLE001

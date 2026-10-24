@@ -134,6 +134,7 @@ def tool_web_cerca() -> Tool:
                 "limite": {"type": "integer",
                            "description": "Quanti risultati, 1-10. Default 5."},
             },
+            "required": ["query"],
         },
         handler=handler,
     )
@@ -178,6 +179,13 @@ def tool_web_leggi() -> Tool:
             return (f"La pagina non ha testo estraibile ({len(grezzo)} byte "
                     f"grezzi). Se è un PDF o un'immagine, questo strumento "
                     f"non li legge.")
+        # righe: tiene solo le prime N righe del testo, se richiesto.
+        if righe and int(righe or 0) > 0:
+            ls = testo.splitlines()
+            n = max(1, int(righe))
+            testo = "\n".join(ls[:n])
+            if len(ls) > n:
+                testo += f"\n\n[...troncato: {len(ls)} righe in tutto, mostro le prime {n}]"
         titolo = _titolo(grezzo)
         if len(testo) > TETTO_PAGINA:
             testo = (testo[:TETTO_PAGINA]
