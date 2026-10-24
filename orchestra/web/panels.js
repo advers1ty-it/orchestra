@@ -3322,7 +3322,7 @@ async function avviaDalDettaglio() {
     const r = await fetch('/api/goal/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ obiettivo, profile, kind: 'goal' }),
+      body: JSON.stringify({ objective: obiettivo, profile, kind: 'goal' }),
     });
     const j = await r.json();
     if (!r.ok) {
