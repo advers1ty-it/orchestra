@@ -88,9 +88,59 @@ def test_tool_normale_ha_id():
         )
 
 
+def test_steer_ha_id():
+    """Uno steer inietta un messaggio tool: deve avere un tool_call_id.
+
+    E' il bug che ha rotto lo steer: il messaggio era role="tool" senza
+    id, e il Nous rispondeva 400 "Missing required parameter:
+    'messages[N].tool_call_id'". Lo steer e' un messaggio del sistema,
+    non un risultato di tool call: l'id si inventa, come per il nudge.
+    """
+    reg = default_registry()
+    prov = Provider(content="fatto")
+    ag = Agent(prov, reg, "test", LoopConfig(max_iterations=3))
+    ag.steer("Rifai la parte X")
+
+    ag.run("test")
+
+    payload = _payload(ag)
+    tool_msgs = [m for m in payload if m.get("role") == "tool"]
+    assert tool_msgs, "lo steer deve essere un messaggio tool"
+    for m in tool_msgs:
+        assert m.get("tool_call_id"), (
+            f"steer senza tool_call_id: {m!r}"
+        )
+
+
+def test_verifica_ha_id():
+    """La nota di verifica fallita e' un messaggio tool: deve avere id."""
+    def fallito(work):
+        return False, "file mancante"
+
+    reg = default_registry()
+    prov = Provider(content="fatto")
+    ag = Agent(prov, reg, "test", LoopConfig(max_iterations=4))
+    ag.config.verifica_compito = {
+        "verificatori": [fallito], "work": "", "max_tentativi": 2}
+
+    ag.run("test")
+
+    payload = _payload(ag)
+    tool_msgs = [m for m in payload if m.get("role") == "tool"]
+    assert tool_msgs, "la verifica fallita deve essere un messaggio tool"
+    for m in tool_msgs:
+        assert m.get("tool_call_id"), (
+            f"verifica senza tool_call_id: {m!r}"
+        )
+
+
 if __name__ == "__main__":
     test_nudge_ha_id()
     print("OK   il nudge ha id")
     test_tool_normale_ha_id()
     print("OK   il tool normale ha id")
+    test_steer_ha_id()
+    print("OK   lo steer ha id")
+    test_verifica_ha_id()
+    print("OK   la verifica ha id")
     print("\nTUTTO OK")

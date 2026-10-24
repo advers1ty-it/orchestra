@@ -531,6 +531,7 @@ class Agent:
                         f"Riconsidera il tuo lavoro alla luce di questa informazione. "
                         f"Continua da dove eri rimasto."
                     ),
+                    tool_call_id=new_id("steer"),
                     name="__steer__",
                 ))
                 self._emit("steer", testo=testo, count=self.state.steer_count)
@@ -828,6 +829,7 @@ class Agent:
                         esito, self._verifica_tentativo,
                         specifica.get("max_tentativi",
                                       self.config.max_tentativi_verifica)),
+                    tool_call_id=new_id("verifica"),
                     name="__verifica__",
                 ))
                 continue
