@@ -3275,6 +3275,12 @@ function chiudiOnboarding() {
     o.setAttribute("hidden", "");
     o.style.display = "none";
   }
+  const d = document.getElementById("onboard-details");
+  if (d) {
+    d.classList.add("hidden");
+    d.setAttribute("hidden", "");
+    d.style.display = "none";
+  }
   try { localStorage.setItem("orchestra.onboard.done", "1"); } catch (e) {}
 }
 
@@ -3358,6 +3364,8 @@ async function avviaObiettivo(o) {
 }
 
 function mostraOnboarding(forza) {
+  const det = document.getElementById("onboard-details");
+  if (det) { det.classList.add("hidden"); det.setAttribute("hidden", ""); det.style.display = "none"; }
   const o = document.getElementById("onboard");
   if (!o) return;
   if (!forza && localStorage.getItem("orchestra.onboard.done")) return;
