@@ -136,8 +136,18 @@ class IndiceMemoria:
         self._conn = sqlite3.connect(self.percorso, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         with self._lock:
-            self._conn.executescript(SCHEMA)
+            # La tabella puo' esistere da una versione vecchia senza la
+            # colonna `progetto`: la si crea/migra PRIMA di eseguire lo
+            # schema completo, altrimenti CREATE INDEX su fatti(progetto)
+            # fallisce e l'indice non si apre.
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS fatti ("
+                "testo TEXT PRIMARY KEY, importante INTEGER NOT NULL DEFAULT 0, "
+                "origine TEXT NOT NULL DEFAULT '', creata REAL NOT NULL, "
+                "scade REAL, usi INTEGER NOT NULL DEFAULT 0)")
+            self._conn.commit()
             self._migra_progetto()
+            self._conn.executescript(SCHEMA)
             self._conn.commit()
         self._ultimo_file = 0.0
         self.ricostruisci_se_cambiato()
@@ -573,6 +583,263 @@ class IndiceMemoria:
             self._conn.commit()
             return cur.rowcount > 0
 
+    def ottimizza_memoria(self, provider=None, dry_run: bool = True,
+                          giorni_grazia: int = 30, progetto: str = "",
+                          unisci: bool = False,
+                          soglia_similarita: float = 0.5) -> dict[str, Any]:
+        """Potatura (e, se richiesto, unione) della memoria.
+
+        Fase 1, a basso rischio: i fatti NON importanti che non sono mai
+        stati usati (`usi = 0`) e sono più vecchi di `giorni_grazia` giorni
+        vengono rimossi. Gli `importanti` non si toccano mai: sono fatti
+        che qualcuno ha esplicitamente marcato come sempre veri.
+
+        Si rimuovono anche i duplicati case-insensitive: `aggiungi` li
+        blocca già, ma un fatto scritto a mano o arrivato da un backend
+        diverso può sfuggire.
+
+        Con `unisci=True` e un `provider`, i fatti simili vengono fusi in
+        uno solo da un modello. È la fase 2: va tenuta spenta di default,
+        perché un modello che fonde due fatti può perdere un dettaglio.
+
+        `dry_run=True` (default) non tocca niente: restituisce solo la
+        lista di ciò che verrebbe fatto. È il modo in cui si usa prima di
+        fidarsi.
+
+        Ritorna un dizionario con i dettagli, per la UI e per i test.
+        """
+        from .memoria import _pulizia_riga
+
+        self.ricostruisci_se_cambiato(forza=True)
+        adesso = time.time()
+        progetto = (progetto or "").strip()
+        grace = max(0, int(giorni_grazia or 0))
+
+        # -- candidati alla potatura --------------------------------------
+        with self._lock:
+            righe = self._conn.execute(
+                "SELECT testo, usi, creata, progetto, importante, scade "
+                "FROM fatti").fetchall()
+        righe = [dict(r) for r in righe]
+
+        da_rimuovere: list[str] = []
+        motivi: dict[str, str] = {}
+        dettagli: list[dict[str, Any]] = []
+
+        for r in righe:
+            if r["importante"]:
+                continue
+            if progetto and (r.get("progetto") or "").lower() != progetto.lower():
+                continue
+            if r.get("scade") is not None and r["scade"] <= adesso:
+                # già scaduto: lo pulisce `pulisci_scaduti`, non è lavoro
+                # dell'ottimizzatore
+                continue
+            eta = (adesso - float(r["creata"])) / 86400.0
+            if r["usi"] == 0 and eta >= grace:
+                t = r["testo"]
+                if t not in da_rimuovere:
+                    da_rimuovere.append(t)
+                    motivi[t] = "mai usato"
+                    dettagli.append({
+                        "testo": t, "motivo": "mai usato",
+                        "usi": r["usi"], "eta_giorni": round(eta, 1),
+                        "progetto": r.get("progetto", ""),
+                    })
+
+        # -- duplicati case-insensitive ------------------------------------
+        visti_lower: dict[str, str] = {}
+        for r in righe:
+            if r["importante"]:
+                continue
+            if progetto and (r.get("progetto") or "").lower() != progetto.lower():
+                continue
+            t = r["testo"]
+            key = " ".join(t.lower().split())
+            if key in visti_lower and visti_lower[key] != t:
+                if t not in da_rimuovere:
+                    da_rimuovere.append(t)
+                    motivi[t] = "duplicato"
+                    dettagli.append({
+                        "testo": t, "motivo": "duplicato",
+                        "usi": r["usi"],
+                        "eta_giorni": round((adesso - float(r["creata"])) / 86400.0, 1),
+                        "progetto": r.get("progetto", ""),
+                    })
+            else:
+                visti_lower[key] = t
+
+        # -- unione di fatti simili (fase 2, opt-in) -----------------------
+        proposte_unione: list[dict[str, Any]] = []
+        uniti = 0
+        if unisci and provider is not None:
+            # solo i fatti non importanti del progetto (o tutti)
+            candidati_unione = [
+                r for r in righe
+                if not r["importante"]
+                and (not progetto or (r.get("progetto") or "").lower() == progetto.lower())
+            ]
+            gruppi = self._gruppi_simili(candidati_unione, soglia_similarita)
+            for gruppo in gruppi:
+                testi = [g["testo"] for g in gruppo]
+                if len(testi) < 2:
+                    continue
+                fuso = self._chiedi_unione(provider, testi)
+                if not fuso or fuso == testi:
+                    continue
+                proposte_unione.append({"originali": testi, "unito": fuso})
+                if not dry_run:
+                    # rimuove gli originali e aggiunge il fuso
+                    for t in testi:
+                        if t not in da_rimuovere:
+                            da_rimuovere.append(t)
+                            motivi[t] = "fuso"
+                    # il fuso si aggiunge dopo la rimozione
+                    progetti = {g.get("progetto", "") for g in gruppo}
+                    proj = progetti.pop() if len(progetti) == 1 else ""
+                    try:
+                        self.sorgente.aggiungi(
+                            " ".join(fuso) if isinstance(fuso, list) else str(fuso),
+                            origine="ottimizzatore", progetto=proj)
+                        uniti += 1
+                    except Exception:
+                        pass
+
+        fatti_prima = len(righe)
+
+        if dry_run:
+            return {
+                "dry_run": True,
+                "applicato": False,
+                "fatti_prima": fatti_prima,
+                "fatti_dopo": fatti_prima,
+                "candidati": dettagli,
+                "da_rimuovere": list(da_rimuovere),
+                "rimossi": 0,
+                "cancellati": 0,
+                "potati": 0,
+                "uniti": 0,
+                "fusi": 0,
+                "proposte_unione": proposte_unione,
+                "motivi": motivi,
+            }
+
+        # -- applicazione ---------------------------------------------------
+        if da_rimuovere:
+            testi_set = set(da_rimuovere)
+            try:
+                contenuto = self.sorgente.leggi()
+                fuori = []
+                for linea in contenuto.splitlines(keepends=True):
+                    r = linea.strip()
+                    if r.startswith("-"):
+                        corpo = r.lstrip("-").strip()
+                        pulito = _pulizia_riga(corpo)[0]
+                        if pulito in testi_set:
+                            continue
+                    fuori.append(linea)
+                self.sorgente.scrivi("".join(fuori))
+            except Exception:
+                pass
+            self.ricostruisci()
+            try:
+                self._ultimo_file = __import__("os").path.getmtime(self.sorgente.percorso)
+            except Exception:
+                pass
+            # pulizia dell'indice per i scaduti, per coerenza
+            try:
+                self.pulisci_scaduti()
+            except Exception:
+                pass
+
+        fatti_dopo = self._conto_db()
+        rimossi = len(da_rimuovere)
+        return {
+            "dry_run": False,
+            "applicato": True,
+            "fatti_prima": fatti_prima,
+            "fatti_dopo": fatti_dopo,
+            "candidati": dettagli,
+            "da_rimuovere": list(da_rimuovere),
+            "rimossi": rimossi,
+            "cancellati": rimossi,
+            "potati": rimossi,
+            "uniti": uniti,
+            "fusi": uniti,
+            "proposte_unione": proposte_unione,
+            "motivi": motivi,
+        }
+
+    def _gruppi_simili(self, righe: list[dict[str, Any]],
+                       soglia: float) -> list[list[dict[str, Any]]]:
+        """Raggruppa fatti per similarita' lessicale (Jaccard su parole).
+
+        Non usa embedding: nessuna dipendenza nuova, e su fatti brevi le
+        parole condivise bastano. I gruppi sono componenti connesse, non
+        coppie: se A e' simile a B e B a C, finiscono insieme.
+        """
+        def parole(t: str) -> set[str]:
+            return {w for w in (t or "").lower().split()
+                    if len(w) > 3}
+
+        n = len(righe)
+        parent = list(range(n))
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                wi, wj = parole(righe[i]["testo"]), parole(righe[j]["testo"])
+                if not wi or not wj:
+                    continue
+                inter = len(wi & wj)
+                uni = len(wi | wj)
+                if uni and inter / uni >= soglia and inter >= 2:
+                    union(i, j)
+
+        gruppi_map: dict[int, list[dict[str, Any]]] = {}
+        for i, r in enumerate(righe):
+            gruppi_map.setdefault(find(i), []).append(r)
+        return [g for g in gruppi_map.values() if len(g) >= 2]
+
+    def _chiedi_unione(self, provider: Any, testi: list[str]) -> list[str] | None:
+        """Chiede al modello di fondere i fatti. Torna la lista fusa o None."""
+        from .types import Message
+        prompt = (
+            "Unisci questi fatti in meno fatti possibili, senza perdere "
+            "informazioni. Una riga per fatto, senza numeri, senza "
+            "trattini, senza commenti. Se non si possono unire, ripeti "
+            "gli originali uno per riga.\\n\\nFatti:\\n"
+            + "\\n".join(f"- {t}" for t in testi)
+        )
+        try:
+            resp = provider.chat([Message(role="user", content=prompt)],
+                                 tools=None)
+            testo = (getattr(resp, "content", "") or "").strip()
+        except Exception:
+            return None
+        if not testo:
+            return None
+        fusi = []
+        for riga in testo.splitlines():
+            r = riga.strip()
+            r = __import__("re").sub(r"^[\\-\\*\\d\\.\\)\\s]+", "", r)
+            if r and len(r) > 8:
+                fusi.append(r)
+        # se il modello non ha ridotto nulla, non c'e' unione
+        if len(fusi) >= len(testi):
+            return None
+        return fusi
+
     def _query(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
         with self._lock:
             return self._conn.execute(sql, args).fetchall()
@@ -591,3 +858,39 @@ def indice_memoria() -> IndiceMemoria:
             if _istanza is None:
                 _istanza = IndiceMemoria()
     return _istanza
+
+
+def ottimizza_memoria(provider=None, dry_run: bool = True, giorni_grazia: int = 30,
+                      progetto: str = "", unisci: bool = False,
+                      soglia_similarita: float = 0.5, **kw) -> dict[str, Any]:
+    """Potatura della memoria. Vedi `IndiceMemoria.ottimizza_memoria`."""
+    # compatibilita' con chiamate in stile ottimizza_memoria(dry_run=...)
+    if "dry_run" in kw:
+        dry_run = kw.pop("dry_run")
+    if "giorni_grazia" in kw:
+        giorni_grazia = kw.pop("giorni_grazia")
+    if "progetto" in kw:
+        progetto = kw.pop("progetto")
+    if "unisci" in kw:
+        unisci = kw.pop("unisci")
+    try:
+        return indice_memoria().ottimizza_memoria(
+            provider=provider, dry_run=dry_run, giorni_grazia=giorni_grazia,
+            progetto=progetto, unisci=unisci,
+            soglia_similarita=soglia_similarita)
+    except Exception as e:
+        return {"dry_run": dry_run, "errore": str(e), "rimossi": 0,
+                "cancellati": 0, "potati": 0, "uniti": 0, "fusi": 0,
+                "fatti_prima": 0, "fatti_dopo": 0, "candidati": []}
+
+
+# alias, per chi la chiama con un nome diverso
+# Alias di metodo sulla classe, per chi chiama l'istanza.
+IndiceMemoria.ottimizza = IndiceMemoria.ottimizza_memoria
+IndiceMemoria.optimize_memory = IndiceMemoria.ottimizza_memoria
+IndiceMemoria.potatura_memoria = IndiceMemoria.ottimizza_memoria
+IndiceMemoria.potatura = IndiceMemoria.ottimizza_memoria
+
+ottimizza = ottimizza_memoria
+optimize_memory = ottimizza_memoria
+potatura_memoria = ottimizza_memoria

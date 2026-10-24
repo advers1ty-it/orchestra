@@ -1074,6 +1074,25 @@ class Session:
             t.start()
         except Exception:
             pass
+
+        # Ogni tanto la memoria si pota da sola. Non a ogni turno: la
+        # potatura tocca il file e l'indice, e farlo sempre sarebbe costo
+        # fisso su un'operazione che serve solo dopo settimane. Ogni
+        # venti turni è un compromesso: abbastanza spesso da non far
+        # crescere la roba morta, abbastanza raro da non disturbare.
+        try:
+            self._turni_memoria = getattr(self, "_turni_memoria", 0) + 1
+            if self._turni_memoria % 20 == 0:
+                def _potatura() -> None:
+                    try:
+                        from .memoria_indice import ottimizza_memoria
+                        ottimizza_memoria(dry_run=False, giorni_grazia=30)
+                    except Exception:
+                        pass
+                threading.Thread(target=_potatura, daemon=True,
+                                 name="orchestra-ottimizzatore").start()
+        except Exception:
+            pass
         return 0
 
     def _riconosci_progetto(self, testo: str) -> str:

@@ -217,10 +217,50 @@ def tool_memoria() -> Tool:
             return "Nessun fatto in memoria."
         return "\n".join(f"- {f}" for f in tutti[-limite:])
 
+    def ottimizza(dry_run: bool = True, giorni_grazia: int = 30,
+                  progetto: str = "", unisci: bool = False) -> str:
+        """Potatura della memoria: toglie i fatti mai usati e vecchi.
+
+        `dry_run=True` (default) mostra solo cosa verrebbe fatto.
+        """
+        m = memoria()
+        ott = getattr(m, "ottimizza_memoria", None)
+        if not callable(ott):
+            return "Ottimizzatore non disponibile (indice assente)."
+        progetto = (progetto or "").strip()
+        if not progetto:
+            try:
+                from .. import progetti as _pr
+                progetto = (_pr._root_progetto() or "").strip()
+            except Exception:  # noqa: BLE001
+                progetto = ""
+        provider = None
+        if unisci:
+            try:
+                # nessun provider nel tool: l'unione resta disabilitata
+                unisci = False
+            except Exception:
+                unisci = False
+        res = ott(provider=provider, dry_run=dry_run,
+                  giorni_grazia=giorni_grazia, progetto=progetto,
+                  unisci=unisci)
+        if res.get("errore"):
+            return f"Errore ottimizzatore: {res['errore']}"
+        righe = []
+        righe.append(f"Ottimizzazione {'(anteprima)' if res.get('dry_run') else '(applicata)'}: "
+                     f"{res.get('rimossi', 0)} fatti rimossi "
+                     f"({res.get('fatti_prima', 0)} -> {res.get('fatti_dopo', res.get('fatti_prima', 0))}).")
+        for c in (res.get("candidati") or [])[:20]:
+            righe.append(f"- {c.get('testo')} ({c.get('motivo')})")
+        if res.get("proposte_unione"):
+            righe.append(f"Unioni proposte: {len(res['proposte_unione'])}")
+        return "\n".join(righe) if righe else "Niente da ottimizzare."
+
     def handler(azione: str = "cerca", query: str = "", fatto: str = "",
                 priorita: str = "", limite: int = 10,
                 vecchio: str = "", nuovo: str = "",
-                progetto: str = "") -> str:
+                progetto: str = "", dry_run: bool = True,
+                giorni_grazia: int = 30, unisci: bool = False) -> str:
         try:
             azione = (azione or "cerca").strip().lower()
             if azione == "cerca":
@@ -233,8 +273,11 @@ def tool_memoria() -> Tool:
                 return modifica(vecchio or fatto, nuovo or query)
             if azione == "elenca":
                 return elenca(limite)
+            if azione == "ottimizza":
+                return ottimizza(dry_run=dry_run, giorni_grazia=giorni_grazia,
+                                 progetto=progetto, unisci=unisci)
             return (f"Azione non riconosciuta: {azione}. "
-                    f"Puoi fare: cerca, aggiungi, elimina, modifica, elenca.")
+                    f"Puoi fare: cerca, aggiungi, elimina, modifica, elenca, ottimizza.")
         except Exception as e:
             # Un errore qui non deve far cadere il turno: l'agente deve
             # poter dire "non riesco a cercare" e continuare.
@@ -257,7 +300,7 @@ def tool_memoria() -> Tool:
             "properties": {
                 "azione": {
                     "type": "string",
-                    "enum": ["cerca", "aggiungi", "elimina", "modifica", "elenca"],
+                    "enum": ["cerca", "aggiungi", "elimina", "modifica", "elenca", "ottimizza"],
                     "description": "Cosa fare. Default: cerca.",
                 },
                 "query": {
@@ -300,6 +343,18 @@ def tool_memoria() -> Tool:
                         "poi puoi chiedere solo quelli di quello che stai "
                         "lavorando."
                     ),
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Se true (default), mostra solo cosa verrebbe fatto.",
+                },
+                "giorni_grazia": {
+                    "type": "integer",
+                    "description": "Giorni di grazia prima di potare un fatto mai usato. Default 30.",
+                },
+                "unisci": {
+                    "type": "boolean",
+                    "description": "Se true, fonde i fatti simili (richiede un provider).",
                 },
             },
         },

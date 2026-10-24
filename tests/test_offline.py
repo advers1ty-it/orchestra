@@ -211,7 +211,9 @@ reg5.register(Tool(name="echo2", description="x", schema={"type": "object", "pro
 a5 = Agent(prov5, reg5, "SYS", LoopConfig(max_iterations=4))
 st5 = a5.run("json rotto")
 check("JSON malformato non crasha", st5.stopped_because == "risposta_finale", st5.stopped_because)
-check("argomento raw preservato", "_raw" in [m for m in st5.messages if m.role=="tool"][0].content)
+r5 = [m for m in st5.messages if m.role == "tool"][0].content
+check("JSON malformato: errore chiaro e tool non eseguito",
+      "JSON" in r5 and "non e' valido" in r5 and "_raw" not in r5, r5)
 
 # caso F: max_iterations
 class LoopForever(FakeProvider):

@@ -2302,7 +2302,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/nous/auth/start", "/api/chiavi",
                     "/api/provider", "/api/memoria/cerca",
                     "/api/memoria/aggiungi", "/api/memoria/elimina",
-                    "/api/memoria/modifica", "/api/progetto"):
+                    "/api/memoria/modifica", "/api/memoria/ottimizza",
+                    "/api/progetto"):
             s = self.app.session  # puo' essere None: non la usano
         else:
             s = self._need_session()
@@ -2540,23 +2541,35 @@ class Handler(BaseHTTPRequestHandler):
             # datalist) e quanti fatti ne ha: e' quello che il campo
             # mostra sotto, e senza l'utente non sa se il progetto
             # esiste davvero o e' solo una parola.
-            nome = str((body.get("progetto") or "")).strip()
-            try:
-                from . import progetti as _pr
-                if nome and not _pr.percorso_di(nome):
-                    return self._json({"error":
-                                       f"progetto sconosciuto: {nome}"}, 400)
-            except Exception as e:  # noqa: BLE001
-                return self._json({"error": str(e)}, 400)
+            # Lettura vs scrittura: una POST senza la chiave "progetto"
+            # (il frontend la manda vuota per rileggere lo stato) NON
+            # deve cambiare il progetto attivo. Se la trattassimo come
+            # "progetto = ''" azzereremmo il progetto a ogni refresh
+            # della sidebar — ed e' esattamente il bug che faceva restare
+            # la sidebar su "nessun progetto" anche dopo il riconoscimento
+            # automatico.
+            scrive = "progetto" in body and body.get("progetto") is not None
+            if scrive:
+                nome = str((body.get("progetto") or "")).strip()
+                try:
+                    from . import progetti as _pr
+                    if nome and not _pr.percorso_di(nome):
+                        return self._json({"error":
+                                           f"progetto sconosciuto: {nome}"}, 400)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"error": str(e)}, 400)
+            else:
+                nome = self.app._progetto_attivo()
             if self.app.session is None:
                 return self._json({"error": "nessuna sessione"}, 409)
-            try:
-                self.app.session.imposta_progetto(nome)
-                if nome:
-                    from . import progetti as _pr
-                    _pr.tocca(nome)
-            except Exception as e:  # noqa: BLE001
-                return self._json({"error": str(e)}, 400)
+            if scrive:
+                try:
+                    self.app.session.imposta_progetto(nome)
+                    if nome:
+                        from . import progetti as _pr
+                        _pr.tocca(nome)
+                except Exception as e:  # noqa: BLE001
+                    return self._json({"error": str(e)}, 400)
             n_fatti = 0
             try:
                 from .memoria import memoria
@@ -2596,6 +2609,31 @@ class Handler(BaseHTTPRequestHandler):
             tolto = memoria().elimina(fatto)
             from .memoria import stato as stato_memoria
             self._json({"ok": True, "tolto": tolto, **stato_memoria()})
+
+        elif path == "/api/memoria/ottimizza":
+            dry_run = body.get("dry_run", True)
+            giorni = int(body.get("giorni_grazia") or 30)
+            progetto = (body.get("progetto")
+                        or getattr(self.app.session, "progetto", "") or "").strip()
+            unisci = bool(body.get("unisci", False))
+            from .tools.memoria import memoria as mem
+            m = mem()
+            ott = getattr(m, "ottimizza_memoria", None)
+            if not callable(ott):
+                self._json({"error": "indice non disponibile"}, 400)
+                return
+            provider = None
+            if unisci:
+                try:
+                    provider = getattr(self.app.session.agent, "provider", None)
+                except Exception:
+                    provider = None
+            res = ott(provider=provider, dry_run=bool(dry_run),
+                      giorni_grazia=giorni, progetto=progetto,
+                      unisci=unisci and provider is not None)
+            from .memoria import stato as stato_memoria
+            res.update(stato_memoria())
+            self._json(res)
 
         elif path == "/api/progetti/registra":
             self._json(self.app._api_progetti_registra(body))

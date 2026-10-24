@@ -682,7 +682,19 @@ class Agent:
                     # ce n'e' piu' di uno con lo stesso nome.
                     self._emit("tool_start", name=tc.name, args=args, id=tc.id)
 
-                    result, ok = self._execute_tool(tc.name, args)
+                    if tc.args_non_validi():
+                        # JSON rotto: NON eseguire. Eseguire con `{}`
+                        # sarebbe peggio che non eseguire (write_file
+                        # riscriverebbe il file vuoto), e eseguire con
+                        # gli argomenti grezzi darebbe un TypeError che
+                        # non dice nulla al modello.
+                        result = (
+                            f"ERRORE DI ARGOMENTI per '{tc.name}': il JSON "
+                            f"degli argomenti non e' valido. "
+                            f"Inizio: {str(tc.arguments)[:120]!r}")
+                        ok = False
+                    else:
+                        result, ok = self._execute_tool(tc.name, args)
 
                     # il conteggio errori si azzera SOLO su un tool riuscito.
                     # Azzerarlo sempre — come faceva prima — rendeva il

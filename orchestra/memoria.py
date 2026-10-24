@@ -245,6 +245,11 @@ class Memoria:
             self._cache = testo
             self._ultimo_mtime = os.path.getmtime(self.percorso)
             self._ultima_lettura = time.time()
+            # Il file è cambiato: il set anti-duplicato e la cache dei fatti
+            # non sono più veri. Senza questo, un fatto appena cancellato
+            # resta "già visto" e non si può più riaggiungere.
+            self._visti = None
+            self._cache_fatti_chiave = None
 
     def aggiungi(self, fatto: str, origine: str = "",
                  importante: bool = False, progetto: str = "") -> bool:
@@ -322,25 +327,25 @@ class Memoria:
             testo = self.leggi()
         if sezione not in testo:
             return []
-        parti = testo.split(sezione, 1)[1]
-        # la sezione finisce alla prossima intestazione di livello 2
-        for altra in ("\n## ",):
-            i = parti.find(altra)
-            if i >= 0:
-                parti = parti[:i]
+        righe = testo.splitlines()
         fuori = []
-        for riga in parti.splitlines():
-            r = riga.strip()
-            if not r.startswith("-"):
+        visti: set[str] = set()
+        i = 0
+        n = len(righe)
+        while i < n:
+            if righe[i].strip() == sezione:
+                i += 1
+                while i < n and not righe[i].strip().startswith("## "):
+                    r = righe[i].strip()
+                    if r.startswith("-"):
+                        corpo = r.lstrip("-").strip()
+                        corpo = _pulizia_riga(corpo)[0]
+                        if corpo and corpo not in visti:
+                            visti.add(corpo)
+                            fuori.append(corpo)
+                    i += 1
                 continue
-            corpo = r.lstrip("-").strip()
-            # stessa pulizia di `fatti()`: se le due regole divergono,
-            # un fatto importante finisce col testo comprensivo di
-            # marcatori e gli altri no — e il modello vede due lingue
-            # diverse per lo stesso archivio.
-            corpo = _pulizia_riga(corpo)[0]
-            if corpo:
-                fuori.append(corpo)
+            i += 1
         return fuori
 
     def elimina(self, fatto: str) -> bool:
@@ -494,6 +499,22 @@ class Memoria:
             if prog:
                 visti[prog] = visti.get(prog, 0) + 1
         return sorted(visti)
+
+
+    def ottimizza_memoria(self, *args, **kwargs) -> dict:
+        """Delega all'ottimizzatore dell'indice FTS5, se disponibile."""
+        try:
+            from .memoria_indice import ottimizza_memoria as _opt
+            return _opt(*args, **kwargs)
+        except Exception as e:
+            return {"dry_run": kwargs.get("dry_run", True), "errore": str(e),
+                    "rimossi": 0, "cancellati": 0, "potati": 0, "uniti": 0,
+                    "fusi": 0, "fatti_prima": 0, "fatti_dopo": 0, "candidati": []}
+
+    ottimizza = ottimizza_memoria
+    optimize_memory = ottimizza_memoria
+    potatura_memoria = ottimizza_memoria
+    potatura = ottimizza_memoria
 
 
 # -- registro dei backend --------------------------------------------------
@@ -695,3 +716,25 @@ def carica_config(percorso: str | None = None) -> None:
             imposta_backend(nome)
     except (OSError, ValueError):
         pass
+
+
+def ottimizza_memoria(*args, **kwargs) -> dict:
+    """Potatura della memoria. Delega all'indice FTS5 se disponibile.
+
+    Il backend a file non ha contatori d'uso: senza indice non c'e' niente da
+    ottimizzare, e si torna un risultato vuoto invece di un errore.
+    """
+    try:
+        from .memoria_indice import ottimizza_memoria as _opt
+        return _opt(*args, **kwargs)
+    except Exception as e:
+        return {"dry_run": kwargs.get("dry_run", True), "errore": str(e),
+                "rimossi": 0, "cancellati": 0, "potati": 0, "uniti": 0,
+                "fusi": 0, "fatti_prima": 0, "fatti_dopo": 0, "candidati": []}
+
+
+ottimizza = ottimizza_memoria
+optimize_memory = ottimizza_memoria
+potatura_memoria = ottimizza_memoria
+potatura = ottimizza_memoria
+

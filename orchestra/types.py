@@ -19,6 +19,27 @@ from typing import Any, Literal, Callable, Awaitable
 Role = Literal["system", "user", "assistant", "tool"]
 
 
+def _args_validi(arguments: str) -> str:
+    """Gli argomenti di un tool call, gia' come stringa JSON valida.
+
+    Un provider OpenAI-compatibile rifiuta l'intera richiesta se un
+    `tool_calls[].function.arguments` non e' un oggetto JSON valido: il
+    sintomo e' un 400 al giro successivo, con l'errore che parla di
+    "must be a valid JSON object string". Un modello che taglia a meta'
+    una chiamata lascia una stringa rotta, e se la rispedissimo com'e'
+    la conversazione non ripartirebbe mai piu'. Qui si mette `{}` al
+    posto della stringa rotta: la chiamata fallisce in modo pulito, il
+    tool riceve un errore e il modello puo' riprovare.
+    """
+    if not arguments:
+        return "{}"
+    try:
+        data = json.loads(arguments)
+    except json.JSONDecodeError:
+        return "{}"
+    return arguments if isinstance(data, dict) else "{}"
+
+
 @dataclass
 class ToolCall:
     """Una richiesta di esecuzione tool emessa dal modello."""
@@ -27,15 +48,37 @@ class ToolCall:
     name: str
     arguments: str  # stringa JSON grezza, come la restituisce il provider
 
+    def args_non_validi(self) -> bool:
+        """True se gli argomenti non sono un oggetto JSON valido.
+
+        Un modello a volte taglia a meta' o produce un JSON rotto. Se
+        questi argomenti venissero passati al tool, il tool riceverebbe
+        una chiave inesistente e risponderebbe con un TypeError inutile;
+        e se venissero rispediti al provider, esso risponderebbe 400.
+        """
+        if not self.arguments:
+            return False
+        try:
+            return not isinstance(json.loads(self.arguments), dict)
+        except json.JSONDecodeError:
+            return True
+
     def parsed_args(self) -> dict[str, Any]:
-        """Tollerante: se il provider ha restituito JSON malformato non crashiamo."""
+        """Tollerante: se il provider ha restituito JSON malformato non crashiamo.
+
+        Ritorna un dizionario VUOTO in quel caso, mai una chiave inventata:
+        una chiave `_raw` finirebbe come keyword argument del tool e il
+        tool risponderebbe `unexpected keyword argument '_raw'`, che non
+        dice nulla al modello. La segnalazione degli argomenti rotti sta
+        in `args_non_validi` e viene fatta prima di eseguire.
+        """
         if not self.arguments:
             return {}
         try:
             data = json.loads(self.arguments)
         except json.JSONDecodeError:
-            return {"_raw": self.arguments}
-        return data if isinstance(data, dict) else {"_raw": data}
+            return {}
+        return data if isinstance(data, dict) else {}
 
 
 @dataclass
@@ -93,7 +136,8 @@ class Message:
                 {
                     "id": tc.id,
                     "type": "function",
-                    "function": {"name": tc.name, "arguments": tc.arguments},
+                    "function": {"name": tc.name,
+                                 "arguments": _args_validi(tc.arguments)},
                 }
                 for tc in self.tool_calls
             ]
