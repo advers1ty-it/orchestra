@@ -129,7 +129,11 @@ CHIUDONO_P = {"p", "div", "ul", "ol", "table", "section", "h1", "h2",
 
 
 class Albero(HTMLParser):
-    """La catena dei genitori, con le stesse regole del browser."""
+    """La catena dei genitori, con le stesse regole del browser.
+
+    Ogni antenato e' etichettato `tag#id` (o solo `tag`): serve a
+    riconoscere i contenitori NASCOSTI per nome, non solo per tag.
+    """
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -137,17 +141,22 @@ class Albero(HTMLParser):
         self.genitori = {}
         self.orfani = []
 
+    @staticmethod
+    def _etichetta(voce):
+        tag, _id, _classe = voce
+        return f"{tag}#{_id}" if _id else tag
+
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         if tag in CHIUDONO_P and self.pila and self.pila[-1][0] == "p":
             self.pila.pop()
         if tag in VUOTI:
             if a.get("id"):
-                self.genitori[a["id"]] = [t for t, _, _ in self.pila]
+                self.genitori[a["id"]] = [self._etichetta(v) for v in self.pila]
             return
         self.pila.append((tag, a.get("id"), a.get("class", "")))
         if a.get("id"):
-            self.genitori[a["id"]] = [t for t, _, _ in self.pila[:-1]]
+            self.genitori[a["id"]] = [self._etichetta(v) for v in self.pila[:-1]]
 
     def handle_endtag(self, tag):
         if tag in VUOTI:
@@ -182,14 +191,20 @@ for _id in PRIMO_LIVELLO:
           catena is not None and catena and catena[-1] == "body",
           f"genitori: {catena}")
 
-# E il caso generale: nessun blocco di primo livello puo' finire dentro
-# un elemento che nasconde tutto.
-NASCOSTI = {"onboard", "onboard-details"}
+# E il caso generale, che non dipende dalla lista di sopra: nessun
+# elemento puo' finire dentro un contenitore che nasconde tutto. E' il
+# difetto vero — non "questi sei id", ma "chiunque stia li' dentro
+# sparisce senza un errore".
+NASCOSTI = ("div#onboard", "div#onboard-details")
+dentro_nascosto = {}
 for _id, _catena in albero.genitori.items():
+    if _id.startswith("onboard"):
+        continue        # gli elementi dell'onboarding stanno li' per mestiere
     dentro = [t for t in _catena if t in NASCOSTI]
     if dentro:
-        check(f"#{_id} non sta dentro un contenitore nascosto", False,
-              f"dentro {dentro}")
+        dentro_nascosto[_id] = dentro
+check("nessun elemento estraneo sta dentro un contenitore nascosto",
+      not dentro_nascosto, str(dentro_nascosto))
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

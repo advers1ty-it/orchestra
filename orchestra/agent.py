@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import traceback
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -98,6 +99,55 @@ class AgentState:
     steer_queue: list[str] = field(default_factory=list)
     steer_count: int = 0
     steer_max: int = 5
+
+
+# ------------------------------------------------------ annuncio a vuoto
+#
+# Il vocabolario del nudge anti-bocca-vuota. Sta qui, fuori dalla classe,
+# perche' e' un dato: si legge e si corregge senza toccare la logica.
+#
+# Perche' e' cosi' largo: ogni forma mancante e' un turno in cui il
+# modello promette e chiude, e l'utente vede "risponde a caso". E'
+# successo con "Faccio le modifiche vere ora" e "Prima indago il modal
+# tracce" — due frasi normali, e nessuna delle due era in elenco.
+
+# Verbi d'azione in prima persona che aprono il testo.
+_ANNUNCI_IN_TESTA = (
+    "analizz", "valuterò", "valutero", "iniziamo", "procedo",
+    "esaminerò", "esaminero", "controllo", "verifico il",
+    "leggo il", "esplor", "occupo la sessione", "mi occupo",
+    "cerco", "eseguo", "ecco il piano",
+    # le forme che Beam usa davvero
+    "indago", "indagherò", "indaghero", "comincio", "inizio",
+    "passo a", "mi metto", "vado a", "diamo un'occhiata",
+    "torno con", "guardo il", "apro il", "provo a", "lancio",
+)
+
+# Verbi d'azione in prima persona, ovunque nel testo (presente o futuro).
+# Con \b, o "ancora" conterebbe come "ora".
+_AZIONI = re.compile(
+    r"\b(faccio|farò|faro|indago|indagherò|indaghero|comincio|inizio|"
+    r"passo a|mi metto|vado a|modifico|modificherò|modifichero|sistemo|"
+    r"sistemerò|sistemero|correggo|correggerò|correggero|aggiungo|"
+    r"aggiungerò|aggiorno|aggiornerò|applico|applicherò|creo|creerò|"
+    r"scrivo|scriverò|leggo|leggerò|controllo|controllerò|verifico|"
+    r"verificherò|eseguo|eseguirò|provo|proverò|apro|aprirò|lancio|"
+    r"lancerò|guardo|guarderò|analizzo|analizzerò|esamino|esaminerò|"
+    r"esploro|esplorerò|procedo|mi occupo|torno con)\b"
+)
+
+# Marcatori di tempo: la promessa e' "adesso/ora/poi", non un risultato.
+_TEMPO = re.compile(
+    r"\b(ora|adesso|subito|prima|poi|dopo|step by step|a breve|"
+    r"in questo momento|a seguire)\b"
+)
+
+# Promesse che il tempo non ce l'hanno: da sole bastano.
+_PROMESSE = (
+    "sto per", "provvedo", "mi metto", "vado a", "comincio",
+    "inizio a", "passo a", "ecco il piano", "diamo un'occhiata",
+    "torno con",
+)
 
 
 class Agent:
@@ -846,49 +896,60 @@ class Agent:
 
         Distingue "analizzo il progetto e ti dico" (bocca vuota) da "ecco
         la valutazione, punto 1..." (risposta vera). Euristiche dichiarate,
-        non magia: cerca il verbo all'inizio con un ANCORAGGIO, così
-        "Punto 1: devo verificare" NON scatta — là il verbo è a metà e c'è
-        contenuto. Sottile per costruzione: meglio un falso negativo (il
-        modello parla a vuoto una volta) che un falso positivo (Orchestra
-        interrompe una risposta vera perché conteneva la parola
-        "analizzo").
+        non magia.
+
+        Il difetto che questa lista ha gia' pagato: un modello che chiude
+        con "Faccio le modifiche vere ora. Prima indago il modal tracce."
+        non veniva riconosciuto — "faccio" e "indago" non erano in elenco —
+        quindi il nudge non partiva e l'annuncio passava per risposta
+        finale. Osservato su Beam 1.0: sette turni di fila a una
+        iterazione, zero tool, esito "risposta_finale". Per l'utente il
+        sintomo era "risponde a caso", e il modello stava solo promettendo.
+
+        Tre strade, dalla piu' forte alla piu' debole:
+        1. verbo d'azione in testa, con l'ANCORAGGIO: cosi' "Punto 1: devo
+           verificare" NON scatta — la' il verbo e' a meta' e c'e'
+           contenuto;
+        2. verbo d'azione + marcatore di tempo ("faccio ... adesso",
+           "indago ... poi"): la promessa a meta' frase. Servono ENTRAMBI,
+           o "faccio notare che il file non esiste" (risposta vera) verrebbe
+           preso per un annuncio;
+        3. forme di promessa che non hanno bisogno del tempo ("sto per",
+           "provvedo", "mi metto").
+
+        Il testo deve restare corto e piano: una risposta vera e' lunga o
+        strutturata. E un verbo negato ("non faccio nulla ora") non e' una
+        promessa. Resta il compromesso dichiarato: meglio un falso negativo
+        (il modello parla a vuoto una volta) che un falso positivo
+        (Orchestra interrompe una risposta vera perche' conteneva
+        "analizzo") — ma i falsi negativi si sono visti costare un turno
+        intero di lavoro mai fatto, quindi l'elenco e' largo.
         """
         if not testo:
             return False
         t = testo.strip()
-        # corta e con verbo annuncia in testa -> bocca vuota. Lunga o con
-        # sostanza -> vera risposta, anche se contiene "analizzo".
-        ANNUNCI = (
-            "analizz", "valuterò", "valutero", "iniziamo", "procedo",
-            "esaminerò", "esaminero", "controllo", "verifico il",
-            "leggo il", "esplor", "occupo la sessione", "mi occupo",
-            "cerco", "eseguo", "ecco il piano",
-        )
-        testa = t[:40].lower()
-        if any(a in testa for a in ANNUNCI):
-            pass
-        else:
-            # Promessa di lavoro futuro a meta' frase ("ho il quadro, ora
-            # applico...", "provvedo subito"): il verbo non e' in testa ma
-            # il turno chiude lo stesso senza aver fatto niente. Si cerca
-            # nei primi 160 caratteri dei testi corti: una risposta vera e'
-            # piu' lunga o non promette azioni.
-            corpo = t[:160].lower()
-            if not (len(t) <= 220 and t.count("\n") < 3 and (
-                    any("ora " + v in corpo for v in (
-                        "applico", "applicare", "procedo", "modifico",
-                        "aggiorno", "sistemo", "correggo", "aggiungo",
-                        "creo", "scrivo", "leggo", "controllo", "verifico",
-                        "esamino", "inizio"))
-                    or any(p in corpo for p in (
-                        "sto per", "provvedo", "applico", "modifico",
-                        "aggiorno", "sistemo", "correggo", "aggiungo",
-                        "creo", "scrivo")))):
-                return False
-        # se è lunga e ha struttura (elenchi, più righe), è una risposta
+        # Lunga o con struttura (elenchi, piu' righe): e' una risposta,
+        # anche se contiene "analizzo".
         if len(t) > 220 or t.count("\n") >= 3:
             return False
-        return True
+        basso = t.lower()
+
+        # 1. verbo d'azione in testa.
+        testa = basso[:40]
+        if any(a in testa for a in _ANNUNCI_IN_TESTA):
+            return True
+
+        # 2. promessa a meta' frase: verbo d'azione E marcatore di tempo.
+        corpo = basso[:200]
+        if _TEMPO.search(corpo):
+            for m in _AZIONI.finditer(corpo):
+                prima = corpo[max(0, m.start() - 6):m.start()]
+                if prima.endswith("non "):
+                    continue      # "non faccio nulla ora": non promette
+                return True
+
+        # 3. promesse esplicite, che il tempo non ce l'hanno.
+        return any(p in corpo for p in _PROMESSE)
 
     def _call_model_with_retry(self) -> LLMResponse:
             """Retry sui soli errori transitori (429/5xx/rete) con fallback chain.

@@ -47,6 +47,11 @@ SUITES = [
     # quando finiscono nel payload, la richiesta va in 400 e il modello
     # non si riprende mai. Copre che OGNI messaggio tool ha un id.
     ("nous-tool-call-id", "test_nous_tool_call_id.py", True),
+    # Il nudge anti-bocca-vuota: il modello che annuncia il lavoro e chiude
+    # senza farlo. Il vocabolario non riconosceva "Faccio le modifiche vere
+    # ora" ne' "Prima indago": sette turni di fila a una iterazione, zero
+    # tool, esito "risposta_finale". Per l'utente era "risponde a caso".
+    ("annuncio-bocca-vuota", "test_annuncio_bocca_vuota.py", True),
     # La memoria che impara da sola. Era il pezzo mancante: l'estrazione
     # dei fatti esisteva ma nessuno la chiamava, e senza un test che
     # copre il "chiama il provider e mette in memoria" il difetto
