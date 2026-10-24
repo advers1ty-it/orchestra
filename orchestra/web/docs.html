@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orchestra — Documentazione 0.5.0</title>
+<title>Orchestra — Documentazione 0.5.38</title>
 <style>
   :root {
     --bg: #0c1018;
@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>Orchestra — Documentazione</h1>
-  <div class="sub">Versione 0.5.0 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
+  <div class="sub">Versione 0.5.38 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
   <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica docs</a></div>
 </header>
 <div class="layout">
@@ -60,6 +60,7 @@
       <li><a href="#config">Configurazione</a></li>
       <li><a href="#modelli">Modelli & provider</a></li>
       <li><a href="#onboarding">Onboarding web</a></li>
+      <li><a href="#progetti">Progetti</a></li>
       <li><a href="#ui">Interfaccia web</a></li>
       <li><a href="#steer">Steer e Stop</a></li>
       <li><a href="#tooling">Tool & profili</a></li>
@@ -117,7 +118,18 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 <ul>
   <li>Pulsante header “Cosa fai?” riapre sempre (anche dopo “Salta”).</li>
   <li>Applicazione: profilo → scope → prompt draft → invio.</li>
+  <li>Scegliere una categoria e compilare i dettagli crea un vero goal (thread in background) e apre il pannello Obiettivo per seguire il progresso.</li>
   <li>Persistenza del flag salta via <code>localStorage</code>.</li>
+</ul>
+</section>
+
+<section id="progetti">
+<h2>Progetti</h2>
+<p>La sidebar ha un selettore “Progetto” che filtra memoria e cronologia per progetto. All'avvio Orchestra rileva il progetto attivo dalla directory di lavoro; il selettore si aggiorna automaticamente (refresh non azzera più il progetto attivo).</p>
+<ul>
+  <li>Aggiungi/gestisci progetti dal modal (pulsante nella sidebar): nome + directory.</li>
+  <li>Il progetto attivo determina quali fatti di memoria e conversazioni vengono considerati.</li>
+  <li>Persistenza in <code>ORCHESTRA_HOME/progetti.json</code>.</li>
 </ul>
 </section>
 
@@ -134,7 +146,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   </div>
   <div class="box">
     <h3>Goal bar</h3>
-    <p>Input obiettivo + avvia/stop + polling stato. Lista goals scrollabile.</p>
+    <p>Input obiettivo + Avvia/Prossimo/Stop. Le opzioni avanzate (profilo, kind, priorità, dipendenze, max iterazioni, criteri, recovery) sono collassate. All'avvio il pannello si apre da solo e fa polling ogni 2s; cliccando una riga si vede l'ultimo output e il gate (ok/bocciato/parziale/in attesa).</p>
   </div>
   <div class="box">
     <h3>Steer</h3>
@@ -180,7 +192,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   "skill": skill tools,
   "pieno": tutti i tool registrati
 }</code></pre>
-<p>Tool aggiunti: browser (<code>browser_apri</code>, <code>browser_render</code>, <code>browser_screenshot</code>), computer (<code>computer_screenshot</code>, <code>computer_click/type/open</code>), web, shell, memoria, skill, storico, goal via API/UI non tool.</p>
+<p>Tool aggiunti: browser (<code>browser_apri</code>, <code>browser_render</code>, <code>browser_screenshot</code>), computer (<code>computer_screenshot</code>, <code>computer_click/type/open</code>), web, shell, memoria, skill, storico, goal via API/UI non tool. <code>read_file</code> supporta <code>start_line</code>/<code>end_line</code> per intervalli precisi; <code>web_leggi</code> tronca alle prime N righe.</p>
 </section>
 
 <section id="delega">
@@ -243,6 +255,8 @@ POST /api/scheduler/stop</code></pre>
   <li>memoria ricercabile via tool (<code>memoria</code>), sezioni Importanti/Fatti, anti-duplicati.</li>
   <li>storico conversazioni persistente, search via tool (<code>storico_cerca</code>).</li>
   <li>non iniettata nel prompt: l’agente la cerca su richiesta.</li>
+  <li>Ottimizzatore: potatura dei fatti mai usati (dopo grace period), dedup case-insensitive, unione opzionale (richiede provider). Si avvia automaticamente ogni 20 turni e via tool/azione <code>ottimizza</code> (anche <code>dry_run</code>).</li>
+  <li>Indice FTS5 su SQLite: la ricerca non dipende dalla dimensione del file.</li>
 </ul>
 </section>
 
@@ -271,7 +285,7 @@ POST /api/scheduler/stop</code></pre>
   <li>tre scenari E2E reali (bugfix, sito, dati).</li>
   <li>credere all’errore del modello solo dopo aver controllato config/versione/endpoints.</li>
 </ol>
-<p><span class="badge">0.5.0</span> — Core in stdlib Python, packaging leggero.</p>
+<p><span class="badge">0.5.38</span> — Core in stdlib Python, packaging leggero.</p>
 </section>
 
 <section id="tester">
@@ -288,7 +302,7 @@ POST /api/scheduler/stop</code></pre>
   </main>
 </div>
 <footer>
-  Orchestra — versione 0.5.0 · docs servita da <code>/docs</code> · contiene screenshot path e output troncati quando richiesto.
+  Orchestra — versione 0.5.38 · docs servita da <code>/docs</code> · contiene screenshot path e output troncati quando richiesto.
 </footer>
 </body>
 </html>
