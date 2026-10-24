@@ -44,6 +44,7 @@ from .tools import SYSTEM_PROMPT, default_registry
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(HERE, ".env")
+REMOTE_STATE_PATH = os.path.join(HERE, ".remote_state.json")
 
 # Quanti minuti un catalogo puo' invecchiare prima di essere
 # ricaricato. Non e' un dettaglio: senza, un modello che esce
@@ -176,17 +177,17 @@ class OrchestraApp:
                                        # un benchmark fermo.
                                        "finiti": 0, "modelli": []}
 
-    def _token_remoto(self) -> str:
+    def _token_remoto(self, forza: bool = False) -> str:
         # Token per accesso remoto. Letto da .env; se manca e il modo
-        # remoto e' attivo, ne genero uno e lo salvo, poi lo stampo
-        # a console (serve all'utente per fare login dal telefono).
+        # remoto e' attivo (o forza=True, es. avvio da UI), ne genero uno
+        # e lo salvo, poi lo stampo a console.
         tok = (self.env.get("ORCHESTRA_REMOTE_TOKEN")
                or load_env(ENV_PATH).get("ORCHESTRA_REMOTE_TOKEN")
                or "").strip()
         if tok:
             self.env["ORCHESTRA_REMOTE_TOKEN"] = tok
             return tok
-        if not self.remoto_attivo:
+        if not (self.remoto_attivo or forza):
             return ""
         import secrets
         tok = secrets.token_urlsafe(24)
@@ -1422,6 +1423,164 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             "lan_url": lan_url,
         }
 
+    def _porta_libera(self) -> int:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    def _leggi_stato_remoto(self) -> dict[str, Any]:
+        try:
+            with open(REMOTE_STATE_PATH, "r", encoding="utf-8") as f:
+                return json.loads(f.read())
+        except (OSError, ValueError):
+            return {}
+
+    def _scrivi_stato_remoto(self, stato: dict[str, Any]) -> None:
+        try:
+            with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as f:
+                json.dump(stato, f)
+        except OSError:
+            pass
+
+    def _pid_vivo(self, pid: int) -> bool:
+        if not pid:
+            return False
+        try:
+            import os as _os
+            _os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
+    def _api_remote_status(self, corpo: dict[str, Any]) -> dict[str, Any]:
+        stato = self._leggi_stato_remoto()
+        pid = int(stato.get("pid") or 0)
+        vivo = self._pid_vivo(pid)
+        if stato and not vivo:
+            try:
+                os.remove(REMOTE_STATE_PATH)
+            except OSError:
+                pass
+            stato = {}
+        # anche il server corrente se e' remoto
+        app = self.app
+        if getattr(app, "remoto_attivo", False) and not stato:
+            info = self._info_remoto()
+            stato = {
+                "pid": os.getpid(),
+                "port": getattr(app, "porta", 8737) or 8737,
+                "url": info.get("lan_url") or "",
+                "tunnel_url": info.get("tunnel_url") or "",
+                "token": info.get("token") or "",
+                "mode": "remote",
+                "self": True,
+            }
+        return {"ok": True, "stato": stato, "vivo": bool(stato)}
+
+    def _api_remote_start(self, corpo: dict[str, Any]) -> dict[str, Any]:
+        mode = str(corpo.get("mode") or "remote").strip().lower()
+        if mode not in ("remote", "tunnel"):
+            mode = "remote"
+        # genera token se manca
+        app = self.app
+        if not (app.token_remoto or ""):
+            app.token_remoto = app._token_remoto(forza=True)
+        token = app.token_remoto or ""
+        if not token:
+            return {"ok": False, "errore": "impossibile generare il token"}
+        # se gia' attivo, ritorna stato
+        stato = self._leggi_stato_remoto()
+        pid = int(stato.get("pid") or 0)
+        if pid and self._pid_vivo(pid):
+            return {"ok": True, "gia_attivo": True, "stato": stato}
+        porta = self._porta_libera()
+        # comando
+        import sys as _sys
+        cmd = [_sys.executable, "-m", "orchestra.cli", "web",
+               "--host", "0.0.0.0", "--port", str(porta),
+               "--no-browser"]
+        if mode == "tunnel":
+            cmd.append("--tunnel")
+        else:
+            cmd.append("--remote")
+        # persisti token in env del subprocess tramite .env (gia' scritto)
+        try:
+            import subprocess
+            log_path = os.path.join(HERE, ".remote.log")
+            lf = open(log_path, "a", encoding="utf-8")
+            flags = 0
+            if os.name == "nt":
+                flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(cmd, stdout=lf, stderr=lf,
+                                    creationflags=flags, close_fds=True)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "errore": str(e)}
+        # attendi che il server sia pronto (poll stato file o porta)
+        import time as _t
+        import urllib.request
+        url = f"http://127.0.0.1:{porta}"
+        pronto = False
+        for _ in range(40):
+            _t.sleep(0.5)
+            try:
+                with urllib.request.urlopen(url + "/api/remote/info" if False else url + "/", timeout=1) as r:
+                    if r.status < 500:
+                        pronto = True
+                        break
+            except Exception:
+                pass
+        # leggi tunnel_url dallo stato file (scritto dal subprocess se tunnel)
+        tunnel_url = ""
+        for _ in range(10):
+            st = self._leggi_stato_remoto()
+            if st.get("pid") == proc.pid or st.get("port") == porta:
+                tunnel_url = st.get("tunnel_url") or ""
+                if tunnel_url or mode != "tunnel":
+                    break
+            _t.sleep(0.5)
+        stato = {
+            "pid": proc.pid,
+            "port": porta,
+            "url": f"http://{self._ip_lan()}:{porta}",
+            "tunnel_url": tunnel_url,
+            "token": token,
+            "mode": mode,
+        }
+        self._scrivi_stato_remoto(stato)
+        return {"ok": True, "stato": stato}
+
+    def _api_remote_stop(self, corpo: dict[str, Any]) -> dict[str, Any]:
+        stato = self._leggi_stato_remoto()
+        pid = int(stato.get("pid") or 0)
+        if pid and pid != os.getpid():
+            try:
+                if os.name == "nt":
+                    import subprocess
+                    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                                   capture_output=True)
+                else:
+                    import signal
+                    os.kill(pid, 9)
+            except Exception:
+                pass
+        try:
+            os.remove(REMOTE_STATE_PATH)
+        except OSError:
+            pass
+        return {"ok": True}
+
+    def _ip_lan(self) -> str:
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
     def _body(self, *, per_allegato: bool = False) -> dict[str, Any]:
         # Il tetto dipende da cosa arriva. Un prompt e' testo scritto e
         # 64KB sono gia' generosi; un allegato in base64 e' un terzo
@@ -1626,6 +1785,10 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             snap["provider"] = self.app.env.get("ORCHESTRA_PROVIDER", "")
             snap["remote"] = self._info_remoto()
             self._json(snap)
+        elif path == "/api/remote/info":
+            self._json(self._info_remoto())
+        elif path == "/api/remote/status":
+            self._json(self._api_remote_status({}))
         elif path == "/api/tracce":
             # Le tracce recenti: la diagnosi dopo il fatto. "Perché quel
             # task ha sbagliato" senza doverlo ripetere.
@@ -2457,7 +2620,9 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                     "/api/provider", "/api/memoria/cerca",
                     "/api/memoria/aggiungi", "/api/memoria/elimina",
                     "/api/memoria/modifica", "/api/memoria/ottimizza",
-                    "/api/progetto"):
+                    "/api/progetto", "/api/remote/start",
+                    "/api/remote/stop", "/api/remote/status",
+                    "/api/remote/info"):
             s = self.app.session  # puo' essere None: non la usano
         else:
             s = self._need_session()
@@ -2543,6 +2708,14 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             self._json({"ok": True})
         elif path == "/api/cancel":
             self._json({"ok": s.cancel()})
+        elif path == "/api/remote/start":
+            self._json(self._api_remote_start(body))
+        elif path == "/api/remote/stop":
+            self._json(self._api_remote_stop(body))
+        elif path == "/api/remote/status":
+            self._json(self._api_remote_status(body))
+        elif path == "/api/remote/info":
+            self._json(self._info_remoto())
         elif path == "/api/storico":
             # Elenco delle conversazioni. Solo GET: la lista si scrive
             # da sola a fine turno, non c'e' niente da mandare.
@@ -3789,6 +3962,18 @@ def _avvia_tunnel(port: int, app: Any) -> None:
                     url = m.group(0)
                     app.tunnel_url = url
                     print(f"\n  Tunnel pubblico: {url}\n", flush=True)
+                    # aggiorna il file stato condiviso col processo padre
+                    try:
+                        import json as _json
+                        st = {}
+                        if os.path.isfile(REMOTE_STATE_PATH):
+                            with open(REMOTE_STATE_PATH, encoding="utf-8") as _f:
+                                st = _json.loads(_f.read())
+                        st["tunnel_url"] = url
+                        with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as _f:
+                            _json.dump(st, _f)
+                    except Exception:
+                        pass
                     # QR code via servizio esterno (stampa URL)
                     print(f"  Apri sul telefono: {url}\n", flush=True)
             proc.wait()
@@ -3821,12 +4006,33 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
     if remoto_attivo and app.token_remoto:
         print(f"\n  Token di accesso remoto: {app.token_remoto}\n", flush=True)
 
+    # stato remoto condiviso con il processo padre
+    if remoto_attivo:
+        try:
+            import json as _json
+            _stato = {"pid": os.getpid(), "port": port,
+                      "url": f"http://{host}:{port}", "tunnel_url": "",
+                      "token": app.token_remoto or "",
+                      "mode": "tunnel" if tunnel else "remote"}
+            with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as _f:
+                _json.dump(_stato, _f)
+        except Exception:
+            pass
+
     httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.daemon_threads = True
 
     # tunnel opzionale
     if tunnel:
         _avvia_tunnel(port, app)
+        if remoto_attivo:
+            try:
+                import json as _json
+                _stato["tunnel_url"] = getattr(app, "tunnel_url", "") or ""
+                with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as _f:
+                    _json.dump(_stato, _f)
+            except Exception:
+                pass
 
     url = f"http://{host}:{port}"
     print(f"\n  Orchestra {__version__}  ->  {url}\n")
@@ -3848,6 +4054,13 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
     finally:
         httpd.shutdown()
         httpd.server_close()
+        if remoto_attivo:
+            try:
+                st = json.loads(open(REMOTE_STATE_PATH, encoding="utf-8").read())
+                if st.get("pid") == os.getpid():
+                    os.remove(REMOTE_STATE_PATH)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

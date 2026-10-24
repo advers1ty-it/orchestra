@@ -263,6 +263,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   <li>Sul telefono apri l'URL e inserisci il token nella pagina di login. La sessione resta valida (cookie).</li>
   <li>In alternativa, senza tunnel: una VPN privata (es. Tailscale) tra PC e telefono, poi <code>orchestra web --remote</code> e apri <code>http://&lt;ip-tailscale-del-pc&gt;:8737</code>.</li>
   <li>Sicurezza: il token protegge tutte le rotte. In locale (127.0.0.1) l'accesso resta libero come prima. Le chiavi API non lasciano il PC.</li>
+  <li>Puoi anche avviare il server remoto direttamente dall'interfaccia: scheda Opzioni → Remoto → "Avvia remoto (LAN)" oppure "Avvia tunnel (pubblico)". Non serve aprire il terminale: il pulsante lancia un secondo server in background e mostra URL + QR code. "Ferma" lo spegne.</li>
   <li>Nella scheda Opzioni → Remoto vedi token, URL e un QR code da scansionare.</li>
 </ul>
 </section>

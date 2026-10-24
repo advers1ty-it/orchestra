@@ -426,7 +426,13 @@
             <p class="small">URL da aprire sul telefono:</p>
             <div id="remoto-url" style="margin-bottom:8px"></div>
             <div id="remoto-qr" style="text-align:center;margin:8px 0"></div>
-            <p class="small dim">Avvia con <code>orchestra web --remote</code> (LAN) oppure <code>--tunnel</code> (URL pubblico). Il token resta sul tuo PC.</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+              <button id="remoto-avvia" class="primary">Avvia remoto (LAN)</button>
+              <button id="remoto-tunnel" class="primary">Avvia tunnel (pubblico)</button>
+              <button id="remoto-ferma" class="ghost">Ferma</button>
+            </div>
+            <p id="remoto-stato" class="small dim"></p>
+            <p class="small dim">Avvia qui il server remoto: non serve il terminale. Il token resta sul tuo PC.</p>
           </div>
         </section>
 

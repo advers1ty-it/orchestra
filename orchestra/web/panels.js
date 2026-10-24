@@ -2343,27 +2343,30 @@ function mostraSezione(nome) {
 }
 
 function caricaRemoto() {
-  fetch("/api/state").then(r => r.json()).then(s => {
-    const rem = s.remote || {};
-    const stato = document.getElementById("remoto-stato");
-    const corpo = document.getElementById("remoto-corpo");
-    if (!rem.attivo) {
-      stato.textContent = "Accesso remoto disattivato. Avvia con: orchestra web --remote (o --tunnel).";
+  const stato = document.getElementById("remoto-stato");
+  const corpo = document.getElementById("remoto-corpo");
+  // info del server corrente (token)
+  fetch("/api/remote/info").then(r => r.json()).then(info => {
+    const tok = info.token || "";
+    document.getElementById("remoto-token").textContent = tok || "(nessun token - avvia remoto per generarne uno)";
+    const copia = document.getElementById("remoto-copia-token");
+    if (copia) copia.onclick = () => { navigator.clipboard.writeText(tok); copia.textContent = "copiato"; setTimeout(()=>copia.textContent="Copia",1200); };
+  }).catch(() => {});
+  // stato del server remoto (lanciato da UI o CLI)
+  fetch("/api/remote/status").then(r => r.json()).then(res => {
+    const st = res.stato || {};
+    if (!res.vivo) {
+      stato.textContent = "Server remoto fermo. Premi 'Avvia remoto' o 'Avvia tunnel'.";
       corpo.classList.add("hidden");
       return;
     }
-    stato.textContent = "Accesso remoto attivo.";
+    stato.textContent = "Server remoto attivo (pid " + (st.pid||"") + ").";
     corpo.classList.remove("hidden");
-    const tok = rem.token || "";
-    document.getElementById("remoto-token").textContent = tok || "(nessun token)";
-    const copia = document.getElementById("remoto-copia-token");
-    if (copia) copia.onclick = () => { navigator.clipboard.writeText(tok); copia.textContent = "copiato"; setTimeout(()=>copia.textContent="Copia",1200); };
-    // URL
     const urlBox = document.getElementById("remoto-url");
     urlBox.innerHTML = "";
     const urls = [];
-    if (rem.tunnel_url) urls.push({label:"Tunnel pubblico", url:rem.tunnel_url});
-    if (rem.lan_url) urls.push({label:"Rete locale (LAN)", url:rem.lan_url});
+    if (st.tunnel_url) urls.push({label:"Tunnel pubblico", url:st.tunnel_url});
+    if (st.url) urls.push({label:"Rete locale (LAN)", url:st.url});
     for (const u of urls) {
       const div = document.createElement("div");
       div.style.marginBottom = "4px";
@@ -2373,10 +2376,9 @@ function caricaRemoto() {
       div.appendChild(a);
       urlBox.appendChild(div);
     }
-    // QR per il primo URL disponibile
     const qr = document.getElementById("remoto-qr");
     qr.innerHTML = "";
-    const target = (rem.tunnel_url || rem.lan_url || "");
+    const target = (st.tunnel_url || st.url || "");
     if (target) {
       const img = document.createElement("img");
       img.src = "https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=" + encodeURIComponent(target);
@@ -2389,9 +2391,41 @@ function caricaRemoto() {
       qr.appendChild(p);
     }
   }).catch(() => {
-    document.getElementById("remoto-stato").textContent = "Impossibile caricare lo stato.";
+    stato.textContent = "Impossibile caricare lo stato.";
   });
 }
+
+// pulsanti avvia/ferma
+(function wireRemotoBtns() {
+  const avvia = document.getElementById("remoto-avvia");
+  const tunnel = document.getElementById("remoto-tunnel");
+  const ferma = document.getElementById("remoto-ferma");
+  const stato = document.getElementById("remoto-stato");
+  async function start(mode) {
+    if (stato) stato.textContent = "Avvio in corso...";
+    try {
+      const r = await fetch("/api/remote/start", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({mode})});
+      const j = await r.json();
+      if (!j.ok) { if (stato) stato.textContent = "Errore: " + (j.errore||""); return; }
+      caricaRemoto();
+      // se tunnel, l'URL pubblico arriva dopo: fai polling
+      if (mode === "tunnel") {
+        let tries = 0;
+        const iv = setInterval(() => {
+          tries++;
+          caricaRemoto();
+          if (tries > 30) clearInterval(iv);
+        }, 2000);
+      }
+    } catch (e) { if (stato) stato.textContent = "Errore di rete."; }
+  }
+  if (avvia) avvia.addEventListener("click", () => start("remote"));
+  if (tunnel) tunnel.addEventListener("click", () => start("tunnel"));
+  if (ferma) ferma.addEventListener("click", async () => {
+    try { await fetch("/api/remote/stop", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"}); } catch(e){}
+    caricaRemoto();
+  });
+})();
 
 function collegaSezioni() {
   const tabs = document.querySelectorAll(".opzioni-tab");
