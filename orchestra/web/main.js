@@ -335,10 +335,17 @@ function inviaSteer() {
     body: JSON.stringify({ testo })
   }).then(r => r.json()).then(d => {
     if (!d.ok) alert(d.error || "Steer fallito");
+    else {
+      // Conferma visibile: l'utente deve sapere che la guida e' stata
+      // ricevuta e verrà letta al prossimo tool, non aspettare in silenzio.
+      const anteprima = testo.length > 80 ? testo.slice(0, 80) + "…" : testo;
+      addNote(`guida inviata: «${anteprima}» — verrà letta al prossimo tool`);
+    }
   });
   steerInput.focus();
 }
 if (steerSend) steerSend.onclick = inviaSteer;
+if (steerStop) steerStop.onclick = cancel;
 if (steerInput) steerInput.addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); inviaSteer(); }
 });

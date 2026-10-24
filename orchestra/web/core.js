@@ -34,7 +34,7 @@ const on = (el, evento, fn) => {
 };
 const log = $("log"), main = $("main"), input = $("input");
 const btnSend = $("btn-send"), btnStop = $("btn-stop");
-const steerBar = $("steer-bar"), steerInput = $("steer-input"), steerSend = $("steer-send");
+const steerBar = $("steer-bar"), steerInput = $("steer-input"), steerSend = $("steer-send"), steerStop = $("steer-stop");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
 const modelPick = $("model-pick");
 const reasoningPick = $("reasoning-pick");
@@ -142,6 +142,7 @@ function setBusy(v) {
   const chatForm = document.getElementById("chat-form");
   if (chatForm) chatForm.hidden = v;
   if (steerBar) steerBar.hidden = !v;
+  if (steerStop) steerStop.disabled = !v;
   if (steerInput && v) steerInput.focus();
   // Il bottone del modello segue il select: senza, durante un turno
   // resterebbe cliccabile mentre il select e' disabilitato, e si
@@ -739,6 +740,15 @@ function handle(kind, d) {
     case "cancel_requested":
       addNote("annullamento richiesto, il turno in corso finirà");
       break;
+    case "steer": {
+      // Conferma che la guida e' stata ricevuta e verra' letta al
+      // prossimo tool. Senza questa riga il messaggio restava in coda
+      // in silenzio e l'utente non sapeva se fosse arrivato.
+      const _t = String(d.testo || "");
+      const _anteprima = _t.length > 80 ? _t.slice(0, 80) + "…" : _t;
+      addNote(`guida ricevuta (#${d.count || "?"}): «${_anteprima}» — letta al prossimo tool`);
+      break;
+    }
     case "reset":
       log.innerHTML = "";
       stats.textContent = "—";
