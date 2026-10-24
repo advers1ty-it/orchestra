@@ -3331,6 +3331,8 @@ async function avviaDalDettaglio() {
     }
     // chiudi entrambi i backdrop
     chiudiOnboarding();
+    if (goalBar) { goalBar.hidden = false; goalPolling(); }
+    caricaGoal();
     // imposta il campo input con l'obiettivo e avvia
     const input = document.getElementById('input');
     if (input) { input.value = obiettivo; if (typeof autoGrow === 'function') autoGrow(); }
@@ -3683,7 +3685,9 @@ on("goal-start", "click", async () => {
     }
     goalSelezionato = d.id;
     if (goalInput) goalInput.value = "";
-    if (goalStatus) goalStatus.textContent = (corpo.kind === "piano" ? "piano creato: " : "avviato: ") + d.id;
+    if (goalBar) { goalBar.hidden = false; }
+    if (goalStatus) goalStatus.textContent = (corpo.kind === "piano" ? "piano creato: " : "avviato: ") + d.id + " — segui il progresso qui sotto";
+    goalPolling();
     caricaGoal();
   } catch (e) {
     if (goalStatus) goalStatus.textContent = "errore: " + e;
