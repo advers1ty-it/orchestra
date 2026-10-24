@@ -3703,23 +3703,77 @@ def _skill_cancella(indice, nome: str) -> bool:
     return True
 
 
+def _trova_cloudflared() -> str:
+    import shutil
+    cf = shutil.which("cloudflared")
+    if cf:
+        return cf
+    # posizioni comuni dopo installazione via winget/brew/apt
+    candidati = []
+    if sys.platform.startswith("win"):
+        bases = [os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"),
+                 os.environ.get("LOCALAPPDATA")]
+        # percorsi fissi: la shell di servizio (es. MSYS) non espone le
+        # variabili d'ambiente di Windows, ma il binario e' li'.
+        bases += [r"C:\Program Files", r"C:\Program Files (x86)",
+                  os.path.join(os.path.expanduser("~"), "AppData", "Local")]
+        for base in bases:
+            if not base:
+                continue
+            candidati.append(os.path.join(base, "cloudflared", "cloudflared.exe"))
+            candidati.append(os.path.join(base, "cloudflared.exe"))
+            candidati.append(os.path.join(base, "Microsoft", "WindowsApps", "cloudflared.exe"))
+    else:
+        for base in ("/usr/local/bin", "/usr/bin", "/opt/homebrew/bin"):
+            candidati.append(os.path.join(base, "cloudflared"))
+    for c in candidati:
+        if c and os.path.isfile(c):
+            return c
+    return ""
+
+
 def _avvia_tunnel(port: int, app: Any) -> None:
     import re
     import shutil
     import subprocess
     import threading
 
-    cf = shutil.which("cloudflared")
+    cf = _trova_cloudflared()
     if not cf:
-        print("  cloudflared non trovato. Per il tunnel automatico installa:",
-              file=sys.stderr)
-        print("    Windows: winget install Cloudflare.cloudflared", file=sys.stderr)
-        print("    macOS:   brew install cloudflared", file=sys.stderr)
-        print("    Linux:   https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/",
-              file=sys.stderr)
-        print("  In alternativa usa una VPN (es. Tailscale) e l'URL LAN qui sopra.",
-              file=sys.stderr)
-        return
+        # tentativo di installazione automatica (solo Windows con winget)
+        if sys.platform.startswith("win") and shutil.which("winget"):
+            if sys.stdin and sys.stdin.isatty():
+                print("  cloudflared non trovato. Posso installarlo ora con winget "
+                      "(Cloudflare.cloudflared).", file=sys.stderr)
+                risp = input("  Installo? [s/N] ").strip().lower()
+                if risp == "s":
+                    print("  Installazione in corso (puo' richiedere un minuto)...",
+                          file=sys.stderr, flush=True)
+                    try:
+                        subprocess.run(
+                            ["winget", "install", "--id", "Cloudflare.cloudflared",
+                             "-e", "--accept-package-agreements",
+                             "--accept-source-agreements", "--silent"],
+                            check=False,
+                        )
+                    except Exception as e:
+                        print(f"  installazione fallita: {e}", file=sys.stderr)
+                    cf = _trova_cloudflared()
+            if not cf:
+                # riprova dopo un attimo (winget aggiorna il PATH nel registro)
+                import time as _t
+                _t.sleep(2)
+                cf = _trova_cloudflared()
+        if not cf:
+            print("  cloudflared non trovato. Per il tunnel automatico installa:",
+                  file=sys.stderr)
+            print("    Windows: winget install Cloudflare.cloudflared", file=sys.stderr)
+            print("    macOS:   brew install cloudflared", file=sys.stderr)
+            print("    Linux:   https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/",
+                  file=sys.stderr)
+            print("  In alternativa usa una VPN (es. Tailscale) e l'URL LAN qui sopra.",
+                  file=sys.stderr)
+            return
 
     def _run() -> None:
         try:
