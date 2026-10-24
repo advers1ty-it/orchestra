@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orchestra — Documentazione 0.5.38</title>
+<title>Orchestra — Documentazione 0.5.39</title>
 <style>
   :root {
     --bg: #0c1018;
@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>Orchestra — Documentazione</h1>
-  <div class="sub">Versione 0.5.38 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
+  <div class="sub">Versione 0.5.39 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
   <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica docs</a></div>
 </header>
 <div class="layout">
@@ -70,8 +70,8 @@
       <li><a href="#permessi">Permessi</a></li>
       <li><a href="#memoria">Memoria & storia</a></li>
       <li><a href="#budget">Budget</a></li>
-      <li><a href="#bugfix">Debug & stato</a></li>
-      <li><a href="#deploy">Rilascio tester</a></li>
+      <li><a href="#bugfix">Se qualcosa non va</a></li>
+      <li><a href="#tester">Installazione senza GitHub</a></li>
       <li><a href="#dev">Appendice (sviluppatori)</a></li>
     </ul>
   </nav>
@@ -93,7 +93,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 
 <section id="config">
 <h2>Configurazione</h2>
-<p>La configurazione vive in <code>orchestra/.env</code>, mai committata:</p>
+<p>La configurazione vive in <code>orchestra/.env</code> e resta solo sul tuo computer:</p>
 <ul>
   <li><code>ORCHESTRA_PROVIDER=openrouter|nous|groq|nvidia|anthropic|...</code></li>
   <li><code>ORCHESTRA_MODEL=...</code></li>
@@ -170,8 +170,6 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 
 <h3>Steer — correggere la rotta a metà lavoro</h3>
 <p>La barra Steer compare sopra il campo di scrittura solo durante un turno attivo. Quello che scrivi viene messo in coda e consegnato al modello <b>alla prima occasione utile</b>: subito dopo il tool o il ragionamento in corso, prima della chiamata successiva al modello.</p>
-<pre><code>POST /api/steer
-{ "testo": "usa il formato CSV, non JSON" }</code></pre>
 <ul>
   <li>Il turno <b>non</b> viene interrotto: lo steer si innesta nel flusso esistente.</li>
   <li>Limite di 5 messaggi steer per turno, 2000 caratteri ciascuno.</li>
@@ -180,8 +178,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 
 <h3>Stop — fermare il turno</h3>
 <p>Il pulsante <b>■</b> accanto a Invia ferma il turno in corso. Il controllo di cancellazione avviene a ogni iterazione e <b>prima di ogni tool</b>: se il modello aveva chiesto dieci tool e ne hai eseguiti tre, i sette rimanenti ricevono un risultato "cancellato" e la sequenza resta valida.</p>
-<pre><code>POST /api/cancel</code></pre>
-<p>Il turno si chiude con motivo <code>canceled_da_should_continue</code>, senza lasciare tool_call senza risultato (invariante della sequenza).</p>
+<p>Il turno si chiude come annullato, senza lasciare tool_call senza risultato.</p>
 </section>
 
 <section id="tooling">
@@ -236,7 +233,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 
 <section id="permessi">
 <h2>Permessi</h2>
-<p>File fuera della root richiedono conferma (gate). In web, un modal chiede “una volta/sessione/sempre/mai”. In assenza di canale (CLI/benchmark) il default è negare.</p>
+<p>I file fuori dalla cartella di lavoro richiedono conferma. In web, un modal chiede “una volta/sessione/sempre/mai”. In assenza di canale (CLI/benchmark) il default è negare.</p>
 <p>Creazione nuove chiavi API: esse non devono arrivare ai subprocessi (scrub env).</p>
 </section>
 
@@ -257,42 +254,28 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 </section>
 
 <section id="bugfix">
-<h2>Debug & stato del server</h2>
+<h2>Se qualcosa non va</h2>
 <ul>
-  <li>Serve su 127.0.0.1:8737 di default.</li>
-  <li>HTTP 000 → worker morto (non una rotta mancante).</li>
-  <li>Piu processi sulla stessa porta → comportamento intermittente.</li>
-  <li>HC: endpoint <code>/docs</code>, <code>/api/dipendenze/stato</code>.</li>
+  <li>Orchestra risponde su <code>127.0.0.1:8737</code>. Se il browser dice che il sito non è raggiungibile, il server è spento: riapri “Avvia Orchestra”.</li>
+  <li>Se hai avviato il server più volte, chiudi le altre finestre: due processi sulla stessa porta danno comportamento intermittente.</li>
+  <li>Pagina bianca o pulsanti che non rispondono: ricarica con Ctrl+F5.</li>
+  <li>Per capire se il server è vivo, apri <code>http://127.0.0.1:8737/docs</code>: se questa guida si apre, il server c’è.</li>
 </ul>
 </section>
 
-<section id="deploy">
-<h2>Rilascio tester</h2>
-<p>Checklist minima:</p>
-<ol>
-  <li><code>git status</code> pulito (no temp, log, DB run)</li>
-  <li>fresh server su <code>ORCHESTRA_ROOT=/test</code> e chiamate agli endpoint editati col metodo giusto.</li>
-  <li>node/js syntax + python compile + suite ui/webapp.</li>
-  <li>tre scenari E2E reali (bugfix, sito, dati).</li>
-  <li>credere all’errore del modello solo dopo aver controllato config/versione/endpoints.</li>
-</ol>
-<p><span class="badge">0.5.38</span> — Core in stdlib Python, packaging leggero.</p>
-</section>
-
 <section id="tester">
-<h2>Tester senza GitHub</h2>
+<h2>Installazione senza GitHub</h2>
 <p>Pacchetto da passare ai tester: <code>installer/Installa-Orchestra.bat</code> + <code>installer/LEGGIMI.txt</code> (il bat è autonomo — vedi <code>installer/LEGGIMI.txt</code>).</p>
 <ul>
   <li>L’installer controlla Python, scarica l’ultima release, crea <code>.env</code> da esempio e mette “Avvia Orchestra” sul Desktop. Niente Git, niente account.</li>
   <li><code>Avvia-Orchestra.bat</code> aggiorna, avvia il server in background e apre il browser; se riaperto a server acceso chiede Apri / Riavvia / Ferma.</li>
-  <li>Pubblicare un update: alza <code>__version__</code>, committa, <code>git tag vX.Y.Z &amp;&amp; git push --tags</code>, <code>gh release create vX.Y.Z --generate-notes</code>.</li>
   <li><code>orchestra update --check</code> controlla soltanto; chiavi e dati locali non vengono mai sovrascritti.</li>
 </ul>
 </section>
 
 <section id="dev">
 <h2>Appendice — per sviluppatori</h2>
-<p>Questa sezione raccoglie CLI, endpoint REST e note di rilascio. Serve a chi sviluppa o integra; l’utente finale non ne ha bisogno.</p>
+<p>Questa sezione raccoglie CLI ed endpoint REST. Serve a chi vuole usare Orchestra da terminale o integrarla; l’utente finale non ne ha bisogno.</p>
 
 <h3>CLI — goal</h3>
 <pre><code>orchestra goal "obiettivo" [--profile ...] [--max-iterations N] [--depends-on A,B] [--priority N] [--max-attempts N] [--criteri JSON] [--recovery JSON]
@@ -333,7 +316,7 @@ python3 kill_ports.py 8737</code></pre>
   </main>
 </div>
 <footer>
-  Orchestra — versione 0.5.38 · docs servita da <code>/docs</code> · contiene screenshot path e output troncati quando richiesto.
+  Orchestra — versione 0.5.39 · docs servita da <code>/docs</code> · contiene screenshot path e output troncati quando richiesto.
 </footer>
 </body>
 </html>
