@@ -402,6 +402,10 @@ function etichettaEsito(esito) {
     troppi_errori_consecutivi: "troppi errori",
     verifica_fallita: "verifica fallita",
     solo_parole: "solo parole, niente fatti",
+    // Il turno ha lavorato, ma si e' chiuso annunciando altro lavoro
+    // invece di farlo. Diverso da "solo parole": qui qualcosa e' stato
+    // fatto, e il lavoro e' rimasto a meta'.
+    annuncio_finale: "fermato su un annuncio",
   }[esito || ""] || esito || "?";
 }
 async function caricaSideTracce() {

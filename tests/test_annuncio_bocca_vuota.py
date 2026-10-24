@@ -28,7 +28,7 @@ os.environ["ORCHESTRA_ROOT"] = ROOT
 
 from orchestra.agent import Agent, LoopConfig
 from orchestra.tools import default_registry
-from orchestra.types import LLMResponse
+from orchestra.types import LLMResponse, ToolCall
 
 PASS, FAIL = [], []
 
@@ -141,6 +141,64 @@ check("una risposta vera chiude come risposta_finale",
       f"esito: {ag2.state.stopped_because!r}")
 check("una risposta vera non prende il nudge", "nudge" not in eventi2,
       f"eventi: {sorted(set(eventi2))}")
+
+# ------------------------------------------------------ [3] dopo aver lavorato
+print("\n[3] Anche dopo aver usato i tool: il turno non si chiude su un annuncio")
+
+# Il buco: il controllo dell'annuncio stava dentro `tool_calls_made == 0`.
+# Un turno che aveva gia' fatto venti tool e poi chiudeva con "ora faccio
+# il resto" non veniva ripreso da nessuno: il lavoro restava a meta' e
+# l'esito diceva "risposta_finale", cioe' "completato".
+
+
+class ProviderConLavoro:
+    """Prima usa un tool, poi annuncia, poi annuncia di nuovo."""
+
+    name = "fake"
+    model = "fake/modello"
+
+    def __init__(self):
+        self.chiamate = 0
+
+    def chat(self, messages, tools=None, **kw):
+        self.chiamate += 1
+        if self.chiamate == 1:
+            return LLMResponse(
+                content="", model=self.model, prompt_tokens=4,
+                completion_tokens=3,
+                tool_calls=[ToolCall(id="call_1", name="calculate",
+                                     arguments='{"expression":"2+2"}')])
+        return LLMResponse(content="Ora faccio il resto della modifica.",
+                           model=self.model, prompt_tokens=4,
+                           completion_tokens=3)
+
+
+eventi3 = []
+prov3 = ProviderConLavoro()
+ag3 = Agent(prov3, default_registry(), "test", LoopConfig(max_iterations=8),
+            on_event=lambda k, d: eventi3.append(k))
+ag3.run("sistema il modal")
+
+check("il tool e' stato eseguito davvero", ag3.state.tool_calls_made == 1,
+      f"tool eseguiti: {ag3.state.tool_calls_made}")
+check("il nudge parte anche dopo aver lavorato", "nudge" in eventi3,
+      f"eventi: {sorted(set(eventi3))}")
+check("l'esito non mente con risposta_finale",
+      ag3.state.stopped_because != "risposta_finale",
+      f"esito: {ag3.state.stopped_because!r}")
+check("l'esito e' annuncio_finale, non solo_parole",
+      ag3.state.stopped_because == "annuncio_finale",
+      f"esito: {ag3.state.stopped_because!r}")
+
+nudge3 = [m for m in ag3.state.messages if m.name == "__nudge__"]
+check("il nudge e' nel contesto", len(nudge3) == 1)
+if nudge3:
+    testo3 = nudge3[0].content
+    check("il nudge non dice il falso 'non hai usato nessuno strumento'",
+          "non hai ancora usato nessuno strumento" not in testo3,
+          "il testo e' quello del caso senza tool")
+    check("il nudge chiede di finire o dirlo esplicitamente",
+          "hai annunciato altro lavoro" in testo3, testo3[:80])
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

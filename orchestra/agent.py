@@ -149,6 +149,26 @@ _PROMESSE = (
     "torno con",
 )
 
+# I due testi del nudge. Sono due perche' il caso e' diverso: dopo venti
+# tool, "non hai ancora usato nessuno strumento" sarebbe falso, e un
+# messaggio falso e' peggio di nessun messaggio.
+_NUDGE_SENZA_TOOL = (
+    "NOTA DEL SISTEMA: hai descritto il lavoro ma non hai ancora usato "
+    "nessuno strumento. Se la richiesta richiede dati che non hai a "
+    "memoria — il contenuto di file, lo stato del progetto, un fatto da "
+    "verificare — chiama gli strumenti (list_dir, read_file, web_cerca) "
+    "ORA. Se invece puoi rispondere solo con quello che sai, rispondi e "
+    "basta: non serve ripetere l'annuncio."
+)
+
+_NUDGE_DOPO_LAVORO = (
+    "NOTA DEL SISTEMA: hai annunciato altro lavoro, ma il turno sta per "
+    "chiudere senza farlo. Se c'e' ancora qualcosa da fare, chiama gli "
+    "strumenti ORA e fallo. Se hai finito, dillo in modo esplicito — cosa "
+    "hai fatto e cosa resta — senza promettere altro: un annuncio non e' "
+    "un risultato."
+)
+
 
 class Agent:
     """L'orchestratore.
@@ -786,58 +806,66 @@ class Agent:
             #
             # NUDGE ANTI-BOCCA-VUOTA: se il modello chiude il turno
             # annunciando che farà un lavoro ("analizzo il progetto...")
-            # ma NON ha eseguito nessun tool, è il sintomo del modello
-            # piccolo che, con un contesto ripetitivo, descrive invece di
-            # fare. Una volta sola si rimanda indietro con un messaggio
-            # esplicito: se il lavoro richiede davvero gli strumenti, deve
+            # invece di farlo, si rimanda indietro con un messaggio
+            # esplicito: se il lavoro richiede gli strumenti, deve
             # chiamarli. Il flag `_nudge_fatto` garantisce che sia UNA
             # volta — un loop che si auto-nudga all'infinito sprecherebbe
             # token senza aggiungere niente.
             #
+            # L'annuncio si controlla SEMPRE, non solo nei turni senza
+            # tool. Prima il controllo stava dentro `tool_calls_made == 0`:
+            # un turno che aveva già fatto venti tool e poi chiudeva con
+            # "ora faccio il resto" non veniva ripreso da nessuno, e il
+            # lavoro restava a metà senza che niente lo dicesse. Il testo
+            # del nudge cambia nei due casi, perché "non hai ancora usato
+            # nessuno strumento" dopo venti tool sarebbe falso.
+            #
             # Ma UN nudge non basta al narratore a puntate ("cerco...",
             # "ora aggiungo...", "ecco il piano..."): ogni giro sembra
             # quasi lavoro e nessuno lo e'. Dopo il nudge, un secondo
-            # annuncio di fila chiude onestamente con "solo_parole":
-            # meglio un fallimento dichiarato che un "completato" che
-            # non ha completato niente. Le risposte vere (senza annunci,
-            # o dopo aver usato tool) non passano di qui.
+            # annuncio di fila chiude: "solo_parole" se non è stato fatto
+            # niente, "annuncio_finale" se il turno ha comunque prodotto
+            # lavoro. Sono due cose diverse, e chiamarle con lo stesso nome
+            # sarebbe la bugia che questo blocco esiste per evitare.
             if self.state.tool_calls_made == 0:
                 self._vuote_di_fila += 1
-                annuncio = self._annuncia_senza_fare(resp.content)
-                if annuncio and not self._nudge_fatto:
-                    self._nudge_fatto = True
-                    self.state.messages.append(Message(
-                        role="tool",
-                        tool_call_id=new_id("nudge"),
-                        content=(
-                            "NOTA DEL SISTEMA: hai descritto il lavoro ma non hai "
-                            "ancora usato nessuno strumento. Se la richiesta "
-                            "richiede dati che non hai a memoria — il contenuto di "
-                            "file, lo stato del progetto, un fatto da verificare — "
-                            "chiama gli strumenti (list_dir, read_file, web_cerca) "
-                            "ORA. Se invece puoi rispondere solo con quello che sai, "
-                            "rispondi e basta: non serve ripetere l'annuncio."),
-                        name="__nudge__",
-                    ))
-                    self._emit("nudge", testo=resp.content[:120])
-                    continue
-                if annuncio and self._nudge_fatto:
-                    # Secondo annuncio di fila dopo il nudge: non agira',
-                    # sta narrando. Chiudere come risposta_finale
-                    # mentirebbe ("completato" senza aver completato).
+            annuncio = self._annuncia_senza_fare(resp.content)
+            if annuncio and not self._nudge_fatto:
+                self._nudge_fatto = True
+                dopo_lavoro = self.state.tool_calls_made > 0
+                self.state.messages.append(Message(
+                    role="tool",
+                    tool_call_id=new_id("nudge"),
+                    content=(_NUDGE_DOPO_LAVORO if dopo_lavoro
+                             else _NUDGE_SENZA_TOOL),
+                    name="__nudge__",
+                ))
+                self._emit("nudge", testo=resp.content[:120],
+                           dopo_lavoro=dopo_lavoro)
+                continue
+            if annuncio and self._nudge_fatto:
+                # Secondo annuncio di fila dopo il nudge: non agira',
+                # sta narrando. Chiudere come risposta_finale
+                # mentirebbe ("completato" senza aver completato).
+                if self.state.tool_calls_made == 0:
                     self._emit("solo_parole",
                                testo=resp.content[:120],
                                giri=self._vuote_di_fila)
                     self.state.stopped_because = "solo_parole"
-                    return self.state
-                if self._vuote_di_fila >= 4:
-                    # Rete di sicurezza per i giri con verifica: testi
-                    # veri ma mai un tool, a ripetizione, non e' lavoro.
-                    self._emit("solo_parole",
+                else:
+                    self._emit("annuncio_finale",
                                testo=resp.content[:120],
-                               giri=self._vuote_di_fila)
-                    self.state.stopped_because = "solo_parole"
-                    return self.state
+                               tool=self.state.tool_calls_made)
+                    self.state.stopped_because = "annuncio_finale"
+                return self.state
+            if self.state.tool_calls_made == 0 and self._vuote_di_fila >= 4:
+                # Rete di sicurezza per i giri con verifica: testi
+                # veri ma mai un tool, a ripetizione, non e' lavoro.
+                self._emit("solo_parole",
+                           testo=resp.content[:120],
+                           giri=self._vuote_di_fila)
+                self.state.stopped_because = "solo_parole"
+                return self.state
 
             # --- self-correzione: verificare prima di chiudere -------------
             #
