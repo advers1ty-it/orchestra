@@ -102,8 +102,14 @@ class OrchestraApp:
     i propri lock; questo oggetto contiene solo la sessione.
     """
 
-    def __init__(self, env: dict[str, str], session: Session | None = None) -> None:
+    def __init__(self, env: dict[str, str], session: Session | None = None,
+                 remoto_attivo: bool = False) -> None:
         self.env = env
+        self.remoto_attivo = bool(remoto_attivo)
+        self.tunnel_url = ""
+        # token per accesso remoto (generato al primo avvio remoto e
+        # salvato in .env come ORCHESTRA_REMOTE_TOKEN)
+        self.token_remoto = self._token_remoto()
         # Allegati già validati, per id. Vivono finche' il messaggio non
         # parte: sono in memoria, non su disco. E il motivo per cui il
         # browser manda il file una volta sola invece di due.
@@ -169,6 +175,36 @@ class OrchestraApp:
                                        # non poteva superare 60 e sembrava
                                        # un benchmark fermo.
                                        "finiti": 0, "modelli": []}
+
+    def _token_remoto(self) -> str:
+        # Token per accesso remoto. Letto da .env; se manca e il modo
+        # remoto e' attivo, ne genero uno e lo salvo, poi lo stampo
+        # a console (serve all'utente per fare login dal telefono).
+        tok = (self.env.get("ORCHESTRA_REMOTE_TOKEN")
+               or load_env(ENV_PATH).get("ORCHESTRA_REMOTE_TOKEN")
+               or "").strip()
+        if tok:
+            self.env["ORCHESTRA_REMOTE_TOKEN"] = tok
+            return tok
+        if not self.remoto_attivo:
+            return ""
+        import secrets
+        tok = secrets.token_urlsafe(24)
+        # persisti in .env
+        try:
+            righe = []
+            if os.path.isfile(ENV_PATH):
+                with open(ENV_PATH, "r", encoding="utf-8") as f:
+                    righe = f.read().splitlines()
+            # rimuovi eventuale riga vuota/esistente
+            righe = [r for r in righe if not r.strip().startswith("ORCHESTRA_REMOTE_TOKEN=")]
+            righe.append(f"ORCHESTRA_REMOTE_TOKEN={tok}")
+            with open(ENV_PATH, "w", encoding="utf-8") as f:
+                f.write("\n".join(righe) + "\n")
+        except Exception:
+            pass
+        self.env["ORCHESTRA_REMOTE_TOKEN"] = tok
+        return tok
 
     def _make_gate(self) -> Any:
         """Il gate che chiede all'utente, collegato agli eventi SSE.
@@ -1150,7 +1186,7 @@ class OrchestraApp:
                 pass  # se non si puo' rimuovere, l'errore emergera' dopo
 
     @classmethod
-    def create(cls) -> "OrchestraApp":
+    def create(cls, remoto_attivo: bool = False) -> "OrchestraApp":
         """Costruisce l'app, o la mette in stato di errore se il provider
         non e' configurato. La UI deve poter mostrare l'errore invece di
         fallire all'avvio."""
@@ -1163,6 +1199,7 @@ class OrchestraApp:
                     env.get("ORCHESTRA_PROVIDER", "openrouter"),
                     env.get("ORCHESTRA_MODEL", ""),
                 ),
+                remoto_attivo=remoto_attivo,
             )
             app._collega_recupero_tool()
             app._collega_delega()
@@ -1179,13 +1216,9 @@ class OrchestraApp:
         except (ProviderError, KeyError) as e:
             # l'app esiste anche senza sessione: /api/state deve poter
             # rispondere con l'errore, e la UI lo mostra
-            app = cls(env, session=None)
+            app = cls(env, session=None, remoto_attivo=remoto_attivo)
             app.ready = False
             app.error = str(e)
-            return app
-            app.ready = False
-            app.error = str(e)
-            app.session = None  # type: ignore[assignment]
             return app
 
 
@@ -1342,6 +1375,53 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _login_page(self) -> None:
+        html = """<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orchestra — Accesso</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f1115;color:#e6e6e6;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.card{background:#1a1d24;padding:24px;border-radius:12px;width:320px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+h1{font-size:18px;margin:0 0 12px}p{font-size:13px;color:#9aa0a6;margin:0 0 16px}
+input{width:100%;padding:10px;border-radius:8px;border:1px solid #2a2e36;background:#0f1115;color:#e6e6e6;box-sizing:border-box}
+button{width:100%;padding:10px;margin-top:12px;border:none;border-radius:8px;background:#4f8cff;color:#fff;font-weight:600;cursor:pointer}
+.err{color:#ff6b6b;font-size:12px;margin-top:8px;display:none}</style></head>
+<body><div class="card"><h1>Accesso remoto</h1><p>Incolla il token mostrato sul PC (oppure nelle impostazioni di Orchestra).</p>
+<input id="tok" type="password" placeholder="token" autocomplete="off">
+<button id="btn">Entra</button><div class="err" id="err">Token non valido</div></div>
+<script>
+document.getElementById('btn').onclick=async()=>{const t=document.getElementById('tok').value.trim();
+const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t})});
+if(r.ok){location.href='/'}else{document.getElementById('err').style.display='block'}};
+document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btn').click()});
+</script></body></html>"""
+        body = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _info_remoto(self) -> dict[str, Any]:
+        app = self.app
+        ip = ""
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            ip = "127.0.0.1"
+        port = getattr(app, "porta", 8737) or 8737
+        lan_url = f"http://{ip}:{port}" if ip else ""
+        return {
+            "attivo": bool(getattr(app, "remoto_attivo", False)),
+            "token": getattr(app, "token_remoto", "") or "",
+            "tunnel_url": getattr(app, "tunnel_url", "") or "",
+            "lan_url": lan_url,
+        }
+
     def _body(self, *, per_allegato: bool = False) -> dict[str, Any]:
         # Il tetto dipende da cosa arriva. Un prompt e' testo scritto e
         # 64KB sono gia' generosi; un allegato in base64 e' un terzo
@@ -1453,10 +1533,48 @@ class Handler(BaseHTTPRequestHandler):
         else:
             cfg.verifica_compito = None
 
+    def _gate_remoto(self, path: str) -> bool:
+        # Accesso remoto: se attivo e il client non e' localhost, serve
+        # un token valido. Restituisce True se la richiesta puo' proseguire.
+        if not getattr(self.app, "remoto_attivo", False):
+            return True
+        ip = (self.client_address[0] or "") if self.client_address else ""
+        if ip in ("127.0.0.1", "::1", "localhost"):
+            return True
+        tok = getattr(self.app, "token_remoto", "") or ""
+        # cookie
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            part = part.strip()
+            if part.startswith("orchestra_tok="):
+                val = urllib.parse.unquote(part[len("orchestra_tok="):])
+                if tok and val == tok:
+                    return True
+        # bearer
+        auth = self.headers.get("Authorization") or ""
+        if auth.startswith("Bearer ") and auth[7:].strip() == tok and tok:
+            return True
+        # non autorizzato: risposta
+        if path.startswith("/api/"):
+            self._json({"error": "accesso non autorizzato"}, 401)
+        else:
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        return False
+
     def do_GET(self) -> None:
         path = self.path.split("?")[0]
+        # risorse necessarie alla pagina di login: sempre accessibili
+        if path not in ("/login",) and not path.endswith((".css", ".js", ".ico", ".png", ".svg")):
+            if not self._gate_remoto(path):
+                return
         if path == "/":
+            if not self._gate_remoto(path):
+                return
             self._html(UI_PATH)
+        elif path == "/login":
+            self._login_page()
         elif path == "/docs":
             self._static("docs.html", "text/html; charset=utf-8")
             return
@@ -1494,7 +1612,8 @@ class Handler(BaseHTTPRequestHandler):
                             "version": __version__,
                             "model": self.app.env.get("ORCHESTRA_MODEL", ""),
                             "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
-                            "busy": False})
+                            "busy": False,
+                            "remote": self._info_remoto()})
                 return
             s = self._need_session()
             if s is None:
@@ -1505,6 +1624,7 @@ class Handler(BaseHTTPRequestHandler):
             snap["version"] = __version__
             snap["model"] = self.app.env.get("ORCHESTRA_MODEL", "")
             snap["provider"] = self.app.env.get("ORCHESTRA_PROVIDER", "")
+            snap["remote"] = self._info_remoto()
             self._json(snap)
         elif path == "/api/tracce":
             # Le tracce recenti: la diagnosi dopo il fatto. "Perché quel
@@ -2296,6 +2416,40 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?")[0]
+        # /api/login e /api/logout sono sempre raggiungibili (il primo
+        # serve proprio a ottenere il cookie).
+        if path not in ("/api/login", "/api/logout"):
+            if not self._gate_remoto(path):
+                return
+        # Login remoto: non richiede sessione ne' token (e' il modo per
+        # ottenerlo).
+        if path == "/api/login":
+            try:
+                body = self._body()
+            except ValueError as e:
+                self._json({"error": str(e)}, 400); return
+            tok = (body.get("token") or "").strip()
+            if tok and tok == (self.app.token_remoto or ""):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Set-Cookie",
+                    f"orchestra_tok={urllib.parse.quote(tok)}; Path=/; HttpOnly; SameSite=Lax")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+            else:
+                self._json({"error": "token non valido"}, 401)
+            return
+        if path == "/api/logout":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie",
+                "orchestra_tok=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"{}")
+            return
+
         # Rotte di configurazione e memoria: devono funzionare anche
         # senza sessione, altrimenti senza chiave non si puo' salvare
         # nessuna chiave e l'app resta bloccata per sempre.
@@ -3549,22 +3703,76 @@ def _skill_cancella(indice, nome: str) -> bool:
     return True
 
 
-def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = True) -> None:
-    app = OrchestraApp.create()
-    Handler.app = app
+def _avvia_tunnel(port: int, app: Any) -> None:
+    import re
+    import shutil
+    import subprocess
+    import threading
 
-    if host not in ("127.0.0.1", "localhost", "::1"):
+    cf = shutil.which("cloudflared")
+    if not cf:
+        print("  cloudflared non trovato. Per il tunnel automatico installa:",
+              file=sys.stderr)
+        print("    Windows: winget install Cloudflare.cloudflared", file=sys.stderr)
+        print("    macOS:   brew install cloudflared", file=sys.stderr)
+        print("    Linux:   https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/",
+              file=sys.stderr)
+        print("  In alternativa usa una VPN (es. Tailscale) e l'URL LAN qui sopra.",
+              file=sys.stderr)
+        return
+
+    def _run() -> None:
+        try:
+            proc = subprocess.Popen(
+                [cf, "tunnel", "--url", f"http://127.0.0.1:{port}"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+            )
+            app._tunnel_proc = proc
+            for line in proc.stdout:
+                m = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line)
+                if m:
+                    url = m.group(0)
+                    app.tunnel_url = url
+                    print(f"\n  Tunnel pubblico: {url}\n", flush=True)
+                    # QR code via servizio esterno (stampa URL)
+                    print(f"  Apri sul telefono: {url}\n", flush=True)
+            proc.wait()
+        except Exception as e:
+            print(f"  tunnel fallito: {e}", file=sys.stderr)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+
+def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = True,
+          remoto: bool = False, tunnel: bool = False) -> None:
+    if remoto or tunnel:
+        host = "0.0.0.0"
+    remoto_attivo = bool(remoto or tunnel or host not in ("127.0.0.1", "localhost", "::1"))
+
+    if remoto_attivo and not (remoto or tunnel):
+        # bind manuale fuori localhost: conferma come prima
         print(f"ATTENZIONE: ascolto su {host}, non su localhost.", file=sys.stderr)
-        print("Il server non ha autenticazione: chi lo raggiunge puo' usare le "
-              "tue chiavi API. Serve solo per test locali.", file=sys.stderr)
-        # senza terminale non c'e' nessuno che possa confermare: rifiutiamo
+        print("Abilito l'accesso remoto con autenticazione a token.", file=sys.stderr)
         if not (sys.stdin and sys.stdin.isatty()):
             raise SystemExit("rifiuto di esporre fuori da localhost in modo non interattivo")
         if input("Continuo? [s/N] ").strip().lower() != "s":
             raise SystemExit("annullato")
 
+    app = OrchestraApp.create(remoto_attivo=remoto_attivo)
+    Handler.app = app
+    app.porta = port
+
+    if remoto_attivo and app.token_remoto:
+        print(f"\n  Token di accesso remoto: {app.token_remoto}\n", flush=True)
+
     httpd = ThreadingHTTPServer((host, port), Handler)
     httpd.daemon_threads = True
+
+    # tunnel opzionale
+    if tunnel:
+        _avvia_tunnel(port, app)
 
     url = f"http://{host}:{port}"
     print(f"\n  Orchestra {__version__}  ->  {url}\n")

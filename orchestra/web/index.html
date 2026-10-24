@@ -198,6 +198,7 @@
               <button id="opz-tab-permessi" class="opzioni-tab" data-sez="permessi">Permessi</button>
               <button id="opz-tab-gratis" class="opzioni-tab" data-sez="gratis">Gratis</button>
               <button id="opz-tab-diagnosi" class="opzioni-tab" data-sez="diagnosi">Diagnosi</button>
+              <button id="opz-tab-remoto" class="opzioni-tab" data-sez="remoto">Remoto</button>
             </nav>
 
       <div class="opzioni-pannelli">
@@ -408,6 +409,25 @@
           </div>
           <textarea id="diag-out" rows="14" readonly spellcheck="false"
                     placeholder="L'output del comando compare qui."></textarea>
+        </section>
+
+        <section id="opz-sez-remoto" class="opz-sez" data-sez="remoto" hidden>
+          <div class="opzioni-remoto-testa">
+            <b>Accesso remoto</b>
+            <span class="dim">usa Orchestra dal telefono, anche fuori casa.</span>
+          </div>
+          <div id="remoto-stato" class="dim">Caricamento…</div>
+          <div id="remoto-corpo" class="hidden">
+            <p class="small">Token (incollalo nella pagina di login del telefono):</p>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+              <code id="remoto-token" style="flex:1;word-break:break-all;background:#0f1115;padding:6px;border-radius:6px"></code>
+              <button id="remoto-copia-token" class="ghost">Copia</button>
+            </div>
+            <p class="small">URL da aprire sul telefono:</p>
+            <div id="remoto-url" style="margin-bottom:8px"></div>
+            <div id="remoto-qr" style="text-align:center;margin:8px 0"></div>
+            <p class="small dim">Avvia con <code>orchestra web --remote</code> (LAN) oppure <code>--tunnel</code> (URL pubblico). Il token resta sul tuo PC.</p>
+          </div>
         </section>
 
       </div>

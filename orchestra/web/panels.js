@@ -2339,6 +2339,58 @@ function mostraSezione(nome) {
   // il modello.
   if (nome === "storico") caricaStorico();
   if (nome === "memoria") caricaMemoria();
+  if (nome === "remoto") caricaRemoto();
+}
+
+function caricaRemoto() {
+  fetch("/api/state").then(r => r.json()).then(s => {
+    const rem = s.remote || {};
+    const stato = document.getElementById("remoto-stato");
+    const corpo = document.getElementById("remoto-corpo");
+    if (!rem.attivo) {
+      stato.textContent = "Accesso remoto disattivato. Avvia con: orchestra web --remote (o --tunnel).";
+      corpo.classList.add("hidden");
+      return;
+    }
+    stato.textContent = "Accesso remoto attivo.";
+    corpo.classList.remove("hidden");
+    const tok = rem.token || "";
+    document.getElementById("remoto-token").textContent = tok || "(nessun token)";
+    const copia = document.getElementById("remoto-copia-token");
+    if (copia) copia.onclick = () => { navigator.clipboard.writeText(tok); copia.textContent = "copiato"; setTimeout(()=>copia.textContent="Copia",1200); };
+    // URL
+    const urlBox = document.getElementById("remoto-url");
+    urlBox.innerHTML = "";
+    const urls = [];
+    if (rem.tunnel_url) urls.push({label:"Tunnel pubblico", url:rem.tunnel_url});
+    if (rem.lan_url) urls.push({label:"Rete locale (LAN)", url:rem.lan_url});
+    for (const u of urls) {
+      const div = document.createElement("div");
+      div.style.marginBottom = "4px";
+      const a = document.createElement("a");
+      a.href = u.url; a.target = "_blank"; a.textContent = u.url;
+      div.textContent = u.label + ": ";
+      div.appendChild(a);
+      urlBox.appendChild(div);
+    }
+    // QR per il primo URL disponibile
+    const qr = document.getElementById("remoto-qr");
+    qr.innerHTML = "";
+    const target = (rem.tunnel_url || rem.lan_url || "");
+    if (target) {
+      const img = document.createElement("img");
+      img.src = "https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=" + encodeURIComponent(target);
+      img.alt = "QR code";
+      img.style.borderRadius = "8px";
+      qr.appendChild(img);
+      const p = document.createElement("p");
+      p.className = "dim small";
+      p.textContent = "Scansiona con il telefono per aprire.";
+      qr.appendChild(p);
+    }
+  }).catch(() => {
+    document.getElementById("remoto-stato").textContent = "Impossibile caricare lo stato.";
+  });
 }
 
 function collegaSezioni() {

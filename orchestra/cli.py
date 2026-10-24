@@ -563,7 +563,9 @@ def cmd_web(args: argparse.Namespace) -> int:
         return 2
     from .webapp import serve
 
-    serve(args.host, args.port, open_browser=not args.no_browser)
+    serve(args.host, args.port, open_browser=not args.no_browser,
+          remoto=getattr(args, "remote", False),
+          tunnel=getattr(args, "tunnel", False))
     return 0
 
 
@@ -753,6 +755,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="default 127.0.0.1; non esporre su rete (nessuna autenticazione)")
     w.add_argument("--port", type=int, default=8737)
     w.add_argument("--no-browser", action="store_true", help="non aprire il browser")
+    w.add_argument("--remote", action="store_true",
+                   help="abilita accesso remoto (auth con token) e bind su 0.0.0.0")
+    w.add_argument("--tunnel", action="store_true",
+                   help="apre un tunnel pubblico (richiede cloudflared) e stampa l'URL")
     w.set_defaults(func=cmd_web)
 
     mo = sub.add_parser("model", help="modelli disponibili e cambio modello")
