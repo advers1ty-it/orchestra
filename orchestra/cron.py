@@ -178,9 +178,48 @@ def prossima_esecuzione(expr: str, base: datetime.datetime | None = None) -> str
 
 def descrizione_schedule(expr: str) -> str:
     expr = (expr or "").strip()
-    if expr in _SHORTCUTS:
+    low = expr.lower()
+    if low in _SHORTCUTS:
+        return low
+    parts = expr.split()
+    if len(parts) != 5:
         return expr
-    # tentativo di traduzione umana minimale
+    minute, hour, dom, month, dow = parts
+    # ogni N minuti
+    if minute.startswith("*/") and hour == "*" and dom == "*" and month == "*" and dow == "*":
+        try:
+            n = int(minute[2:])
+            return f"ogni {n} minuti"
+        except ValueError:
+            pass
+    # ogni ora
+    if minute == "0" and hour == "*" and dom == "*" and month == "*" and dow == "*":
+        return "ogni ora"
+    # ogni N ore
+    if minute == "0" and hour.startswith("*/") and dom == "*" and month == "*" and dow == "*":
+        try:
+            n = int(hour[2:])
+            return f"ogni {n} ore"
+        except ValueError:
+            pass
+    # giorni specifici della settimana (semplice)
+    # orario fisso ogni giorno
+    if dom == "*" and month == "*" and dow == "*" and "/" not in minute and "/" not in hour \
+       and "," not in minute:
+        try:
+            h = int(hour); m = int(minute)
+            return f"ogni giorno alle {h:02d}:{m:02d}"
+        except ValueError:
+            pass
+    # piu' orari al giorno
+    if dom == "*" and month == "*" and dow == "*" and "/" not in minute and "," in hour:
+        try:
+            hs = [int(x) for x in hour.split(",")]
+            m = int(minute)
+            orari = ", ".join(f"{h:02d}:{m:02d}" for h in hs)
+            return f"ogni giorno alle {orari}"
+        except ValueError:
+            pass
     return expr
 
 
@@ -190,7 +229,12 @@ def descrizione_schedule(expr: str) -> str:
 
 def list_jobs() -> list[dict[str, Any]]:
     with _lock():
-        return [dict(j) for j in _load()]
+        out = []
+        for j in _load():
+            jj = dict(j)
+            jj["schedule_human"] = descrizione_schedule(jj.get("schedule") or "")
+            out.append(jj)
+        return out
 
 
 def get(job_id: str) -> dict[str, Any] | None:
@@ -241,7 +285,9 @@ def crea(nome: str, schedule: str, action_type: str, action: dict[str, Any],
         jobs = _load()
         jobs.append(job)
         _save(jobs)
-    return dict(job)
+    job = dict(job)
+    job["schedule_human"] = descrizione_schedule(job.get("schedule") or "")
+    return job
 
 
 def aggiorna(job_id: str, **campi) -> dict[str, Any] | None:
@@ -277,7 +323,9 @@ def aggiorna(job_id: str, **campi) -> dict[str, Any] | None:
         else:
             target["next_run"] = None
         _save(jobs)
-        return dict(target)
+        t = dict(target)
+        t["schedule_human"] = descrizione_schedule(t.get("schedule") or "")
+        return t
 
 
 def elimina(job_id: str) -> bool:

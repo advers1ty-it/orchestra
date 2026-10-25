@@ -789,7 +789,20 @@
 <div id="cron-bar" class="goal-bar" hidden>
   <div class="goal-bar-inner">
     <input id="cron-nome" type="text" placeholder="Nome job (es. report giornaliero)" />
-    <input id="cron-schedule" type="text" placeholder="Schedule (es. 0 9 * * * oppure @daily)" />
+    <select id="cron-preset" title="Frequenza">
+      <option value="*/5 * * * *">Ogni 5 minuti</option>
+      <option value="*/10 * * * *">Ogni 10 minuti</option>
+      <option value="*/30 * * * *">Ogni 30 minuti</option>
+      <option value="0 * * * *">Ogni ora</option>
+      <option value="0 9,18 * * *">Due volte al giorno (9:00 e 18:00)</option>
+      <option value="0 9 * * *">Una volta al giorno (9:00)</option>
+      <option value="at">A un orario preciso…</option>
+      <option value="custom">Personalizzato (cron)…</option>
+    </select>
+    <input id="cron-at-hour" type="number" min="0" max="23" value="9" placeholder="ora" hidden />
+    <span class="small dim" id="cron-at-sep" hidden>:</span>
+    <input id="cron-at-min" type="number" min="0" max="59" value="0" placeholder="min" hidden />
+    <input id="cron-schedule" type="text" placeholder="Schedule cron (es. 0 9 * * *)" hidden />
     <select id="cron-type" title="Tipo azione">
       <option value="goal">goal</option>
       <option value="shell">shell</option>

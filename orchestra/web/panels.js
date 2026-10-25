@@ -4177,6 +4177,10 @@ if (sidebar && !sidebar.hasAttribute("hidden")) {
 const cronBar = $("cron-bar");
 const cronNome = $("cron-nome");
 const cronSchedule = $("cron-schedule");
+const cronPreset = $("cron-preset");
+const cronAtHour = $("cron-at-hour");
+const cronAtMin = $("cron-at-min");
+const cronAtSep = $("cron-at-sep");
 const cronType = $("cron-type");
 const cronObjective = $("cron-objective");
 const cronCommand = $("cron-command");
@@ -4188,6 +4192,30 @@ const cronSched = $("cron-sched");
 const cronSchedStat = $("cron-sched-stat");
 let cronPoll = 0;
 
+function cronScheduleDaUI() {
+  const p = (cronPreset && cronPreset.value) || "";
+  if (p === "at") {
+    const h = parseInt((cronAtHour && cronAtHour.value) || "0", 10);
+    const m = parseInt((cronAtMin && cronAtMin.value) || "0", 10);
+    return (isNaN(m) ? 0 : m) + " " + (isNaN(h) ? 0 : h) + " * * *";
+  }
+  if (p === "custom") {
+    return (cronSchedule && cronSchedule.value || "").trim();
+  }
+  return p.trim();
+}
+
+function aggiornaPresetUI() {
+  const p = (cronPreset && cronPreset.value) || "";
+  const showAt = p === "at";
+  const showCustom = p === "custom";
+  if (cronAtHour) cronAtHour.hidden = !showAt;
+  if (cronAtMin) cronAtMin.hidden = !showAt;
+  if (cronAtSep) cronAtSep.hidden = !showAt;
+  if (cronSchedule) cronSchedule.hidden = !showCustom;
+}
+on(cronPreset, "change", aggiornaPresetUI);
+
 function cronRiga(j) {
   const riga = document.createElement("div");
   riga.className = "goal-row";
@@ -4198,8 +4226,8 @@ function cronRiga(j) {
   riga.appendChild(id);
   const nome = document.createElement("span");
   nome.className = "goal-obj";
-  nome.textContent = (j.nome || "") + "  [" + (j.schedule || "") + "]";
-  nome.title = j.nome || "";
+  nome.textContent = (j.nome || "") + "  [" + (j.schedule_human || j.schedule || "") + "]";
+  nome.title = (j.nome || "") + " — " + (j.schedule || "");
   riga.appendChild(nome);
   const st = document.createElement("span");
   st.className = "goal-stato stato-" + (j.enabled ? "done" : "pending");
@@ -4285,7 +4313,7 @@ on("cron-refresh", "click", () => caricaCron());
 
 on("cron-create", "click", async () => {
   const nome = (cronNome && cronNome.value || "").trim();
-  const schedule = (cronSchedule && cronSchedule.value || "").trim();
+  const schedule = cronScheduleDaUI();
   if (!nome || !schedule) {
     if (cronStatus) cronStatus.textContent = "nome e schedule richiesti";
     return;
