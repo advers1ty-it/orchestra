@@ -79,6 +79,7 @@
   <button id="btn-opzioni" class="ghost" title="Chiavi API e servizi gratuiti">Opzioni</button>
   <button id="btn-bench" class="ghost">Benchmark</button>
   <button id="btn-goal" class="ghost" title="Obiettivo autonomo">Obiettivo</button>
+   <button id="btn-cron" class="ghost" title="Job programmati">Cron</button>
   <button id="btn-onboard" class="ghost" title="Mostra obiettivi iniziali">Cosa fai?</button>
   <button id="btn-docs" class="ghost" title="Documentazione">Docs</button>
 
@@ -784,6 +785,37 @@
   </div>
   <div id="goal-output" class="goal-output"></div>
   <div id="goal-list" class="goal-list"></div>
+</div>
+<div id="cron-bar" class="goal-bar" hidden>
+  <div class="goal-bar-inner">
+    <input id="cron-nome" type="text" placeholder="Nome job (es. report giornaliero)" />
+    <input id="cron-schedule" type="text" placeholder="Schedule (es. 0 9 * * * oppure @daily)" />
+    <select id="cron-type" title="Tipo azione">
+      <option value="goal">goal</option>
+      <option value="shell">shell</option>
+    </select>
+    <button id="cron-create" class="primary">Crea</button>
+    <button id="cron-refresh" class="ghost">Aggiorna</button>
+    <span id="cron-status" class="small dim"></span>
+  </div>
+  <div class="goal-bar-inner">
+    <input id="cron-objective" type="text" placeholder="Obiettivo (se goal)" />
+    <input id="cron-command" type="text" placeholder="Comando (se shell)" />
+    <select id="cron-profile" title="Profilo">
+      <option value="auto">auto</option>
+      <option value="base">base</option>
+      <option value="ricerca">ricerca</option>
+      <option value="skill">skill</option>
+      <option value="pieno">pieno</option>
+    </select>
+  </div>
+  <div class="goal-bar-inner">
+    <span id="cron-sched-stat" class="small dim"></span>
+    <span class="grow"></span>
+    <button id="cron-sched" class="ghost" title="Avvia/ferma scheduler cron">Scheduler: off</button>
+  </div>
+  <div id="cron-output" class="goal-output"></div>
+  <div id="cron-list" class="goal-list"></div>
 </div>
 <!-- Le tracce: una riga per turno, e il dettaglio in un modale.
      Aprirlo sotto la lista lo nascondeva sotto lo schermo: la lista

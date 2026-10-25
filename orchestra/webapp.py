@@ -1984,6 +1984,12 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         elif path == "/api/scheduler/status":
             from . import goal as goal_mod
             self._json(goal_mod.scheduler_status())
+        elif path == "/api/cron/jobs":
+            from . import cron as cron_mod
+            self._json({"jobs": cron_mod.list_jobs()})
+        elif path == "/api/cron/scheduler/status":
+            from . import cron as cron_mod
+            self._json(cron_mod.scheduler_status())
         elif path == "/api/dipendenze/stato":
             import importlib, sys as _sys
             deps=[]
@@ -3357,6 +3363,89 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             goal_mod.scheduler_stop()
             self._json({"ok": True})
             return
+        elif path == "/api/cron/create":
+            from . import cron as cron_mod
+            try:
+                nome = (body.get("nome") or "").strip() if isinstance(body, dict) else ""
+                schedule = (body.get("schedule") or "").strip() if isinstance(body, dict) else ""
+                action_type = (body.get("action_type") or "goal").strip() if isinstance(body, dict) else "goal"
+                if action_type == "shell":
+                    action = {"command": (body.get("command") or "").strip() if isinstance(body, dict) else ""}
+                else:
+                    action = {
+                        "objective": (body.get("objective") or "").strip() if isinstance(body, dict) else "",
+                        "profile": (body.get("profile") or "auto").strip() if isinstance(body, dict) else "auto",
+                    }
+                enabled = True
+                if isinstance(body, dict) and body.get("enabled") is not None:
+                    enabled = bool(body.get("enabled"))
+                job = cron_mod.crea(nome, schedule, action_type, action, enabled=enabled)
+            except (ValueError, RuntimeError) as e:
+                self._json({"error": str(e)}, 400)
+                return
+            self._json({"ok": True, "job": job})
+            return
+        elif path == "/api/cron/update":
+            from . import cron as cron_mod
+            jid = (body.get("id") if isinstance(body, dict) else None)
+            if not jid:
+                self._json({"error": "id richiesto"}, 400)
+                return
+            campi = {}
+            if isinstance(body, dict):
+                if body.get("nome") is not None:
+                    campi["nome"] = body.get("nome")
+                if body.get("schedule") is not None:
+                    campi["schedule"] = body.get("schedule")
+                if body.get("action_type") is not None:
+                    campi["action_type"] = body.get("action_type")
+                if body.get("enabled") is not None:
+                    campi["enabled"] = bool(body.get("enabled"))
+                if body.get("objective") is not None or body.get("command") is not None:
+                    at = body.get("action_type") or "goal"
+                    if at == "shell":
+                        campi["action"] = {"command": (body.get("command") or "").strip()}
+                    else:
+                        campi["action"] = {"objective": (body.get("objective") or "").strip(),
+                                           "profile": (body.get("profile") or "auto").strip()}
+            try:
+                job = cron_mod.aggiorna(jid, **campi)
+            except (ValueError, RuntimeError) as e:
+                self._json({"error": str(e)}, 400)
+                return
+            if job is None:
+                self._json({"error": "job sconosciuto"}, 404)
+                return
+            self._json({"ok": True, "job": job})
+            return
+        elif path == "/api/cron/delete":
+            from . import cron as cron_mod
+            jid = (body.get("id") if isinstance(body, dict) else None)
+            ok = cron_mod.elimina(str(jid or ""))
+            self._json({"ok": ok})
+            return
+        elif path == "/api/cron/run":
+            from . import cron as cron_mod
+            jid = (body.get("id") if isinstance(body, dict) else None)
+            r = cron_mod.esegui_job(str(jid or ""), env=self.app.env)
+            self._json(r)
+            return
+        elif path == "/api/cron/scheduler/start":
+            from . import cron as cron_mod
+            interval = 30.0
+            if isinstance(body, dict) and body.get("interval") is not None:
+                try:
+                    interval = float(body.get("interval"))
+                except (TypeError, ValueError):
+                    interval = 30.0
+            ok = cron_mod.scheduler_start(env=self.app.env, interval=interval)
+            self._json({"ok": True} if ok else {"ok": False, "error": "gia' attivo"})
+            return
+        elif path == "/api/cron/scheduler/stop":
+            from . import cron as cron_mod
+            cron_mod.scheduler_stop()
+            self._json({"ok": True})
+            return
         elif path == "/api/goal/stop":
             gid = (body.get("id") if isinstance(body, dict) else None)
             from . import goal as goal_mod
@@ -4033,6 +4122,14 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
                     _json.dump(_stato, _f)
             except Exception:
                 pass
+
+    # cron scheduler: parte in automatico, cosi' i job programmati girano
+    # anche se nessuno tocca la UI. Si puo' fermare dal pannello.
+    try:
+        from . import cron as _cron_mod
+        _cron_mod.scheduler_start(env=app.env, interval=30.0)
+    except Exception:
+        pass
 
     url = f"http://{host}:{port}"
     print(f"\n  Orchestra {__version__}  ->  {url}\n")

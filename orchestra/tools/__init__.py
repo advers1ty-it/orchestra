@@ -54,6 +54,7 @@ from .calculate import tool_calculate  # noqa: E402
 from .memoria import tool_memoria  # noqa: E402
 from .web import tool_web_cerca, tool_web_leggi  # noqa: E402
 from .storico import tool_storico_cerca  # noqa: E402
+from .cron import tool_cron  # noqa: E402
 from .skill import (
     tool_skill_cerca,
     tool_skill_leggi,
@@ -340,7 +341,7 @@ def default_registry() -> ToolRegistry:
     for tool in (tool_read_file(), tool_write_file(), tool_edit_file(),
                  tool_list_dir(), tool_run_shell(), tool_calculate(),
                  tool_memoria(), tool_web_cerca(), tool_web_leggi(),
-                 tool_storico_cerca(),
+                 tool_storico_cerca(), tool_cron(),
                  tool_skill_cerca(), tool_skill_leggi(),
                  tool_skill_genera(), tool_skill_importa(),
                  tool_browser_apri(), tool_browser_render(),

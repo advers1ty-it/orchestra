@@ -4172,3 +4172,148 @@ caricaProgetti();
 if (sidebar && !sidebar.hasAttribute("hidden")) {
   caricaSide();
 }
+
+// ============================== CRON ==============================
+const cronBar = $("cron-bar");
+const cronNome = $("cron-nome");
+const cronSchedule = $("cron-schedule");
+const cronType = $("cron-type");
+const cronObjective = $("cron-objective");
+const cronCommand = $("cron-command");
+const cronProfile = $("cron-profile");
+const cronStatus = $("cron-status");
+const cronOutput = $("cron-output");
+const cronList = $("cron-list");
+const cronSched = $("cron-sched");
+const cronSchedStat = $("cron-sched-stat");
+let cronPoll = 0;
+
+function cronRiga(j) {
+  const riga = document.createElement("div");
+  riga.className = "goal-row";
+  const id = document.createElement("span");
+  id.className = "goal-id";
+  id.textContent = String(j.id || "").slice(0, 8);
+  id.title = j.id || "";
+  riga.appendChild(id);
+  const nome = document.createElement("span");
+  nome.className = "goal-obj";
+  nome.textContent = (j.nome || "") + "  [" + (j.schedule || "") + "]";
+  nome.title = j.nome || "";
+  riga.appendChild(nome);
+  const st = document.createElement("span");
+  st.className = "goal-stato stato-" + (j.enabled ? "done" : "pending");
+  st.textContent = j.enabled ? "on" : "off";
+  riga.appendChild(st);
+  const meta = document.createElement("span");
+  meta.className = "goal-meta";
+  meta.textContent = "next=" + (j.next_run || "-") + " last=" + (j.last_status || "-");
+  riga.appendChild(meta);
+  const azioni = document.createElement("span");
+  azioni.className = "goal-meta";
+  const btnRun = document.createElement("button");
+  btnRun.className = "ghost";
+  btnRun.textContent = "Esegui";
+  btnRun.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    try {
+      const r = await fetch("/api/cron/run", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: j.id }) });
+      const d = await r.json().catch(() => ({}));
+      if (cronOutput) cronOutput.textContent = JSON.stringify(d);
+      caricaCron();
+    } catch (err) { if (cronStatus) cronStatus.textContent = "errore: " + err; }
+  });
+  const btnToggle = document.createElement("button");
+  btnToggle.className = "ghost";
+  btnToggle.textContent = j.enabled ? "Off" : "On";
+  btnToggle.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const path = j.enabled ? "/api/cron/update" : "/api/cron/update";
+    await fetch(path, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: j.id, enabled: !j.enabled }) });
+    caricaCron();
+  });
+  const btnDel = document.createElement("button");
+  btnDel.className = "ghost";
+  btnDel.textContent = "X";
+  btnDel.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await fetch("/api/cron/delete", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: j.id }) });
+    caricaCron();
+  });
+  azioni.appendChild(btnRun);
+  azioni.appendChild(btnToggle);
+  azioni.appendChild(btnDel);
+  riga.appendChild(azioni);
+  return riga;
+}
+
+async function caricaCron() {
+  if (!cronBar || cronBar.hidden) return;
+  try {
+    const [rs, ss] = await Promise.all([
+      fetch("/api/cron/jobs").then((r) => r.json().catch(() => ({}))),
+      fetch("/api/cron/scheduler/status").then((r) => r.json().catch(() => ({}))),
+    ]);
+    const jobs = rs.jobs || [];
+    if (cronList) {
+      cronList.replaceChildren();
+      for (const j of jobs) cronList.appendChild(cronRiga(j));
+      if (!jobs.length) {
+        const vuoto = document.createElement("div");
+        vuoto.className = "goal-meta";
+        vuoto.textContent = "Nessun job. Crea un job con nome, schedule e azione.";
+        cronList.appendChild(vuoto);
+      }
+    }
+    if (cronSched) cronSched.textContent = ss.running ? "Scheduler: on" : "Scheduler: off";
+    if (cronSchedStat) cronSchedStat.textContent = ss.running ? ("rounds=" + (ss.rounds||0) + " last=" + (ss.last_id||"")) : "";
+  } catch (e) {
+    if (cronStatus) cronStatus.textContent = "cron non raggiungibili: " + e;
+  }
+}
+
+on("btn-cron", "click", () => {
+  if (!cronBar) return;
+  cronBar.hidden = !cronBar.hidden;
+  if (!cronBar.hidden) {
+    caricaCron();
+    if (!cronPoll) cronPoll = setInterval(() => { if (cronBar && !cronBar.hidden) caricaCron(); }, 3000);
+  }
+});
+
+on("cron-refresh", "click", () => caricaCron());
+
+on("cron-create", "click", async () => {
+  const nome = (cronNome && cronNome.value || "").trim();
+  const schedule = (cronSchedule && cronSchedule.value || "").trim();
+  if (!nome || !schedule) {
+    if (cronStatus) cronStatus.textContent = "nome e schedule richiesti";
+    return;
+  }
+  const tipo = (cronType && cronType.value) || "goal";
+  const corpo = { nome: nome, schedule: schedule, action_type: tipo, enabled: true };
+  if (tipo === "shell") {
+    corpo.command = (cronCommand && cronCommand.value || "").trim();
+  } else {
+    corpo.objective = (cronObjective && cronObjective.value || "").trim();
+    corpo.profile = (cronProfile && cronProfile.value) || "auto";
+  }
+  if (cronStatus) cronStatus.textContent = "creazione...";
+  try {
+    const r = await fetch("/api/cron/create", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(corpo) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { if (cronStatus) cronStatus.textContent = d.error || ("errore " + r.status); return; }
+    if (cronStatus) cronStatus.textContent = "creato: " + (d.job && d.job.id);
+    if (cronNome) cronNome.value = "";
+    caricaCron();
+  } catch (e) { if (cronStatus) cronStatus.textContent = "errore: " + e; }
+});
+
+on("cron-sched", "click", async () => {
+  try {
+    const st = await fetch("/api/cron/scheduler/status").then((r) => r.json().catch(() => ({})));
+    const rotta = st.running ? "/api/cron/scheduler/stop" : "/api/cron/scheduler/start";
+    await fetch(rotta, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ interval: 30 }) });
+    caricaCron();
+  } catch (e) { if (cronStatus) cronStatus.textContent = "errore: " + e; }
+});

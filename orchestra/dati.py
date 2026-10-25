@@ -69,7 +69,7 @@ def cartella_dati() -> str:
 # mai il codice e mai il .env (le chiavi non si copiano fra installazioni).
 FILE_STATO = {
     "memory.md", "memoria_config.json", "budget_global.json",
-    "nous_auth.json", "goals.json", "token.txt",
+    "nous_auth.json", "goals.json", "cron.json", "token.txt",
     "storico.db", "storico.sqlite3", "memoria_indice.db",
     "catalog_groq.json", "catalog_nous.json", "catalog_openrouter.json",
 }
