@@ -3450,6 +3450,47 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             cron_mod.scheduler_stop()
             self._json({"ok": True})
             return
+        elif path == "/api/mcp/servers":
+            from . import mcp as mcp_mod
+            self._json({"servers": mcp_mod.list_servers()})
+            return
+        elif path == "/api/mcp/tools":
+            from . import mcp as mcp_mod
+            self._json({"tools": mcp_mod.list_tools()})
+            return
+        elif path == "/api/mcp/status":
+            from . import mcp as mcp_mod
+            self._json(mcp_mod.stato())
+            return
+        elif path == "/api/mcp/add":
+            from . import mcp as mcp_mod
+            cfg = body if isinstance(body, dict) else {}
+            c = mcp_mod.add_server(cfg)
+            self._json({"ok": True, "server": c})
+            return
+        elif path == "/api/mcp/delete":
+            from . import mcp as mcp_mod
+            jid = (body.get("id") if isinstance(body, dict) else None)
+            ok = mcp_mod.remove_server(str(jid or ""))
+            self._json({"ok": ok})
+            return
+        elif path == "/api/mcp/connect":
+            from . import mcp as mcp_mod
+            jid = (body.get("id") if isinstance(body, dict) else None)
+            r = mcp_mod.connect(str(jid or ""))
+            self._json(r)
+            return
+        elif path == "/api/mcp/disconnect":
+            from . import mcp as mcp_mod
+            jid = (body.get("id") if isinstance(body, dict) else None)
+            ok = mcp_mod.disconnect(str(jid or ""))
+            self._json({"ok": ok})
+            return
+        elif path == "/api/mcp/connect_all":
+            from . import mcp as mcp_mod
+            r = mcp_mod.connect_all()
+            self._json({"results": r})
+            return
         elif path == "/api/autostart/enable":
             from . import autostart as as_mod
             ok = as_mod.abilita()
@@ -4142,6 +4183,13 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
     try:
         from . import cron as _cron_mod
         _cron_mod.scheduler_start(env=app.env, interval=30.0)
+    except Exception:
+        pass
+
+    # MCP: connette i server abilitati all'avvio.
+    try:
+        from . import mcp as _mcp_mod
+        _mcp_mod.connect_all()
     except Exception:
         pass
 

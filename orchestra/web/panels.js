@@ -4378,3 +4378,128 @@ caricaCron = async function() {
   await _origCaricaCron();
   caricaAutostart();
 };
+
+// ============================== MCP ==============================
+const mcpBar = $("mcp-bar");
+const mcpNome = $("mcp-nome");
+const mcpTransport = $("mcp-transport");
+const mcpCommand = $("mcp-command");
+const mcpArgs = $("mcp-args");
+const mcpEnv = $("mcp-env");
+const mcpStatus = $("mcp-status");
+const mcpList = $("mcp-list");
+const mcpTools = $("mcp-tools");
+
+function mcpRiga(s) {
+  const riga = document.createElement("div");
+  riga.className = "goal-row";
+  const nome = document.createElement("span");
+  nome.className = "goal-obj";
+  nome.textContent = (s.name || s.id) + "  [" + (s.transport || "stdio") + "]";
+  nome.title = s.id;
+  riga.appendChild(nome);
+  const st = document.createElement("span");
+  st.className = "goal-stato stato-" + (s.connected ? "done" : "pending");
+  st.textContent = s.connected ? ("on · " + s.tools + " tool") : "off";
+  if (s.error) st.title = s.error;
+  riga.appendChild(st);
+  const azioni = document.createElement("span");
+  azioni.className = "goal-meta";
+  const btnConn = document.createElement("button");
+  btnConn.className = "ghost";
+  btnConn.textContent = s.connected ? "Disconnetti" : "Connetti";
+  btnConn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (s.connected) await fetch("/api/mcp/disconnect", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: s.id }) });
+    else await fetch("/api/mcp/connect", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: s.id }) });
+    caricaMcp();
+  });
+  const btnDel = document.createElement("button");
+  btnDel.className = "ghost";
+  btnDel.textContent = "X";
+  btnDel.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await fetch("/api/mcp/delete", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: s.id }) });
+    caricaMcp();
+  });
+  azioni.appendChild(btnConn);
+  azioni.appendChild(btnDel);
+  riga.appendChild(azioni);
+  return riga;
+}
+
+async function caricaMcp() {
+  if (!mcpBar || mcpBar.hidden) return;
+  try {
+    const rs = await fetch("/api/mcp/servers").then((r) => r.json().catch(() => ({})));
+    const ts = await fetch("/api/mcp/tools").then((r) => r.json().catch(() => ({})));
+    const servers = rs.servers || [];
+    if (mcpList) {
+      mcpList.replaceChildren();
+      for (const s of servers) mcpList.appendChild(mcpRiga(s));
+      if (!servers.length) {
+        const v = document.createElement("div");
+        v.className = "goal-meta";
+        v.textContent = "Nessun server MCP. Aggiungine uno.";
+        mcpList.appendChild(v);
+      }
+    }
+    if (mcpTools) {
+      mcpTools.replaceChildren();
+      const tools = ts.tools || [];
+      if (tools.length) {
+        const h = document.createElement("div");
+        h.className = "goal-meta";
+        h.textContent = "Tool remoti (" + tools.length + "): " + tools.map((t) => t.prefixed).join(", ");
+        mcpTools.appendChild(h);
+      }
+    }
+    if (mcpStatus) mcpStatus.textContent = servers.length + " server, " + (ts.tools || []).length + " tool";
+  } catch (e) {
+    if (mcpStatus) mcpStatus.textContent = "mcp non raggiungibili: " + e;
+  }
+}
+
+on("btn-mcp", "click", () => {
+  if (!mcpBar) return;
+  mcpBar.hidden = !mcpBar.hidden;
+  if (!mcpBar.hidden) caricaMcp();
+});
+
+on("mcp-refresh", "click", () => caricaMcp());
+
+on("mcp-add", "click", async () => {
+  const nome = (mcpNome && mcpNome.value || "").trim();
+  const command = (mcpCommand && mcpCommand.value || "").trim();
+  if (!nome) { if (mcpStatus) mcpStatus.textContent = "nome richiesto"; return; }
+  const args = (mcpArgs && mcpArgs.value || "").trim().split(/\s+/).filter(Boolean);
+  const env = {};
+  const envStr = (mcpEnv && mcpEnv.value || "").trim();
+  if (envStr) {
+    for (const part of envStr.split(";")) {
+      const idx = part.indexOf("=");
+      if (idx > 0) env[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+    }
+  }
+  const cfg = { name: nome, transport: (mcpTransport && mcpTransport.value) || "stdio",
+                command: command, args: args, env: env, enabled: true };
+  if (mcpStatus) mcpStatus.textContent = "aggiunta...";
+  try {
+    const r = await fetch("/api/mcp/add", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(cfg) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { if (mcpStatus) mcpStatus.textContent = d.error || ("errore " + r.status); return; }
+    // connetti subito
+    await fetch("/api/mcp/connect", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: (d.server && d.server.id) }) });
+    if (mcpNome) mcpNome.value = "";
+    if (mcpCommand) mcpCommand.value = "";
+    if (mcpArgs) mcpArgs.value = "";
+    if (mcpEnv) mcpEnv.value = "";
+    caricaMcp();
+    if (mcpStatus) mcpStatus.textContent = "aggiunto e connesso";
+  } catch (e) { if (mcpStatus) mcpStatus.textContent = "errore: " + e; }
+});
+
+on("mcp-connect-all", "click", async () => {
+  await fetch("/api/mcp/connect_all", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" });
+  caricaMcp();
+});

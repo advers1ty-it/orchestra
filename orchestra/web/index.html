@@ -80,6 +80,7 @@
   <button id="btn-bench" class="ghost">Benchmark</button>
   <button id="btn-goal" class="ghost" title="Obiettivo autonomo">Obiettivo</button>
    <button id="btn-cron" class="ghost" title="Job programmati">Cron</button>
+   <button id="btn-mcp" class="ghost" title="Server MCP">MCP</button>
   <button id="btn-onboard" class="ghost" title="Mostra obiettivi iniziali">Cosa fai?</button>
   <button id="btn-docs" class="ghost" title="Documentazione">Docs</button>
 
@@ -835,6 +836,26 @@
   </div>
   <div id="cron-output" class="goal-output"></div>
   <div id="cron-list" class="goal-list"></div>
+</div>
+<div id="mcp-bar" class="goal-bar" hidden>
+  <div class="goal-bar-inner">
+    <input id="mcp-nome" type="text" placeholder="Nome server (es. supabase)" />
+    <select id="mcp-transport" title="Transport">
+      <option value="stdio">stdio</option>
+    </select>
+    <input id="mcp-command" type="text" placeholder="Comando (es. npx -y @supabase/mcp-server...)" />
+    <input id="mcp-args" type="text" placeholder="Argomenti (separati da spazio)" />
+    <button id="mcp-add" class="primary">Aggiungi</button>
+    <button id="mcp-refresh" class="ghost">Aggiorna</button>
+    <span id="mcp-status" class="small dim"></span>
+  </div>
+  <div class="goal-bar-inner">
+    <input id="mcp-env" type="text" placeholder="Env (KEY=val, separati da ;)" />
+    <span class="grow"></span>
+    <button id="mcp-connect-all" class="ghost">Connetti tutti</button>
+  </div>
+  <div id="mcp-list" class="goal-list"></div>
+  <div id="mcp-tools" class="goal-list"></div>
 </div>
 <!-- Le tracce: una riga per turno, e il dettaglio in un modale.
      Aprirlo sotto la lista lo nascondeva sotto lo schermo: la lista

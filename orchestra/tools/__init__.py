@@ -55,6 +55,7 @@ from .memoria import tool_memoria  # noqa: E402
 from .web import tool_web_cerca, tool_web_leggi  # noqa: E402
 from .storico import tool_storico_cerca  # noqa: E402
 from .cron import tool_cron  # noqa: E402
+from .mcp import tool_mcp  # noqa: E402
 from .skill import (
     tool_skill_cerca,
     tool_skill_leggi,
@@ -347,7 +348,8 @@ def default_registry() -> ToolRegistry:
                  tool_browser_apri(), tool_browser_render(),
                  tool_browser_screenshot(),
                  tool_computer_screenshot(), tool_computer_click(),
-                 tool_computer_open(), tool_computer_type()):
+                 tool_computer_open(), tool_computer_type(),
+                 tool_mcp()):
         registry.registra(tool)
         registry.attiva(tool.name)
 
@@ -377,6 +379,11 @@ def default_registry() -> ToolRegistry:
     # attivi. Chi vuole un profilo, lo chiede esplicitamente con
     # applica_profilo() — e lo fa' nel posto giusto, che e' a ogni
     # turno (session.py) e non una volta sola alla costruzione.
+    try:
+        from .. import mcp as _mcp_mod
+        _mcp_mod.registra_tool_nel_registro(registry)
+    except Exception:  # noqa: BLE001
+        pass
     return registry
 
 
