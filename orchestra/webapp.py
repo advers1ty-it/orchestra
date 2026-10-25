@@ -1990,6 +1990,10 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         elif path == "/api/cron/scheduler/status":
             from . import cron as cron_mod
             self._json(cron_mod.scheduler_status())
+        elif path == "/api/autostart/status":
+            from . import autostart as as_mod
+            self._json({"disponibile": as_mod.disponibile(),
+                        "attivo": as_mod.stato()})
         elif path == "/api/dipendenze/stato":
             import importlib, sys as _sys
             deps=[]
@@ -3445,6 +3449,16 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             from . import cron as cron_mod
             cron_mod.scheduler_stop()
             self._json({"ok": True})
+            return
+        elif path == "/api/autostart/enable":
+            from . import autostart as as_mod
+            ok = as_mod.abilita()
+            self._json({"ok": ok, "attivo": as_mod.stato()})
+            return
+        elif path == "/api/autostart/disable":
+            from . import autostart as as_mod
+            ok = as_mod.disabilita()
+            self._json({"ok": ok, "attivo": as_mod.stato()})
             return
         elif path == "/api/goal/stop":
             gid = (body.get("id") if isinstance(body, dict) else None)

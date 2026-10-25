@@ -4317,3 +4317,36 @@ on("cron-sched", "click", async () => {
     caricaCron();
   } catch (e) { if (cronStatus) cronStatus.textContent = "errore: " + e; }
 });
+
+// ============================== AUTOSTART ==============================
+const autostartStat = $("autostart-stat");
+const autostartToggle = $("autostart-toggle");
+
+async function caricaAutostart() {
+  try {
+    const r = await fetch("/api/autostart/status").then((x) => x.json().catch(() => ({})));
+    if (!r.disponibile) {
+      if (autostartStat) autostartStat.textContent = "non disponibile (non Windows)";
+      if (autostartToggle) autostartToggle.hidden = true;
+      return;
+    }
+    if (autostartStat) autostartStat.textContent = r.attivo ? "attivo" : "disattivo";
+    if (autostartToggle) autostartToggle.textContent = r.attivo ? "Disattiva" : "Attiva";
+  } catch (e) { }
+}
+
+on("autostart-toggle", "click", async () => {
+  try {
+    const st = await fetch("/api/autostart/status").then((x) => x.json().catch(() => ({})));
+    const rotta = st.attivo ? "/api/autostart/disable" : "/api/autostart/enable";
+    await fetch(rotta, { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" });
+    caricaAutostart();
+  } catch (e) { }
+});
+
+// carica stato all'apertura del pannello cron
+const _origCaricaCron = caricaCron;
+caricaCron = async function() {
+  await _origCaricaCron();
+  caricaAutostart();
+};
