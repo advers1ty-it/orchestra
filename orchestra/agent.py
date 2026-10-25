@@ -33,7 +33,9 @@ from .fallback import (
     get_chain_for_provider, should_fallback
 )
 from .budget import budget_guard, BudgetLimits
-from .types import LLMResponse, Message, ToolCall, ToolRegistry, new_id
+from .types import (
+    LLMResponse, Message, ToolCall, ToolRegistry, ToolResult, new_id,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(HERE, ".env")
@@ -303,8 +305,10 @@ class Agent:
                        limit=self.config.context_limit,
                        sopra_soglia=sopra)
 
-    def _execute_tool(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
-        """Esegue un tool e restituisce (testo, riuscito).
+    def _execute_tool(
+        self, name: str, args: dict[str, Any]
+    ) -> tuple[str, bool, list[str]]:
+        """Esegue un tool e restituisce (testo, riuscito, immagini).
 
         Restituisce SEMPRE una stringa, mai solleva. Vedi invariante 1: è
         deliberato, un agente che si blocca su un errore recuperabile è un
@@ -313,6 +317,12 @@ class Agent:
         Il secondo valore serve al chiamante: `riuscito` è False anche quando
         il testo è un messaggio d'errore, e senza questo il circuit breaker
         non ha modo di sapere che il modello sta sbagliando.
+
+        Il terzo sono le immagini da mettere nel messaggio `tool`. Quasi
+        sempre vuoto: solo i tool che devono far VEDERE qualcosa (uno
+        screenshot, una pagina renderizzata) lo riempiono. Senza, il
+        modello riceve "screenshot salvato in ..." e non ha modo di
+        guardare lo schermo — il tool esiste ma è inutile.
         """
         tool = self.registry.get(name)
         if tool is None:
@@ -320,6 +330,7 @@ class Agent:
                 f"ERRORE: tool inesistente '{name}'. "
                 f"Disponibili: {', '.join(self.registry.all_names())}",
                 False,
+                [],
             )
 
         try:
@@ -335,17 +346,29 @@ class Agent:
                 text = cached
                 if len(text) > self.config.tool_timeout_chars:
                     text = text[: self.config.tool_timeout_chars]
-                return text, True
+                return text, True, []
 
             result = tool.handler(**args)
             if hasattr(result, "__await__"):
                 import asyncio
 
                 result = asyncio.run(result)
-            text = result if isinstance(result, str) else json.dumps(result, default=str)
+            if isinstance(result, ToolResult):
+                text = result.text
+                immagini = list(result.immagini)
+                # Un'immagine non si cachea: dipende dal mondo (lo schermo
+                # cambia), e il testo da solo non la riproduce. Metterla in
+                # cache darebbe al modello lo schermo di cinque minuti fa.
+                cachevole = not immagini
+            else:
+                text = (result if isinstance(result, str)
+                        else json.dumps(result, default=str))
+                immagini = []
+                cachevole = True
             # Si cachea solo il successo: un errore transitorio inchiodato
             # per 5 minuti sarebbe peggio che ricalcolarlo.
-            cache.metti(name, args, text)
+            if cachevole:
+                cache.metti(name, args, text)
         except TypeError as e:
             # quasi sempre argomenti sbagliati: lo riportiamo con
             # precisione. È un errore del modello, quindi conta verso
@@ -367,7 +390,7 @@ class Agent:
                 pass
             dettaglio = f" Accetta: {attesi}." if attesi else ""
             return (f"ERRORE DI ARGOMENTI per '{name}': {e}."
-                    f"{dettaglio}"), False
+                    f"{dettaglio}"), False, []
         except Exception as e:
             self._emit(
                 "tool_error",
@@ -375,7 +398,8 @@ class Agent:
                 error=f"{type(e).__name__}: {e}",
                 trace=traceback.format_exc(limit=3),
             )
-            return f"ERRORE durante l'esecuzione di '{name}': {type(e).__name__}: {e}", False
+            return (f"ERRORE durante l'esecuzione di '{name}': "
+                    f"{type(e).__name__}: {e}"), False, []
 
         if len(text) > self.config.tool_timeout_chars:
             text = (
@@ -383,7 +407,7 @@ class Agent:
                 + f"\n\n[TRONCATO: {len(text)} caratteri totali, mostro i primi "
                 f"{self.config.tool_timeout_chars}]"
             )
-        return text, True
+        return text, True, immagini
 
     # -- il loop -----------------------------------------------------------
 
@@ -794,7 +818,7 @@ class Agent:
                             f"Inizio: {str(tc.arguments)[:120]!r}")
                         ok = False
                     else:
-                        result, ok = self._execute_tool(tc.name, args)
+                        result, ok, immagini = self._execute_tool(tc.name, args)
 
                     # il conteggio errori si azzera SOLO su un tool riuscito.
                     # Azzerarlo sempre — come faceva prima — rendeva il
@@ -815,6 +839,7 @@ class Agent:
                             content=result,
                             tool_call_id=tc.id,
                             name=tc.name,
+                            images=immagini,
                         )
                     )
                     self._emit(

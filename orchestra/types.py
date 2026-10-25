@@ -175,7 +175,28 @@ class Message:
 # Tool
 # --------------------------------------------------------------------------
 
-ToolHandler = Callable[..., str] | Callable[..., Awaitable[str]]
+ToolHandler = (
+    Callable[..., "str | ToolResult"]
+    | Callable[..., Awaitable["str | ToolResult"]]
+)
+
+
+@dataclass
+class ToolResult:
+    """Il risultato di un tool che porta anche un'immagine.
+
+    La maggior parte dei tool restituisce una stringa e basta. Alcuni —
+    un tool che legge uno screenshot, per esempio — devono dare al
+    modello QUALCOSA DA VEDERE, non una descrizione: il testo da solo
+    non basta, e il modello non ha modo di sapere com'e' lo schermo.
+
+    `immagini` sono data URL (`data:image/png;base64,...`), lo stesso
+    formato che gli allegati della chat usano: il provider li accetta
+    cosi', e non c'e' motivo di averne due formati.
+    """
+
+    text: str
+    immagini: list[str] = field(default_factory=list)
 
 
 @dataclass

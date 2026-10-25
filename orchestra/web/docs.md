@@ -38,6 +38,7 @@
 ## Browser / computer
 - Browser render apre Chrome/Edge locale (headless).
 - Computer automation usa api Windows e richiede permesso.
+- `screenshot_view` legge lo PNG prodotto da `browser_screenshot` / `computer_screenshot` e lo passa al modello come immagine: la cattura da sola dà un percorso, non uno schermo.
 
 ## Supporto
 - non ci sono dipendenze esterne per default.

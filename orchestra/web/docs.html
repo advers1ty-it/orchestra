@@ -253,6 +253,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 <ul>
   <li><code>browser_render</code>: headless Chrome/Edge (JS eseguito), fallback fetch leggero.</li>
   <li><code>browser_screenshot</code>: PNG nel workdir.</li>
+  <li><code>screenshot_view</code>: legge quel PNG e lo mostra al modello come immagine — senza, il modello riceve un percorso e non vede nulla.</li>
   <li>Automazione click/type/open gated da permesso o env <code>ORCHESTRA_COMPUTER_USE</code>.</li>
 </ul>
 <p>Per i tester: l’automazione da tastiera/click richiede conferma esplicita; di default bloccata finché non si abilita.</p>

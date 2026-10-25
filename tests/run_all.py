@@ -85,6 +85,11 @@ SUITES = [
     ("prezzi", "test_prezzi.py", True),
     ("categorie", "test_categorie.py", True),
     ("allegati", "test_allegati.py", True),
+    # Lo screenshot letto come immagine: computer_screenshot da solo dava
+    # un percorso, e un percorso non è uno schermo. Copre anche i due
+    # formati di provider (OpenAI e Anthropic) e la compaction, che
+    # altrimenti lascerebbe un'immagine costosa accanto a un segnaposto.
+    ("screenshot", "test_screenshot.py", True),
     ("allegato-e2e", "test_allegato_e2e.py", True),
     ("scrizione", "test_scrizione.py", True),
     ("allegato-giro", "test_allegato_giro.py", True),

@@ -86,6 +86,14 @@ def compact_tools(
             # (es. le prime righe di un file) basta a orientare il modello
             head = msg.content[:200].strip()
             msg.content = f"{placeholder}\n{head}" if head else placeholder
+            # L'immagine si toglie sempre: e' la parte che costa (un
+            # screenshot sono ~1100 token) e l'unica che il segnaposto
+            # non sostituisce. Lasciarla accanto a "[potato: ...]"
+            # manderebbe al modello uno schermo che il testo dice di
+            # non avere — e il modello ci ragionerebbe sopra, non sopra
+            # quello che vede.
+            if getattr(msg, "images", None):
+                msg.images = []
             pruned += 1
     return pruned
 

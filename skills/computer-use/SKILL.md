@@ -11,16 +11,20 @@ origine: base
 
 Some jobs live outside files and browsers: desktop apps,
 system dialogs, installers. Tools: `computer_screenshot`
-(see), `computer_click` (click), `computer_type` (type),
+(capture), `screenshot_view` (show the capture to the model),
+`computer_click` (click), `computer_type` (type),
 `computer_open` (open an app). Real side effects every time.
 
 ## How
 
 1. `computer_screenshot` first, always: never click from
    memory of a previous screen. UI state goes stale fast.
-2. One action, one verification: after click or type, take
-   another screenshot and confirm the expected state before
-   the next step.
+2. `screenshot_view` with the path the capture returned: the
+   capture alone is a file, and a file is not a screen. Without
+   it you describe a screen you have never seen.
+3. One action, one verification: after click or type, take
+   another screenshot, `screenshot_view` it, and confirm the
+   expected state before the next step.
 3. Prefer `computer_open` with the app name over navigating
    menus by coordinates: names survive UI restyling, pixels
    do not.

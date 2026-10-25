@@ -25,8 +25,10 @@ dependencies. If a server is needed, the project's own or
 1. Serve the page and hit it with `run_shell` + `curl`:
    status must be 200 and the body the expected one.
 2. If the project has browser tools (`browser_render`,
-   `browser_screenshot`), use them to actually see the page:
-   markup that "should" work has not worked until seen.
+   `browser_screenshot`, `screenshot_view`), use them to
+   actually see the page: markup that "should" work has not
+   worked until seen. `screenshot_view` after the capture,
+   otherwise the model has a path and not a page.
 3. Clean console: no JavaScript errors. A forgotten
    `console.log` is noise, an exception is a bug.
 

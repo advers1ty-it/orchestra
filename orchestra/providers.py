@@ -74,6 +74,30 @@ class _StreamNonSupportato(Exception):
     sembra un guasto di rete.
     """
 
+def _blocco_immagine(url: str) -> dict[str, Any] | None:
+    """Una data URL diventa un blocco immagine Anthropic. None se non si puo'.
+
+    Anthropic vuole `{"type": "image", "source": {"type": "base64",
+    "media_type": ..., "data": ...}}`; gli allegati e gli screenshot
+    arrivano come `data:image/png;base64,....`. La traduzione e' meccanica,
+    ma se il prefisso non e' quello si scarta invece di mandare un blocco
+    a meta': un'immagine troncata viene rifiutata con un errore che sembra
+    di rete.
+    """
+    if not isinstance(url, str) or not url.startswith("data:"):
+        return None
+    try:
+        head, b64 = url.split(",", 1)
+        media = (head.split(";")[0].split(":")[1] if ";" in head
+                 else head.split(":")[1])
+    except (ValueError, IndexError):
+        return None
+    if not b64 or not media:
+        return None
+    return {"type": "image",
+            "source": {"type": "base64", "media_type": media, "data": b64}}
+
+
 def _retry_after(corpo: str, headers=None) -> float:
     """Quanti secondi chiede il server di aspettare. Zero se non lo dice.
 
@@ -650,24 +674,37 @@ class AnthropicAdapter:
                     content.append({"type": "text", "text": ""})
                 out.append({"role": "assistant", "content": content})
             elif m.role == "tool":
-                out.append({"role": "user", "content": [
-                    {"type": "tool_result", "tool_use_id": m.tool_call_id,
-                     "content": m.content}]})
+                # Un risultato di tool puo' portare un'immagine (uno
+                # screenshot letto con screenshot_view). In formato
+                # OpenAI `Message.to_api` la attacca; qui no, e senza
+                # questa riga il modello Anthropic riceve il percorso e
+                # non vede nulla — lo strumento esiste ma e' muto.
+                imgs = [
+                    _blocco_immagine(url) for url in (getattr(m, "images", []) or [])
+                    if isinstance(url, str) and url.startswith("data:")
+                ]
+                if imgs:
+                    contenuto: list[dict[str, Any]] = imgs
+                    if m.content:
+                        # il testo va DOPO le immagini: e' la
+                        # conferma di cio' che si sta vedendo
+                        contenuto.append({"type": "text", "text": m.content})
+                    out.append({"role": "user", "content": [
+                        {"type": "tool_result", "tool_use_id": m.tool_call_id,
+                         "content": contenuto}]})
+                else:
+                    out.append({"role": "user", "content": [
+                        {"type": "tool_result", "tool_use_id": m.tool_call_id,
+                         "content": m.content}]})
             else:
                 content = []
                 if m.content:
                     content.append({"type": "text", "text": m.content})
                 # immagini data URL -> base64 source
                 for url in getattr(m, "images", []) or []:
-                    if not isinstance(url, str) or not url.startswith("data:"):
-                        continue
-                    try:
-                        head, b64 = url.split(",", 1)
-                        media = head.split(";")[0].split(":")[1] if ";" in head else head.split(":")[1]
-                    except (ValueError, IndexError):
-                        continue
-                    content.append({"type": "image", "source": {
-                        "type": "base64", "media_type": media, "data": b64}})
+                    blocco = _blocco_immagine(url)
+                    if blocco is not None:
+                        content.append(blocco)
                 if not content:
                     content.append({"type": "text", "text": ""})
                 out.append({"role": "user", "content": content})
