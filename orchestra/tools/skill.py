@@ -221,7 +221,7 @@ def tool_skill_importa() -> Tool:
     async def handler(cartella: str = "", categoria: str = "") -> str:
         sorgente = str(cartella or "").strip()
         if not sorgente:
-            return "Che cartella? Il percorso di uno store con dentro le cartelle delle skill."
+            return "Che cartella? Il percorso di uno store con dentro le cartelle delle skill, oppure un URL git (https://... o git@...)."
         i = _indice()
         n, nomi = i.importa(sorgente, categoria=str(categoria or "").strip())
         if not n:

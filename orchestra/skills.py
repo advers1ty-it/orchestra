@@ -52,6 +52,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable
@@ -424,16 +426,32 @@ class Indice:
 
     def importa(self, sorgente: str, categoria: str = "",
                 origine: str = "scaricata") -> tuple[int, list[str]]:
-        """Porta skill da uno store esterno.
+        """Porta skill da uno store esterno (cartella locale o URL git).
 
-        Copia la cartella intera, non solo SKILL.md: una skill con
-        `references/` o `scripts/` senza quei file e' un documento
-        che rimanda a roba che non c'e', e l'agente la segue fino
-        all'errore.
+        Se `sorgente` e' un URL (http/https/git@), clona il repository
+        in una cartella temporanea, importa da li', e rimuove il clone.
+        Restituisce (quante, nomi). In caso di errore di clone,
+        restituisce (0, [messaggio]).
+        """
+        temp: str | None = None
+        if _e_url(sorgente):
+            temp = tempfile.mkdtemp(prefix="skill-store-")
+            ok, msg = _clona_repo(sorgente, temp)
+            if not ok:
+                shutil.rmtree(temp, ignore_errors=True)
+                return 0, [msg]
+            sorgente = temp
+        try:
+            return self._importa_cartella(sorgente, categoria, origine)
+        finally:
+            if temp:
+                shutil.rmtree(temp, ignore_errors=True)
 
-        Restituisce (quante, nomi). I nomi sono perche' l'agente
-        sappia cid' che e' entrato — un import silenzioso e' un import
-        che non si puo' controllare.
+    def _importa_cartella(self, sorgente: str, categoria: str = "",
+                          origine: str = "scaricata") -> tuple[int, list[str]]:
+        """Porta skill da una cartella locale (implementazione).
+
+        Copia la cartella intera, non solo SKILL.md.
         """
         if not os.path.isdir(sorgente):
             return 0, []
@@ -586,6 +604,33 @@ def salva_generata(indice: Indice, c: Candidato) -> str:
 
 
 _NOME_SPORCO = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _e_url(sorgente: str) -> bool:
+    s = (sorgente or "").strip().lower()
+    return (s.startswith("http://") or s.startswith("https://")
+            or s.startswith("git@") or s.startswith("ssh://"))
+
+
+def _clona_repo(url: str, dest: str) -> tuple[bool, str]:
+    """Clona un repository git in `dest`. Shallow, senza prompt.
+
+    Restituisce (ok, messaggio). `git` deve essere nel PATH: se non
+    c'e', l'errore viene riportato invece di far cadere l'import.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "clone", "--depth", "1", url.strip(), dest],
+            capture_output=True, text=True, timeout=120,
+        )
+    except FileNotFoundError:
+        return False, "git non trovato nel PATH"
+    except subprocess.TimeoutExpired:
+        return False, "clone scaduto (timeout 120s)"
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "").strip()
+        return False, f"clone fallito: {err[:300]}"
+    return True, "ok"
 
 
 def _nome_sicuro(nome: str) -> str:
