@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orchestra — Documentazione 0.5.40</title>
+<title>Orchestra — Documentazione 0.5.41</title>
 <style>
   :root {
     --bg: #0c1018;
@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>Orchestra — Documentazione</h1>
-  <div class="sub">Versione 0.5.40 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
+  <div class="sub">Versione 0.5.41 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
   <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica docs</a></div>
 </header>
 <div class="layout">
@@ -162,6 +162,10 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
     <h3>Docs</h3>
     <p>Pulsante Docs apre questa guida in nuova tab.</p>
   </div>
+  <div class="box">
+    <h3>Tracce</h3>
+    <p>La sidebar (pulsante 📼) elenca gli ultimi turni con l’esito in parole — «completato», «fermato al limite», «annullato», «budget finito», «girava a vuoto», «troppi errori», «verifica fallita», «solo parole, niente fatti», «fermato su un annuncio». Cliccando una riga si apre un modale con la sequenza esatta degli eventi: serve per capire <em>perché</em> un turno è andato com’è andato, senza ripeterlo.</p>
+  </div>
 </div>
 </section>
 
@@ -265,6 +269,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   <li>Sicurezza: il token protegge tutte le rotte. In locale (127.0.0.1) l'accesso resta libero come prima. Le chiavi API non lasciano il PC.</li>
   <li>Puoi anche avviare il server remoto direttamente dall'interfaccia: scheda Opzioni → Remoto → "Avvia remoto (LAN)" oppure "Avvia tunnel (pubblico)". Non serve aprire il terminale: il pulsante lancia un secondo server in background e mostra URL + QR code. "Ferma" lo spegne.</li>
   <li>Nella scheda Opzioni → Remoto vedi token, URL e un QR code da scansionare.</li>
+  <li>Sul telefono l’interfaccia si adatta da sola (sidebar richiudibile, chat a tutta larghezza). Orchestra è installabile: dal browser del telefono «Aggiungi a schermata Home», e si apre a schermo intero come un’app nativa (manifest + service worker, con cache offline della shell).</li>
 </ul>
 </section>
 
@@ -331,7 +336,7 @@ python3 kill_ports.py 8737</code></pre>
   </main>
 </div>
 <footer>
-  Orchestra — versione 0.5.40 · guida servita da <code>/docs</code>.
+  Orchestra — versione 0.5.41 · guida servita da <code>/docs</code>.
 </footer>
 </body>
 </html>
