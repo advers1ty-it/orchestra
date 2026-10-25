@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orchestra — Documentazione 0.5.41</title>
+<title>Orchestra — Documentazione 0.5.44</title>
 <style>
   :root {
     --bg: #0c1018;
@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>Orchestra — Documentazione</h1>
-  <div class="sub">Versione 0.5.41 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
+  <div class="sub">Versione 0.5.44 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
   <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica docs</a></div>
 </header>
 <div class="layout">
@@ -66,6 +66,8 @@
       <li><a href="#tooling">Tool & profili</a></li>
       <li><a href="#delega">Multi-agent & delega</a></li>
       <li><a href="#goal">Goal autonomi</a></li>
+      <li><a href="#cron">Cron (job programmati)</a></li>
+      <li><a href="#mcp">Client MCP</a></li>
       <li><a href="#browser">Browser e computer</a></li>
       <li><a href="#permessi">Permessi</a></li>
       <li><a href="#memoria">Memoria & storia</a></li>
@@ -225,6 +227,26 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 </ul>
 </section>
 
+<section id="cron">
+<h2>Cron — job programmati</h2>
+<p>Pannello “Cron” (toolbar) per schedulare obiettivi o comandi shell. Frequenze tramite menu amichevole (ogni 5/10/30 min, ogni ora, due volte al giorno, una volta al giorno, orario preciso, personalizzato cron). Lo scheduler parte in automatico all'avvio del server (intervallo 30s) e riprende dopo riavvio (job salvati su disco). Avvio automatico di Orchestra su Windows (al login) attivabile dal pannello.</p>
+<ul>
+  <li>Tipi azione: <code>goal</code> (avvia un obiettivo) o <code>shell</code> (comando).</li>
+  <li>CRUD completo da UI e via tool <code>cron</code> (anche per l'agente).</li>
+  <li>Shortcut: <code>@hourly</code>, <code>@daily</code>, <code>@weekly</code>, <code>@monthly</code>, <code>@yearly</code>, <code>@reboot</code>.</li>
+</ul>
+</section>
+
+<section id="mcp">
+<h2>Client MCP</h2>
+<p>Orchestra può connettersi a server MCP esterni (Supabase, Unreal, Godot, filesystem, ecc.) e usare i loro tool come strumenti nativi. Pannello “MCP” in toolbar per aggiungere/configurare server stdio; i tool scoperti diventano disponibili con prefisso <code>mcp_&lt;server&gt;__&lt;tool&gt;</code>. Gestione anche via tool <code>mcp</code>.</p>
+<ul>
+  <li>Configurazione persistente in <code>ORCHESTRA_HOME/mcp_servers.json</code>.</li>
+  <li>Connessione automatica dei server abilitati all'avvio.</li>
+  <li>Supporto transport stdio (subprocess); SSE/HTTP in roadmap.</li>
+</ul>
+</section>
+
 <section id="browser">
 <h2>Browser & computer use</h2>
 <p>Sfruttano SOLO componenti OS già presenti (Chrome/Edge, PowerShell, .NET). Non richiedono pacchetti esterni.</p>
@@ -317,6 +339,26 @@ POST /api/scheduler/stop</code></pre>
 <pre><code>POST /api/steer   { "testo": "..." }
 POST /api/cancel</code></pre>
 
+<h3>Endpoint REST — cron</h3>
+<pre><code>GET  /api/cron/jobs
+POST /api/cron/create
+POST /api/cron/update
+POST /api/cron/delete
+POST /api/cron/run
+GET  /api/cron/scheduler/status
+POST /api/cron/scheduler/start
+POST /api/cron/scheduler/stop</code></pre>
+
+<h3>Endpoint REST — mcp</h3>
+<pre><code>GET  /api/mcp/servers
+GET  /api/mcp/tools
+GET  /api/mcp/status
+POST /api/mcp/add
+POST /api/mcp/delete
+POST /api/mcp/connect
+POST /api/mcp/disconnect
+POST /api/mcp/connect_all</code></pre>
+
 <h3>Avvio & configurazione CLI</h3>
 <pre><code>python3 -m orchestra.cli doctor
 python3 -m orchestra.cli web [--no-browser] [--port 8737]
@@ -336,7 +378,7 @@ python3 kill_ports.py 8737</code></pre>
   </main>
 </div>
 <footer>
-  Orchestra — versione 0.5.41 · guida servita da <code>/docs</code>.
+  Orchestra — versione 0.5.44 · guida servita da <code>/docs</code>.
 </footer>
 </body>
 </html>
