@@ -324,6 +324,16 @@ class Session:
             st: AgentState = self.agent.state
             messaggi = []
             for m in st.messages:
+                # Le coppie assistant/tool sintetiche (nudge, verifica,
+                # steer, gira-a-vuoto) servono al modello, non all'utente:
+                # sono role="tool" con un id inventato, e per poterle
+                # mandare a gateway stretti (Beam) sono precedute da un
+                # assistant con una tool_call fittizia. Se finissero nello
+                # snapshot, l'UI disegnerebbe un tool card "__nudge__" con
+                # dentro la nota di sistema — rumore che non e' quello che
+                # e' successo. Il nome con "__" le riconosce.
+                if m.name and m.name.startswith("__"):
+                    continue
                 if m.role == "user":
                     messaggi.append({"role": m.role, "content": m.content,
                                      "name": m.name})

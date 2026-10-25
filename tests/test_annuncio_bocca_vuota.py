@@ -123,8 +123,11 @@ check("nessun tool e' stato eseguito", ag.state.tool_calls_made == 0,
       f"tool eseguiti: {ag.state.tool_calls_made}")
 
 # Il nudge deve essere un messaggio tool con id: senza, il gateway
-# risponde 400 (vedi test_nous_tool_call_id.py).
-nudge = [m for m in ag.state.messages if m.name == "__nudge__"]
+# risponde 400 (vedi test_nous_tool_call_id.py). Si filtra per ruolo
+# "tool": la coppia sintetica ha anche un assistant fittizio col nome
+# "__nudge__" (serve al pairing, vedi _nota_sistema).
+nudge = [m for m in ag.state.messages
+         if m.name == "__nudge__" and m.role == "tool"]
 check("il nudge e' nel contesto una volta sola", len(nudge) == 1,
       f"nudge trovati: {len(nudge)}")
 if nudge:
@@ -190,7 +193,8 @@ check("l'esito e' annuncio_finale, non solo_parole",
       ag3.state.stopped_because == "annuncio_finale",
       f"esito: {ag3.state.stopped_because!r}")
 
-nudge3 = [m for m in ag3.state.messages if m.name == "__nudge__"]
+nudge3 = [m for m in ag3.state.messages
+          if m.name == "__nudge__" and m.role == "tool"]
 check("il nudge e' nel contesto", len(nudge3) == 1)
 if nudge3:
     testo3 = nudge3[0].content

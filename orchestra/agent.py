@@ -33,7 +33,7 @@ from .fallback import (
     get_chain_for_provider, should_fallback
 )
 from .budget import budget_guard, BudgetLimits
-from .types import LLMResponse, Message, ToolRegistry, new_id
+from .types import LLMResponse, Message, ToolCall, ToolRegistry, new_id
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(HERE, ".env")
@@ -506,6 +506,42 @@ class Agent:
         self.state.steer_queue.append(testo)
         return True
 
+    def _nota_sistema(self, testo: str, nome: str) -> None:
+        """Appende una nota di sistema come coppia assistant/tool valida.
+
+        I messaggi di sistema (nudge, verifica, steer, gira-a-vuoto) sono
+        role="tool" con un tool_call_id inventato: non sono il risultato di
+        una tool_call che il modello abbia fatto. I gateway permissivi
+        (longcat, laguna) li accettano lo stesso; quelli stretti no:
+        Beam 1.0 risponde 400 "messages[N] is a tool result, but it does
+        not follow an assistant message with 'tool_calls' or its
+        results", e il turno si interrompe senza riprendersi.
+
+        Dare un id non basta: serve il PAIRING. La nota e' preceduta da
+        un assistant con una tool_call fittizia che porta lo stesso id —
+        il risultato segue la chiamata, e la sequenza e' valida ovunque.
+
+        L'assistant fittizio ha content vuoto: non finisce nello storico
+        (che tiene solo i messaggi con contenuto) e non genera eventi,
+        quindi l'utente non lo vede mai.
+        """
+        nome = nome or "__sistema__"
+        cid = new_id(nome.strip("_"))
+        self.state.messages.append(Message(
+            role="assistant",
+            content="",
+            tool_calls=[ToolCall(id=cid, name=nome, arguments="{}")],
+            # `name` marca la coppia come sintetica: lo snapshot lo usa per
+            # non disegnarla come un tool card "__nudge__" (vedi session.py).
+            name=nome,
+        ))
+        self.state.messages.append(Message(
+            role="tool",
+            tool_call_id=cid,
+            name=nome,
+            content=testo,
+        ))
+
     def request_cancel(self) -> None:
         """Richiede la cancellazione del turno in corso."""
         self._cancel_flag = True
@@ -592,18 +628,14 @@ class Agent:
             if self.state.steer_queue:
                 testo = self.state.steer_queue.pop(0)
                 self.state.steer_count += 1
-                self.state.messages.append(Message(
-                    role="tool",
-                    content=(
-                        f"[MESSAGGIO DURANTE IL LAVORO — steer #{self.state.steer_count}]\n"
-                        f"{testo}\n"
-                        f"\n"
-                        f"Riconsidera il tuo lavoro alla luce di questa informazione. "
-                        f"Continua da dove eri rimasto."
-                    ),
-                    tool_call_id=new_id("steer"),
-                    name="__steer__",
-                ))
+                self._nota_sistema(
+                    f"[MESSAGGIO DURANTE IL LAVORO — steer #{self.state.steer_count}]\n"
+                    f"{testo}\n"
+                    f"\n"
+                    f"Riconsidera il tuo lavoro alla luce di questa informazione. "
+                    f"Continua da dove eri rimasto.",
+                    "__steer__",
+                )
                 self._emit("steer", testo=testo, count=self.state.steer_count)
                 # Se il modello stava per concludere, lo steer lo fa ripensare:
                 # non fare il check di chiusura, vai direttamente alla chiamata
@@ -702,19 +734,16 @@ class Agent:
                 if ripetuta_troppo:
                     nome_rip, args_rip = ripetuta_troppo
                     self._emit("gira_a_vuoto", tool=nome_rip, args=args_rip)
-                    self.state.messages.append(Message(
-                        role="tool",
-                        name="__sistema__",
-                        tool_call_id=new_id("sistema"),
-                        content=(
-                            f"STAI RIPETENDO la stessa chiamata `{nome_rip}` con gli "
-                            f"stessi argomenti e torna sempre lo stesso errore. "
-                            f"Smetti di riprovarla: è un vicolo cieco. Rispondi "
-                            f"adesso con quello che sei riuscito a fare finora, e "
-                            f"dì in una riga cosa non ha funzionato e perché. "
-                            f"Un «non ce l'ho fatta su {nome_rip}» è una risposta "
-                            f"utile; ritentare la stessa chiamata non lo è."),
-                    ))
+                    self._nota_sistema(
+                        f"STAI RIPETENDO la stessa chiamata `{nome_rip}` con gli "
+                        f"stessi argomenti e torna sempre lo stesso errore. "
+                        f"Smetti di riprovarla: è un vicolo cieco. Rispondi "
+                        f"adesso con quello che sei riuscito a fare finora, e "
+                        f"dì in una riga cosa non ha funzionato e perché. "
+                        f"Un «non ce l'ho fatta su {nome_rip}» è una risposta "
+                        f"utile; ritentare la stessa chiamata non lo è.",
+                        "__sistema__",
+                    )
                     self.state.stopped_because = "gira_a_vuoto"
                     return self.state
 
@@ -833,13 +862,10 @@ class Agent:
             if annuncio and not self._nudge_fatto:
                 self._nudge_fatto = True
                 dopo_lavoro = self.state.tool_calls_made > 0
-                self.state.messages.append(Message(
-                    role="tool",
-                    tool_call_id=new_id("nudge"),
-                    content=(_NUDGE_DOPO_LAVORO if dopo_lavoro
-                             else _NUDGE_SENZA_TOOL),
-                    name="__nudge__",
-                ))
+                self._nota_sistema(
+                    _NUDGE_DOPO_LAVORO if dopo_lavoro else _NUDGE_SENZA_TOOL,
+                    "__nudge__",
+                )
                 self._emit("nudge", testo=resp.content[:120],
                            dopo_lavoro=dopo_lavoro)
                 continue
@@ -901,15 +927,13 @@ class Agent:
                                tentativi=self._verifica_tentativo)
                     self.state.stopped_because = "verifica_fallita"
                     return self.state
-                self.state.messages.append(Message(
-                    role="tool",
-                    content=nota_per_modello(
+                self._nota_sistema(
+                    nota_per_modello(
                         esito, self._verifica_tentativo,
                         specifica.get("max_tentativi",
                                       self.config.max_tentativi_verifica)),
-                    tool_call_id=new_id("verifica"),
-                    name="__verifica__",
-                ))
+                    "__verifica__",
+                )
                 continue
 
             self.state.stopped_because = "risposta_finale"

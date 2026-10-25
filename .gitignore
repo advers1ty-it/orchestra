@@ -7,6 +7,9 @@
 # Sono id generati (numeri), e committarli riempie il diff di robba
 # Spazzatura dei test: il cestino delle skill e la cartella di prova
 # Stato runtime dei goal in locale: si ricostruisce usandoli, non è verità.
+# Stato del server remoto (porta, pid, url del tunnel): lo scrive Orchestra
+# a runtime e non e' verita', si ricostruisce avviandolo di nuovo.
+orchestra/.remote_state.json
 # Token read-only per gli aggiornamenti: lo mette chi fa il pacchetto.
 # tutti gli skill specifici di TraceApp, Godot, Aphrodite, su qualunque categoria
 # vengono creati dal vivo quando i test scrivono e cancellano skill.

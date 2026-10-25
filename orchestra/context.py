@@ -154,8 +154,39 @@ def compact_history(
 
     kept_indices = sorted(protected | set(range(cutoff, len(rest))))
     rebuilt = [merged] + [rest[i] for i in kept_indices]
+    rebuilt = _senza_tool_orfani(rebuilt)
     messages[:] = system + rebuilt
     return len(to_merge)
+
+
+def _senza_tool_orfani(messaggi: list[Message]) -> list[Message]:
+    """Toglie i tool result che non seguono un tool_call.
+
+    La compaction fonde gli assistant prima del taglio e butta i tool
+    result che li seguono: se un tool result sopravvive al taglio ma il
+    suo assistant e' finito nel riepilogo, resta un tool result orfano.
+    I gateway permissivi lo ingoiano, ma quelli stretti rifiutano la
+    richiesta intera con 400 ("is a tool result, but it does not follow
+    an assistant message with 'tool_calls'") e il turno si interrompe.
+
+    Si tiene un tool result solo se il suo id e' stato chiamato da un
+    assistant visto poco prima. Il resto si butta: l'assistant e' gia'
+    nel riepilogo, che ne conserva le chiamate.
+    """
+    attesi: set[str] = set()
+    tenuti: list[Message] = []
+    for m in messaggi:
+        if m.role == "assistant":
+            attesi |= {tc.id for tc in m.tool_calls}
+            tenuti.append(m)
+        elif m.role == "tool":
+            if m.tool_call_id in attesi:
+                attesi.discard(m.tool_call_id)
+                tenuti.append(m)
+            # altrimenti: orfano, si butta
+        else:
+            tenuti.append(m)
+    return tenuti
 
 
 def _naive_summarize(transcript: str, limit: int = 1200) -> str:

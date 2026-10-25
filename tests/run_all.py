@@ -41,11 +41,14 @@ SUITES = [
     # Dopo lo stop, l'agente deve poter tornare a lavorare. Il flag di
     # cancel restava acceso e ogni tool veniva annullato prima di partire.
     ("cancel-recupero", "test_cancel_recupero.py", True),
-    # Un messaggio role="tool" senza tool_call_id rompe il Nous (e altri
-    # proxy): 400 "Missing required parameter: 'tool_call_id'". L'agente
-    # costruisce due messaggi di sistema (gira_a_vuoto e nudge) senza id:
-    # quando finiscono nel payload, la richiesta va in 400 e il modello
-    # non si riprende mai. Copre che OGNI messaggio tool ha un id.
+    # Un messaggio role="tool" rompe il Nous (e altri proxy) in due modi:
+    # 400 "Missing required parameter: 'tool_call_id'" se non ha un id, e
+    # 400 "is a tool result, but it does not follow an assistant message
+    # with 'tool_calls'" se l'id non corrisponde a una chiamata del
+    # modello. L'agente costruisce messaggi di sistema (gira_a_vuoto,
+    # nudge, steer, verifica) con un id inventato: serve il PAIRING, non
+    # solo l'id. Beam 1.0 e altri gateway stretti rifiutano tutta la
+    # richiesta e il turno si interrompe senza riprendersi.
     ("nous-tool-call-id", "test_nous_tool_call_id.py", True),
     # Il nudge anti-bocca-vuota: il modello che annuncia il lavoro e chiude
     # senza farlo. Il vocabolario non riconosceva "Faccio le modifiche vere
