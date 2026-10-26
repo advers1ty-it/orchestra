@@ -1249,35 +1249,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         super().send_error(code, message, explain)
 
-    def handle_error(self, request, client_address) -> None:
-        """Silenzia il rumore di connessione, tieni il resto.
-
-        Un browser che chiude una scheda, o una scheda che viene
-        ricaricata, lascia la connessione a meta': il server vede
-        WinError 10053 e stampa uno stack trace di dieci righe per
-        niente. In un log che si legge quando qualcosa non va, quel
-        rumore copre le poche righe che contano.
-
-        Non e' una cosa da tacere sempre: un errore vero in `do_GET`
-        arriva come 500 e va visto. Qui si distingue solo quello che
-        arriva dalla rete, e si registra in una riga.
-        """
-        import sys as _sys
-
-        exc = _sys.exc_info()[1]
-        rumore = isinstance(exc, (ConnectionAbortedError,
-                                  ConnectionResetError,
-                                  BrokenPipeError))
-        if rumore:
-            print(f"  connessione chiusa dal browser "
-                  f"({client_address[0]}) — normale, non un errore",
-                  flush=True)
-            return
-        # tutto il resto: si lascia com'e'. Il default di http.server
-        # stampa lo stack trace e va lasciato andare, perche' un
-        # errore che non si vede non si corregge.
-        _sys.stderr.write(f"  errore serving {client_address[0]}: {exc!r}\n")
-        _sys.stderr.flush()
+    # handle_error e' sulla sottoclasse OrchestraServer: socketserver chiama
+    # server.handle_error (non handler.handle_error), quindi una definizione
+    # qui non avrebbe alcun effetto. La gestione delle chiusure improvvise
+    # del client vive li'.
 
     # -- helper ------------------------------------------------------------
 
@@ -4141,10 +4116,17 @@ def _avvia_tunnel(port: int, app: Any) -> None:
 
     def _run() -> None:
         try:
+            # Su Windows la finestra nera di cloudflared resta aperta in
+            # secondo piano: la nascondo con CREATE_NO_WINDOW. Il processo
+            # gira comunque, e i log vengono letti da stdout (PIPE).
+            _flags = 0
+            if sys.platform.startswith("win"):
+                _flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             proc = subprocess.Popen(
                 [cf, "tunnel", "--url", f"http://127.0.0.1:{port}"],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
+                creationflags=_flags,
             )
             app._tunnel_proc = proc
             for line in proc.stdout:
@@ -4173,6 +4155,53 @@ def _avvia_tunnel(port: int, app: Any) -> None:
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
+
+
+class OrchestraServer(ThreadingHTTPServer):
+    """Server che gestisce davvero le chiusure improvvise del client.
+
+    `socketserver` chiama `self.handle_error` dove `self` e' il server, non
+    il request handler: una definizione di `handle_error` su `Handler` non
+    avrebbe alcun effetto. Qui e' sul server, come deve essere.
+
+    Un browser (o il telefono) che chiude la scheda, la ricarica, o cambia
+    rete mentre il server sta ancora leggendo la richiesta, lascia la
+    connessione a meta'. `http.server` di base stampa uno stack trace di
+    dieci righe per un fatto normale. Lo distinguiamo da un errore vero
+    (che in `do_GET` arriva come 500 e va visto) e lo riduciamo a una riga.
+    """
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def handle_error(self, request, client_address) -> None:
+        import sys as _sys
+        import errno as _errno
+        exc = _sys.exc_info()[1]
+        # Connessioni interrotte dal lato client: ConnectionAbortedError /
+        # ConnectionResetError / BrokenPipeError, piu' gli OSError Windows
+        # (10053 interrotta, 10054 reset, 10058 shutdown) che arrivano come
+        # `OSError` generici. Tutto normale, niente stack trace.
+        if isinstance(exc, (ConnectionAbortedError, ConnectionResetError,
+                            BrokenPipeError)):
+            pass
+        elif isinstance(exc, OSError) and getattr(exc, "errno", None) in (
+                _errno.ECONNABORTED, _errno.ECONNRESET, _errno.EPIPE,
+                10053, 10054, 10058):
+            pass
+        elif isinstance(exc, (TimeoutError, _sys.modules["socket"].timeout)):
+            pass
+        else:
+            # errore vero: si vede.
+            _sys.stderr.write(
+                f"  errore serving {client_address[0]}: {exc!r}\n")
+            _sys.stderr.flush()
+            return
+        try:
+            addr = client_address[0]
+        except Exception:
+            addr = "?"
+        print(f"  connessione chiusa dal client ({addr}) — normale, non un errore",
+              flush=True)
 
 
 def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = True,
@@ -4210,8 +4239,7 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
         except Exception:
             pass
 
-    httpd = ThreadingHTTPServer((host, port), Handler)
-    httpd.daemon_threads = True
+    httpd = OrchestraServer((host, port), Handler)
 
     # tunnel opzionale
     if tunnel:
