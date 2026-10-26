@@ -1,5 +1,7 @@
-/* Service worker: cache della shell per uso offline/PWA. */
-const CACHE = "orchestra-shell-v1";
+/* Service worker: cache della shell per uso offline/PWA.
+   Network-first per HTML/JS (cosi' il telefono aggiornato vede sempre
+   l'ultima versione anche dopo un refresh), cache-first per asset statici. */
+const CACHE = "orchestra-shell-v2";
 const SHELL = ["/", "/app.css", "/app.js", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
@@ -23,16 +25,31 @@ self.addEventListener("fetch", (e) => {
   if (url.origin !== self.location.origin) return;
   // Non cachare le API: sempre rete.
   if (url.pathname.startsWith("/api/")) return;
-  e.respondWith(
-    caches.match(req).then((cached) => {
-      const net = fetch(req).then((res) => {
+  const isShell = url.pathname === "/" || url.pathname.endsWith(".js") || url.pathname.endsWith(".html");
+  if (isShell) {
+    // Network-first: prova la rete, fallback alla cache.
+    e.respondWith(
+      fetch(req).then((res) => {
         if (res && res.status === 200 && res.type === "basic") {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
         return res;
-      }).catch(() => cached);
-      return cached || net;
-    })
-  );
+      }).catch(() => caches.match(req))
+    );
+  } else {
+    // Cache-first per asset statici (immagini, css, manifest).
+    e.respondWith(
+      caches.match(req).then((cached) => {
+        const net = fetch(req).then((res) => {
+          if (res && res.status === 200 && res.type === "basic") {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          }
+          return res;
+        }).catch(() => cached);
+        return cached || net;
+      })
+    );
+  }
 });

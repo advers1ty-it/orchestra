@@ -457,19 +457,84 @@ function addTool(name, args, key) {
 // ---------------------------------------------------------------- SSE
 let es = null;
 
+// Polling di fallback: se il SSE non riceve eventi per 12s (tunnel
+// lento, mobile sospeso, Cloudflare che bufferizza), il client ricarica
+// lo snapshot da /api/state. Cosi' il telefono si sincronizza anche
+// quando il flusso live e' morto — e' il caso del tunnel remoto.
+let ultimoEventoTs = Date.now();
+let pollingTimer = null;
+
+function avviaPollingFallback() {
+  if (pollingTimer) return;
+  pollingTimer = setInterval(async () => {
+    try {
+      const r = await fetch("/api/state");
+      if (!r.ok) return;
+      const j = await r.json();
+      // Applica lo snapshot solo se e' cambiato (evita flicker).
+      const snap = j.snapshot || j;
+      if (snap && snap.messages) {
+        // Confronto grezzo: numero di messaggi.
+        const n = log.querySelectorAll(".msg").length;
+        if (snap.messages.length !== n) {
+          // Ricostruisci la chat come fa lo snapshot del SSE.
+          log.innerHTML = "";
+          const risultatiTool = {};
+          (snap.messages || []).forEach((m) => {
+            if (m && m.role === "tool" && m.tool_call_id) risultatiTool[m.tool_call_id] = m;
+          });
+          (snap.messages || []).forEach((m) => {
+            const text = (m && m.content != null) ? String(m.content) : "";
+            if (m.role === "user") addText("user", text);
+            else if (m.role === "assistant") {
+              if (text.trim()) addText("assistant", text, true);
+              (m.tool_calls || []).forEach((tc) => {
+                const creato = addTool(tc.name, tc.arguments, tc.id);
+                const ris = risultatiTool[tc.id];
+                if (ris) {
+                  const male = String(ris.content || "").startsWith("ERRORE");
+                  const st = creato.root.querySelector(".tool-status");
+                  st.className = "tool-status " + (male ? "err" : "ok");
+                  st.textContent = male ? "errore" : "ok";
+                  creato.root.querySelector(".tool-out").textContent = ris.content || "";
+                }
+              });
+            }
+          });
+          setBusy(!!snap.busy);
+          main.scrollTop = main.scrollHeight;
+        }
+      }
+    } catch (e) { /* rete giu': riprova al prossimo giro */ }
+  }, 5000);
+}
+
+function fermaPollingFallback() {
+  if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
+}
+
 function connect() {
   if (es) es.close();
+  fermaPollingFallback();
   es = new EventSource("/api/stream");
 
-  es.onopen = () => { conn.textContent = "connesso"; conn.style.color = "var(--ok)"; };
+  es.onopen = () => {
+    conn.textContent = "connesso"; conn.style.color = "var(--ok)";
+    fermaPollingFallback();
+  };
 
   es.onerror = () => {
     conn.textContent = "riconnessione…";
     conn.style.color = "var(--warn)";
-    // EventSource riconnette da solo; non lo chiudiamo
+    // Se il SSE non si riprende in 12s, avvia il polling di fallback.
+    setTimeout(() => {
+      if (es && es.readyState !== EventSource.OPEN) avviaPollingFallback();
+    }, 12000);
   };
 
   es.onmessage = (e) => {
+    ultimoEventoTs = Date.now();
+    fermaPollingFallback();
     let item;
     try { item = JSON.parse(e.data); } catch { return; }
     handle(item.kind, item.data || {});
