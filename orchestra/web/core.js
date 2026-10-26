@@ -513,19 +513,40 @@ function fermaPollingFallback() {
   if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
 }
 
+let watchdogTimer = null;
+function fermaWatchdog() {
+  if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
+}
+function avviaWatchdog() {
+  fermaWatchdog();
+  watchdogTimer = setTimeout(() => {
+    // Se il SSE ha aperto la connessione ma non ha consegnato alcun
+    // evento (tipico del tunnel Cloudflare che bufferizza/blocca lo
+    // stream), passiamo al polling di fallback su /api/state.
+    if (Date.now() - ultimoEventoTs > 7000) avviaPollingFallback();
+    else avviaWatchdog(); // riprova: magari sta solo tardando
+  }, 8000);
+}
+
 function connect() {
   if (es) es.close();
   fermaPollingFallback();
+  fermaWatchdog();
+  ultimoEventoTs = Date.now();
   es = new EventSource("/api/stream");
 
   es.onopen = () => {
     conn.textContent = "connesso"; conn.style.color = "var(--ok)";
     fermaPollingFallback();
+    // Avvia il watchdog: se in 8s non arriva nessun evento (tunnel
+    // che bufferizza), cade sul polling.
+    avviaWatchdog();
   };
 
   es.onerror = () => {
     conn.textContent = "riconnessione…";
     conn.style.color = "var(--warn)";
+    fermaWatchdog();
     // Se il SSE non si riprende in 12s, avvia il polling di fallback.
     setTimeout(() => {
       if (es && es.readyState !== EventSource.OPEN) avviaPollingFallback();
@@ -535,6 +556,8 @@ function connect() {
   es.onmessage = (e) => {
     ultimoEventoTs = Date.now();
     fermaPollingFallback();
+    fermaWatchdog();
+    avviaWatchdog(); // ri-arma il watchdog per il prossimo silenzio
     let item;
     try { item = JSON.parse(e.data); } catch { return; }
     handle(item.kind, item.data || {});

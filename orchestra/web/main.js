@@ -456,7 +456,11 @@ fetch("/api/state").then(r => r.json()).then(s => {
   // servizio e scopo — una variabile che cambia non abilita niente da
   // sola, serve qualcuno che la legga e agisca.
   setBusy(false);
-  if (!log.children.length) handle("snapshot", s);
+  // Sul telefono/tunnel il SSE puo' non consegnare lo snapshot
+  // iniziale (buffering Cloudflare): /api/state e' la fonte di verita'
+  // al caricamento, quindi lo applichiamo sempre, non solo se il log
+  // e' vuoto. Un eventuale snapshot SSE successivo lo rimpiazza.
+  handle("snapshot", s);
 }).catch(() => { conn.textContent = "server non raggiungibile"; });
 
 // La versione è il modo più economico per capire se stai guardando la
