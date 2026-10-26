@@ -1892,8 +1892,11 @@ select:disabled {
     display: inline-flex !important;
     order: 3; margin-left: auto; align-self: center; flex-shrink: 0;
   }
-  /* secondari nascosti nell'header compatto */
+  /* secondari nascosti nell'header compatto: scopo e modello si
+     spostano nel menu full-screen, cosi' resta solo logo, hamburger
+     e "altre opzioni" */
   header .h-sec { display: none !important; }
+  header .scope-wrap, header .mp-wrap { display: none; }
 
   /* menu full-screen: l'header si espande a coprire tutto */
   header.esteso {
@@ -1910,8 +1913,8 @@ select:disabled {
   header.esteso #btn-header-toggle { order: -1; margin-left: 0; align-self: flex-end; }
   /* poi logo, scopo e modello (a tutta larghezza) */
   header.esteso .logo { order: 0; }
-  header.esteso .scope-wrap { order: 1; flex: 0 0 auto; max-width: 100%; }
-  header.esteso .mp-wrap { order: 2; flex: 0 0 auto; max-width: 100%; }
+  header.esteso .scope-wrap { order: 1; flex: 0 0 auto; max-width: 100%; display: flex !important; }
+  header.esteso .mp-wrap { order: 2; flex: 0 0 auto; max-width: 100%; display: inline-block !important; }
   /* poi le azioni e i selettori di servizio */
   header.esteso button.h-sec {
     display: inline-flex !important; width: 100%; justify-content: center; order: 3;
