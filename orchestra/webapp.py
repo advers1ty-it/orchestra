@@ -4190,6 +4190,11 @@ class OrchestraServer(ThreadingHTTPServer):
             pass
         elif isinstance(exc, (TimeoutError, _sys.modules["socket"].timeout)):
             pass
+        elif isinstance(exc, SystemError):
+            # Windows: "returned a result with an exception set" durante la
+            # lettura della richiesta (rfile.readline) con il socket rotto.
+            # Artefatto socket/protocollo, non un bug dell'app. Niente stack.
+            pass
         else:
             # errore vero: si vede.
             _sys.stderr.write(
