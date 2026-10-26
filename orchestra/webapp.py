@@ -1725,7 +1725,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
     def do_GET(self) -> None:
         path = self.path.split("?")[0]
         # risorse necessarie alla pagina di login: sempre accessibili
-        if path not in ("/login",) and not path.endswith((".css", ".js", ".ico", ".png", ".svg")):
+        if path not in ("/login",) and not path.endswith((".css", ".js", ".ico", ".png", ".svg", ".webmanifest")):
             if not self._gate_remoto(path):
                 return
         if path == "/":
@@ -1736,6 +1736,15 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             self._login_page()
         elif path == "/docs":
             self._static("docs.html", "text/html; charset=utf-8")
+            return
+        elif path == "/manifest.webmanifest":
+            self._static("manifest.webmanifest", "application/manifest+json")
+            return
+        elif path == "/sw.js":
+            self._static("sw.js", "text/javascript; charset=utf-8")
+            return
+        elif path == "/icon.svg":
+            self._static("icon.svg", "image/svg+xml")
             return
         elif path == "/app.js":
             self._bundle()

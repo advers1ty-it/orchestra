@@ -351,6 +351,12 @@ if (steerInput) steerInput.addEventListener("keydown", e => {
 });
 
 connect();
+// PWA: registra il service worker per cache offline della shell.
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
 // Opzioni si caricano QUI, non solo quando apri il pannello. I
 // selettori di servizio e di scopo vivono nell'header, e senza questa
 // chiamata restano disabilitati fino a quando non apri Opzioni: si

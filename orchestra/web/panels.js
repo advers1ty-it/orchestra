@@ -2736,8 +2736,10 @@ function apriSide(aperta) {
   if (aperta) {
     sidebar.removeAttribute("hidden");
     caricaSide();
+    if (window.innerWidth <= 640) document.body.classList.add("sidebar-aperta");
   } else {
     sidebar.setAttribute("hidden", "");
+    document.body.classList.remove("sidebar-aperta");
   }
 }
 
@@ -3103,17 +3105,29 @@ function allargaSide() {
   localStorage.removeItem("orchestra.side.ridotta");
 }
 
-// Aperta all'avvio, sempre. La cronologia è il pezzo che dà senso a una
-// conversazione che sopravvive al riavvio: nasconderla di default vuol
-// dire aver costruito la persistenza e non farla vedere.
-sidebar.removeAttribute("hidden");
+// Aperta all'avvio, sempre — ma solo su desktop. Su telefono la sidebar
+// è un drawer: parte chiusa, si apre col pulsante hamburger.
+if (window.innerWidth > 640) {
+  sidebar.removeAttribute("hidden");
+}
 
 // Il bottone alterna aperta/ridotta. Non chiude: la cronologia serve
 // troppo spesso per costare due clic.
 if (sideBtn) {
   sideBtn.addEventListener("click", () => {
+    if (window.innerWidth <= 640) {
+      apriSide();
+      return;
+    }
     if (sidebar && sidebar.classList.contains("ridotta")) allargaSide();
     else riduciSide();
+  });
+}
+// Chiusura del drawer mobile toccando il backdrop.
+const sideBackdrop = $("side-backdrop");
+if (sideBackdrop) {
+  sideBackdrop.addEventListener("click", () => {
+    if (window.innerWidth <= 640) apriSide(false);
   });
 }
 
