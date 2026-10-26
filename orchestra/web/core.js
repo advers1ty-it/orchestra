@@ -33,7 +33,7 @@ const on = (el, evento, fn) => {
   return true;
 };
 const log = $("log"), main = $("main"), input = $("input");
-const btnSend = $("btn-send"), btnStop = $("btn-stop");
+const btnSend = $("btn-send");
 const steerBar = $("steer-bar"), steerInput = $("steer-input"), steerSend = $("steer-send"), steerStop = $("steer-stop");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
 const modelPick = $("model-pick");
@@ -134,7 +134,6 @@ function setBusy(v) {
   dot.className = "dot" + (v ? " busy" : " ok");
   input.disabled = !ready || v;
   btnSend.disabled = !ready || v;
-  if (typeof btnStop !== "undefined" && btnStop) btnStop.disabled = !v;
   // Il pallino e' sempre li': verde a riposo, giallo mentre lavora.
   // Durante il lavoro il form chat viene sostituito dalla steer bar:
   // la stessa larghezza, la stessa posizione, niente scroll che

@@ -4058,6 +4058,48 @@ def _trova_cloudflared() -> str:
     return ""
 
 
+def _stdin_attivo() -> bool:
+    """True se si puo' chiedere una risposta all'utente da tastiera.
+
+    Lanciato da una .bat/shortcut senza console, sys.stdin puo' essere un
+    handle invalido: isatty() risponde True ma input() poi muore con
+    OSError [Errno 9] Bad file descriptor, e l'app va in crash proprio
+    quando il tunnel non trova cloudflared. Qui il controllo e' piu'
+    prudente e non lascia l'app a terra.
+    """
+    try:
+        return bool(sys.stdin and sys.stdin.isatty())
+    except Exception:
+        return False
+
+
+def _domanda(testo: str) -> str:
+    """input() che non puo' rompere: senza console o con handle chiuso
+    risponde con la stringa vuota, e il chiamante decide il default."""
+    try:
+        return input(testo).strip().lower()
+    except (EOFError, OSError):
+        return ""
+
+
+def _installa_cloudflared_winget() -> str:
+    """Prova a installare cloudflared con winget (silenzioso) e ritorna il
+    binario trovato, oppure "" se non ci e' riuscito."""
+    import subprocess
+    print("  Installazione in corso (puo' richiedere un minuto)...",
+          file=sys.stderr, flush=True)
+    try:
+        subprocess.run(
+            ["winget", "install", "--id", "Cloudflare.cloudflared", "-e",
+             "--accept-package-agreements", "--accept-source-agreements",
+             "--silent", "--disable-interactivity"],
+            check=False, capture_output=True, timeout=300,
+        )
+    except Exception as e:
+        print("  installazione fallita: %s" % e, file=sys.stderr)
+    return _trova_cloudflared()
+
+
 def _avvia_tunnel(port: int, app: Any) -> None:
     import re
     import shutil
@@ -4066,25 +4108,21 @@ def _avvia_tunnel(port: int, app: Any) -> None:
 
     cf = _trova_cloudflared()
     if not cf:
-        # tentativo di installazione automatica (solo Windows con winget)
+        # cloudflared assente: provo a installarlo. Chi ha chiesto il tunnel
+        # vuole il tunnel, quindi l'installazione automatica e' lo scopo; se
+        # non e' possibile (winget mancante, permessi, installazione fallita)
+        # si prosegue con le istruzioni e il server resta comunque attivo in
+        # LAN con il token, senza lasciare l'app a terra.
         if sys.platform.startswith("win") and shutil.which("winget"):
-            if sys.stdin and sys.stdin.isatty():
+            if _stdin_attivo():
                 print("  cloudflared non trovato. Posso installarlo ora con winget "
                       "(Cloudflare.cloudflared).", file=sys.stderr)
-                risp = input("  Installo? [s/N] ").strip().lower()
-                if risp == "s":
-                    print("  Installazione in corso (puo' richiedere un minuto)...",
-                          file=sys.stderr, flush=True)
-                    try:
-                        subprocess.run(
-                            ["winget", "install", "--id", "Cloudflare.cloudflared",
-                             "-e", "--accept-package-agreements",
-                             "--accept-source-agreements", "--silent"],
-                            check=False,
-                        )
-                    except Exception as e:
-                        print(f"  installazione fallita: {e}", file=sys.stderr)
-                    cf = _trova_cloudflared()
+                if _domanda("  Installo? [s/N] ") == "s":
+                    cf = _installa_cloudflared_winget()
+            else:
+                # Niente console: non si puo' chiedere. Installo comunque, e'
+                # lo scopo del tunnel; se fallisce si dice come farlo a mano.
+                cf = _installa_cloudflared_winget()
             if not cf:
                 # riprova dopo un attimo (winget aggiorna il PATH nel registro)
                 import time as _t
@@ -4147,9 +4185,9 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
         # bind manuale fuori localhost: conferma come prima
         print(f"ATTENZIONE: ascolto su {host}, non su localhost.", file=sys.stderr)
         print("Abilito l'accesso remoto con autenticazione a token.", file=sys.stderr)
-        if not (sys.stdin and sys.stdin.isatty()):
+        if not _stdin_attivo():
             raise SystemExit("rifiuto di esporre fuori da localhost in modo non interattivo")
-        if input("Continuo? [s/N] ").strip().lower() != "s":
+        if _domanda("Continuo? [s/N] ") != "s":
             raise SystemExit("annullato")
 
     app = OrchestraApp.create(remoto_attivo=remoto_attivo)

@@ -65,7 +65,6 @@ async function send() {
 }
 
 async function cancel() {
-  if (typeof btnStop !== "undefined" && btnStop) btnStop.disabled = true;
   try { await fetch("/api/cancel", { method: "POST" }); } catch {}
 }
 
@@ -321,7 +320,11 @@ on(input, "keydown", (e) => {
 });
 btnSend.onclick = send;
 if (btnAllega) btnAllega.disabled = !ready;
-if (typeof btnStop !== "undefined" && btnStop) btnStop.onclick = cancel;
+// Verifica: stesso gate dell'allegato. Prima restava disabilitato per
+// sempre (nessuna riga lo abilitava), quindi il ✓ non si accendeva mai,
+// il popover non si apriva e la self-correzione non si attivava: di fuori
+// sembrava rotta. Con `ready` segue lo stesso ciclo dell'allegato.
+if (btnVerifica) btnVerifica.disabled = !ready;
 
 // Steer: inietta un messaggio al modello durante il lavoro
 // (steerBar/steerInput/steerSend sono dichiarati in core.js)
@@ -357,6 +360,62 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
+// ---- Install PWA
+// beforeinstallprompt scatta SOLO con manifest valido + service worker +
+// secure context (localhost o HTTPS — il tunnel Cloudflare e' HTTPS).
+// Senza questo handler il browser si limita a mettere la sua icona
+// nell'toolbar, che nessuno trova: da qui "non vedo la richiesta di
+// installazione". Un pulsante "Installa" appare quando il prompt e'
+// disponibile e parte su un clic. Se le condizioni non ci sono (es. HTTP
+// pubblico non-localhost) resta nascosto: non c'e' niente da mostrare.
+let deferredPrompt = null;
+let installBtn = $("btn-install");
+function aggiornaInstall() {
+  if (!installBtn) return;
+  installBtn.hidden = !deferredPrompt;
+}
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();          // tengo il prompt, lo mostro io al clic
+    deferredPrompt = e;
+    aggiornaInstall();
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    aggiornaInstall();
+  });
+}
+if (installBtn) {
+  installBtn.addEventListener("click", async () => {
+    if (!deferredPrompt) return;
+    const p = deferredPrompt;
+    deferredPrompt = null;
+    try {
+      p.prompt();
+      const { userChoice } = await p.userChoice;
+      if (userChoice === "accepted" && typeof addNote === "function") {
+        addNote("Orchestra installata: la trovi come un'app e funziona anche offline.");
+      }
+    } catch (e) { /* annullato o il browser non lo accetta: niente */ }
+    aggiornaInstall();
+  });
+}
+aggiornaInstall();
+
+// ---- Header mobile: il pulsante "altre opzioni" espande/chiude i
+// controlli secondari. Di default l'header resta compatto (logo, scopo,
+// modello) cosi' non ruba quattro righe sullo schermo di un telefono.
+// Desktop il pulsante non esiste (via CSS), quindi niente da fare.
+(function () {
+  const tog = $("btn-header-toggle");
+  if (!tog) return;
+  const hdr = tog.closest ? tog.closest("header") : null;
+  if (!hdr) return;
+  tog.addEventListener("click", () => {
+    const aperto = hdr.classList.toggle("esteso");
+    tog.setAttribute("aria-expanded", aperto ? "true" : "false");
+  });
+})();
 // Opzioni si caricano QUI, non solo quando apri il pannello. I
 // selettori di servizio e di scopo vivono nell'header, e senza questa
 // chiamata restano disabilitati fino a quando non apri Opzioni: si
@@ -373,8 +432,13 @@ caricaOpzioni().catch(() => {
 });
 fetch("/api/state").then(r => r.json()).then(s => {
   if (s.version) showVersion(s.version);
-  if (s.ready === false) { showBanner(s.error); if (typeof apriOpzioni === "function") apriOpzioni(); return; }
-  ready = true;
+  ready = s.ready !== false;
+  // I bottoni allega e verifica seguono `ready`. Prima erano impostati una
+  // sola volta all'avvio, quando ready era ancora false: restavano
+  // disabilitati per sempre e il ✓ non si accendeva mai.
+  if (btnAllega) btnAllega.disabled = !ready;
+  if (btnVerifica) btnVerifica.disabled = !ready;
+  if (!ready) { showBanner(s.error); if (typeof apriOpzioni === "function") apriOpzioni(); return; }
   // setBusy applica `ready` ai controlli. Senza questa chiamata il
   // flag e' impostato ma nessuno lo guarda: il campo resta disabilitato
   // e la pagina sembra rotta. E' lo stesso buco dei selettori di

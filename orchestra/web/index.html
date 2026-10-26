@@ -84,13 +84,18 @@
   <button id="btn-side" class="ghost" title="Cronologia e skill (Ctrl+B)"
           aria-label="Apri il pannello laterale">&#9776;</button>
   <div class="grow"></div>
-  <button id="btn-opzioni" class="ghost" title="Chiavi API e servizi gratuiti">Opzioni</button>
-  <button id="btn-bench" class="ghost">Benchmark</button>
-  <button id="btn-goal" class="ghost" title="Obiettivo autonomo">Obiettivo</button>
-   <button id="btn-cron" class="ghost" title="Job programmati">Cron</button>
-   <button id="btn-mcp" class="ghost" title="Server MCP">MCP</button>
-  <button id="btn-onboard" class="ghost" title="Mostra obiettivi iniziali">Cosa fai?</button>
-  <button id="btn-docs" class="ghost" title="Documentazione">Docs</button>
+  <button id="btn-opzioni" class="ghost h-sec" title="Chiavi API e servizi gratuiti">Opzioni</button>
+  <button id="btn-bench" class="ghost h-sec">Benchmark</button>
+  <button id="btn-goal" class="ghost h-sec" title="Obiettivo autonomo">Obiettivo</button>
+   <button id="btn-cron" class="ghost h-sec" title="Job programmati">Cron</button>
+   <button id="btn-mcp" class="ghost h-sec" title="Server MCP">MCP</button>
+  <button id="btn-onboard" class="ghost h-sec" title="Mostra obiettivi iniziali">Cosa fai?</button>
+  <button id="btn-docs" class="ghost h-sec" title="Documentazione">Docs</button>
+  <!-- Comparve SOLO quando il browser dichiara beforeinstallprompt
+       (manifest valido + service worker + secure context: localhost o
+       HTTPS, cioe' anche il tunnel). Senza un pulsante dedicato la
+       richiesta di installazione non si vedeva mai. -->
+  <button id="btn-install" class="ghost h-sec" title="Installa Orchestra come app (funziona anche offline)" hidden>Installa</button>
 
   <!-- Lo scopo sta PRIMA del modello, non in un pannello: la domanda
        "che lavoro stai facendo" viene prima di "con quale modello", e
@@ -102,10 +107,10 @@
       <option value="">tutto</option>
     </select>
   </label>
-  <select id="provider-pick" title="Servizio in uso" disabled>
+  <select id="provider-pick" class="h-sec" title="Servizio in uso" disabled>
     <option value="">servizio…</option>
   </select>
-  <span id="provider-note" class="provider-note"></span>
+  <span id="provider-note" class="provider-note h-sec"></span>
     <!-- Il select porta solo il value al server: un select
          visibile aprirebbe il proprio menu, del sistema, sopra
          il pannello. Il perche' e' in modelpick.js. -->
@@ -121,7 +126,7 @@
           <span id="model-label">modello…</span>
         </button>
       </div>
-      <select id="reasoning-pick" title="Livello reasoning" disabled>
+      <select id="reasoning-pick" class="h-sec" title="Livello reasoning" disabled>
         <option value="">auto</option>
         <option value="none">none</option>
         <option value="minimal">minimal</option>
@@ -131,7 +136,15 @@
         <option value="xhigh">xhigh</option>
         <option value="max">max</option>
       </select>
-    <span id="scope-note" class="scope-note"></span>
+    <span id="scope-note" class="scope-note h-sec"></span>
+    <!-- Mobile: apre/chiude i controlli secondari (azioni, provider,
+         reasoning) che altrimenti impileranno quattro righe. Desktop
+         resta invariato: il pulsante qui non si vede. -->
+    <button id="btn-header-toggle" class="ghost h-toggle" title="Altre opzioni" aria-expanded="false">
+      <span class="h-open" aria-hidden="true">⋯</span>
+      <span class="h-close" aria-hidden="true">▲</span>
+      <span class="sr">Altre opzioni</span>
+    </button>
 </header>
 
 <!-- Permessi: l'agente vuole uscire dalla cartella di lavoro.
@@ -668,8 +681,7 @@
         </button>
         <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
         <div class="dot" id="dot" title="verde = pronto, giallo = al lavoro"></div>
-        <button class="primary" id="btn-send" disabled>Invia</button>
-        <button class="ghost" id="btn-stop" title="Ferma il lavoro" aria-label="Ferma il lavoro" disabled>■</button>
+        <button class="primary" id="btn-send" disabled title="Invia (Invio per inviare, Shift+Invio a capo)">→</button>
       </div>
     </div>
       <!-- steer: messaggio al modello mentre lavora (barra visibile solo durante il lavoro) -->

@@ -1,6 +1,6 @@
 /* Service worker: cache della shell per uso offline/PWA. */
 const CACHE = "orchestra-shell-v1";
-const SHELL = ["/", "/app.css", "/app.js", "/icon.svg", "/manifest.webmanifest"];
+const SHELL = ["/", "/app.css", "/app.js", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));

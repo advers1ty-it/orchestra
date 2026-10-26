@@ -1868,3 +1868,62 @@ select:disabled {
   /* Drawer sidebar: backdrop gia' gestito da JS */
   #sidebar { transition: transform .22s ease; }
 }
+
+
+/* ============================================================
+   Header mobile compatto (webapp).
+   Di default l'header mostra SOLO logo, scopo e modello: i controlli
+   secondari (Opzioni/Benchmark/Obiettivo/Cron/MCP/Docs/Installa, piu'
+   provider e reasoning) restano nascosti perche' impileranno quattro-
+   cinque righe e rubavano mezza schermata. Il pulsante "altre opzioni"
+   li apre/chiude. Desktop resta invariato: il pulsante non si vede e
+   l'header mostra tutto come prima.
+   ============================================================ */
+@media (max-width: 640px) {
+  #btn-header-toggle {
+    display: inline-flex !important;   /* override di hidden nell'HTML */
+    order: 5;
+    margin-left: auto;
+    align-self: center;
+    flex-shrink: 0;                    /* senza, nowrap lo stringe a 0 e sparisce */
+  }
+  /* primari su una sola riga, a sinistra del pulsante */
+  header { flex-wrap: nowrap; row-gap: 6px; overflow: visible; }
+  header .grow { display: none; }
+  header .scope-wrap { order: 1; flex: 1 1 40%; min-width: 0; }
+  header .mp-wrap { order: 2; flex: 1 1 40%; min-width: 0; }
+  /* secondari nascosti finche' l'header non e' esteso */
+  header .h-sec { display: none !important; }
+  /* esteso: tutto come sul desktop, con wrap */
+  header.esteso { flex-wrap: wrap; overflow-x: auto; }
+  header.esteso button.h-sec { display: inline-flex !important; }
+  header.esteso select.h-sec { display: inline-block !important; }
+  header.esteso span.h-sec { display: inline !important; }
+  header.esteso .grow { flex: 1; height: 0; display: inline; }
+  header.esteso .scope-wrap,
+  header.esteso .mp-wrap { flex: 1 1 48%; }
+  header.esteso #btn-header-toggle { order: 10; margin-left: auto; }
+  /* freccia: di default si mostra solo "apri"; "chiudi" compare a header esteso */
+  #btn-header-toggle .h-close { display: none; }
+  #btn-header-toggle .h-open { display: inline; }
+  header.esteso #btn-header-toggle .h-open { display: none; }
+  header.esteso #btn-header-toggle .h-close { display: inline; }
+}
+/* Desktop: il pulsante di toggle mobile non si vede. */
+@media (min-width: 641px) {
+  #btn-header-toggle { display: none !important; }
+}
+
+
+/* ============================================================
+   Composer mobile.
+   Sul telefono la barra di scrittura era schiacciata: il campo
+   restava basso (46px) e i tre bottoni (allega, verifica, invia)
+   gli rubavano larghezza. Qui il campo cresce e la riga respira,
+   i bottoni restano a 44px (touch target gia' impostato sopra).
+   ============================================================ */
+@media (max-width: 640px) {
+  footer { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .row { gap: 8px; }
+  textarea { min-height: 78px; padding: 12px; }
+}
