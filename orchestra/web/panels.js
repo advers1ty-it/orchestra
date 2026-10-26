@@ -3507,7 +3507,7 @@ const _avviaOnboardingSeServe = () => {
   const skip = document.getElementById("onboard-skip");
   if (skip) skip.addEventListener("click", chiudiOnboarding);
   const o = document.getElementById("onboard");
-  if (o && !localStorage.getItem("orchestra.onboard.done")) setTimeout(mostraOnboarding, 200);
+  // onboarding non si apre piu' da solo all'avvio: resta accessibile dal bottone "Cosa fai?"
 };
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", _avviaOnboardingSeServe, { once: true });
