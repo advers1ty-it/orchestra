@@ -1871,43 +1871,65 @@ select:disabled {
 
 
 /* ============================================================
-   Header mobile compatto (webapp).
-   Di default l'header mostra SOLO logo, scopo e modello: i controlli
-   secondari (Opzioni/Benchmark/Obiettivo/Cron/MCP/Docs/Installa, piu'
-   provider e reasoning) restano nascosti perche' impileranno quattro-
-   cinque righe e rubavano mezza schermata. Il pulsante "altre opzioni"
-   li apre/chiude. Desktop resta invariato: il pulsante non si vede e
-   l'header mostra tutto come prima.
+   Header mobile: sticky in alto + menu full-screen.
+   L'header resta fisso (non scrolla con la chat). I controlli
+   secondari (Opzioni/Benchmark/Obiettivo/Cron/MCP/Docs/Installa,
+   provider e reasoning) non stanno piu' nell'header: quando si preme
+   "menu" l'header diventa un pannello full-screen con tutto impilato,
+   e il corpo della pagina non scrolla finche' non si chiude.
+   Desktop resta invariato: il pulsante non si vede.
    ============================================================ */
 @media (max-width: 640px) {
-  #btn-header-toggle {
-    display: inline-flex !important;   /* override di hidden nell'HTML */
-    order: 5;
-    margin-left: auto;
-    align-self: center;
-    flex-shrink: 0;                    /* senza, nowrap lo stringe a 0 e sparisce */
+  /* sticky: l'header non si sposta quando si scorre la chat */
+  header {
+    position: sticky; top: 0; z-index: 50;
+    flex-wrap: nowrap; row-gap: 6px; overflow: visible;
   }
-  /* primari su una sola riga, a sinistra del pulsante */
-  header { flex-wrap: nowrap; row-gap: 6px; overflow: visible; }
   header .grow { display: none; }
   header .scope-wrap { order: 1; flex: 1 1 40%; min-width: 0; }
   header .mp-wrap { order: 2; flex: 1 1 40%; min-width: 0; }
-  /* secondari nascosti finche' l'header non e' esteso */
+  #btn-header-toggle {
+    display: inline-flex !important;
+    order: 3; margin-left: auto; align-self: center; flex-shrink: 0;
+  }
+  /* secondari nascosti nell'header compatto */
   header .h-sec { display: none !important; }
-  /* esteso: tutto come sul desktop, con wrap */
-  header.esteso { flex-wrap: wrap; overflow-x: auto; }
-  header.esteso button.h-sec { display: inline-flex !important; }
-  header.esteso select.h-sec { display: inline-block !important; }
-  header.esteso span.h-sec { display: inline !important; }
-  header.esteso .grow { flex: 1; height: 0; display: inline; }
-  header.esteso .scope-wrap,
-  header.esteso .mp-wrap { flex: 1 1 48%; }
-  header.esteso #btn-header-toggle { order: 10; margin-left: auto; }
-  /* freccia: di default si mostra solo "apri"; "chiudi" compare a header esteso */
+
+  /* menu full-screen: l'header si espande a coprire tutto */
+  header.esteso {
+    position: fixed; inset: 0; z-index: 60;
+    flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+    background: var(--panel);
+    gap: 10px;
+  }
+  header.esteso .grow { display: none; }
+  /* in cima: hamburger a sinistra, chiudi a destra */
+  header.esteso #btn-side { order: -2; align-self: flex-start; }
+  header.esteso #btn-header-toggle { order: -1; margin-left: 0; align-self: flex-end; }
+  /* poi logo, scopo e modello (a tutta larghezza) */
+  header.esteso .logo { order: 0; }
+  header.esteso .scope-wrap { order: 1; flex: 0 0 auto; max-width: 100%; }
+  header.esteso .mp-wrap { order: 2; flex: 0 0 auto; max-width: 100%; }
+  /* poi le azioni e i selettori di servizio */
+  header.esteso button.h-sec {
+    display: inline-flex !important; width: 100%; justify-content: center; order: 3;
+  }
+  header.esteso select.h-sec {
+    display: inline-block !important; width: 100%; max-width: 100%; order: 4;
+  }
+  header.esteso span.h-sec { display: inline !important; order: 4; }
+  /* freccia apri/chiudi */
   #btn-header-toggle .h-close { display: none; }
   #btn-header-toggle .h-open { display: inline; }
   header.esteso #btn-header-toggle .h-open { display: none; }
   header.esteso #btn-header-toggle .h-close { display: inline; }
+  /* backdrop scuro dietro al menu */
+  body.header-menu-aperto::before {
+    content: ""; position: fixed; inset: 0; z-index: 59;
+    background: rgba(0,0,0,.55);
+  }
 }
 /* Desktop: il pulsante di toggle mobile non si vede. */
 @media (min-width: 641px) {

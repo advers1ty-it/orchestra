@@ -414,6 +414,17 @@ aggiornaInstall();
   tog.addEventListener("click", () => {
     const aperto = hdr.classList.toggle("esteso");
     tog.setAttribute("aria-expanded", aperto ? "true" : "false");
+    document.body.classList.toggle("header-menu-aperto", aperto);
+    document.body.style.overflow = aperto ? "hidden" : "";
+  });
+  // chiusura con Escape
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && hdr.classList.contains("esteso")) {
+      hdr.classList.remove("esteso");
+      tog.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("header-menu-aperto");
+      document.body.style.overflow = "";
+    }
   });
 })();
 // Opzioni si caricano QUI, non solo quando apri il pannello. I
