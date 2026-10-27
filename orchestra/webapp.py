@@ -1769,6 +1769,9 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             snap["provider"] = self.app.env.get("ORCHESTRA_PROVIDER", "")
             snap["remote"] = self._info_remoto()
             self._json(snap)
+        elif path == "/api/stt/status":
+            from . import stt as _stt
+            self._json(_stt.stato())
         elif path == "/api/remote/info":
             self._json(self._info_remoto())
         elif path == "/api/remote/status":
@@ -1979,19 +1982,37 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             self._json({"disponibile": as_mod.disponibile(),
                         "attivo": as_mod.stato()})
         elif path == "/api/dipendenze/stato":
-            import importlib, sys as _sys
-            deps=[]
+            import importlib, sys as _sys, shutil, os as _os
+            deps = []
             for nome in ("ddgs",):
                 try:
-                    m=importlib.import_module(nome)
-                    deps.append({"nome": nome, "stato":"ok",
-                                 "versione": getattr(m, "__version__", "?")})
+                    m = importlib.import_module(nome)
+                    deps.append({"nome": nome, "stato": "ok",
+                                 "versione": getattr(m, "__version__", "?"),
+                                 "via": "pip"})
                 except Exception:
-                    deps.append({"nome": nome, "stato":"da installare"})
-            from pathlib import Path as _P
-            req = _P(__file__).resolve().parents[1] / "requirements.txt"
-            self._json({"python": _sys.version.split()[0], "deps": deps,
-                        "requirements": str(req), "esiste": req.exists()})
+                    deps.append({"nome": nome, "stato": "da installare", "via": "pip"})
+            try:
+                m = importlib.import_module("faster_whisper")
+                deps.append({"nome": "faster-whisper", "stato": "ok",
+                             "versione": getattr(m, "__version__", "?"),
+                             "via": "pip"})
+            except Exception:
+                deps.append({"nome": "faster-whisper", "stato": "da installare", "via": "pip"})
+            cf = shutil.which("cloudflared")
+            if not cf:
+                for cand in (r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
+                             r"C:\Program Files\cloudflared\cloudflared.exe"):
+                    if _os.path.exists(cand):
+                        cf = cand
+                        break
+            if cf:
+                deps.append({"nome": "cloudflared", "stato": "ok",
+                             "versione": "installato", "via": "winget",
+                             "path": cf})
+            else:
+                deps.append({"nome": "cloudflared", "stato": "da installare", "via": "winget"})
+            self._json({"python": _sys.version.split()[0], "deps": deps})
             return
         elif path == "/api/tools/profile":
             from .tools import _PROFILI
@@ -2710,6 +2731,28 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             self._json(self._api_remote_status(body))
         elif path == "/api/remote/info":
             self._json(self._info_remoto())
+        elif path == "/api/stt/install":
+            from . import stt as _stt
+            _stt.avvia_installazione()
+            self._json({"ok": True, **_stt.stato()})
+        elif path == "/api/transcribe":
+            import base64 as _b64
+            from . import stt as _stt
+            audio_b64 = (body.get("audio") or "").strip()
+            if not audio_b64:
+                self._json({"error": "audio mancante"}, 400); return
+            try:
+                raw = _b64.b64decode(audio_b64)
+            except Exception:
+                self._json({"error": "audio non valido"}, 400); return
+            if not _stt.disponibile():
+                self._json({"error": "whisper non installato",
+                            "installable": True}, 503); return
+            try:
+                testo = _stt.trascrivi(raw, body.get("filename") or "audio.webm")
+                self._json({"text": testo})
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": str(e)}, 500)
         elif path == "/api/storico":
             # Elenco delle conversazioni. Solo GET: la lista si scrive
             # da sola a fine turno, non c'e' niente da mandare.
@@ -3158,46 +3201,82 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 return
             self._json(gate.stato())
         elif path == "/api/dipendenze/stato":
-            import importlib, sys as _sys
+            import importlib, sys as _sys, shutil, os as _os
             deps = []
+            # ddgs (ricerca web)
             for nome in ("ddgs",):
                 try:
                     m = importlib.import_module(nome)
                     deps.append({"nome": nome, "stato": "ok",
-                                 "versione": getattr(m, "__version__", "?")})
+                                 "versione": getattr(m, "__version__", "?"),
+                                 "via": "pip"})
                 except Exception:
-                    deps.append({"nome": nome, "stato": "da installare"})
+                    deps.append({"nome": nome, "stato": "da installare", "via": "pip"})
+            # faster-whisper (STT server)
             try:
-                from orchestra.tools import _root
-                root = _root()
+                m = importlib.import_module("faster_whisper")
+                deps.append({"nome": "faster-whisper", "stato": "ok",
+                             "versione": getattr(m, "__version__", "?"),
+                             "via": "pip"})
             except Exception:
-                root = Path(".")
-            from pathlib import Path as _P
-            req = _P(__file__).resolve().parents[1] / "requirements.txt"
-            self._json({"python": _sys.version.split()[0], "deps": deps,
-                        "requirements": str(req),
-                        "esiste": req.exists()})
+                deps.append({"nome": "faster-whisper", "stato": "da installare", "via": "pip"})
+            # cloudflared (tunnel)
+            cf = shutil.which("cloudflared")
+            if not cf:
+                for cand in (r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
+                             r"C:\Program Files\cloudflared\cloudflared.exe"):
+                    if _os.path.exists(cand):
+                        cf = cand
+                        break
+            if cf:
+                deps.append({"nome": "cloudflared", "stato": "ok",
+                             "versione": "installato", "via": "winget",
+                             "path": cf})
+            else:
+                deps.append({"nome": "cloudflared", "stato": "da installare", "via": "winget"})
+            self._json({"python": _sys.version.split()[0], "deps": deps})
             return
         elif path == "/api/dipendenze/installa":
-            from pathlib import Path as _P
-            req = _P(__file__).resolve().parents[1] / "requirements.txt"
-            if not req.exists():
-                self._json({"error": "requirements.txt mancante"}, 404)
+            import sys as _sys, subprocess
+            nome = (body.get("nome") if isinstance(body, dict) else None) or ""
+            nome = nome.strip().lower()
+            # cloudflared via winget
+            if nome == "cloudflared":
+                try:
+                    r = subprocess.run(
+                        ["winget", "install", "--id", "Cloudflare.cloudflared", "-e",
+                         "--silent", "--accept-package-agreements",
+                         "--accept-source-agreements"],
+                        text=True, capture_output=True, timeout=300)
+                    self._json({
+                        "ok": r.returncode == 0,
+                        "returncode": r.returncode,
+                        "output": ((r.stdout or "") + (r.stderr or ""))[-1800:],
+                    })
+                except Exception as e:  # noqa: BLE001
+                    self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return
-            try:
-                import sys as _sys, subprocess
-                r = subprocess.run(
-                    [_sys.executable, "-m", "pip", "install", "-r", str(req)],
-                    text=True, capture_output=True, timeout=300)
-                self._json({
-                    "ok": r.returncode == 0,
-                    "returncode": r.returncode,
-                    "output": ((r.stdout or "") + (r.stderr or ""))[-1800:],
-                })
+            # pip packages
+            pkg = None
+            if nome in ("ddgs",):
+                pkg = "ddgs"
+            elif nome in ("faster-whisper", "faster_whisper", "whisper"):
+                pkg = "faster-whisper"
+            if pkg:
+                try:
+                    r = subprocess.run(
+                        [_sys.executable, "-m", "pip", "install", pkg],
+                        text=True, capture_output=True, timeout=300)
+                    self._json({
+                        "ok": r.returncode == 0,
+                        "returncode": r.returncode,
+                        "output": ((r.stdout or "") + (r.stderr or ""))[-1800:],
+                    })
+                except Exception as e:  # noqa: BLE001
+                    self._json({"error": f"{type(e).__name__}: {e}"}, 500)
                 return
-            except Exception as e:  # noqa: BLE001
-                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
-                return
+            self._json({"error": "dipendenza sconosciuta: " + nome}, 400)
+            return
         elif path == "/api/diagnosi/stato":
             self._json({
                 "comandi": [

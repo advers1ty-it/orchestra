@@ -3538,25 +3538,72 @@ if (dettagliInput) dettagliInput.addEventListener("keydown", (e) => {
 
 
 
-// ------------------------------------------------- dipendenze opzionali
+// ------------------------------------------------- dipendenze opzionali (pannello)
 const btnDeps = $("opzioni-deps");
-if (btnDeps) btnDeps.addEventListener("click", async () => {
-  if (btnDeps.disabled) return;
-  btnDeps.disabled = true;
-  const prev = btnDeps.textContent;
-  btnDeps.textContent = "installazione…";
+function _depsChiudi() {
+  const m = document.getElementById("deps-modal");
+  if (m) m.remove();
+}
+async function _depsStato() {
+  const r = await fetch("/api/dipendenze/stato");
+  return r.json().catch(() => ({ deps: [] }));
+}
+async function _depsInstalla(nome, btn) {
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = "installazione…";
   try {
-    const r = await fetch("/api/dipendenze/installa", { method: "POST" });
+    const r = await fetch("/api/dipendenze/installa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome }),
+    });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) alert(d.error || "Dipendenze: errore installazione");
+    if (!r.ok) alert(d.error || "Errore installazione " + nome);
     else alert((d.output || "fatto").slice(-1200));
   } catch (e) {
-    alert("Dipendenze: " + e);
+    alert("Errore: " + e);
   } finally {
-    btnDeps.disabled = false;
-    btnDeps.textContent = prev;
+    btn.disabled = false;
+    btn.textContent = prev;
+    // ricarica stato
+    _depsApri();
   }
-});
+}
+async function _depsApri() {
+  _depsChiudi();
+  const data = await _depsStato();
+  const deps = data.deps || [];
+  const modal = document.createElement("div");
+  modal.id = "deps-modal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;";
+  const box = document.createElement("div");
+  box.style.cssText = "background:var(--bg,#1a1a2e);color:var(--fg,#eee);padding:20px;border-radius:12px;max-width:420px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.4);";
+  let html = "<h3 style='margin:0 0 12px'>Dipendenze opzionali</h3>";
+  html += "<p style='font-size:12px;opacity:.7;margin:0 0 12px'>Python: " + (data.python || "?") + "</p>";
+  for (const d of deps) {
+    const ok = d.stato === "ok";
+    html += "<div style='display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1)'>";
+    html += "<div><strong>" + d.nome + "</strong><br><span style='font-size:11px;opacity:.6'>" + (ok ? (d.versione || "ok") : "da installare") + " · " + (d.via || "") + "</span></div>";
+    if (!ok) {
+      html += "<button class='deps-install' data-nome='" + d.nome + "' style='padding:4px 10px;border-radius:6px;border:1px solid #555;background:transparent;color:inherit;cursor:pointer;font-size:12px'>Installa</button>";
+    } else {
+      html += "<span style='color:#4ade80;font-size:12px'>✓ ok</span>";
+    }
+    html += "</div>";
+  }
+  html += "<div style='text-align:right;margin-top:12px'><button id='deps-chiudi' style='padding:6px 14px;border-radius:6px;border:1px solid #555;background:transparent;color:inherit;cursor:pointer'>Chiudi</button></div>";
+  box.innerHTML = html;
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) _depsChiudi(); });
+  const chiudi = document.getElementById("deps-chiudi");
+  if (chiudi) chiudi.addEventListener("click", _depsChiudi);
+  box.querySelectorAll(".deps-install").forEach((b) => {
+    b.addEventListener("click", () => _depsInstalla(b.dataset.nome, b));
+  });
+}
+if (btnDeps) btnDeps.addEventListener("click", _depsApri);
 
 // ------------------------------------------------- documentazione (nuova scheda)
 const btnDocs = $("btn-docs");

@@ -134,6 +134,8 @@ function setBusy(v) {
   dot.className = "dot" + (v ? " busy" : " ok");
   input.disabled = !ready || v;
   btnSend.disabled = !ready || v;
+  const micFloatEl = document.getElementById("mic-float");
+  if (micFloatEl) micFloatEl.disabled = !ready || v;
   // Il pallino e' sempre li': verde a riposo, giallo mentre lavora.
   // Durante il lavoro il form chat viene sostituito dalla steer bar:
   // la stessa larghezza, la stessa posizione, niente scroll che

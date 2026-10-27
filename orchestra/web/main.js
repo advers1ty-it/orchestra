@@ -293,6 +293,7 @@ function verificaPayload() {
 
 const btnVerifica = $("btn-verifica");
 const verificaPop = $("verifica-pop");
+const btnMic = $("btn-mic-float");
 
 function apriChiudiVerifica() {
   verificaPop.hidden = !verificaPop.hidden;
@@ -315,6 +316,82 @@ if (btnVerifica && verificaPop) {
   on("verifica-tipo", "change", apriChiudiVerifica);
   on("verifica-file", "change", apriChiudiVerifica);
 }
+// Dittazione vocale: Web Speech API quando disponibile (Chrome desktop
+// e Android), altrimenti audio -> server -> faster-whisper.
+let _micRec = false, _micStream = null, _micChunks = [];
+let _recTimer = null;
+function _micDisponibile() {
+  return Promise.resolve(
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+    || (window._sttDisponibile === true));
+}
+function _micAvvia() {
+  if (!btnMic || btnMic.disabled) return;
+  const ws = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (ws) {
+    _micRec = true;
+    btnMic.classList.add("recording");
+    const rec = new ws();
+    rec.lang = (navigator.language || "it-IT");
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e) => {
+      let t = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        t += e.results[i][0].transcript;
+      }
+      input.value = (input.value + t).slice(0, 4000);
+    };
+    rec.onerror = (e) => { console.warn("speech error", e); _micFerma(); };
+    rec.onend = () => { _micFerma(); };
+    rec.start();
+    return;
+  }
+  // Fallback: registra audio e manda al server
+  navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    _micStream = stream;
+    _micRec = true;
+    _micChunks = [];
+    btnMic.classList.add("recording");
+    const mr = new MediaRecorder(stream);
+    mr.ondataavailable = (e) => { if (e.data.size > 0) _micChunks.push(e.data); };
+    mr.onstop = async () => {
+      const blob = new Blob(_micChunks, { type: "audio/webm" });
+      const b64 = await blob.arrayBuffer().then(b => btoa(String.fromCharCode(...new Uint8Array(b))));
+      try {
+        const r = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audio: b64, filename: "audio.webm" }),
+        });
+        const j = await r.json();
+        if (j.text) input.value = (input.value + " " + j.text).slice(0, 4000);
+        else if (j.error) _micMessaggio(j.error);
+      } catch (e) { _micMessaggio("errore trascrizione"); }
+      _micFerma();
+    };
+    mr.start();
+    _recTimer = setTimeout(() => mr.stop(), 60000);
+  }).catch((e) => { _micMessaggio("microfono non accessibile: " + e.message); });
+}
+function _micFerma() {
+  if (_recTimer) { clearTimeout(_recTimer); _recTimer = null; }
+  if (_micStream) { _micStream.getTracks().forEach(t => t.stop()); _micStream = null; }
+  _micRec = false;
+  if (btnMic) btnMic.classList.remove("recording");
+}
+function _micMessaggio(msg) {
+  if (!btnMic) return;
+  const old = btnMic.title;
+  btnMic.title = msg;
+  setTimeout(() => { if (btnMic) btnMic.title = "Dittazione vocale (faster-whisper)"; }, 4000);
+}
+if (btnMic) {
+  btnMic.addEventListener("click", () => {
+    if (_micRec) { _micFerma(); return; }
+    _micAvvia();
+  });
+}
 on(input, "keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
@@ -325,6 +402,30 @@ if (btnAllega) btnAllega.disabled = !ready;
 // il popover non si apriva e la self-correzione non si attivava: di fuori
 // sembrava rotta. Con `ready` segue lo stesso ciclo dell'allegato.
 if (btnVerifica) btnVerifica.disabled = !ready;
+if (btnMic) {
+  btnMic.disabled = !ready;
+  btnMic.hidden = true;
+  // Il microfono è disponibile solo se il browser parla (Web Speech
+  // API) o se il server ha whisper installato. Se entrambi mancano,
+  // il pulsante non compare affatto.
+  _micDisponibile().then((ok) => {
+    if (!btnMic) return;
+    btnMic.hidden = !ok;
+    btnMic.disabled = !ready || !ok;
+  });
+}
+
+// All'avvio chiediamo al server se whisper è installato: così il pulsante
+// microfono compare solo quando c'è una via d'uscita (Web Speech API nel
+// browser, o faster-whisper sul server). Se entrambi mancano, non
+// mostriamo niente: non è un pulsante finto.
+function _sttCheck() {
+  fetch("/api/stt/status")
+    .then(r => r.json())
+    .then(j => { window._sttDisponibile = !!(j && j.disponibile); })
+    .catch(() => { window._sttDisponibile = false; });
+}
+_sttCheck();
 
 // Steer: inietta un messaggio al modello durante il lavoro
 // (steerBar/steerInput/steerSend sono dichiarati in core.js)
@@ -594,3 +695,117 @@ async function apriTraccia(id, btn) {
     apriModaleTraccia();
   }
 }
+
+// ------------------------------------------------------------- Dettatura vocale (STT)
+//
+// Microfono flottante in basso a destra. Due vie:
+//   1. Web Speech API (Chrome desktop + Android): gratis, zero server.
+//   2. MediaRecorder + /api/transcribe (faster-whisper sul server): per i
+//      browser senza Web Speech API (Safari/iOS). Funziona solo se whisper
+//      e' installato sul PC che serve l'app.
+const micFloat = $("mic-float");
+let micRecording = false;
+let micRecognition = null;
+let mediaRecorder = null;
+let micChunks = [];
+
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+const hasWebSpeech = !!SpeechRecognitionCtor;
+
+async function micDisponibile() {
+  if (hasWebSpeech) return true;
+  try {
+    const r = await fetch("/api/stt/status");
+    const j = await r.json();
+    return !!(j && j.disponibile);
+  } catch (e) { return false; }
+}
+
+function micUpdateUI() {
+  if (!micFloat) return;
+  micFloat.classList.toggle("recording", micRecording);
+  const span = micFloat.querySelector("span");
+  if (span) span.textContent = micRecording ? "⏹" : "🎤";
+  micFloat.title = micRecording ? "Ferma la dettatura" : "Dettatura vocale";
+}
+
+async function micToggle() {
+  if (micRecording) {
+    if (micRecognition) { try { micRecognition.stop(); } catch (e) {} }
+    if (mediaRecorder && mediaRecorder.state !== "inactive") { try { mediaRecorder.stop(); } catch (e) {} }
+    micRecording = false;
+    micUpdateUI();
+    return;
+  }
+  if (hasWebSpeech) {
+    try {
+      micRecognition = new SpeechRecognitionCtor();
+      micRecognition.lang = "it-IT";
+      micRecognition.interimResults = true;
+      micRecognition.continuous = false;
+      micRecognition.onresult = (e) => {
+        let final = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        }
+        if (final) {
+          input.value = (input.value + " " + final).trim();
+          autoGrow();
+        }
+      };
+      micRecognition.onend = () => { micRecording = false; micUpdateUI(); };
+      micRecognition.onerror = (e) => {
+        addText("error", "dettatura: " + ((e && e.error) || "errore"));
+        micRecording = false; micUpdateUI();
+      };
+      micRecognition.start();
+      micRecording = true;
+      micUpdateUI();
+    } catch (e) {
+      addText("error", "dettatura non avviata: " + e);
+    }
+  } else {
+    // MediaRecorder + whisper sul server
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      micChunks = [];
+      mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) micChunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(micChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const b64 = (reader.result || "").split(",")[1] || "";
+            const r = await fetch("/api/transcribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ audio: b64, filename: "audio.webm" }),
+            });
+            const j = await r.json();
+            if (j && j.text) {
+              input.value = (input.value + " " + j.text).trim();
+              autoGrow();
+            } else {
+              addText("error", "trascrizione fallita: " + ((j && j.error) || "errore"));
+            }
+          } catch (e) { addText("error", "trascrizione fallita: " + e); }
+        };
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+      };
+      mediaRecorder.start();
+      micRecording = true;
+      micUpdateUI();
+    } catch (e) {
+      addText("error", "microfono non disponibile: " + e);
+    }
+  }
+}
+
+(async function initMic() {
+  const avail = await micDisponibile();
+  if (!avail || !micFloat) return;
+  micFloat.classList.add("show");
+  micFloat.onclick = micToggle;
+})();

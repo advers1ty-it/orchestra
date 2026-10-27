@@ -1626,6 +1626,39 @@ select:disabled {
 /* Toggle verifica (✓) e popover. Coerente con la graffetta: ghost,
    stesso ingombro. "acceso" lo distingue a colpo d'occhio. */
 #btn-verifica.acceso { color: var(--accent); background: var(--panel-2, rgba(255,255,255,.08)); }
+/* Pulsante microfono floating: in basso a destra sopra la chat, piccolo,
+   semitrasparente, non intrusivo. Scompare quando non disponibile. */
+.mic-float {
+  position: fixed;
+  right: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(30,30,34,.78);
+  backdrop-filter: blur(8px);
+  color: var(--fg);
+  font-size: 22px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 22px rgba(0,0,0,.35);
+  z-index: 60;
+  transition: transform .15s ease, opacity .15s ease, background .15s ease;
+}
+.mic-float:hover { transform: scale(1.08); background: rgba(50,50,56,.92); }
+.mic-float:disabled { opacity: .28; cursor: not-allowed; }
+.mic-float.recording {
+  background: #c0392b;
+  border-color: #e74c3c;
+  color: #fff;
+  animation: micPulse 1s ease-in-out infinite;
+}
+@keyframes micPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+@media (max-width: 640px) {
+  .mic-float { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); width: 44px; height: 44px; font-size: 20px; }
+}
 
 #verifica-pop {
   position: fixed;
@@ -1947,8 +1980,41 @@ select:disabled {
    gli rubavano larghezza. Qui il campo cresce e la riga respira,
    i bottoni restano a 44px (touch target gia' impostato sopra).
    ============================================================ */
+/* Pulsante microfono flottante (STT) */
+.mic-float {
+  position: fixed;
+  right: 14px;
+  bottom: 96px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent, #7c5cff);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  z-index: 40;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s ease, background .15s ease;
+}
+.mic-float.show { display: flex; }
+.mic-float.recording {
+  background: #e53935;
+  animation: micPulse 1.1s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229,57,53,.55); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(229,57,53,0); }
+}
+.mic-float:disabled { opacity: .5; cursor: not-allowed; }
+
 @media (max-width: 640px) {
   footer { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
   .row { gap: 8px; }
   textarea { min-height: 78px; padding: 12px; }
+  .mic-float { bottom: calc(96px + env(safe-area-inset-bottom)); }
 }

@@ -21,14 +21,38 @@ set "PORT=8737"
 set "URL=http://127.0.0.1:%PORT%"
 set "LOG=%CD%\orchestra-server.log"
 
-rem --- 1. Trova l'interprete Python (anche se il PATH e' vecchio) ---
+rem --- 1. Trova l'interprete Python (preferisce 3.12, poi 3.11) ---
 set "PYEXE="
-for %%P in (py python python3) do (
-  if not defined PYEXE %%P --version >nul 2>&1 && set "PYEXE=%%P"
+rem 1a. Cerca Python 3.12 in percorsi noti
+for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312" "C:\Python312" "C:\Program Files\Python312") do (
+  if not defined PYEXE if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
 )
+rem 1b. Se 3.12 non c'e', prova a installarlo (come l'installer)
 if not defined PYEXE (
-  for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312" "%LocalAppData%\Programs\Python\Python311" "C:\Python312" "C:\Python311" "C:\Program Files\Python312" "C:\Program Files\Python311") do (
+  echo  Python 3.12 non trovato. Provo a installarlo...
+  winget install -e --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements >nul 2>&1
+  for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312") do (
     if not defined PYEXE if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
+  )
+  if not defined PYEXE (
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe' -OutFile '%TEMP%\python-setup.exe' -UseBasicParsing" 2>nul
+    if exist "%TEMP%\python-setup.exe" (
+      start /wait "" "%TEMP%\python-setup.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+      del "%TEMP%\python-setup.exe" >nul 2>&1
+      for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312") do if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
+    )
+  )
+)
+rem 1c. Fallback a Python 3.11 (hermes, faster-whisper gia' presenti)
+if not defined PYEXE (
+  for %%D in ("%LOCALAPPDATA%\Programs\Python\Python311" "C:\Python311" "C:\Program Files\Python311") do (
+    if not defined PYEXE if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
+  )
+)
+rem 1d. Ultimo tentativo: py/python dal PATH (evita 3.15 probe)
+if not defined PYEXE (
+  for %%P in (python python3) do (
+    if not defined PYEXE %%P --version >nul 2>&1 && set "PYEXE=%%P"
   )
 )
 if not defined PYEXE (
@@ -37,6 +61,7 @@ if not defined PYEXE (
   pause
   exit /b 1
 )
+echo  [OK] Interprete: %PYEXE%
 
 call :porta_aperta
 if not errorlevel 1 goto :menu
