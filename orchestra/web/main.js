@@ -343,7 +343,11 @@ function _micAvvia() {
       input.value = (input.value + t).slice(0, 4000);
     };
     rec.onerror = (e) => { console.warn("speech error", e); _micFerma(); };
-    rec.onend = () => { _micFerma(); };
+    rec.onend = () => {
+      const _had = (input.value || "").trim().length > 0;
+      _micFerma();
+      if (_had && !busy && ready) { setTimeout(send, 50); }
+    };
     rec.start();
     return;
   }
@@ -369,6 +373,7 @@ function _micAvvia() {
         else if (j.error) _micMessaggio(j.error);
       } catch (e) { _micMessaggio("errore trascrizione"); }
       _micFerma();
+      if ((input.value || "").trim() && !busy && ready) { setTimeout(send, 50); }
     };
     mr.start();
     _recTimer = setTimeout(() => mr.stop(), 60000);
@@ -742,7 +747,7 @@ async function micToggle() {
       micRecognition = new SpeechRecognitionCtor();
       micRecognition.lang = "it-IT";
       micRecognition.interimResults = true;
-      micRecognition.continuous = false;
+      micRecognition.continuous = true;
       micRecognition.onresult = (e) => {
         let final = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -753,7 +758,13 @@ async function micToggle() {
           autoGrow();
         }
       };
-      micRecognition.onend = () => { micRecording = false; micUpdateUI(); };
+      micRecognition.onend = () => {
+        const _had = (input.value || "").trim().length > 0;
+        micRecording = false; micUpdateUI();
+        // Auto-invio: quando la dettatura finisce (sia manuale che
+        // automatica) e c'e' testo, manda il messaggio da solo.
+        if (_had && !busy && ready) { setTimeout(send, 50); }
+      };
       micRecognition.onerror = (e) => {
         addText("error", "dettatura: " + ((e && e.error) || "errore"));
         micRecording = false; micUpdateUI();
@@ -786,6 +797,7 @@ async function micToggle() {
             if (j && j.text) {
               input.value = (input.value + " " + j.text).trim();
               autoGrow();
+              if ((input.value || "").trim() && !busy && ready) { setTimeout(send, 50); }
             } else {
               addText("error", "trascrizione fallita: " + ((j && j.error) || "errore"));
             }

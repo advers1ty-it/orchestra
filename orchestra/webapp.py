@@ -1982,22 +1982,27 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             self._json({"disponibile": as_mod.disponibile(),
                         "attivo": as_mod.stato()})
         elif path == "/api/dipendenze/stato":
-            import importlib, sys as _sys, shutil, os as _os
+            import importlib.util, importlib.metadata, shutil, os as _os, sys as _sys
             deps = []
-            for nome in ("ddgs",):
+            # ddgs (ricerca web) — find_spec non importa il modulo (niente cache)
+            if importlib.util.find_spec("ddgs") is not None:
                 try:
-                    m = importlib.import_module(nome)
-                    deps.append({"nome": nome, "stato": "ok",
-                                 "versione": getattr(m, "__version__", "?"),
-                                 "via": "pip"})
+                    ver = importlib.metadata.version("ddgs")
                 except Exception:
-                    deps.append({"nome": nome, "stato": "da installare", "via": "pip"})
-            try:
-                m = importlib.import_module("faster_whisper")
+                    ver = "?"
+                deps.append({"nome": "ddgs", "stato": "ok",
+                             "versione": ver, "via": "pip"})
+            else:
+                deps.append({"nome": "ddgs", "stato": "da installare", "via": "pip"})
+            # faster-whisper (STT server)
+            if importlib.util.find_spec("faster_whisper") is not None:
+                try:
+                    ver = importlib.metadata.version("faster-whisper")
+                except Exception:
+                    ver = "?"
                 deps.append({"nome": "faster-whisper", "stato": "ok",
-                             "versione": getattr(m, "__version__", "?"),
-                             "via": "pip"})
-            except Exception:
+                             "versione": ver, "via": "pip"})
+            else:
                 deps.append({"nome": "faster-whisper", "stato": "da installare", "via": "pip"})
             cf = shutil.which("cloudflared")
             if not cf:
@@ -3201,24 +3206,27 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 return
             self._json(gate.stato())
         elif path == "/api/dipendenze/stato":
-            import importlib, sys as _sys, shutil, os as _os
+            import importlib.util, importlib.metadata, shutil, os as _os, sys as _sys
             deps = []
             # ddgs (ricerca web)
-            for nome in ("ddgs",):
+            if importlib.util.find_spec("ddgs") is not None:
                 try:
-                    m = importlib.import_module(nome)
-                    deps.append({"nome": nome, "stato": "ok",
-                                 "versione": getattr(m, "__version__", "?"),
-                                 "via": "pip"})
+                    ver = importlib.metadata.version("ddgs")
                 except Exception:
-                    deps.append({"nome": nome, "stato": "da installare", "via": "pip"})
+                    ver = "?"
+                deps.append({"nome": "ddgs", "stato": "ok",
+                             "versione": ver, "via": "pip"})
+            else:
+                deps.append({"nome": "ddgs", "stato": "da installare", "via": "pip"})
             # faster-whisper (STT server)
-            try:
-                m = importlib.import_module("faster_whisper")
+            if importlib.util.find_spec("faster_whisper") is not None:
+                try:
+                    ver = importlib.metadata.version("faster-whisper")
+                except Exception:
+                    ver = "?"
                 deps.append({"nome": "faster-whisper", "stato": "ok",
-                             "versione": getattr(m, "__version__", "?"),
-                             "via": "pip"})
-            except Exception:
+                             "versione": ver, "via": "pip"})
+            else:
                 deps.append({"nome": "faster-whisper", "stato": "da installare", "via": "pip"})
             # cloudflared (tunnel)
             cf = shutil.which("cloudflared")
