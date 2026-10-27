@@ -68,3 +68,6 @@ plans/
 # La cartella di stato '.orchestra' dentro il progetto: non e' la
 # cartella dati (quella sta in AppData), e non serve a nulla.
 .orchestra/
+
+# Python portabile bundled (3.15 probe): non versionare, si ricrea localmente.
+Python/
