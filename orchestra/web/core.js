@@ -701,8 +701,8 @@ if (n.classList.contains("ragionamento")) return false;
       setBusy(!!d.busy);
       // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
       // ripristina lo scroll precedente (evita il salto in cima).
-      // La snapshot e' un caricamento/sync completo: si porta in fondo.
-      main.scrollTop = main.scrollHeight;
+      if (eraInFondoPrima) scrollDown();
+      else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
       break;
     }
     case "permission_request":
