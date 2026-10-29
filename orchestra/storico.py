@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS messaggi (
     sessione_id INTEGER NOT NULL REFERENCES sessioni(id) ON DELETE CASCADE,
     ruolo        TEXT NOT NULL,
     contenuto    TEXT NOT NULL DEFAULT '',
+    ragionamento TEXT NOT NULL DEFAULT '',
     nome         TEXT,
     tool_json    TEXT,
     token        INTEGER NOT NULL DEFAULT 0,
@@ -110,7 +111,15 @@ class Storico:
         self._conn.execute("PRAGMA foreign_keys = ON")
         with self._lock:
             self._conn.executescript(SCHEMA)
-            self._conn.commit()
+            # Migrazione: DB vecchi senza la colonna `ragionamento`. ALTER
+            # fallisce se la colonna esiste già, e va bene: il try la ignora.
+            try:
+                self._conn.execute(
+                    "ALTER TABLE messaggi ADD COLUMN ragionamento TEXT "
+                    "NOT NULL DEFAULT ''")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
     def chiudi(self) -> None:
         with self._lock:
@@ -237,7 +246,7 @@ class Storico:
     def messaggi(self, sessione_id: int) -> list[dict[str, Any]]:
         with self._lock:
             righe = self._conn.execute(
-                "SELECT id, ruolo, contenuto, nome, tool_json, token, creata"
+                "SELECT id, ruolo, contenuto, ragionamento, nome, tool_json, token, creata"
                 " FROM messaggi WHERE sessione_id = ? ORDER BY id", (sessione_id,)
             ).fetchall()
         fuori = []
@@ -358,10 +367,11 @@ class Storico:
                         if tool_json is not None else None)
                 self._conn.execute(
                     "INSERT INTO messaggi"
-                    " (sessione_id, ruolo, contenuto, nome, tool_json, token, creata)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    " (sessione_id, ruolo, contenuto, ragionamento, nome, tool_json, token, creata)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (sessione_id, m.get("ruolo", ""), m.get("contenuto", ""),
-                     m.get("nome"), dati, m.get("token", 0), time.time()))
+                     m.get("ragionamento", "") or "", m.get("nome"), dati,
+                     m.get("token", 0), time.time()))
             self.tocca(sessione_id, modello, provider)
 
 

@@ -498,7 +498,10 @@ function avviaPollingFallback() {
           // Ricostruisci la chat come fa lo snapshot del SSE.
           const nodiClient = Array.from(log.children).filter((n) => {
             if (!n.classList) return false;
-            if (n.classList.contains("ragionamento")) return true;
+            // Il ragionamento viene dallo snapshot (campo `reasoning`), non va
+// preservato come nodo cliente: altrimenti la ricostruzione lo spinge
+// sotto i messaggi e rompe l'ordine.
+if (n.classList.contains("ragionamento")) return false;
             if (n.classList.contains("msg")) {
               return n.classList.contains("system") ||
                      n.classList.contains("error") ||
@@ -515,6 +518,11 @@ function avviaPollingFallback() {
             const text = (m && m.content != null) ? String(m.content) : "";
             if (m.role === "user") addText("user", text);
             else if (m.role === "assistant") {
+              if (m.reasoning) {
+                const r = el("div", "ragionamento");
+                r.textContent = m.reasoning;
+                log.appendChild(r);
+              }
               if (text.trim()) addText("assistant", text, true);
               (m.tool_calls || []).forEach((tc) => {
                 const creato = addTool(tc.name, tc.arguments, tc.id);
@@ -607,6 +615,15 @@ function handle(kind, d) {
       ready = true;
       renderStats(d);
       loadModels();
+      // Durante un turno attivo non ricostruire il DOM: evita flicker e
+      // spostamenti del ragionamento. Il sync completo avviene a fine turno.
+      const eraPrimoSnapshot = primoSnapshot;
+      if (primoSnapshot) {
+        primoSnapshot = false;
+      } else if (d.busy) {
+        setBusy(true);
+        return;
+      }
       const firma = String((d.messages || []).length) + "::" +
         String((d.messages && d.messages.length)
           ? (d.messages[d.messages.length - 1].content || "") : "");
@@ -624,7 +641,10 @@ function handle(kind, d) {
       // Preserva i nodi lato client che non fanno parte dello snapshot.
       const nodiClient = Array.from(log.children).filter((n) => {
         if (!n.classList) return false;
-        if (n.classList.contains("ragionamento")) return true;
+        // Il ragionamento viene dallo snapshot (campo `reasoning`), non va
+// preservato come nodo cliente: altrimenti la ricostruzione lo spinge
+// sotto i messaggi e rompe l'ordine.
+if (n.classList.contains("ragionamento")) return false;
         if (n.classList.contains("msg")) {
           return n.classList.contains("system") ||
                  n.classList.contains("error") ||
@@ -652,6 +672,12 @@ function handle(kind, d) {
         const text = (m && m.content != null) ? String(m.content) : "";
         if (m.role === "user") addText("user", text);
         else if (m.role === "assistant") {
+          // Il ragionamento appartiene a questa risposta e va prima di essa.
+          if (m.reasoning) {
+            const r = el("div", "ragionamento");
+            r.textContent = m.reasoning;
+            log.appendChild(r);
+          }
           // Solo testo, niente riga bianca: un assistant con sole tool
           // call non ha niente da dire, e il suo contenuto sono i tool
           // sotto. La riga bianca era il motivo per cui questi messaggi
@@ -675,8 +701,8 @@ function handle(kind, d) {
       setBusy(!!d.busy);
       // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
       // ripristina lo scroll precedente (evita il salto in cima).
-      if (eraInFondoPrima) main.scrollTop = main.scrollHeight;
-      else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
+      // La snapshot e' un caricamento/sync completo: si porta in fondo.
+      main.scrollTop = main.scrollHeight;
       break;
     }
     case "permission_request":

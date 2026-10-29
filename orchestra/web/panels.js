@@ -3331,12 +3331,9 @@ function ragionamentoAggiungi(testo) {
 }
 
 function ragionamentoChiudi() {
-  // Non si cancella niente: il blocco resta visibile come storia. Si
-  // stacca solo il puntatore, così il prossimo ragionamento apre un nodo
-  // nuovo invece di riempire questo.
+  // Il blocco resta visibile come storia: si stacca solo il puntatore,
+  // così il prossimo ragionamento apre un nodo nuovo. Non si nasconde.
   ragionamentoCorrente = null;
-  const n = document.getElementById("ragionamento");
-  if (n) n.setAttribute("hidden", "");
 }
 
 // ------------------------------------------------- onboarding guidato

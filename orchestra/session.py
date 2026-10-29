@@ -342,6 +342,12 @@ class Session:
                     item: dict[str, Any] = {"role": m.role,
                                             "content": m.content,
                                             "name": m.name}
+                    # Il ragionamento viaggia con l'assistant: così la UI lo
+                    # renderizza dallo snapshot e non ha bisogno di preservare
+                    # nodi DOM lato client, che è il punto in cui si rompeva
+                    # l'ordine (ragionamento spinto sotto la risposta).
+                    if getattr(m, "reasoning", ""):
+                        item["reasoning"] = m.reasoning
                     if m.tool_calls:
                         item["tool_calls"] = [
                             {"id": tc.id, "name": tc.name,
@@ -971,7 +977,8 @@ class Session:
                 if m["ruolo"] in ("user", "assistant") and m["contenuto"].strip():
                     ricostruiti.append(Message(role=m["ruolo"],
                                                content=m["contenuto"],
-                                               name=m.get("nome")))
+                                               name=m.get("nome"),
+                                               reasoning=m.get("ragionamento", "") or ""))
             self.agent.state.messages = ricostruiti
         self.bridge.emit("sessione_caricata", {"id": sessione_id})
         return True
@@ -986,7 +993,8 @@ class Session:
         """
         st = self.agent.state
         messaggi = [
-            {"ruolo": m.role, "contenuto": m.content, "nome": m.name}
+            {"ruolo": m.role, "contenuto": m.content, "nome": m.name,
+             "ragionamento": getattr(m, "reasoning", "") if m.role == "assistant" else ""}
             for m in st.messages
             if m.role in ("user", "assistant") and m.content.strip()
         ]
