@@ -867,6 +867,9 @@ function handle(kind, d) {
       break;
     case "turn_end":
       renderStats({ ...d, compactions: 0 });
+      // Il reasoning, se ancora aperto, viene congelato: resta visibile
+      // dove si trova, ma non insegue più il fondo ad ogni nuovo messaggio.
+      ragionamentoCorrente = null;
       break;
     case "error":
       addText("error", d.message);
@@ -892,6 +895,10 @@ function handle(kind, d) {
       // A fine turno arrivano i totali: la barra del contesto si
       // aggiorna qui, non solo al reload della pagina.
       if (typeof d.total_tokens === "number") renderStats(d);
+      // Congela anche qui: se il turno finisce senza turn_end (es.
+      // cancellazione o errore gestito), il reasoning non deve restare
+      // "corrente" e inseguire il fondo.
+      ragionamentoCorrente = null;
       break;
   }
 }
