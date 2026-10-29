@@ -67,6 +67,7 @@
       <li><a href="#delega">Multi-agent & delega</a></li>
       <li><a href="#goal">Goal autonomi</a></li>
       <li><a href="#cron">Cron (job programmati)</a></li>
+      <li><a href="#consiglio">Consiglio (Roast Room)</a></li>
       <li><a href="#mcp">Client MCP</a></li>
       <li><a href="#browser">Browser e computer</a></li>
       <li><a href="#permessi">Permessi</a></li>
@@ -234,6 +235,17 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   <li>Tipi azione: <code>goal</code> (avvia un obiettivo) o <code>shell</code> (comando).</li>
   <li>CRUD completo da UI e via tool <code>cron</code> (anche per l'agente).</li>
   <li>Shortcut: <code>@hourly</code>, <code>@daily</code>, <code>@weekly</code>, <code>@monthly</code>, <code>@yearly</code>, <code>@reboot</code>.</li>
+</ul>
+</section>
+
+<section id="consiglio">
+<h2>Consiglio — Roast Room</h2>
+<p>Pannello “Consiglio” (toolbar) per far dibattere una decisione tra più advisor (mentor) in round successivi; al termine il chair produce un verdict. I risultati (round e verdict) vengono salvati su disco e scaricabili in PDF. L’interfaccia grafica del tavolo e il formato dei round si ispirano al progetto open source “Roast Room” (citazione dovuta agli autori originali).</p>
+<ul>
+  <li>Input: decisione testuale, numero di round (2 o 3), selezione degli advisor.</li>
+  <li>Output: trascrizione dei round + verdict del chair, salvato in <code>sessions/</code>.</li>
+  <li>Export: <code>/api/council/pdf</code> genera un PDF con verdict + trascrizioni.</li>
+  <li>Portraits degli advisor caricati da <code>/web/portraits/</code>.</li>
 </ul>
 </section>
 

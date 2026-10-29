@@ -1,0 +1,43 @@
+# Stories: Codie Sanchez
+
+Built from the batch notes over 41 sources. 20 stories and cases she reuses, with the lesson she draws. Source ids in parentheses. Where her numbers change between retellings, every version is listed. Member stories from her company newsletter (team voice) are left out.
+
+1. **The pack-and-ship store, built then bought.** A friend built a pack-and-ship store from scratch and needed 18 months of ads, mailings, and pop-ups to reach profit. For his second store she told him to buy one with customers and upsell them; he paid about 1.5x profit to a retiring owner and doubled revenue. "went out and bought an already an existing store that had customers and then just up sold them and that's a much easier way to do it" (S006) Lesson: the cleanest build-versus-buy case she tells; buying skips the slow climb to the first customers (S006).
+
+2. **Her uncle's plumbing company.** At retirement (in the 2023 telling, during cancer) her uncle shut down a profitable plumbing company and paid to close it, because nobody told him it could be sold. It showed her a micro version of the private equity model she knew. Numbers vary: about $2 to 3M profit (S006, 2021); $5 to 6M revenue and $1 to 3M profit (S010, 2023); an estimated $6 to 10M sale value (S013, 2023); millions in revenue and seven-figure profit (S020, 2025). Lesson: many owners do not know they hold a sellable asset, which is why off-market outreach works (S006, S010, S013, S020).
+
+3. **The first laundromat.** She bought it secretly while employed and an operator ran it while she flew to Chile. Figures vary: about $100K for about $67K a year in profit (S013, S018, S020); about $100K for $60K to $80K after renegotiating the lease, later $150K to $180K (S010); under $100,000 (S025); about $65K a year (S035). It grew into 25 to 30 laundromats (S035), and she later sold laundromats to a buyer from her audience (S010). "it was like little enough for me to feel okay with it and it was also big enough where I could make real income" (S018) Lesson: size a first deal so a loss is survivable and a win is real income (S010, S011, S013, S018, S020, S021, S025, S035).
+
+4. **Her own starts failed first.** Selling South (a US and Latin America consultancy) and Threads Refined (a fashion styling marketplace that lost her six figures) went nowhere. Retellings differ on whether she bought Selling South (up to 75%, S010; "bought", S011) or started it as a website (S014). "turns out I'm not the idea girl like my ideas aren't making me money" (S011) Lesson: validate before you build; the only thing that worked was buying boring businesses (S004, S010, S011, S014, S022).
+
+5. **Strike Fire Productions.** She paid $10,000 for about 49% of a podcast production company because the owner hated sales and she liked selling, then sold the stake back when it was too small. Income varies by telling: $5,852 in month one and her money back within three months (S020); $5K to $10K a month for about a year (S014); $8K to $9K a month (S021); $10K to $30K a month for a few years (S022). Lesson: trade expertise for equity in a business you already pay (S010, S014, S020, S021, S022).
+
+6. **The 19-year-old who bought his vendor.** A 19-year-old with no business experience bought out his employer's vendor with seller financing or sweat equity. The 2024 telling names him Adam and the vendor a graphic design firm (S001); the 2026 telling names him Jared, says he earned $60K for 18 months of work, and puts the business above $1M in value (S021). This may be one story told two ways. Lesson: you can buy with time and expertise instead of cash (S001, S021).
+
+7. **Spencer's trash route.** A software founder offered his neighborhood a trash pickup service if enough people signed up, got paid before buying the truck, and now drives it and says he is happier. The numbers differ: about $15,000 in pre-orders overnight against a 200-signup target (S011); 150 people paying $33 a month within a day (S025). Lesson: if you start, get dollars before you build (S011, S025).
+
+8. **The window cleaning test.** She bought a window cleaning company and pre-sold services to work out the daily number a business has to hit. "you need to make $384 a day in order to have a business" (S001) Lesson: do the daily math before you commit (S001).
+
+9. **Friends and partners who stole.** A close friend and deal partner stole from her and her husband after she talked herself out of a gut flag (S009); two friendships ended, "One incompetence and one fraud." (S010); a bookkeeping business lied to her and stole a couple hundred thousand (S005); she wrote a big check to remove a partner with a record of mediocrity (S027). Her fix: "now I have a new rule and the rule is No New Friends" (S008) Lesson: friends go through the same diligence as strangers, and the partner choice is the mistake (S005, S008, S009, S010, S023, S027).
+
+10. **The big losses.** She lost $12 million in 90 days on a cannabis pre-rolls deal (S023); she cites a $12M loss on one deal and a private equity group loss near $25M (S021); a PE investment group had about $12M exposure when fraud surfaced (S035). These may overlap. Her first deal lost $50,000 and another $75,000 (S027). She says she has never lost money on a business she bought outright (S021). Lesson: she could model the deal but trusted the wrong person; "trust is not due diligence" (S035) (S021, S023, S027, S035).
+
+11. **The gross profit clause.** Her attorney missed a clause that paid a partner on gross profit instead of net. "I ended up having to pay out a partner on a gross profit basis" (S007) Lesson: structure and definitions decide the real price (S007).
+
+12. **The empty bank account.** She walked into a bank for a loan and found the account near zero; her head of operations had hidden the cash problem. That night she called her father. Lesson: track people and numbers weekly and build systems: "there's a reason why cowboys don't have long lives." (S004) (S004)
+
+13. **Branson's island and the resignations.** She turned down Richard Branson's island invitation because she believed her $5M business would fail without her, and later called it the hero complex (S002). Years later her number two resigned, the third key person to leave in 30 days. "I wasn't the indispensable founder holding it all together, I was the bottleneck holding it all back." (S031) Lesson: a business that needs the owner is a job (S002, S031).
+
+14. **"We get rich quietly."** Her finance firm refused to let her build a newsletter and media presence, and she left to build Contrarian Thinking. Tellings differ: a senior partner told her to stop making content (S011); two PE partners made her choose twice (S013); her CEO used the line "we get rich quietly" (S005, S028); a First Trust CEO said they needed a new boat and pushing her out was a favor (S001). Lesson: audience is leverage and a deal-flow engine (S001, S005, S011, S013, S028).
+
+15. **Bill Perkins: small infected your thinking.** Her billionaire mentor asked whether years of small deals had shrunk her thinking. "do you think you have been investing in small business for so long small has affected your thinking" (S008) Lesson: the small-deal lens has a ceiling, and she tries to be the smallest person in the room (S003, S008, S013, S015).
+
+16. **Charlie Munger's "it's hard".** At a dinner around 2018 or 2019 Munger kept saying it is hard; she thought it was easy, then learned that scaling means constant people problems. "the reality is no it's really hard" (S012) Lesson: hiring CEOs did not remove the people problems she wanted to escape (S012).
+
+17. **The ad-dependent client.** A $10M business with 70% margins spent $200,000 a month on Facebook and Google until rising costs turned margins negative. She told the owner to cut every ad; revenue fell about 30% to $7M, profit rose, and other channels later pushed both past the start. Lesson: paid growth had outrun the real economics (S041).
+
+18. **Thirty-five deals for one.** Trying to buy a marketing agency, she got a string of nos. "So, 35 deals in one vertical to get one seller financing deal done." (S022) Lesson: buying is a numbers game and follow-up wins (S022).
+
+19. **The reluctant partner bought out over three years.** She bought out a partner for about a million dollars paid over time from profits; the business now does $15M to $16M a year. Lesson: patience, and the business can fund its own purchase (S022).
+
+20. **Covid did not break the boring businesses.** In the first month of the pandemic she expected every business she owned to go bankrupt; none were hurt. Lesson: recession-resistant, boring businesses hold up (S010; lesson inferred from S010, S011).

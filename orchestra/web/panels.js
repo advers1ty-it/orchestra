@@ -235,6 +235,7 @@ function closeBench() {
 }
 on($("btn-bench"), "click", openBench);
 on($("bench-close"), "click", closeBench);
+on($("opz-bench-apri"), "click", () => { chiudiOpzioni(); openBench(); });
 // via on(), non addEventListener diretto: se il pannello manca, questo
 // era l'unico punto che uccideva TUTTO lo script che segue. Serve
 // core.js perche' il bundle e' un unico script: un solo elemento
@@ -1416,6 +1417,7 @@ async function caricaOpzioni() {
     }
 
     caricaPermessi();
+    caricaAutostart();
     // Le skill anche. Una chiamata in piu' a /api/skill durante
     // l'apertura del pannello, e su 103 file la costruzione dell'indice
     // richiede qualche decimo di secondo: per quello NON aspetta il
@@ -2340,6 +2342,8 @@ function mostraSezione(nome) {
   if (nome === "storico") caricaStorico();
   if (nome === "memoria") caricaMemoria();
   if (nome === "remoto") caricaRemoto();
+  if (nome === "autostart") caricaAutostart();
+  if (nome === "benchmark") { /* il benchmark resta nel suo pannello */ }
 }
 
 function caricaRemoto() {
@@ -4564,3 +4568,93 @@ on("mcp-connect-all", "click", async () => {
   await fetch("/api/mcp/connect_all", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" });
   caricaMcp();
 });
+
+
+// --- Consiglio (Roast Room) ---
+(function(){
+  const btn = document.getElementById('btn-council');
+  const panel = document.getElementById('council-panel');
+  const close = document.getElementById('council-close');
+  const startBtn = document.getElementById('council-start');
+  const pdfBtn = document.getElementById('council-pdf');
+  const decision = document.getElementById('council-decision');
+  const rounds = document.getElementById('council-rounds');
+  const status = document.getElementById('council-status');
+  const log = document.getElementById('council-log');
+  const verdict = document.getElementById('council-verdict');
+  const table = document.getElementById('council-table');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', () => { panel.classList.remove('hidden'); loadRoster(); });
+  if (close) close.addEventListener('click', () => panel.classList.add('hidden'));
+  let roster = [];
+  let timer = null;
+  function loadRoster(){
+    if (roster.length) { renderTable(); return; }
+    fetch('/api/council/roster').then(r=>r.json()).then(d=>{
+      roster = d.seats || [];
+      renderTable();
+    }).catch(()=>{});
+  }
+  function renderTable(){
+    if (!table) return;
+    table.innerHTML = '';
+    roster.forEach(s=>{
+      const chip = document.createElement('div');
+      chip.className = 'council-seat';
+      chip.id = 'cseat-'+s.key;
+      chip.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:2px solid '+(s.color||'#888')+';border-radius:10px;transition:box-shadow .15s,transform .15s;background:rgba(255,255,255,.03)';
+      chip.innerHTML = '<img src="/portraits/'+s.key+'-base.webp" alt="'+s.short+'" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid '+(s.color||'#888')+'" id="cimg-'+s.key+'"><div style="font-size:14px;font-weight:700">'+s.short+'</div><div style="font-size:11px;opacity:.75;text-align:center;line-height:1.2">'+s.pillar+'</div>';
+      table.appendChild(chip);
+    });
+    const chair = document.createElement('div');
+    chair.id = 'cseat-chair';
+    chair.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:2px dashed #bbb;border-radius:10px;background:rgba(255,255,255,.03)';
+     chair.innerHTML = '<div style="width:80px;height:80px;border-radius:50%;background:#555;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px">CH</div><div style="font-size:14px;font-weight:700">Chair</div><div style="font-size:11px;opacity:.75">Sintesi</div>';
+    table.appendChild(chair);
+  }
+  function highlight(current){
+    roster.forEach(s=>{
+      const el = document.getElementById('cseat-'+s.key);
+      if (!el) return;
+      const img = document.getElementById('cimg-'+s.key);
+      if (current && current === s.key) {
+        el.style.boxShadow = '0 0 0 3px '+(s.color||'#fff');
+        el.style.transform = 'scale(1.06)';
+        if (img) img.src = '/portraits/'+s.key+'-open.webp';
+      } else {
+        el.style.boxShadow = 'none';
+        el.style.transform = 'scale(1)';
+        if (img) img.src = '/portraits/'+s.key+'-base.webp';
+      }
+    });
+    const chair = document.getElementById('cseat-chair');
+    if (chair) {
+      if (current === 'chair') { chair.style.boxShadow = '0 0 0 3px #fff'; chair.style.transform='scale(1.06)'; }
+      else { chair.style.boxShadow = 'none'; chair.style.transform='scale(1)'; }
+    }
+  }
+  function poll() {
+    fetch('/api/council/status').then(r=>r.json()).then(d=>{
+      status.textContent = d.running ? ('round '+(d.current_round||'?')+' in corso...') : (d.error ? 'errore' : 'pronto');
+      const _prevScroll = log.scrollTop;
+      log.textContent = (d.log||[]).join('\n');
+      if (d.verdict) verdict.textContent = d.verdict;
+      log.scrollTop = _prevScroll;
+      highlight(d.current_seat || '');
+      if (d.running) timer = setTimeout(poll, 2000);
+    }).catch(()=>{});
+  }
+  if (startBtn) startBtn.addEventListener('click', async () => {
+    const dec = (decision.value||'').trim();
+    if (!dec) { status.textContent = 'inserisci una decisione'; return; }
+    status.textContent = 'avvio...';
+    log.textContent = '';
+    verdict.textContent = '';
+    highlight('');
+    const r = await fetch('/api/council/start', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:dec,rounds:parseInt(rounds.value||'3',10)})});
+    const d = await r.json();
+    if (d.error) { status.textContent = d.error; return; }
+    poll();
+  });
+  if (pdfBtn) pdfBtn.addEventListener('click', () => { window.location.href = '/api/council/pdf'; });
+})();

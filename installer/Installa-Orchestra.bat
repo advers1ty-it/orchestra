@@ -85,6 +85,16 @@ rem --- 5. Collegamento sul Desktop (con icona Orchestra) ---
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=[Environment]::GetFolderPath('Desktop'); if(-not (Test-Path $d)){ $d=Join-Path $env:USERPROFILE 'Desktop'; New-Item -ItemType Directory -Force -Path $d | Out-Null }; $s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'Avvia Orchestra.lnk')); $s.TargetPath='%DESTDIR%\Avvia-Orchestra.bat'; $s.WorkingDirectory='%DESTDIR%'; $s.IconLocation='%DESTDIR%\installer\orchestra.ico'; $s.Save(); Write-Host ('  collegamento creato in ' + $d)"
 echo  [OK] Collegamento sul Desktop creato.
 
+rem --- 6. Comando 'orchestra' nel PATH (CLI) ---
+set "SHIMDIR=%LOCALAPPDATA%\Microsoft\WindowsApps"
+if not exist "%SHIMDIR%" mkdir "%SHIMDIR%"
+(
+  echo @echo off
+  echo set "PYTHONPATH=%DESTDIR%;%%PYTHONPATH%%"
+  echo python -m orchestra.cli %%*
+) > "%SHIMDIR%\orchestra.cmd"
+echo  [OK] Comando 'orchestra' registrato (CLI).
+
 echo.
 echo  === Fatto! Premi un tasto per avviare Orchestra ===
 pause >nul

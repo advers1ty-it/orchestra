@@ -176,6 +176,11 @@ class OrchestraApp:
                                        # non poteva superare 60 e sembrava
                                        # un benchmark fermo.
                                        "finiti": 0, "modelli": []}
+        # stato del consiglio (Roast Room) lanciato dalla UI
+        self._council: dict[str, Any] = {"running": False, "log": [],
+                                          "verdict": "", "session_dir": "",
+                                          "started": 0.0, "error": "",
+                                          "current_round": 0, "current_seat": ""}
 
     def _token_remoto(self, forza: bool = False) -> str:
         # Token per accesso remoto. Letto da .env; se manca e il modo
@@ -968,6 +973,98 @@ class OrchestraApp:
         return {"ok": True, "models": ids, "tasks": len(tasks),
                 "runs": len(ids) * len(tasks)}
 
+    def start_council(self, decision: str, seats: list[str] | None = None,
+                      rounds: int = 3) -> dict[str, Any]:
+        if self._council.get("running"):
+            raise RuntimeError("un consiglio e' gia' in corso")
+        decision = (decision or "").strip()
+        if not decision:
+            raise RuntimeError("decisione vuota")
+        self._council = {"running": True, "log": [], "verdict": "",
+                         "session_dir": "", "started": __import__("time").time(),
+                         "error": "", "rounds": rounds, "seats": seats or [],
+                         "current_round": 0, "current_seat": ""}
+
+        def _log(kind, data):
+            try:
+                # traccia chi sta parlando per la UI del tavolo
+                if kind == "round_start":
+                    self._council["current_round"] = int(data.get("round") or 0)
+                    self._council["current_seat"] = ""
+                elif kind == "seat_start":
+                    self._council["current_round"] = int(data.get("round") or self._council.get("current_round", 0))
+                    self._council["current_seat"] = str(data.get("seat") or "")
+                elif kind == "round_done":
+                    self._council["current_seat"] = ""
+                elif kind == "chair_start":
+                    self._council["current_seat"] = "chair"
+                elif kind == "council_done":
+                    self._council["current_seat"] = ""
+                    self._council["current_round"] = 0
+                msg = ""
+                if kind == "seat_done":
+                    msg = f"[round {data.get('round')}] {data.get('name')}:\n{str(data.get('text','')).strip()}"
+                elif kind == "round_done":
+                    msg = f"--- round {data.get('round')} finito ---"
+                elif kind == "chair_done":
+                    msg = "Chair: verdict pronto"
+                elif kind == "council_done":
+                    msg = "Consiglio concluso"
+                elif kind == "council_start":
+                    msg = "Consiglio avviato"
+                if msg:
+                    self._council["log"].append(msg)
+                    # tieni il log corto
+                    if len(self._council["log"]) > 200:
+                        self._council["log"] = self._council["log"][-200:]
+            except Exception:
+                pass
+
+        def worker():
+            try:
+                from .council import run_council
+                r = run_council(
+                    decision,
+                    seats=seats,
+                    rounds=rounds,
+                    provider=None,  # _ensure_provider sceglie un provider funzionante
+                    base_dir=os.getcwd(),
+                    on_event=_log,
+                )
+                self._council["verdict"] = r.get("verdict", "")
+                self._council["session_dir"] = r.get("session_dir", "")
+                self._council["log"].append("Verdict salvato in " + r.get("verdict_path", ""))
+            except Exception as e:  # noqa: BLE001
+                self._council["error"] = f"{type(e).__name__}: {e}"
+                self._council["log"].append("ERRORE: " + self._council["error"])
+            finally:
+                self._council["running"] = False
+
+        import threading
+        threading.Thread(target=worker, daemon=True, name="orchestra-council").start()
+        return {"ok": True, "running": True}
+
+    def council_status(self) -> dict[str, Any]:
+        return {
+            "running": self._council.get("running", False),
+            "log": list(self._council.get("log", [])),
+            "verdict": self._council.get("verdict", ""),
+            "session_dir": self._council.get("session_dir", ""),
+            "error": self._council.get("error", ""),
+            "current_round": self._council.get("current_round", 0),
+            "current_seat": self._council.get("current_seat", ""),
+            "rounds": self._council.get("rounds", 0),
+            "seats": list(self._council.get("seats", [])),
+        }
+
+    @staticmethod
+    def council_roster() -> list[dict[str, Any]]:
+        try:
+            from .council import load_roster
+            return load_roster()
+        except Exception:
+            return []
+
     @staticmethod
     def _make_session(provider_name: str, model: str) -> Session:
         # Il fallback e' su ENV_PATH (.env), non su os.environ: quando si
@@ -1272,6 +1369,35 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _council_pdf(self) -> None:
+        try:
+            from .pdf_mini import text_to_pdf
+            st = self.app.council_status()
+            text = st.get("verdict") or "Nessun verdict disponibile."
+            # appendi la trascrizione completa (round 1/2/3) dopo il verdict,
+            # cosi' il PDF contiene anche cio' che hanno detto i mentor.
+            sdir = (st.get("session_dir") or "").strip()
+            if sdir and os.path.isdir(sdir):
+                parts = [text]
+                for rn in (1, 2, 3):
+                    rp = os.path.join(sdir, f"round-{rn}.md")
+                    if os.path.isfile(rp):
+                        try:
+                            with open(rp, encoding="utf-8") as f:
+                                parts.append(f.read())
+                        except OSError:
+                            pass
+                text = "\n\n".join(parts)
+            data = text_to_pdf(text, "Consiglio")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/pdf")
+            self.send_header("Content-Disposition", "attachment; filename=consiglio.pdf")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:  # noqa: BLE001
+            self._json({"error": str(e)}, 500)
+
     def _json(self, obj: Any, code: int = 200) -> None:
         self._send_bytes(code, json.dumps(obj).encode("utf-8"),
                          "application/json; charset=utf-8")
@@ -1327,6 +1453,34 @@ class Handler(BaseHTTPRequestHandler):
         # come per l'HTML: obbliga a riverificare. Senza, correggere un .js
         # e ricaricare non produceva nulla, e sembrava che le modifiche
         # non arrivassero al browser.
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _portrait(self, name: str) -> None:
+        if not name or not all(c.isalnum() or c in "._-" for c in name):
+            self._json({"error": "nome file non valido"}, 400)
+            return
+        portraits_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "web", "portraits")
+        path = os.path.join(portraits_dir, name)
+        if not os.path.abspath(path).startswith(portraits_dir + os.sep):
+            self._json({"error": "non trovato"}, 404)
+            return
+        try:
+            with open(path, "rb") as f:
+                body = f.read()
+        except OSError:
+            self._json({"error": "non trovato"}, 404)
+            return
+        ct = "image/webp"
+        if name.endswith(".png"):
+            ct = "image/png"
+        elif name.endswith(".jpg") or name.endswith(".jpeg"):
+            ct = "image/jpeg"
+        self.send_response(200)
+        self.send_header("Content-Type", ct)
+        self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache, must-revalidate")
         self.end_headers()
         self.wfile.write(body)
@@ -1700,7 +1854,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
     def do_GET(self) -> None:
         path = self.path.split("?")[0]
         # risorse necessarie alla pagina di login: sempre accessibili
-        if path not in ("/login",) and not path.endswith((".css", ".js", ".ico", ".png", ".svg", ".webmanifest")):
+        if path not in ("/login",) and not path.endswith((".css", ".js", ".ico", ".png", ".svg", ".webmanifest", ".webp", ".jpg", ".jpeg")):
             if not self._gate_remoto(path):
                 return
         if path == "/":
@@ -1732,6 +1886,19 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             # percorso dei file statici, quindi se questo funziona
             # sappiamo che il trasporto dei file e' a posto.
             self._static(path[1:], "text/html; charset=utf-8")
+        elif path.startswith("/portraits/"):
+            name = path[len("/portraits/"):]
+            self._portrait(name)
+        elif path.endswith(".webp"):
+            self._static(path[1:], "image/webp")
+        elif path.endswith(".png"):
+            self._static(path[1:], "image/png")
+        elif path.endswith(".jpg") or path.endswith(".jpeg"):
+            self._static(path[1:], "image/jpeg")
+        elif path.endswith(".svg"):
+            self._static(path[1:], "image/svg+xml")
+        elif path.endswith(".ico"):
+            self._static(path[1:], "image/x-icon")
         elif path == "/api/skill/file":
             # Anche in GET: il pulsante "Apri" e' una lettura, non una
             # scrittura. Registrarle solo fra i POST faceva rispondere
@@ -1894,6 +2061,12 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                                 "fermo_da": round(time.monotonic()
                                                   - self.app._bench.get("last_progress", 0.0)),
             })
+        elif path == "/api/council/status":
+            self._json(self.app.council_status())
+        elif path == "/api/council/roster":
+            self._json({"seats": self.app.council_roster()})
+        elif path == "/api/council/pdf":
+            self._council_pdf()
         elif path == "/api/prior":
                 # Copertura del prior esterno. Non e' il benchmark: e' un
                 # parere. Darlo per primo evita di fidarsi di numeri che
@@ -3084,6 +3257,24 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             try:
                 res = self.app.start_benchmark(sample=sample, category=category,
                                                models=scelti or None)
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+                return
+            self._json(res)
+        elif path == "/api/council/start":
+            body = body if isinstance(body, dict) else {}
+            decision = (body.get("decision") or "").strip()
+            seats = body.get("seats")
+            try:
+                rounds = int(body.get("rounds", 3))
+            except (TypeError, ValueError):
+                rounds = 3
+            rounds = max(1, min(3, rounds))
+            try:
+                res = self.app.start_council(decision, seats=seats, rounds=rounds)
             except RuntimeError as e:
                 self._json({"error": str(e)}, 409)
                 return

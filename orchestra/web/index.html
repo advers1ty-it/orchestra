@@ -91,6 +91,7 @@
    <button id="btn-mcp" class="ghost h-sec" title="Server MCP">MCP</button>
   <button id="btn-onboard" class="ghost h-sec" title="Mostra obiettivi iniziali">Cosa fai?</button>
   <button id="btn-docs" class="ghost h-sec" title="Documentazione">Docs</button>
+  <button id="btn-council" class="ghost h-sec" title="Consiglio di advisor">Consiglio</button>
   <!-- Comparve SOLO quando il browser dichiara beforeinstallprompt
        (manifest valido + service worker + secure context: localhost o
        HTTPS, cioe' anche il tunnel). Senza un pulsante dedicato la
@@ -222,6 +223,8 @@
               <button id="opz-tab-gratis" class="opzioni-tab" data-sez="gratis">Gratis</button>
               <button id="opz-tab-diagnosi" class="opzioni-tab" data-sez="diagnosi">Diagnosi</button>
               <button id="opz-tab-remoto" class="opzioni-tab" data-sez="remoto">Remoto</button>
+              <button id="opz-tab-autostart" class="opzioni-tab" data-sez="autostart">Avvio automatico</button>
+              <button id="opz-tab-benchmark" class="opzioni-tab" data-sez="benchmark">Benchmark</button>
             </nav>
 
       <div class="opzioni-pannelli">
@@ -457,6 +460,32 @@
             <p id="remoto-stato" class="small dim"></p>
             <p class="small dim">Avvia qui il server remoto: non serve il terminale. Il token resta sul tuo PC.</p>
           </div>
+        </section>
+
+        <section id="opz-sez-autostart" class="opz-sez" data-sez="autostart" hidden>
+          <div class="opzioni-servizi-testa">
+            <b>Avvio automatico con Windows</b>
+            <span class="dim">fa partire il server Orchestra al login, senza privilegi di amministratore.</span>
+          </div>
+          <div class="goal-bar-inner" style="margin-top:10px">
+            <span class="small dim">Stato:</span>
+            <span id="autostart-stat" class="small dim">disattivo</span>
+            <span class="grow"></span>
+            <button id="autostart-toggle" class="ghost">Attiva</button>
+          </div>
+          <p class="opzioni-nota">Usa la chiave Run dell'utente (HKCU). Disattiva per fermare l'avvio automatico.</p>
+        </section>
+
+        <section id="opz-sez-benchmark" class="opz-sez" data-sez="benchmark" hidden>
+          <div class="opzioni-servizi-testa">
+            <b>Benchmark</b>
+            <span class="dim">misura cosa sa fare ogni modello, per categoria.</span>
+          </div>
+          <div class="goal-bar-inner" style="margin-top:10px">
+            <button id="opz-bench-apri" class="primary">Apri pannello Benchmark</button>
+            <span class="small dim">costa token reali; i modelli :free non costano nulla.</span>
+          </div>
+          <p class="opzioni-nota">Il benchmark gira in un pannello a parte, per non perdere lo stato delle Opzioni.</p>
         </section>
 
       </div>
@@ -853,10 +882,7 @@
     <button id="cron-sched" class="ghost" title="Avvia/ferma scheduler cron">Scheduler: off</button>
   </div>
   <div class="goal-bar-inner">
-    <span class="small dim">Avvio automatico Windows (al login):</span>
-    <span id="autostart-stat" class="small dim"></span>
-    <span class="grow"></span>
-    <button id="autostart-toggle" class="ghost">Attiva</button>
+    <span class="small dim">Avvio automatico Windows (al login): gestito in Opzioni.</span>
   </div>
   <div id="cron-output" class="goal-output"></div>
   <div id="cron-list" class="goal-list"></div>
@@ -950,5 +976,28 @@
 <button id="mic-float" class="mic-float" title="Dettatura vocale (microfono)" aria-label="Dettatura vocale" hidden>
   <span aria-hidden="true">🎤</span>
 </button>
+</button>
+
+<div id="council-panel" class="panel hidden">
+  <div class="panel-box" style="max-width:900px">
+    <div class="panel-head">
+      <h2>Consiglio (Roast Room)</h2>
+      <button id="council-close" class="ghost">Chiudi</button>
+    </div>
+    <div class="panel-body">
+      <textarea id="council-decision" rows="4" style="width:100%" placeholder="La decisione da dibattere (con opzioni, numeri, vincoli, lean)..."></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label>Rounds: <select id="council-rounds"><option value="2">2</option><option value="3" selected>3</option></select></label>
+        <button id="council-start" class="primary">Avvia consiglio</button>
+        <button id="council-pdf" class="ghost">Scarica PDF</button>
+        <span id="council-status" class="small dim"></span>
+      </div>
+      <div id="council-table" style="margin-top:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
+      <pre id="council-log" style="margin-top:12px;max-height:30vh;overflow:auto;background:#0f1115;color:#e6e6e6;padding:8px;border-radius:6px;white-space:pre-wrap"></pre>
+      <div id="council-verdict" style="margin-top:12px;white-space:pre-wrap"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

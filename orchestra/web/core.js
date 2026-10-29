@@ -123,8 +123,16 @@ function seiInFondo() {
 // fa scendere "in fondo" per qualche secondo, e il messaggio che arriva
 // dopo non troverebbe più nessuno in fondo. Il flag ricorda l'intento.
 let seguiTurno = false;
+let primoSnapshot = true;
+let ultimaFirmaSnapshot = "";
 
 function scrollDown() {
+  // Non scrollare se l'utente sta selezionando testo nella chat: lo
+  // scroll forzato annulla la selezione e rende impossibile copiare.
+  try {
+    const sel = window.getSelection && window.getSelection();
+    if (sel && sel.toString().trim() && main.contains(sel.anchorNode)) return;
+  } catch (e) { /* ignora */ }
   // solo se l'utente è già in fondo: scrollare mentre legge sopra è irritante
   if (seiInFondo()) main.scrollTop = main.scrollHeight;
 }
@@ -452,7 +460,7 @@ function addTool(name, args, key) {
   // qui ignorava proprio l'intento appena registrato e strattonava chi
   // stava leggendo sopra. Il ragionamento (se c'è) resta ancorato a
   // fondo solo quando si segue.
-  if (seguiva) { main.scrollTop = main.scrollHeight; }
+  if (seguiva) { scrollDown(); }
   return { root: t, status: st, out };
 }
 
@@ -476,10 +484,22 @@ function avviaPollingFallback() {
       // Applica lo snapshot solo se e' cambiato (evita flicker).
       const snap = j.snapshot || j;
       if (snap && snap.messages) {
-        // Confronto grezzo: numero di messaggi.
+        const firma = String(snap.messages.length) + "::" +
+          String(snap.messages.length ? (snap.messages[snap.messages.length-1].content || "") : "");
+        // Confronto grezzo: numero di messaggi (e firma).
         const n = log.querySelectorAll(".msg").length;
-        if (snap.messages.length !== n) {
+        if (snap.messages.length !== n || firma !== ultimaFirmaSnapshot) {
           // Ricostruisci la chat come fa lo snapshot del SSE.
+          const nodiClient = Array.from(log.children).filter((n) => {
+            if (!n.classList) return false;
+            if (n.classList.contains("ragionamento")) return true;
+            if (n.classList.contains("msg")) {
+              return n.classList.contains("system") ||
+                     n.classList.contains("error") ||
+                     n.classList.contains("info");
+            }
+            return false;
+          });
           log.innerHTML = "";
           const risultatiTool = {};
           (snap.messages || []).forEach((m) => {
@@ -503,8 +523,10 @@ function avviaPollingFallback() {
               });
             }
           });
+          nodiClient.forEach((n) => log.appendChild(n));
+          ultimaFirmaSnapshot = firma;
           setBusy(!!snap.busy);
-          main.scrollTop = main.scrollHeight;
+          scrollDown();
         }
       }
     } catch (e) { /* rete giu': riprova al prossimo giro */ }
@@ -576,6 +598,28 @@ function handle(kind, d) {
       ready = true;
       renderStats(d);
       loadModels();
+      const firma = String((d.messages || []).length) + "::" +
+        String((d.messages && d.messages.length)
+          ? (d.messages[d.messages.length - 1].content || "") : "");
+      // Se lo snapshot non e' cambiato, non ricostruire: evita il refresh
+      // forzato che cancella la selezione del testo e fa sparire i
+      // messaggi lato client (gateway, ragionamento).
+      if (!primoSnapshot && firma === ultimaFirmaSnapshot) {
+        setBusy(!!d.busy);
+        return;
+      }
+      ultimaFirmaSnapshot = firma;
+      // Preserva i nodi lato client che non fanno parte dello snapshot.
+      const nodiClient = Array.from(log.children).filter((n) => {
+        if (!n.classList) return false;
+        if (n.classList.contains("ragionamento")) return true;
+        if (n.classList.contains("msg")) {
+          return n.classList.contains("system") ||
+                 n.classList.contains("error") ||
+                 n.classList.contains("info");
+        }
+        return false;
+      });
       // ricostruisci la conversazione
       log.innerHTML = "";
       // I risultati dei tool, indicizzati per id: le chiamate (dentro i
@@ -614,11 +658,12 @@ function handle(kind, d) {
           });
         }
       });
+      // Reinserisci i nodi lato client preservati (ragionamento, gateway).
+      nodiClient.forEach((n) => log.appendChild(n));
       setBusy(!!d.busy);
-      // La snapshot e' il primo caricamento, non un evento live: qui
-      // "sei in fondo" non ha senso, e infatti non scrollerebbe mai.
-      // L'utente vede la pagina per la prima volta e vuole gli
-      // ultimi messaggi, non dove aveva lasciato il log (che e' 0).
+      // La snapshot e' un caricamento (anche se non il primo): porta in
+      // fondo. Solo se e' cambiata (vedi firma sopra) — altrimenti non
+      // si tocca nulla e la selezione del testo resta intatta.
       main.scrollTop = main.scrollHeight;
       break;
     }
@@ -695,7 +740,7 @@ function handle(kind, d) {
         // e `scrollDown` la lascia sotto. Questo è il "devo scrollare
         // io" segnalato in uso. Se l'utente era risalito a leggere, il
         // flag è falso e nessuno lo strattona.
-        if (seguiTurno) { seguiTurno = false; main.scrollTop = main.scrollHeight; }
+        if (seguiTurno) { seguiTurno = false; scrollDown(); }
       }
       (d.tool_calls || []).forEach((tc) => {
         // chiave basata sull'id del tool call: `tool_end` lo cerca cosi' e
@@ -722,7 +767,7 @@ function handle(kind, d) {
         // "non sei in fondo" da qui in poi — risposta finale inclusa — e
         // toccherebbe scrollare a mano. Se aveva scrollato su da solo, il
         // flag è falso e nessuno lo disturba.
-        if (node._segui) main.scrollTop = main.scrollHeight;
+        if (node._segui) scrollDown();
       }
       break;
     }

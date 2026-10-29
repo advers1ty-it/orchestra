@@ -46,6 +46,7 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 - **Benchmark onesto** — misura i modelli per categoria di compito con verifiche oggettive (niente LLM che giudicano LLM).
 - **Permessi** — file fuori dalla cartella di lavoro e automazioni richiedono conferma esplicita; senza canale di conferma, default = nega.
 - **Diagnostica** — `orchestra doctor`, pannello Diagnosi nella UI, docs integrate su `/docs`.
+- **Consiglio (Roast Room)** — pannello per far dibattere una decisione tra advisor in round, con verdict del chair e export PDF. L’idea e parte dell’interfaccia del tavolo sono ispirate al progetto open source “Roast Room” (citazione dovuta agli autori originali).
 
 ## Struttura
 

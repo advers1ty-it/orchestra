@@ -374,6 +374,7 @@ class OpenAICompatAdapter:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        headers.update(self.extra_headers)
         req = urllib.request.Request(url, data=corpo, headers=headers,
                                      method="POST")
         try:
@@ -951,11 +952,23 @@ def build_provider(
             f"manca la chiave {key_env} per il provider '{name}'. "
             f"Inseriscila dal pannello Opzioni (icona in alto) o in .env."
         )
+    extra_headers = None
+    if name == "openrouter":
+        extra_headers = {}
+        extra_headers["HTTP-Referer"] = (
+            env.get("OPENROUTER_HTTP_REFERER") or
+            "https://github.com/advers1ty-it/orchestra")
+        extra_headers["X-OpenRouter-Title"] = (
+            env.get("OPENROUTER_APP_TITLE") or "Orchestra")
+        cats = env.get("OPENROUTER_CATEGORIES")
+        if cats:
+            extra_headers["X-OpenRouter-Categories"] = cats
     return OpenAICompatAdapter(
         base_url=base_url_for(name, env),
         api_key=api_key or "local",  # alcuni motori rifiutano un header vuoto
         model=model or default_model,
         name=name,
+        extra_headers=extra_headers,
     )
 
 def ambiente(path: str) -> dict[str, str]:
