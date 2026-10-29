@@ -243,7 +243,6 @@ function addText(role, text, markdown) {
   }
   m.appendChild(corpo);
   log.appendChild(m);
-  tieniRagionamentoInFondo();
   scrollDown();
   return m;
 }
@@ -311,7 +310,6 @@ function renderMarkdown(text) {
 
 function addNote(text) {
   log.appendChild(el("div", "sysnote", text));
-  tieniRagionamentoInFondo();
   scrollDown();
 }
 
@@ -340,7 +338,6 @@ function mostraAttesa() {
     attesaNodo = el("div", "attesa");
     log.appendChild(attesaNodo);
   }
-  tieniRagionamentoInFondo();
   attesaGiro += 1;
   const i = Math.min(attesaGiro - 1, FRASI_ATTESA.length - 1);
   attesaNodo.textContent = FRASI_ATTESA[i];
