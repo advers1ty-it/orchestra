@@ -484,11 +484,20 @@ function avviaPollingFallback() {
       // Applica lo snapshot solo se e' cambiato (evita flicker).
       const snap = j.snapshot || j;
       if (snap && snap.messages) {
+        // Mentre il turno e' in corso non ricostruire il DOM: evita
+        // flicker e salti di scroll. Si aggiorna solo busy/stats; il sync
+        // completo avviene a fine turno (busy=false).
+        if (snap.busy) {
+          setBusy(true);
+          renderStats(snap);
+          return;
+        }
         const firma = String(snap.messages.length) + "::" +
           String(snap.messages.length ? (snap.messages[snap.messages.length-1].content || "") : "");
         // Confronto grezzo: numero di messaggi (e firma).
-        const n = log.querySelectorAll(".msg").length;
-        if (snap.messages.length !== n || firma !== ultimaFirmaSnapshot) {
+        if (firma !== ultimaFirmaSnapshot) {
+          const eraInFondoPrima = seiInFondo();
+          const scrollTopPrima = main.scrollTop;
           // Ricostruisci la chat come fa lo snapshot del SSE.
           const nodiClient = Array.from(log.children).filter((n) => {
             if (!n.classList) return false;
@@ -526,7 +535,10 @@ function avviaPollingFallback() {
           nodiClient.forEach((n) => log.appendChild(n));
           ultimaFirmaSnapshot = firma;
           setBusy(!!snap.busy);
-          scrollDown();
+          // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
+          // ripristina lo scroll precedente (evita il salto in cima).
+          if (eraInFondoPrima) scrollDown();
+          else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
         }
       }
     } catch (e) { /* rete giu': riprova al prossimo giro */ }
@@ -609,6 +621,9 @@ function handle(kind, d) {
         return;
       }
       ultimaFirmaSnapshot = firma;
+      primoSnapshot = false;
+      const eraInFondoPrima = seiInFondo();
+      const scrollTopPrima = main.scrollTop;
       // Preserva i nodi lato client che non fanno parte dello snapshot.
       const nodiClient = Array.from(log.children).filter((n) => {
         if (!n.classList) return false;
@@ -661,10 +676,10 @@ function handle(kind, d) {
       // Reinserisci i nodi lato client preservati (ragionamento, gateway).
       nodiClient.forEach((n) => log.appendChild(n));
       setBusy(!!d.busy);
-      // La snapshot e' un caricamento (anche se non il primo): porta in
-      // fondo. Solo se e' cambiata (vedi firma sopra) — altrimenti non
-      // si tocca nulla e la selezione del testo resta intatta.
-      main.scrollTop = main.scrollHeight;
+      // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
+      // ripristina lo scroll precedente (evita il salto in cima).
+      if (eraInFondoPrima) main.scrollTop = main.scrollHeight;
+      else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
       break;
     }
     case "permission_request":
