@@ -85,18 +85,12 @@
           aria-label="Apri il pannello laterale">&#9776;</button>
   <div class="grow"></div>
   <button id="btn-opzioni" class="ghost h-sec" title="Chiavi API e servizi gratuiti">Opzioni</button>
-  <button id="btn-bench" class="ghost h-sec">Benchmark</button>
   <button id="btn-goal" class="ghost h-sec" title="Obiettivo autonomo">Obiettivo</button>
    <button id="btn-cron" class="ghost h-sec" title="Job programmati">Cron</button>
    <button id="btn-mcp" class="ghost h-sec" title="Server MCP">MCP</button>
   <button id="btn-onboard" class="ghost h-sec" title="Mostra obiettivi iniziali">Cosa fai?</button>
   <button id="btn-docs" class="ghost h-sec" title="Documentazione">Docs</button>
   <button id="btn-council" class="ghost h-sec" title="Consiglio di advisor">Consiglio</button>
-  <!-- Comparve SOLO quando il browser dichiara beforeinstallprompt
-       (manifest valido + service worker + secure context: localhost o
-       HTTPS, cioe' anche il tunnel). Senza un pulsante dedicato la
-       richiesta di installazione non si vedeva mai. -->
-  <button id="btn-install" class="ghost h-sec" title="Installa Orchestra come app (funziona anche offline)" hidden>Installa</button>
 
   <!-- Lo scopo sta PRIMA del modello, non in un pannello: la domanda
        "che lavoro stai facendo" viene prima di "con quale modello", e
@@ -880,9 +874,6 @@
     <span id="cron-sched-stat" class="small dim"></span>
     <span class="grow"></span>
     <button id="cron-sched" class="ghost" title="Avvia/ferma scheduler cron">Scheduler: off</button>
-  </div>
-  <div class="goal-bar-inner">
-    <span class="small dim">Avvio automatico Windows (al login): gestito in Opzioni.</span>
   </div>
   <div id="cron-output" class="goal-output"></div>
   <div id="cron-list" class="goal-list"></div>

@@ -426,7 +426,7 @@ on($("permesso-mai"), "click", () => rispondiPermesso("mai"));
 
 // chiudere il pannello Opzioni mentre c'e' una domanda: la domanda
 // resta, non e' un avviso che si nasconde
-on($("btn-bench"), "click", () => { /* il benchmark non copre il permesso */ });
+
 
 function addTool(name, args, key) {
   const t = el("div", "tool");

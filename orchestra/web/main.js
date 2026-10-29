@@ -466,47 +466,8 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
-// ---- Install PWA
-// beforeinstallprompt scatta SOLO con manifest valido + service worker +
-// secure context (localhost o HTTPS — il tunnel Cloudflare e' HTTPS).
-// Senza questo handler il browser si limita a mettere la sua icona
-// nell'toolbar, che nessuno trova: da qui "non vedo la richiesta di
-// installazione". Un pulsante "Installa" appare quando il prompt e'
-// disponibile e parte su un clic. Se le condizioni non ci sono (es. HTTP
-// pubblico non-localhost) resta nascosto: non c'e' niente da mostrare.
-let deferredPrompt = null;
-let installBtn = $("btn-install");
-function aggiornaInstall() {
-  if (!installBtn) return;
-  installBtn.hidden = !deferredPrompt;
-}
-if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();          // tengo il prompt, lo mostro io al clic
-    deferredPrompt = e;
-    aggiornaInstall();
-  });
-  window.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    aggiornaInstall();
-  });
-}
-if (installBtn) {
-  installBtn.addEventListener("click", async () => {
-    if (!deferredPrompt) return;
-    const p = deferredPrompt;
-    deferredPrompt = null;
-    try {
-      p.prompt();
-      const { userChoice } = await p.userChoice;
-      if (userChoice === "accepted" && typeof addNote === "function") {
-        addNote("Orchestra installata: la trovi come un'app e funziona anche offline.");
-      }
-    } catch (e) { /* annullato o il browser non lo accetta: niente */ }
-    aggiornaInstall();
-  });
-}
-aggiornaInstall();
+// Install PWA rimosso: in desktop (Electron/tauri non in uso) il prompt
+// di installazione non serve. L'app resta installabile dal browser.
 
 // ---- Header mobile: il pulsante "altre opzioni" espande/chiude i
 // controlli secondari. Di default l'header resta compatto (logo, scopo,

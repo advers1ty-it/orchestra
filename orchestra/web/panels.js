@@ -233,7 +233,6 @@ function closeBench() {
   benchPanel.classList.add("hidden");
   if (benchTimer) { clearInterval(benchTimer); benchTimer = null; }
 }
-on($("btn-bench"), "click", openBench);
 on($("bench-close"), "click", closeBench);
 on($("opz-bench-apri"), "click", () => { chiudiOpzioni(); openBench(); });
 // via on(), non addEventListener diretto: se il pannello manca, questo

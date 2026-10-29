@@ -115,7 +115,7 @@ check("ogni sorgente si annuncia", all(
 # harness: DOM finto, ma con lo scope condiviso che ha il browser
 harness = """
 const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","stats","conn","ver","ragionamento",
-             "model-pick","model-btn","model-label","btn-bench","bench","bench-sample","bench-cat","bench-count",
+             "model-pick","model-btn","model-label","bench","bench-sample","bench-cat","bench-count",
              "bench-free","bench-allfree","bench-models","bench-none","bench-run","bench-status","bench-log","bench-out","bench-close",
              "btn-capacita","capacita","capacita-close","cap-filtro","cap-lista","cap-msg",
              "btn-opzioni","opzioni","opzioni-close","opzioni-deps","opzioni-nota","opt-context-note","opt-max-iters",

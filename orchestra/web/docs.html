@@ -299,6 +299,7 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 <ul>
   <li>Avvia con <code>orchestra web --remote</code>: il server ascolta su tutte le interfacce, genera un token e lo stampa a console. Lo stesso token viene salvato in <code>orchestra/.env</code> (<code>ORCHESTRA_REMOTE_TOKEN</code>).</li>
   <li>Per un URL pubblico (senza VPN): <code>orchestra web --tunnel</code>. Se <code>cloudflared</code> e' installato, Orchestra apre il tunnel da sola e stampa l'URL <code>https://…trycloudflare.com</code>. Su Windows, se manca, Orchestra propone di installarlo automaticamente con winget; in caso contrario stampa le istruzioni e ripiega sull'IP della LAN.</li>
+  <li><b>Durata dell'URL tunnel:</b> l'indirizzo <code>…trycloudflare.com</code> e' <i>effimero</i>: viene generato da cloudflared a ogni avvio e <b>cambia a ogni riavvio</b> (del PC o del server). L'avvio automatico di Windows riavvia cloudflared, quindi l'URL cambia. Per un indirizzo stabile serve un tunnel con nome e dominio proprio (cloudflared tunnel create + route dns) oppure una VPN (Tailscale).</li>
   <li>Sul telefono apri l'URL e inserisci il token nella pagina di login. La sessione resta valida (cookie).</li>
   <li>In alternativa, senza tunnel: una VPN privata (es. Tailscale) tra PC e telefono, poi <code>orchestra web --remote</code> e apri <code>http://&lt;ip-tailscale-del-pc&gt;:8737</code>.</li>
   <li>Sicurezza: il token protegge tutte le rotte. In locale (127.0.0.1) l'accesso resta libero come prima. Le chiavi API non lasciano il PC.</li>
