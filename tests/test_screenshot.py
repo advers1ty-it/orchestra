@@ -106,7 +106,8 @@ try:
     # e non vedrebbe nulla — lo strumento esisterebbe ma sarebbe inutile.
     agente = Agent(provider=None, registry=r, system_prompt="sei un agente",
                    config=LoopConfig())
-    testo, ok, immagini = agente._execute_tool("screenshot_view", {"nome_file": p})
+    testo, ok, immagini, anteprime = agente._execute_tool(
+        "screenshot_view", {"nome_file": p})
     check("l'agente prende le immagini dal risultato",
           len(immagini) == 1 and immagini[0].startswith("data:image/"),
           f"immagini={immagini[:1]}")
@@ -116,7 +117,7 @@ try:
     check("il tool conta come riuscito", ok is True, str(ok))
 
     # Un tool che non esiste non deve rompere il contratto a 3 valori.
-    t2, ok2, img2 = agente._execute_tool("non_esiste", {})
+    t2, ok2, img2, ante2 = agente._execute_tool("non_esiste", {})
     check("tool inesistente: tre valori",
           isinstance(t2, str) and ok2 is False and img2 == [],
           f"{type(t2)} {ok2} {img2}")

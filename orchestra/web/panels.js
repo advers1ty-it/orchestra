@@ -2339,6 +2339,8 @@ function mostraSezione(nome) {
   // apertura del pannello Opzioni, anche quando si va a cambiare solo
   // il modello.
   if (nome === "storico") caricaStorico();
+  if (nome === "identita") caricaIdentita();
+  if (nome === "bot") caricaBot();
   if (nome === "memoria") caricaMemoria();
   if (nome === "remoto") caricaRemoto();
   if (nome === "autostart") caricaAutostart();
@@ -4653,4 +4655,410 @@ on("mcp-connect-all", "click", async () => {
     poll();
   });
   if (pdfBtn) pdfBtn.addEventListener('click', () => { window.location.href = '/api/council/pdf'; });
+})();
+
+// ---- Bot: identita' persistenti -------------------------------------------
+//
+// Un bot non e' una seconda applicazione: e' una sessione con un nome, un
+// modello, una persona e un progetto. La UI qui fa tre cose sole — scegliere
+// chi sta parlando, crearne uno, e dire con chi puo' parlare. Tutto il resto
+// (conversazione, storico, profondita' delle chiamate) vive nel server.
+
+let botElenco = [];
+let botScelto = 0;
+let botAttivoOra = false;
+// Il nome con cui l'agente principale si presenta. Vuoto = etichetta
+// storica "agente principale".
+let nomePrincipale = "agente principale";
+
+function aggiornaSelettoriBot() {
+  // Con un bot attivo il modello e il servizio arrivano dalla SUA
+  // configurazione: cambiarli dal menu in alto sarebbe un comando che
+  // sembra funzionare e non cambia quello che stai usando. Si
+  // disabilitano, e la nota dice dove si cambiano davvero.
+  const bloccato = botAttivoOra;
+  const pp = $("provider-pick");
+  if (pp) {
+    pp.disabled = bloccato;
+    pp.title = bloccato ? "Il servizio del bot si cambia da Opzioni → Bot"
+                        : "Servizio in uso";
+  }
+  const mp = $("model-pick");
+  if (mp) mp.disabled = bloccato;
+  const mb = $("model-btn");
+  if (mb) {
+    mb.disabled = bloccato;
+    mb.title = bloccato ? "Il modello del bot si cambia da Opzioni → Bot"
+                        : "Modello in uso";
+  }
+  const sp = $("scope-pick");
+  if (sp) sp.disabled = bloccato;
+}
+
+function botNota(testo, errore) {
+  const el = $("bot-msg");
+  if (!el) return;
+  el.textContent = testo || "";
+  el.style.color = errore ? "var(--err)" : "var(--muted)";
+}
+
+function botNotaLavoro(testo, errore) {
+  const el = $("bot-lavoro-msg");
+  if (!el) return;
+  el.textContent = testo || "";
+  el.style.color = errore ? "var(--err)" : "var(--muted)";
+}
+
+function riempiModuloBot(b) {
+  botScelto = b && b.id ? b.id : 0;
+  const campi = {
+    "bot-nome": b ? b.nome : "",
+    "bot-provider": b ? (b.provider || "") : "",
+    "bot-modello": b ? (b.modello || "") : "",
+    "bot-progetto": b ? (b.progetto || "") : "",
+    "bot-profilo": b ? (b.profilo || "") : "",
+    "bot-parla": b ? (b.parla_con || []).join(", ") : "",
+    "bot-persona": b ? (b.persona || "") : "",
+  };
+  for (const [id, valore] of Object.entries(campi)) {
+    const el = $(id);
+    if (el) el.value = valore || "";
+  }
+  botNota(b ? ("modifica " + b.nome) : "");
+}
+
+function svuotaModuloBot() {
+  riempiModuloBot(null);
+  botNota("");
+}
+
+function disegnaBot(d) {
+  botElenco = d.bots || [];
+  const attivo = d.attivo || null;
+  botAttivoOra = !!attivo;
+  if (d.principale) {
+    nomePrincipale = (d.principale.nome || "").trim() || "agente principale";
+  }
+  aggiornaSelettoriBot();
+
+  const pick = $("bot-pick");
+  if (pick) {
+    pick.innerHTML = "";
+    const base = document.createElement("option");
+    base.value = "";
+    base.textContent = nomePrincipale;
+    pick.appendChild(base);
+    for (const b of botElenco) {
+      const o = document.createElement("option");
+      o.value = String(b.id);
+      // Lo stato anche nel menu in testa: se un bot sta lavorando (in
+      // background o in un turno che hai lasciato), l'utente lo vede
+      // senza aprire Opzioni. Il nome resta il valore; il suffisso e'
+      // solo informazione.
+      const stato = b.busy ? " · lavora"
+        : (b.coda ? " · +" + b.coda : "");
+      o.textContent = b.nome + stato;
+      if (attivo && String(attivo.id) === String(b.id)) o.selected = true;
+      pick.appendChild(o);
+    }
+    const gest = document.createElement("option");
+    gest.value = "__gestisci__";
+    gest.textContent = "＋ gestisci bot…";
+    pick.appendChild(gest);
+  }
+
+  const prov = $("bot-provider");
+  if (prov) {
+    const scelto = prov.value;
+    prov.innerHTML = "";
+    const base = document.createElement("option");
+    base.value = "";
+    base.textContent = "come l'app";
+    prov.appendChild(base);
+    for (const p of (d.providers || [])) {
+      const o = document.createElement("option");
+      o.value = p;
+      o.textContent = p;
+      prov.appendChild(o);
+    }
+    prov.value = scelto || "";
+  }
+
+  const prj = $("bot-progetto");
+  if (prj) {
+    const scelto = prj.value;
+    prj.innerHTML = "";
+    const base = document.createElement("option");
+    base.value = "";
+    base.textContent = "nessuno";
+    prj.appendChild(base);
+    for (const p of (d.progetti || [])) {
+      const o = document.createElement("option");
+      o.value = p;
+      o.textContent = p;
+      prj.appendChild(o);
+    }
+    prj.value = scelto || "";
+  }
+
+  const el = $("bot-elenco");
+  if (!el) return;
+  el.innerHTML = "";
+  if (!botElenco.length) {
+    const p = document.createElement("p");
+    p.className = "small dim";
+    p.textContent = "Nessun bot. Compila i campi e premi Salva per crearne uno.";
+    el.appendChild(p);
+    return;
+  }
+  for (const b of botElenco) {
+    const riga = document.createElement("div");
+    riga.className = "bot-riga"
+      + (attivo && String(attivo.id) === String(b.id) ? " attivo" : "");
+    const nome = document.createElement("span");
+    nome.className = "bot-nome";
+    nome.textContent = b.nome;
+    const grow = document.createElement("span");
+    grow.className = "grow";
+    const sub = document.createElement("span");
+    sub.className = "bot-sub";
+    const pezzi = [b.provider || "come l'app",
+                   b.modello_effettivo || b.modello || "predefinito",
+                   b.progetto || "nessun progetto"];
+    if (b.parla_con && b.parla_con.length)
+      pezzi.push("parla con " + b.parla_con.join(", "));
+    if (b.busy) pezzi.push("al lavoro");
+    if (b.coda) pezzi.push("in coda: " + b.coda);
+    sub.textContent = pezzi.join(" · ");
+    riga.appendChild(nome);
+    riga.appendChild(grow);
+    riga.appendChild(sub);
+    if (b.ultimo && b.ultimo.risposta) {
+      // L'ultima risposta del lavoro in background, in una riga sola.
+      // Senza, per sapere com'e' andata bisogna attivare il bot e
+      // aprire la conversazione — che e' proprio il passaggio che il
+      // lavoro in background voleva evitare.
+      const u = document.createElement("div");
+      u.className = "bot-ultimo";
+      u.textContent = "ultimo: " + b.ultimo.risposta.slice(0, 120);
+      u.title = b.ultimo.risposta;
+      riga.appendChild(u);
+    }
+    riga.addEventListener("click", () => riempiModuloBot(b));
+    el.appendChild(riga);
+  }
+}
+
+async function caricaBot() {
+  if (!$("bot-elenco") && !$("bot-pick")) return;
+  try {
+    const r = await fetch("/api/bots");
+    const d = await r.json();
+    if (d.error) { botNota(d.error, true); return; }
+    disegnaBot(d);
+  } catch (e) {
+    botNota("non riesco a caricare i bot", true);
+  }
+}
+
+function datiModuloBot() {
+  const parla = ($("bot-parla").value || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  return {
+    nome: ($("bot-nome").value || "").trim(),
+    provider: $("bot-provider").value || "",
+    modello: ($("bot-modello").value || "").trim(),
+    progetto: $("bot-progetto").value || "",
+    profilo: $("bot-profilo").value || "",
+    persona: $("bot-persona").value || "",
+    parla_con: parla,
+  };
+}
+
+async function salvaBot() {
+  const body = datiModuloBot();
+  if (!body.nome) { botNota("serve un nome per il bot", true); return; }
+  const url = botScelto ? "/api/bots/aggiorna" : "/api/bots/crea";
+  if (botScelto) body.id = botScelto;
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.error) { botNota(d.error, true); return; }
+    botNota(botScelto ? "bot aggiornato" : "bot creato");
+    await caricaBot();
+    if (d.bot) riempiModuloBot(d.bot);
+  } catch (e) {
+    botNota("errore di rete: il bot non e' stato salvato", true);
+  }
+}
+
+function identitaNota(testo, errore) {
+  const el = $("identita-msg");
+  if (!el) return;
+  el.textContent = testo || "";
+  el.style.color = errore ? "var(--err)" : "var(--muted)";
+}
+
+async function caricaIdentita() {
+  if (!$("identita-nome") && !$("identita-persona")) return;
+  try {
+    const r = await fetch("/api/identita");
+    const d = await r.json();
+    if (d.error) { identitaNota(d.error, true); return; }
+    if ($("identita-nome")) $("identita-nome").value = d.nome || "";
+    if ($("identita-persona")) $("identita-persona").value = d.persona || "";
+    nomePrincipale = (d.nome || "").trim() || "agente principale";
+    identitaNota("");
+  } catch (e) {
+    identitaNota("non riesco a leggere l'identità", true);
+  }
+}
+
+async function salvaIdentita() {
+  const body = {
+    nome: ($("identita-nome").value || "").trim(),
+    persona: ($("identita-persona").value || "").trim(),
+  };
+  try {
+    const r = await fetch("/api/identita", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.error) { identitaNota(d.error, true); return; }
+    nomePrincipale = (d.nome || "").trim() || "agente principale";
+    identitaNota("identità salvata");
+    // Il menu in testa e la nota di attivazione leggono dai bot: si
+    // ricarica anche quello, altrimenti il nome nuovo resta invisibile
+    // finche' non si riapre la pagina.
+    await caricaBot();
+  } catch (e) {
+    identitaNota("errore di rete: identità non salvata", true);
+  }
+}
+
+async function avviaLavoroBot() {
+  if (!botScelto) { botNotaLavoro("scegli un bot dalla lista", true); return; }
+  const testo = ($("bot-compito").value || "").trim();
+  if (!testo) {
+    botNotaLavoro("scrivi il compito da affidare al bot", true);
+    return;
+  }
+  try {
+    const r = await fetch("/api/bots/avvia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: botScelto, testo: testo }),
+    });
+    const d = await r.json();
+    if (d.error) { botNotaLavoro(d.error, true); return; }
+    $("bot-compito").value = "";
+    botNotaLavoro("avviato: " + (d.in_coda || 1) + " in coda");
+    await caricaBot();
+  } catch (e) {
+    botNotaLavoro("errore di rete: il lavoro non e' partito", true);
+  }
+}
+
+async function aggiornaStatoBot() {
+  await caricaBot();
+  botNotaLavoro("stato aggiornato");
+}
+
+async function attivaBotDaId(id) {
+  try {
+    const r = await fetch("/api/bots/attiva", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id || null }),
+    });
+    const d = await r.json();
+    if (d.error) {
+      botNota(d.error, true);
+      if (typeof addNote === "function") addNote(d.error);
+      return;
+    }
+    const nome = d.bot ? d.bot.nome : nomePrincipale;
+    if (typeof addNote === "function") addNote("ora parli con " + nome);
+    // La connessione SSE e' legata alla sessione: senza riconnettere,
+    // continuerebbe a mostrare gli eventi del bot precedente mentre la
+    // chat e' gia' passata all'altro. La riconnessione manda anche lo
+    // snapshot nuovo, quindi il log si ricostruisce da solo.
+    if (typeof connect === "function") connect();
+    caricaBot();
+    if (typeof caricaProgetto === "function") caricaProgetto();
+    if (typeof caricaSideSessioni === "function") caricaSideSessioni();
+  } catch (e) {
+    botNota("errore di rete: cambio bot non riuscito", true);
+  }
+}
+
+async function attivaBotScelto() {
+  if (!botScelto) { botNota("scegli un bot dalla lista", true); return; }
+  await attivaBotDaId(botScelto);
+}
+
+async function eliminaBotScelto() {
+  if (!botScelto) { botNota("scegli un bot dalla lista", true); return; }
+  const b = botElenco.find((x) => String(x.id) === String(botScelto));
+  if (!b) return;
+  if (!confirm("Eliminare il bot «" + b.nome + "»? La conversazione resta "
+               + "nella cronologia, ma l'identita' non esiste piu'.")) return;
+  try {
+    const r = await fetch("/api/bots/elimina", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: botScelto }),
+    });
+    const d = await r.json();
+    if (d.error) { botNota(d.error, true); return; }
+    svuotaModuloBot();
+    await caricaBot();
+    if (typeof connect === "function") connect();
+    botNota("bot eliminato");
+  } catch (e) {
+    botNota("errore di rete: il bot non e' stato eliminato", true);
+  }
+}
+
+
+(function collegaBot() {
+  const pick = $("bot-pick");
+  if (pick) {
+    pick.addEventListener("change", async () => {
+      const v = pick.value;
+      if (v === "__gestisci__") {
+        if (typeof apriOpzioni === "function") apriOpzioni();
+        if (typeof mostraSezione === "function") mostraSezione("bot");
+        caricaBot();
+        return;
+      }
+      await attivaBotDaId(v ? parseInt(v, 10) : null);
+    });
+  }
+  // Gli elementi si prendono una volta e si controllano prima di
+  // agganciare: un listener su null uccide il resto del bundle, e in un
+  // file concatenato "il resto" sono tutte le funzioni dopo questa riga.
+  const btnNuovo = $("bot-nuovo");
+  const btnSalva = $("bot-salva");
+  const btnAttiva = $("bot-attiva");
+  const btnElimina = $("bot-elimina");
+  const btnAvvia = $("bot-avvia");
+  const btnStato = $("bot-stato");
+  const btnIdentita = $("identita-salva");
+  if (btnIdentita) btnIdentita.addEventListener("click", salvaIdentita);
+  if (btnNuovo) btnNuovo.addEventListener("click", svuotaModuloBot);
+  if (btnSalva) btnSalva.addEventListener("click", salvaBot);
+  if (btnAttiva) btnAttiva.addEventListener("click", attivaBotScelto);
+  if (btnElimina) btnElimina.addEventListener("click", eliminaBotScelto);
+  if (btnAvvia) btnAvvia.addEventListener("click", avviaLavoroBot);
+  if (btnStato) btnStato.addEventListener("click", aggiornaStatoBot);
+  // Riempie il menu in testa e la lista del pannello. Se i bot non ci sono
+  // ancora, la richiesta torna vuota e non si vede niente: nessun errore.
+  caricaBot();
 })();

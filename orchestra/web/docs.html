@@ -64,6 +64,8 @@
       <li><a href="#ui">Interfaccia web</a></li>
       <li><a href="#steer">Steer e Stop</a></li>
       <li><a href="#tooling">Tool & profili</a></li>
+      <li><a href="#bot">Bot</a></li>
+      <li><a href="#identita">Identità dell'agente principale</a></li>
       <li><a href="#delega">Multi-agent & delega</a></li>
       <li><a href="#goal">Goal autonomi</a></li>
       <li><a href="#cron">Cron (job programmati)</a></li>
@@ -199,6 +201,30 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   "pieno": tutti i tool registrati
 }</code></pre>
 <p>Tool aggiunti: browser (<code>browser_apri</code>, <code>browser_render</code>, <code>browser_screenshot</code>), computer (<code>computer_screenshot</code>, <code>computer_click/type/open</code>), web, shell, memoria, skill, storico, goal via API/UI non tool. <code>read_file</code> supporta <code>start_line</code>/<code>end_line</code> per intervalli precisi; <code>web_leggi</code> tronca alle prime N righe.</p>
+<p><code>image_gen</code> genera un'immagine da un prompt con OpenAI Images, Google Gemini o OpenRouter usando la chiave già configurata, la salva in <code>immagini/</code> e ne mostra l'anteprima nel riquadro del tool. Con <code>provider="openrouter"</code> si sceglie uno qualsiasi dei modelli immagine del catalogo tramite <code>modello</code>; <code>elenco_modelli=true</code> elenca gli slug disponibili senza generare. Con <code>riferimento</code> modifica un'immagine esistente (percorso, data URL, oppure <code>ultimo</code> per l'allegato appena inviato). La generazione è a pagamento sul provider: per generare senza costo per immagine serve un modello locale (skill <code>invokeai</code>).</p>
+</section>
+
+<section id="bot">
+<h2>Bot</h2>
+<p>Un bot è un'identità salvata: nome, servizio, modello, persona, progetto e conversazione propri. Si crea da <b>Opzioni → Bot</b> o dal menu identità in testa. Servizio e modello vuoti significano "come l'app"; il progetto è un default modificabile per bot.</p>
+<ul>
+  <li>Ogni bot ha una sessione separata e una cronologia etichettata col suo nome: aprire la conversazione di un altro bot richiede di attivarlo.</li>
+  <li>Da <b>Opzioni → Bot</b> si avvia un compito in background: il bot lavora senza cambiare l'identità attiva. Bot diversi avanzano in parallelo, ognuno nella propria cartella; lo stesso bot esegue un compito alla volta e accoda gli altri (max 20). Puoi cambiare bot mentre uno lavora: il turno continua nella sua sessione e lo ritrovi quando torni. La coda vive in memoria: un riavvio la svuota, la conversazione già svolta resta.</li>
+  <li><code>bot_chiedi</code> permette a un bot di chiedere a un altro, con risposta sincrona. Profondità massima 1 e allowlist <code>parla_con</code>: vuota significa che il bot non può parlare con nessuno.</li>
+  <li>Non sono processi separati: condividono chiavi, permessi e processo, quindi non sono una sandbox. Non si svegliano da soli: un lavoro parte quando l'utente lo avvia (o quando un altro bot lo chiama).</li>
+</ul>
+</section>
+
+<section id="identita">
+<h2>Identità dell'agente principale</h2>
+<p>Anche l'agente principale ha un'identità, e non serve creare un bot per personalizzarlo: <b>Opzioni → Identità</b> offre nome e persona/istruzioni. Valgono quando non è attivo un bot; con un bot attivo vale la persona del bot.</p>
+<ul>
+  <li>La persona è testo libero — ruolo, tono, cosa tenere presente — e viene aggiunta <b>dopo</b> le regole di sistema: non può disattivare divieti o permessi.</li>
+  <li>Il nome compare nel menu in testa al posto di "agente principale"; se lo lasci vuoto il menu resta com'è.</li>
+  <li>L'identità è salvata nella cartella dati dell'installazione: vale per le conversazioni dell'agente principale anche dopo un riavvio.</li>
+  <li>Mentre usi un bot, l'identità principale resta da parte e la ritrovi tornando all'agente principale. Salvare dal pannello non tocca il bot attivo.</li>
+  <li>Per azzerarla svuota i due campi e salva: nessuna identità in più, prompt di Orchestra come prima.</li>
+</ul>
 </section>
 
 <section id="delega">

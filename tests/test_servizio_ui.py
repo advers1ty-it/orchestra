@@ -40,8 +40,16 @@ print("[1] I due selettori esistono e sono nello stesso punto della UI")
 check("il selettore del servizio e' nella barra in alto",
       'id="provider-pick"' in html and html.index('id="provider-pick"') < html.index("<main"),
       "non sta nella barra")
+# I commenti fra i due elementi sono documentazione, non controlli:
+# contando anche quelli la distanza supera il tetto anche quando i due
+# select sono adiacenti nel DOM (e' successo con il commento sopra
+# mp-wrap). Si misura il markup vero, non la prosa attorno.
+import re as _re  # noqa: E402
+
+_senza_commenti = _re.sub(r"<!--.*?-->", "", html, flags=_re.S)
 check("e sta subito prima del modello",
-      abs(html.index('id="provider-pick"') - html.index('id="model-pick"')) < 400)
+      abs(_senza_commenti.index('id="provider-pick"') -
+          _senza_commenti.index('id="model-pick"')) < 400)
 check("il selettore del modello e' ancora li", 'id="model-pick"' in html)
 
 print("\n[2] Entrambi agganciano lo stesso cambio")

@@ -96,6 +96,13 @@
        "che lavoro stai facendo" viene prima di "con quale modello", e
        se il modello e' gia' scelto per te non ha senso mostrarlo
        per primo. Cambiando scopo, Orchestra sceglie il modello. -->
+  <!-- L'identita' sta prima del modello: con quale bot stai parlando
+       decide il modello, la persona e la cartella, quindi e' la prima
+       scelta, non una decorazione. Vuoto = agente principale. -->
+  <select id="bot-pick" class="h-sec"
+          title="Identita' con cui stai lavorando">
+    <option value="">agente principale</option>
+  </select>
   <label class="scope-wrap" title="Che lavoro stai facendo">
     <span class="scope-label">scopo</span>
     <select id="scope-pick" disabled>
@@ -209,6 +216,7 @@
     <div class="opzioni-corpo">
       <nav class="opzioni-nav" aria-label="sezioni">
               <button id="opz-tab-modello" class="opzioni-tab attiva" data-sez="modello">Modello</button>
+              <button id="opz-tab-identita" class="opzioni-tab" data-sez="identita">Identità</button>
               <button id="opz-tab-budget" class="opzioni-tab" data-sez="budget">Budget</button>
               <button id="opz-tab-skill" class="opzioni-tab" data-sez="skill">Skill</button>
               <button id="opz-tab-cestino" class="opzioni-tab" data-sez="cestino">Cestino</button>
@@ -218,6 +226,7 @@
               <button id="opz-tab-diagnosi" class="opzioni-tab" data-sez="diagnosi">Diagnosi</button>
               <button id="opz-tab-remoto" class="opzioni-tab" data-sez="remoto">Remoto</button>
               <button id="opz-tab-autostart" class="opzioni-tab" data-sez="autostart">Avvio automatico</button>
+              <button id="opz-tab-bot" class="opzioni-tab" data-sez="bot">Bot</button>
               <button id="opz-tab-benchmark" class="opzioni-tab" data-sez="benchmark">Benchmark</button>
             </nav>
 
@@ -266,6 +275,32 @@
                     </div>
           <p class="opzioni-nota">La stessa scelta e' anche nei menu in
             alto, sopra la chat. Qui la trovi insieme a tutto il resto.</p>
+        </section>
+
+        <section id="opz-sez-identita" class="opz-sez" data-sez="identita" hidden>
+          <div class="opzioni-servizi-testa">
+            <b>Identità dell'agente principale</b>
+            <span class="dim">nome e istruzioni personali, validi quando
+              non è attivo un bot. I bot hanno la loro identità in
+              Opzioni → Bot.</span>
+          </div>
+          <div class="opzioni-selezione">
+            <label>Nome
+              <input id="identita-nome" type="text" maxlength="40"
+                     placeholder="es. Orchestra" autocomplete="off">
+            </label>
+          </div>
+          <label class="bot-persona">Persona / istruzioni
+            <textarea id="identita-persona" rows="8"
+                      placeholder="Chi è l'agente, come lavora, cosa deve tenere presente. Le regole di sistema restano sopra."></textarea>
+          </label>
+          <div class="opzioni-budget-azioni">
+            <button id="identita-salva" class="primary">Salva identità</button>
+            <span id="identita-msg" class="small dim"></span>
+          </div>
+          <p class="opzioni-nota">Il nome sostituisce "agente principale"
+            nel menu in alto. Le istruzioni vengono aggiunte DOPO le
+            regole di sistema, quindi non possono disattivarle.</p>
         </section>
 
                 <section id="opz-sez-budget" class="opz-sez" data-sez="budget" hidden>
@@ -468,6 +503,77 @@
             <button id="autostart-toggle" class="ghost">Attiva</button>
           </div>
           <p class="opzioni-nota">Usa la chiave Run dell'utente (HKCU). Disattiva per fermare l'avvio automatico.</p>
+        </section>
+
+        <section id="opz-sez-bot" class="opz-sez" data-sez="bot" hidden>
+          <div class="opzioni-servizi-testa">
+            <b>Bot</b>
+            <span class="dim">identita' con modello, persona, progetto e
+              conversazione propri. Non sono processi separati: condividono
+              chiavi e permessi. Un bot puo' chiedere a un altro solo se
+              glielo consenti.</span>
+          </div>
+          <div id="bot-elenco" class="bot-elenco"></div>
+          <div class="opzioni-selezione bot-campi">
+            <label>Nome
+              <input id="bot-nome" type="text" maxlength="40"
+                     placeholder="es. Grok" autocomplete="off">
+            </label>
+            <label>Servizio
+              <select id="bot-provider">
+                <option value="">come l'app</option>
+              </select>
+            </label>
+            <label>Modello
+              <input id="bot-modello" type="text"
+                     placeholder="vuoto = predefinito" autocomplete="off">
+            </label>
+            <label>Progetto
+              <select id="bot-progetto">
+                <option value="">nessuno</option>
+              </select>
+            </label>
+            <label>Profilo strumenti
+              <select id="bot-profilo">
+                <option value="">come l'app</option>
+                <option value="base">base</option>
+                <option value="ricerca">ricerca</option>
+                <option value="skill">skill</option>
+                <option value="pieno">pieno</option>
+              </select>
+            </label>
+            <label>Parla con
+              <input id="bot-parla" type="text"
+                     placeholder="nomi, separati da virgola"
+                     autocomplete="off">
+            </label>
+          </div>
+          <label class="bot-persona">Persona / compito
+            <textarea id="bot-persona" rows="4"
+                      placeholder="Come deve comportarsi questo bot, e di cosa si occupa."></textarea>
+          </label>
+          <div class="opzioni-budget-azioni">
+            <button id="bot-nuovo" class="ghost">Nuovo</button>
+            <button id="bot-salva" class="primary">Salva</button>
+            <button id="bot-attiva" class="ghost">Attiva</button>
+            <button id="bot-elimina" class="ghost">Elimina</button>
+            <span id="bot-msg" class="small dim"></span>
+          </div>
+          <label class="bot-persona">Compito in background
+            <textarea id="bot-compito" rows="3"
+                      placeholder="Un lavoro da affidare a questo bot mentre continui altrove."></textarea>
+          </label>
+          <div class="opzioni-budget-azioni">
+            <button id="bot-avvia" class="ghost">Avvia in background</button>
+            <button id="bot-stato" class="ghost">Aggiorna stato</button>
+            <span id="bot-lavoro-msg" class="small dim"></span>
+          </div>
+          <p class="opzioni-nota">Il lavoro parte subito e non cambia
+            l'identita' attiva: puoi avviarne uno per bot e continuare a
+            usare l'agente principale. Un bot esegue un compito alla
+            volta; gli altri restano in coda. Puoi anche cambiare bot
+            mentre lavora: il turno continua e lo ritrovi quando torni.
+            Lo stato si vede nella lista qui sopra.</p>
         </section>
 
         <section id="opz-sez-benchmark" class="opz-sez" data-sez="benchmark" hidden>
@@ -966,7 +1072,6 @@
 <div class="backdrop" id="side-backdrop"></div>
 <button id="mic-float" class="mic-float" title="Dettatura vocale (microfono)" aria-label="Dettatura vocale" hidden>
   <span aria-hidden="true">🎤</span>
-</button>
 </button>
 
 <div id="council-panel" class="panel hidden">

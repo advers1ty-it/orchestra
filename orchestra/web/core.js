@@ -137,6 +137,35 @@ function scrollDown() {
   if (seiInFondo()) main.scrollTop = main.scrollHeight;
 }
 
+// Gli snapshot contengono solo la conversazione server-side. Gli avvisi
+// mostrati dal client (es. cambio modello) vanno conservati al punto in cui
+// sono comparsi, non appesi in coda dopo aver ricostruito la conversazione.
+function raccogliNodiClient() {
+  const nodi = [];
+  let indice = 0;
+  Array.from(log.children).forEach((n) => {
+    const locale = n.classList && (
+      n.classList.contains("sysnote") ||
+      (n.classList.contains("msg") && (
+        n.classList.contains("system") ||
+        n.classList.contains("error") ||
+        n.classList.contains("info")
+      ))
+    );
+    if (locale) nodi.push({ nodo: n, indice });
+    else indice += 1;
+  });
+  return nodi;
+}
+
+function ripristinaNodiClient(nodi) {
+  const nodiSnapshot = Array.from(log.children);
+  nodi.forEach(({ nodo, indice }) => {
+    const riferimento = nodiSnapshot[Math.min(indice, nodiSnapshot.length)] || null;
+    log.insertBefore(nodo, riferimento);
+  });
+}
+
 function setBusy(v) {
   busy = v;
   dot.className = "dot" + (v ? " busy" : " ok");
@@ -425,6 +454,24 @@ on($("permesso-mai"), "click", () => rispondiPermesso("mai"));
 // resta, non e' un avviso che si nasconde
 
 
+// Anteprime di un tool: immagini che il tool ha prodotto (per esempio
+// image_gen). Non arrivano dentro `result` perché sono grandi e non sono
+// testo: viaggiano a parte in `images`, e qui diventano <img>.
+//
+// Solo data URL: un percorso del disco non è raggiungibile dal browser, e
+// un URL esterno dentro un evento SSE non è una cosa da caricare di
+// nascosto. Se il tool manda altro, si ignora.
+function mostraAnteprime(out, immagini) {
+  (immagini || []).forEach((src) => {
+    if (typeof src !== "string" || !src.startsWith("data:image/")) return;
+    const img = el("img", "tool-img");
+    img.src = src;
+    img.alt = "immagine generata";
+    img.loading = "lazy";
+    out.appendChild(img);
+  });
+}
+
 function addTool(name, args, key) {
   const t = el("div", "tool");
   // data-key: serve a `tool_end` per trovare il tool giusto quando ce n'e'
@@ -496,19 +543,7 @@ function avviaPollingFallback() {
           const eraInFondoPrima = seiInFondo();
           const scrollTopPrima = main.scrollTop;
           // Ricostruisci la chat come fa lo snapshot del SSE.
-          const nodiClient = Array.from(log.children).filter((n) => {
-            if (!n.classList) return false;
-            // Il ragionamento viene dallo snapshot (campo `reasoning`), non va
-// preservato come nodo cliente: altrimenti la ricostruzione lo spinge
-// sotto i messaggi e rompe l'ordine.
-if (n.classList.contains("ragionamento")) return false;
-            if (n.classList.contains("msg")) {
-              return n.classList.contains("system") ||
-                     n.classList.contains("error") ||
-                     n.classList.contains("info");
-            }
-            return false;
-          });
+          const nodiClient = raccogliNodiClient();
           log.innerHTML = "";
           const risultatiTool = {};
           (snap.messages || []).forEach((m) => {
@@ -537,7 +572,7 @@ if (n.classList.contains("ragionamento")) return false;
               });
             }
           });
-          nodiClient.forEach((n) => log.appendChild(n));
+          ripristinaNodiClient(nodiClient);
           ultimaFirmaSnapshot = firma;
           setBusy(!!snap.busy);
           // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
@@ -650,19 +685,7 @@ function handle(kind, d) {
         break;
       }
       // Preserva i nodi lato client che non fanno parte dello snapshot.
-      const nodiClient = Array.from(log.children).filter((n) => {
-        if (!n.classList) return false;
-        // Il ragionamento viene dallo snapshot (campo `reasoning`), non va
-// preservato come nodo cliente: altrimenti la ricostruzione lo spinge
-// sotto i messaggi e rompe l'ordine.
-if (n.classList.contains("ragionamento")) return false;
-        if (n.classList.contains("msg")) {
-          return n.classList.contains("system") ||
-                 n.classList.contains("error") ||
-                 n.classList.contains("info");
-        }
-        return false;
-      });
+      const nodiClient = raccogliNodiClient();
       // ricostruisci la conversazione
       log.innerHTML = "";
       // I risultati dei tool, indicizzati per id: le chiamate (dentro i
@@ -707,12 +730,13 @@ if (n.classList.contains("ragionamento")) return false;
           });
         }
       });
-      // Reinserisci i nodi lato client preservati (ragionamento, gateway).
-      nodiClient.forEach((n) => log.appendChild(n));
+      // Ripristina gli avvisi locali vicino ai messaggi accanto a cui erano.
+      ripristinaNodiClient(nodiClient);
       setBusy(!!d.busy);
-      // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
-      // ripristina lo scroll precedente (evita il salto in cima).
-      if (eraInFondoPrima) scrollDown();
+      // Il primo snapshot inizializza la chat: mostra subito gli ultimi
+      // messaggi. Gli aggiornamenti successivi conservano invece la lettura.
+      if (eraPrimoSnapshot) main.scrollTop = main.scrollHeight;
+      else if (eraInFondoPrima) scrollDown();
       else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
       break;
     }
@@ -809,7 +833,16 @@ if (n.classList.contains("ragionamento")) return false;
         const st = node.querySelector(".tool-status");
         st.className = "tool-status " + (d.ok ? "ok" : "err");
         st.textContent = d.ok ? "ok" : "errore";
-        node.querySelector(".tool-out").textContent = d.result || "";
+        const out = node.querySelector(".tool-out");
+        out.textContent = d.result || "";
+        mostraAnteprime(out, d.images);
+        // Un'immagine dentro un riquadro chiuso non si vede: il tool card
+        // nasce chiuso, quindi un risultato visivo lo apre da solo. Il
+        // testo resta apribile e richiudibile come gli altri.
+        if ((d.images || []).length) {
+          node.classList.add("open");
+          if (d.id) openTools.add(d.id);
+        }
         // Il risultato ha allungato il log anche di centinaia di righe.
         // Se l'utente stava seguendo (registrato a `tool_start`), lo si
         // riporta in fondo: senza, il controllo di `scrollDown` direbbe
@@ -1066,6 +1099,11 @@ async function loadModels() {
     }
     modelPick.disabled = false;
     mpSincronizzaEtichetta();
+    // Con un bot attivo servizio e modello sono SUOI: i menu globali
+    // non devono poterli cambiare di nascosto. La funzione vive in
+    // panels.js e si chiama solo se c'e' — il core non deve dipendere
+    // da un pannello per funzionare.
+    if (typeof aggiornaSelettoriBot === "function") aggiornaSelettoriBot();
     // le liste del pannello benchmark e della prova manuale usano lo
     // stesso catalogo. Popolarle qui evita un secondo fetch e fa si'
     // che i tre selettori non possano contraddirsi.

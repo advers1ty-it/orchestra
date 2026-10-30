@@ -53,6 +53,30 @@ CATALOGO_TTL_SECONDS = 15 * 60
 
 UI_PATH = os.path.join(HERE, "web", "index.html")
 
+
+def _prompt_base_con_memoria() -> str:
+    """Il prompt di sistema senza identita', con le cose sempre vere.
+
+    Sta fuori dalla classe perche' serve sia a costruire una sessione sia
+    ad aggiornare l'identita' di una sessione viva: nel secondo caso non
+    si puo' ricostruire tutto (si perderebbe la conversazione), quindi il
+    punto di partenza va ricomposto allo stesso modo.
+    """
+    from .tools.memoria import blocco_prompt
+
+    prompt = SYSTEM_PROMPT
+    importanti = blocco_prompt()
+    if importanti:
+        prompt = (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"---\n"
+            f"Cose che valgono in ogni conversazione. Non ripeterle "
+            f"se non servono. Per tutto il resto hai il tool "
+            f"`memoria`: cerca quello che ti serve invece di "
+            f"assumere di non saperlo.\n\n"
+            f"{importanti}")
+    return prompt
+
 CARTELLA_CESTINO = ".cestino"
 
 MAX_BODY = 64 * 1024  # un prompt non occupa 64KB: oltre e' un errore
@@ -137,6 +161,22 @@ class OrchestraApp:
         except (ProviderError, KeyError, Exception) as _e:
             self.session = None
             sess_err = str(_e)
+        # I bot: identita' persistenti con una sessione ciascuna. Il
+        # dizionario si riempie a richiesta, non all'avvio: un bot che non
+        # usi non deve costare una sessione in memoria, un provider e un
+        # prompt. `_sessione_principale` e' l'agente configurato in
+        # Opzioni, quello che c'era prima dei bot: si conserva perche'
+        # attivare un bot non deve distruggerlo, e disattivarlo deve
+        # riportare la conversazione di prima esattamente com'era.
+        self._bots_runtime: dict[int, dict[str, Any]] = {}
+        self._bot_attivo_id: int = 0
+        self._sessione_principale: Session | None = None
+        # I lavori in background dei bot. Non sono il turno attivo: sono
+        # code separate, una per bot, con un filo che le consuma. E' il
+        # pezzo che permette a due bot di avanzare insieme — la sessione
+        # attiva resta una sola, e la UI non deve seguire due stream.
+        self._bots_lavori: dict[int, dict[str, Any]] = {}
+        self._bots_lavori_lock = threading.RLock()
         # Lo storico. La sessione appena creata non ha ancora un id: o è
         # nuova, o deve caricare l'ultima conversazione da disco.
         #
@@ -442,6 +482,13 @@ class OrchestraApp:
         """
         if self.session is not None and self.session.busy:
             raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
+        if self.bot_attivo() is not None:
+            # Il servizio dell'applicazione e quello del bot sono due
+            # cose diverse: cambiare il primo lascerebbe il bot sul
+            # provider vecchio e il menu convinto del contrario.
+            raise RuntimeError(
+                "stai usando un bot: il suo servizio si cambia dal "
+                "pannello Opzioni → Bot")
 
         from .providers import KNOWN_PROVIDERS, NO_KEY_PROVIDERS, base_url_for
 
@@ -755,8 +802,16 @@ class OrchestraApp:
         if self.session.busy:
             raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
 
+        bot = self.bot_attivo()
+        # Il catalogo e' quello del provider dell'APPLICAZIONE. Se il bot
+        # usa un provider diverso, il suo modello non c'e' dentro: rifiutarlo
+        # sarebbe un errore inventato dal catalogo sbagliato.
+        provider_name = ((bot or {}).get("provider")
+                         or self.env.get("ORCHESTRA_PROVIDER", "openrouter"))
         cat = self.catalog
-        if cat is not None and cat.models and model_id not in cat.models:
+        if (not bot or provider_name == self.env.get("ORCHESTRA_PROVIDER")) \
+                and cat is not None and cat.models \
+                and model_id not in cat.models:
             raise ValueError(
                 f"modello sconosciuto: {model_id}. "
                 f"Disponibili: {', '.join(sorted(cat.models)[:5])}…"
@@ -765,13 +820,25 @@ class OrchestraApp:
         from .providers import build_provider
         from .fallback import get_chain_for_provider, ChainEntry
 
-        provider_name = self.env.get("ORCHESTRA_PROVIDER", "openrouter")
         env = ambiente(ENV_PATH)
         prov = build_provider(provider_name, model=model_id, env=env)
         self.session.agent.provider = prov
-        self.env["ORCHESTRA_MODEL"] = model_id
-        from . import keys as keys_mod
-        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
+        if bot is not None:
+            # Il modello scelto qui e' QUELLO DEL BOT: scriverlo in .env
+            # cambierebbe il default di ogni altra identita', e il bot
+            # successivo nascerebbe col modello sbagliato.
+            from . import bots as bots_mod
+            try:
+                bots_mod.aggiorna(bot["id"], modello=model_id)
+            except Exception:  # noqa: BLE001
+                pass
+            rt = self._bots_runtime.get(int(bot["id"]))
+            if rt is not None:
+                rt["config"] = bots_mod.per_id(bot["id"]) or rt["config"]
+        else:
+            self.env["ORCHESTRA_MODEL"] = model_id
+            from . import keys as keys_mod
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
         # La catena di fallback va RICOSTRUITA sul nuovo modello. Senza,
         # la prima entry continua a puntare al modello di prima: quello
         # morto o inesistente viene chiamato per primo, risponde 404/410,
@@ -1066,7 +1133,8 @@ class OrchestraApp:
             return []
 
     @staticmethod
-    def _make_session(provider_name: str, model: str) -> Session:
+    def _make_session(provider_name: str, model: str, *,
+                      persona: str = "", nome_bot: str = "") -> Session:
         # Il fallback e' su ENV_PATH (.env), non su os.environ: quando si
         # salva un'impostazione via API (es. /api/iterazioni) scrive in .env
         # e in self.app.env, ma os.environ non viene aggiornato. Riavviando
@@ -1098,18 +1166,26 @@ class OrchestraApp:
         # di uso avvelena il contesto di ogni richiesta, comprese quelle
         # che non c'entrano niente con quello che c'è salvato. Il tool
         # costa solo quando si usa.
-        from .tools.memoria import blocco_prompt
-        prompt_con_memoria = SYSTEM_PROMPT
-        importanti = blocco_prompt()
-        if importanti:
-            prompt_con_memoria = (
-                f"{SYSTEM_PROMPT}\n\n"
-                f"---\n"
-                f"Cose che valgono in ogni conversazione. Non ripeterle "
-                f"se non servono. Per tutto il resto hai il tool "
-                f"`memoria`: cerca quello che ti serve invece di "
-                f"assumere di non saperlo.\n\n"
-                f"{importanti}")
+        from . import identita as identita_mod
+
+        prompt_con_memoria = _prompt_base_con_memoria()
+        # La persona di un bot viene DOPO le regole, non al posto loro:
+        # il bot ha un carattere e un compito, ma resta un agente di
+        # Orchestra, con i suoi confini e i suoi divieti. Lo stesso vale
+        # per l'agente principale: il suo nome e le sue istruzioni sono
+        # un blocco in fondo, non un prompt alternativo.
+        #
+        # Un `_make_session` senza nome di bot e' l'agente principale:
+        # se l'utente non ha passato una persona esplicita, si legge
+        # quella salvata. Cosi' ogni ricostruzione della sessione — cambio
+        # provider, cambio modello, riavvio — non perde l'identita'.
+        e_bot = bool((nome_bot or "").strip())
+        if not e_bot:
+            ident = identita_mod.carica()
+            nome_bot = nome_bot or ident["nome"]
+            persona = (persona or "").strip() or ident["persona"]
+        prompt_con_memoria = identita_mod.componi_prompt(
+            prompt_con_memoria, nome_bot, persona, bot=e_bot)
         return Session(
                     provider=build_provider(provider_name, model=model,
                                             env=load_env(ENV_PATH) | os.environ),
@@ -1122,7 +1198,454 @@ class OrchestraApp:
                                                           tool_profile=_env.get("ORCHESTRA_TOOL_PROFILE") or None),
                 )
 
-    def _collega_delega(self) -> None:
+    # -- bot ----------------------------------------------------------------
+
+    def elenco_bot(self) -> list[dict[str, Any]]:
+        """I bot salvati, con lo stato che serve al pannello.
+
+        `busy` e `modello_effettivo` vengono dalla sessione viva, non
+        dalla configurazione: un bot che sta lavorando e uno fermo hanno
+        la stessa riga nel DB, e la differenza e' quella che l'utente
+        guarda per decidere se mandargli qualcosa.
+        """
+        from . import bots as bots_mod
+
+        fuori = []
+        # getattr e non self._x: il server puo' essere costruito con
+        # __new__ (lo fanno i test e una vecchia create()), e allora gli
+        # attributi aggiunti dopo non ci sono. Un pannello che legge
+        # l'elenco dei bot non deve far cadere /api/state per questo.
+        attivo_id = int(getattr(self, "_bot_attivo_id", 0) or 0)
+        runtime = getattr(self, "_bots_runtime", {}) or {}
+        for b in bots_mod.tutti():
+            voce = dict(b)
+            voce["attivo"] = int(b["id"]) == attivo_id
+            rt = runtime.get(int(b["id"]))
+            voce["busy"] = bool(rt and rt["sessione"].busy)
+            voce["modello_effettivo"] = (
+                rt["sessione"].modello_in_uso() if rt else b["modello"])
+            # Lo stato dei lavori in background. `busy` da solo non basta:
+            # un compito in coda non ha ancora reso la sessione occupata,
+            # e la UI deve poter dire "in coda: 2" prima che parta.
+            lav = (getattr(self, "_bots_lavori", {}) or {}).get(int(b["id"]))
+            if lav is not None:
+                with self._lock_lavori_bot():
+                    voce["coda"] = len(lav.get("coda") or [])
+                    voce["in_corso"] = str(lav.get("in_corso") or "")
+                    ultimo = lav.get("ultimo")
+                    voce["ultimo"] = dict(ultimo) if ultimo else None
+            else:
+                voce["coda"] = 0
+                voce["in_corso"] = ""
+                voce["ultimo"] = None
+            fuori.append(voce)
+        return fuori
+
+    def bot_attivo(self) -> dict[str, Any] | None:
+        ident = int(getattr(self, "_bot_attivo_id", 0) or 0)
+        if not ident:
+            return None
+        from . import bots as bots_mod
+
+        return bots_mod.per_id(ident)
+
+    # -- lavori in background dei bot -------------------------------------
+
+    # Quanti compiti si possono accodare su un bot. Un tetto basso non e'
+    # una limitazione tecnica: e' il punto in cui un errore di battitura
+    # (premere due volte "Avvia") smette di produrre una fila di turni a
+    # pagamento che nessuno ha chiesto.
+    MAX_LAVORI_BOT = 20
+
+    def _lavori_bot(self) -> dict[int, dict[str, Any]]:
+        lavori = getattr(self, "_bots_lavori", None)
+        if lavori is None:
+            lavori = self._bots_lavori = {}
+        return lavori
+
+    def _lock_lavori_bot(self) -> threading.RLock:
+        lock = getattr(self, "_bots_lavori_lock", None)
+        if lock is None:
+            lock = self._bots_lavori_lock = threading.RLock()
+        return lock
+
+    def avvia_lavoro_bot(self, bot_id: int | str | None,
+                         testo: str) -> dict[str, Any]:
+        """Accoda un compito per un bot, senza cambiare l'identita' attiva.
+
+        Il turno parte in un filo suo: chi chiama torna subito, e il bot
+        lavora mentre l'utente (o un altro bot) continua altrove. Una
+        coda per bot, non una globale: due compiti sullo stesso bot non
+        possono girare insieme — la Session ha un turno solo — ma due
+        bot diversi hanno sessioni e fili diversi, quindi avanzano
+        davvero in parallelo.
+        """
+        from . import bots as bots_mod
+
+        b = bots_mod.per_id(bot_id) if bot_id not in (None, "", 0, "0") \
+            else None
+        if b is None:
+            raise ValueError(f"bot inesistente: {bot_id}")
+        testo = (testo or "").strip()
+        if not testo:
+            raise ValueError("serve un compito da svolgere")
+        if len(testo) > Session.BOT_MESSAGGIO_MAX:
+            raise ValueError("compito troppo lungo")
+        ident = int(b["id"])
+        with self._lock_lavori_bot():
+            # Costruire la sessione qui, e non nel filo, fa fallire subito
+            # un provider mal configurato: l'utente vede l'errore sul
+            # pulsante invece di un lavoro che non parte e non dice
+            # perche'. Il filo la riusa dal runtime.
+            self._sessione_bot(b)
+            stato = self._lavori_bot().setdefault(
+                ident, {"coda": [], "in_corso": "", "iniziato": 0.0,
+                        "filo": None, "ultimo": None})
+            # Il tetto comprende quello in corso: con MAX=1 un bot puo'
+            # avere un lavoro alla volta, non uno in corso piu' uno in
+            # attesa. Contare solo la coda faceva sembrare il limite
+            # piu' largo di quanto sia.
+            impegnati = len(stato["coda"]) + (1 if stato["in_corso"] else 0)
+            if impegnati >= self.MAX_LAVORI_BOT:
+                raise RuntimeError(
+                    f"troppi lavori in coda per questo bot "
+                    f"(max {self.MAX_LAVORI_BOT})")
+            stato["coda"].append({"testo": testo, "creato": time.time()})
+            filo = stato.get("filo")
+            if filo is None or not filo.is_alive():
+                filo = threading.Thread(
+                    target=self._gira_lavori_bot, args=(ident,),
+                    daemon=True, name=f"orchestra-bot-{ident}")
+                stato["filo"] = filo
+                filo.start()
+            in_coda = len(stato["coda"])
+        return {"ok": True, "bot": b["nome"], "in_coda": in_coda}
+
+    def _gira_lavori_bot(self, ident: int) -> None:
+        """Consuma la coda di un bot, un compito alla volta.
+
+        Il filo non tiene mai il lock mentre aspetta un turno: il lock
+        protegge la coda, non il lavoro. Tenerlo durante `send`
+        bloccherebbe `elenco_bot` per minuti e la UI sembrerebbe morta.
+        """
+        from . import bots as bots_mod
+
+        while True:
+            with self._lock_lavori_bot():
+                stato = self._lavori_bot().get(ident)
+                if stato is None or not stato["coda"]:
+                    if stato is not None:
+                        stato["filo"] = None
+                    return
+                voce = stato["coda"].pop(0)
+                stato["in_corso"] = voce["testo"]
+                stato["iniziato"] = time.time()
+            esito: dict[str, Any]
+            try:
+                b = bots_mod.per_id(ident)
+                if b is None:
+                    esito = {"ok": False, "risposta": "",
+                             "errore": "il bot non esiste piu'"}
+                else:
+                    sess = self._sessione_bot(b)
+                    # La sessione puo' essere occupata da un turno
+                    # dell'utente o da `bot_chiedi`: si aspetta, non si
+                    # accoda un secondo turno nella Session (che lo
+                    # rifiuterebbe). Il tetto e' il tempo, non un numero
+                    # di tentativi: un turno lungo e' normale.
+                    while not sess.send(voce["testo"]):
+                        time.sleep(0.2)
+                    while sess.busy:
+                        time.sleep(0.2)
+                    risposta = ""
+                    try:
+                        for m in reversed(sess.snapshot().get("messages", [])):
+                            if (m.get("role") == "assistant"
+                                    and (m.get("content") or "").strip()):
+                                risposta = (m.get("content") or "").strip()
+                                break
+                    except Exception:  # noqa: BLE001
+                        pass
+                    esito = {"ok": bool(risposta), "risposta": risposta[:400],
+                             "errore": "" if risposta else "nessuna risposta"}
+            except Exception as e:  # noqa: BLE001
+                esito = {"ok": False, "risposta": "",
+                         "errore": f"{type(e).__name__}: {e}"}
+            with self._lock_lavori_bot():
+                stato = self._lavori_bot().get(ident)
+                if stato is not None:
+                    stato["in_corso"] = ""
+                    stato["ultimo"] = {**esito, "testo": voce["testo"][:200],
+                                       "fine": time.time()}
+
+    def identita(self) -> dict[str, str]:
+        """Nome e persona dell'agente principale (vuoti = Orchestra)."""
+        from . import identita as identita_mod
+
+        return identita_mod.carica()
+
+    def salva_identita(self, nome: str, persona: str) -> dict[str, str]:
+        """Salva l'identita' e la applica subito alla sessione principale.
+
+        Non si ricostruisce la sessione: perderebbe la conversazione in
+        corso. Si ricompone il prompt di base (regole + memoria) e ci si
+        aggiunge la nuova identita', poi si lascia che l'Agent rimetta
+        skills e progetto come fa a ogni turno.
+
+        Se in questo momento e' attivo un bot, la sessione da aggiornare
+        e' quella principale conservata da parte: l'utente la ritrovera'
+        gia' aggiornata quando torna.
+        """
+        from . import identita as identita_mod
+
+        dati = identita_mod.salva(nome, persona)
+        if self.bot_attivo() is None:
+            target = self.session
+        else:
+            target = getattr(self, "_sessione_principale", None)
+        if target is not None:
+            nuovo = identita_mod.componi_prompt(
+                _prompt_base_con_memoria(), dati["nome"], dati["persona"])
+            try:
+                target.agent.system_prompt = nuovo
+                target.agent._aggiorna_prompt()
+            except Exception:  # noqa: BLE001
+                # Se l'Agent non e' ancora pronto, il prompt del primo
+                # messaggio e' comunque meglio di un'identita' salvata
+                # solo su disco: la si applica dove si puo'.
+                try:
+                    target.set_system_prompt(nuovo)
+                except Exception:  # noqa: BLE001
+                    pass
+        return dati
+
+    def provider_attivo(self) -> str:
+        """Il nome del provider che la sessione attiva sta usando."""
+        sess = self.session
+        agente = getattr(sess, "agent", None) if sess is not None else None
+        prov = getattr(agente, "provider", None) if agente is not None else None
+        nome = str(getattr(prov, "name", "") or "")
+        return nome or self.env.get("ORCHESTRA_PROVIDER", "")
+
+    def _bot_provider_modello(self, bot: dict[str, Any]) -> tuple[str, str]:
+        """Con quale provider e modello parla questo bot.
+
+        Vuoto significa "come l'applicazione": e' il default di chi crea
+        un bot e non vuole scegliere, e deve continuare a funzionare
+        quando l'utente cambia modello in Opzioni. Se invece il bot ha un
+        provider suo e nessun modello, si prova a sceglierne uno valido
+        dal catalogo: un provider senza modello non parte, e il primo
+        turno morirebbe con un 400 che sembra un problema di rete.
+        """
+        provider = (bot.get("provider") or self.env.get("ORCHESTRA_PROVIDER")
+                    or "openrouter").strip()
+        modello = (bot.get("modello") or "").strip()
+        if not modello:
+            if provider == (self.env.get("ORCHESTRA_PROVIDER") or ""):
+                modello = self.env.get("ORCHESTRA_MODEL", "")
+            else:
+                try:
+                    modello = self._modello_per_servizio(provider, "") or ""
+                except Exception:  # noqa: BLE001
+                    modello = ""
+        return provider, modello
+
+    def _risolutore_bot(self, nome: str) -> dict[str, Any] | None:
+        """Il ponte che `bot_chiedi` usa per raggiungere un altro bot.
+
+        Costruisce la sessione del destinatario se non c'e': un bot che
+        riceve un messaggio deve poter rispondere anche se non l'hai mai
+        aperto in questa esecuzione. E' l'unica differenza fra un bot e
+        un'etichetta.
+        """
+        from . import bots as bots_mod
+
+        b = bots_mod.per_nome(nome)
+        if b is None:
+            return None
+        return {"nome": b["nome"], "sessione": self._sessione_bot(b)}
+
+    def _sessione_bot(self, bot: dict[str, Any]) -> Session:
+        """La sessione di un bot, costruita una volta e poi riusata.
+
+        Il riuso e' voluto: la conversazione vive in memoria fra un turno
+        e l'altro, e ricostruirla a ogni messaggio vorrebbe dire rileggere
+        lo storico e perdere le tool call non ancora salvate. Quando la
+        configurazione cambia, il chiamante la butta esplicitamente.
+        """
+        ident = int(bot["id"])
+        runtime = getattr(self, "_bots_runtime", None)
+        if runtime is None:
+            runtime = self._bots_runtime = {}
+        rt = runtime.get(ident)
+        if rt is not None:
+            return rt["sessione"]
+        provider, modello = self._bot_provider_modello(bot)
+        sess = self._make_session(provider, modello,
+                                  persona=bot.get("persona", ""),
+                                  nome_bot=bot.get("nome", ""))
+        sess.bot = bot["nome"]
+        sess.attiva_bot(self._risolutore_bot, nome=bot["nome"],
+                        parla_con=list(bot.get("parla_con") or []))
+        if bot.get("profilo"):
+            sess.agent.config.tool_profile = bot["profilo"]
+        if bot.get("progetto"):
+            sess.imposta_progetto(bot["progetto"])
+        self._bots_runtime[ident] = {"config": bot, "sessione": sess}
+        self._collega_delega(sess)
+        # Riapri l'ultima conversazione DI QUESTO bot, non l'ultima di
+        # tutte: senza il filtro, attivare un bot appena creato mostrerebbe
+        # la chat dell'agente principale, che non c'entra niente.
+        try:
+            if self._storico is not None:
+                ultima = self._storico.elenco(limite=1, bot=bot["nome"])
+                if ultima:
+                    sess.carica_sessione(int(ultima[0]["id"]))
+        except Exception:  # noqa: BLE001
+            pass
+        return sess
+
+    def _salva_bot_attivo(self, nome: str) -> None:
+        try:
+            from . import keys as keys_mod
+
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_BOT", nome)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def attiva_bot(self, bot_id: int | str | None) -> dict[str, Any]:
+        """Passa da un'identita' all'altra. None = agente principale.
+
+        Cambiare identita' NON ferma il turno di quella che lasci. Le
+        Session sono indipendenti, ognuna col suo filo: il lavoro
+        continua nella sua sessione e lo ritrovi quando ci torni. E'
+        esattamente il caso d'uso di due bot su due progetti — e
+        bloccare il cambio costringerebbe ad aspettare il primo per
+        poter avviare il secondo, che e' il problema da cui nascono i
+        lavori in background.
+
+        Il turno lasciato non trasmette piu' eventi alla UI (lo stream
+        segue la sessione attiva), ma la conversazione e il risultato
+        restano: al ritorno lo snapshot li ricostruisce. L'unica cosa
+        che resta vietata e' mandare un secondo messaggio alla stessa
+        sessione mentre e' occupata: quello la Session lo rifiuta.
+        """
+        from . import bots as bots_mod
+
+        if bot_id in (None, "", 0, "0"):
+            if getattr(self, "_sessione_principale", None) is not None:
+                self.session = self._sessione_principale
+                self._sessione_principale = None
+            self._bot_attivo_id = 0
+            self.env["ORCHESTRA_BOT"] = ""
+            self._salva_bot_attivo("")
+            return {"ok": True, "bot": None}
+        b = bots_mod.per_id(bot_id)
+        if b is None:
+            raise ValueError(f"bot inesistente: {bot_id}")
+        if int(getattr(self, "_bot_attivo_id", 0) or 0) == int(b["id"]):
+            return {"ok": True, "bot": b}
+        sess = self._sessione_bot(b)
+        if getattr(self, "_sessione_principale", None) is None:
+            self._sessione_principale = self.session
+        self.session = sess
+        self._bot_attivo_id = int(b["id"])
+        self.env["ORCHESTRA_BOT"] = b["nome"]
+        self._salva_bot_attivo(b["nome"])
+        self.ready = self.session is not None
+        self.error = ""
+        return {"ok": True, "bot": b}
+
+    def crea_bot(self, **campi: Any) -> dict[str, Any]:
+        """Crea un bot, scegliendo un modello se il provider lo richiede."""
+        from . import bots as bots_mod
+
+        provider = str(campi.get("provider") or "").strip().lower()
+        modello = str(campi.get("modello") or "").strip()
+        if provider and not modello \
+                and provider != (self.env.get("ORCHESTRA_PROVIDER") or ""):
+            try:
+                modello = self._modello_per_servizio(provider, "") or ""
+            except Exception:  # noqa: BLE001
+                modello = ""
+            if modello:
+                campi["modello"] = modello
+        return bots_mod.crea(**campi)
+
+    def aggiorna_bot(self, bot_id: int | str, **campi: Any) -> dict | None:
+        from . import bots as bots_mod
+
+        runtime = getattr(self, "_bots_runtime", {}) or {}
+        rt = runtime.get(int(bot_id)) if str(bot_id).isdigit() else None
+        if rt is not None and rt["sessione"].busy:
+            raise RuntimeError(
+                "il bot sta lavorando: attendi o annulla prima di "
+                "modificarlo")
+        lav = (getattr(self, "_bots_lavori", {}) or {}).get(
+            int(bot_id)) if str(bot_id).isdigit() else None
+        if lav is not None and (lav.get("coda") or lav.get("in_corso")):
+            raise RuntimeError(
+                "il bot ha lavori in coda: attendi che finiscano prima "
+                "di modificarlo")
+        b = bots_mod.aggiorna(bot_id, **campi)
+        if b is None:
+            return None
+        # La configurazione e' cambiata: la sessione viva non la riflette
+        # piu'. Si butta e si ricostruisce al prossimo uso — tenere una
+        # sessione col vecchio prompt sarebbe peggio che perdere il
+        # contesto, perche' l'utente crede di aver cambiato l'identita'.
+        runtime.pop(int(b["id"]), None)
+        attivo_id = int(getattr(self, "_bot_attivo_id", 0) or 0)
+        if int(b["id"]) == attivo_id and self.session is not None:
+            self.session = self._sessione_bot(b)
+        return b
+
+    def elimina_bot(self, bot_id: int | str) -> bool:
+        from . import bots as bots_mod
+
+        b = bots_mod.per_id(bot_id)
+        if b is None:
+            return False
+        lav = (getattr(self, "_bots_lavori", {}) or {}).get(int(b["id"]))
+        if lav is not None and (lav.get("coda") or lav.get("in_corso")):
+            raise RuntimeError("il bot ha lavori in coda: attendi o annulla")
+        # Il controllo va PRIMA di cambiare identita': altrimenti si
+        # tornerebbe al principale e solo dopo si scoprirebbe che il bot
+        # non si puo' eliminare, lasciando l'utente su un'identita'
+        # diversa da quella che credeva.
+        rt = (getattr(self, "_bots_runtime", {}) or {}).get(int(b["id"]))
+        if rt is not None and rt["sessione"].busy:
+            raise RuntimeError("il bot sta lavorando: attendi o annulla")
+        if int(b["id"]) == int(getattr(self, "_bot_attivo_id", 0) or 0):
+            self.attiva_bot(None)
+        (getattr(self, "_bots_runtime", {}) or {}).pop(int(b["id"]), None)
+        (getattr(self, "_bots_lavori", {}) or {}).pop(int(b["id"]), None)
+        return bots_mod.elimina(b["id"])
+
+    def _ripristina_bot(self) -> None:
+        """Riapri l'ultimo bot attivo, se c'era.
+
+        Un riavvio non deve riportare l'utente nella chat dell'agente
+        principale mentre il bot con cui stava lavorando e' ancora la'. La
+        scelta si salva in `.env` come ORCHESTRA_BOT, nello stesso posto e
+        nello stesso modo del modello.
+        """
+        nome = (self.env.get("ORCHESTRA_BOT") or "").strip()
+        if not nome:
+            return
+        from . import bots as bots_mod
+
+        b = bots_mod.per_nome(nome)
+        if b is None:
+            self.env["ORCHESTRA_BOT"] = ""
+            self._salva_bot_attivo("")
+            return
+        try:
+            self.attiva_bot(b["id"])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _collega_delega(self, sessione: Session | None = None) -> None:
         """Costruisce la fabbrica del figlio e registra il tool.
 
         Il figlio nasce QUI, non riusando l'agente del padre: ha il
@@ -1139,7 +1662,17 @@ class OrchestraApp:
         invece di lasciarlo andare.
         """
         app = self
-        nome_provider = self.env.get("ORCHESTRA_PROVIDER", "openrouter")
+        # La delega si collega alla sessione che la riceve, non sempre a
+        # quella attiva: un bot ha la sua, e il figlio deve nascere col
+        # provider e col progetto del bot che delega, non con quelli
+        # dell'agente principale.
+        sess = sessione or self.session
+        if sess is None:
+            return
+        nome_provider = (getattr(getattr(sess, "agent", None), "provider", None)
+                        and getattr(sess.agent.provider, "name", ""))
+        nome_provider = nome_provider or self.env.get("ORCHESTRA_PROVIDER",
+                                                       "openrouter")
         env_chiavi = ambiente(ENV_PATH)
 
         def fabbrica(obiettivo: str):
@@ -1157,7 +1690,7 @@ class OrchestraApp:
             progetto = ""
             percorso = ""
             try:
-                progetto = getattr(self.session, "progetto", "") or ""
+                progetto = getattr(sess, "progetto", "") or ""
             except Exception:  # noqa: BLE001
                 progetto = ""
             if progetto:
@@ -1190,7 +1723,7 @@ class OrchestraApp:
             try:
                 passi_padre = int(
                     self.env.get("ORCHESTRA_MAX_ITERS", "")
-                    or self.session.agent.config.max_iterations)
+                    or sess.agent.config.max_iterations)
             except (TypeError, ValueError):
                 passi_padre = 20
             passi_figlio = max(1, min(passi_padre, 50))
@@ -1216,7 +1749,7 @@ class OrchestraApp:
                 # vedeva niente — ne' nell'UI ne' nel log — e l'unico
                 # indizio era "ha finito i passi senza risposta", che
                 # non dice DOVE. Adesso si vede cosa ha tentato.
-                on_event=lambda kind, data: self.session.bridge.emit(
+                on_event=lambda kind, data: sess.bridge.emit(
                     "figlio", {"tipo": kind, **(data or {})}),
             )
             # Il figlio sa su quale progetto lavora: e' lui che mette
@@ -1231,11 +1764,17 @@ class OrchestraApp:
                 pass
             return figlio
 
-        self.session._fabbrica_figlio = fabbrica
+        sess._fabbrica_figlio = fabbrica
         # il catalogo serve al tariffario del figlio: senza i prezzi del
         # modello che ha lavorato, il costo di una delega resta sconosciuto
-        self.session._catalogo_per_costo = app.catalog
-        self.delega_attiva = self.session.attiva_delega()
+        # Solo se il catalogo e' GIA' caricato: `app.catalog` lo scarica al
+        # primo accesso, e attivare un bot non deve fare una chiamata di
+        # rete solo per conoscere dei prezzi che servono a una delega che
+        # forse non ci sara'.
+        sess._catalogo_per_costo = getattr(app, "_catalog", None)
+        attiva = sess.attiva_delega()
+        if sess is self.session:
+            self.delega_attiva = attiva
 
     def _aggancia_storico(self) -> None:
         """Collega la sessione allo storico su disco.
@@ -1302,6 +1841,9 @@ class OrchestraApp:
             app._collega_recupero_tool()
             app._collega_delega()
             app._ripara_modello_iniziale()
+            # Dopo il modello: il bot attivo puo' averne uno suo, e la
+            # riparazione del modello riguarda l'agente principale.
+            app._ripristina_bot()
             # La finestra del modello attivo, se il catalogo lo conosce.
             # In try separato: se il catalogo non si apre, l'app parte
             # comunque col default di 120k. Un limite prudente batte un
@@ -1932,8 +2474,14 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             snap["ready"] = self.app.ready
             snap["error"] = self.app.error
             snap["version"] = __version__
-            snap["model"] = self.app.env.get("ORCHESTRA_MODEL", "")
-            snap["provider"] = self.app.env.get("ORCHESTRA_PROVIDER", "")
+            # Il modello e il provider sono quelli della sessione VIVA,
+            # non quelli salvati in .env: un bot ha i suoi, e leggerli
+            # dall'ambiente mostrava nel menu il modello sbagliato mentre
+            # la chat usava quello giusto.
+            snap["model"] = s.modello_in_uso() or self.app.env.get(
+                "ORCHESTRA_MODEL", "")
+            snap["provider"] = self.app.provider_attivo()
+            snap["bot"] = self.app.bot_attivo()
             snap["remote"] = self._info_remoto()
             self._json(snap)
         elif path == "/api/stt/status":
@@ -2318,6 +2866,32 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             self._json({"ok": True,
                         "progetti": self.app._elenco_progetti(),
                         "attivo": self.app._progetto_attivo()})
+        elif path == "/api/identita":
+            # Nome e persona dell'agente principale. Sta accanto a /api/bots
+            # perche' il menu in testa ha bisogno di entrambi per dire chi
+            # sta parlando quando non c'e' un bot attivo.
+            self._json({"ok": True, **self.app.identita()})
+        elif path == "/api/bots":
+            # I bot salvati, chi e' attivo, e i valori che servono al form
+            # (provider validi, progetti registrati). Una lettura sola per
+            # disegnare tutto il pannello: due richieste per una schermata
+            # che si apre di rado sono due occasioni di restare a meta'.
+            try:
+                from .providers import KNOWN_PROVIDERS
+
+                self._json({
+                    "ok": True,
+                    "bots": self.app.elenco_bot(),
+                    "attivo": self.app.bot_attivo(),
+                    # Il nome dell'agente principale serve al menu in
+                    # testa: senza, dopo averlo personalizzato il menu
+                    # continuerebbe a dire "agente principale".
+                    "principale": self.app.identita(),
+                    "providers": sorted(KNOWN_PROVIDERS),
+                    "progetti": [p.get("nome") for p in self.app._elenco_progetti()],
+                })
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
         elif path == "/api/locali":
             # Separato perche' e' lento per costruzione: si interrogano
             # motori in ascolto su localhost e una porta chiusa puo'
@@ -2813,7 +3387,10 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                     "/api/provider", "/api/memoria/cerca",
                     "/api/memoria/aggiungi", "/api/memoria/elimina",
                     "/api/memoria/modifica", "/api/memoria/ottimizza",
-                    "/api/progetto", "/api/remote/start",
+                    "/api/progetto", "/api/identita", "/api/bots/crea",
+                    "/api/bots/attiva", "/api/bots/aggiorna",
+                    "/api/bots/elimina", "/api/bots/avvia",
+                    "/api/remote/start",
                     "/api/remote/stop", "/api/remote/status",
                     "/api/remote/info"):
             s = self.app.session  # puo' essere None: non la usano
@@ -2894,9 +3471,20 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             if len(testo) > 2000:
                 self._json({"error": "troppo lungo (max 2000 caratteri)"}, 400)
                 return
+            if not s.busy:
+                # La UI nasconde la barra quando il turno finisce, ma una
+                # richiesta in volo o un client esterno possono arrivare
+                # qui lo stesso. Accodare adesso significherebbe farla
+                # leggere al prossimo turno, sulla domanda sbagliata.
+                self._json({"error": "nessun turno in corso da guidare"}, 409)
+                return
             ok = s.steer(testo)
             if not ok:
-                self._json({"error": "coda steer piena (max 5)"}, 400)
+                if not s.busy:
+                    self._json({"error": "il turno e' appena finito: "
+                                         "guida non inviata"}, 409)
+                else:
+                    self._json({"error": "coda steer piena (max 5)"}, 400)
                 return
             self._json({"ok": True})
         elif path == "/api/cancel":
@@ -2976,7 +3564,20 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             except (TypeError, ValueError):
                 self._json({"error": "id mancante o non valido"}, 400)
                 return
+            # Una conversazione appartiene all'identita' che l'ha scritta.
+            # Caricarla in un'altra sessione la farebbe continuare dal bot
+            # sbagliato, e il salvataggio successivo la lascerebbe col nome
+            # del primo bot ma col contenuto del secondo: un misto che non
+            # si puo' piu' separare.
             try:
+                riga = self.app._storico.sessione(sid) if self.app._storico else None
+                proprietario = str((riga or {}).get("bot") or "")
+                if riga is not None \
+                        and proprietario != (self.app.session.bot or ""):
+                    nome = proprietario or "l'agente principale"
+                    self._json({"error": f"questa conversazione appartiene a "
+                                        f"{nome}: attivalo prima di aprirla"}, 409)
+                    return
                 ok = self.app.session.carica_sessione(sid)
             except RuntimeError as e:
                 self._json({"error": str(e)}, 409)
@@ -3077,6 +3678,72 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             from .memoria import stato as stato_memoria
             self._json(stato_memoria())
 
+        elif path == "/api/identita":
+            try:
+                dati = self.app.salva_identita(
+                    body.get("nome") or "", body.get("persona") or "")
+            except (OSError, ValueError) as e:
+                self._json({"error": f"identita' non salvata: {e}"}, 400)
+                return
+            self._json({"ok": True, **dati})
+        elif path == "/api/bots/crea":
+            campi = {k: body.get(k) for k in
+                     ("nome", "provider", "modello", "persona", "progetto",
+                      "profilo", "parla_con") if k in body}
+            try:
+                b = self.app.crea_bot(**campi)
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            self._json({"ok": True, "bot": b})
+        elif path == "/api/bots/attiva":
+            try:
+                risultato = self.app.attiva_bot(body.get("id"))
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            self._json(risultato)
+        elif path == "/api/bots/aggiorna":
+            campi = {k: body.get(k) for k in
+                     ("nome", "provider", "modello", "persona", "progetto",
+                      "profilo", "parla_con") if k in body}
+            try:
+                b = self.app.aggiorna_bot(body.get("id"), **campi)
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            if b is None:
+                self._json({"error": "bot inesistente"}, 404)
+                return
+            self._json({"ok": True, "bot": b})
+        elif path == "/api/bots/elimina":
+            try:
+                fatto = self.app.elimina_bot(body.get("id"))
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            if not fatto:
+                self._json({"error": "bot inesistente"}, 404)
+                return
+            self._json({"ok": True})
+        elif path == "/api/bots/avvia":
+            # Un compito in background, senza cambiare l'identita' attiva.
+            try:
+                risultato = self.app.avvia_lavoro_bot(
+                    body.get("id"), body.get("testo") or "")
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            self._json(risultato)
         elif path == "/api/progetto":
             # POST {progetto: nome}: imposta il progetto attivo.
             # La risposta porta anche i progetti conosciuti (per il

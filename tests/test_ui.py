@@ -119,6 +119,11 @@ class El {
   constructor(tag){ this.tagName=tag; this.children=[]; this._text=""; this.style={};
                    this.disabled=false; this._on={}; this._attrs={}; this._cl=null; }
   appendChild(c){ this.children.push(c); return c; }
+  insertBefore(c, ref){
+    const i = ref ? this.children.indexOf(ref) : -1;
+    if (i < 0) this.children.push(c); else this.children.splice(i, 0, c);
+    return c;
+  }
   cloneNode(){ const e=new El(this.tagName); e._text=this._text; return e; }
   // className e classList devono stare in sync nei due sensi: la UI
   // scrive con classList.add (per toggolare "hidden") e legge con
@@ -469,6 +474,9 @@ try {
 // caricamento, non un evento live: l'utente vede la pagina per la prima
 // volta e vuole gli ultimi messaggi, non dove aveva lasciato il log.
 const mainEl = mk("main");
+log.innerHTML = "";
+primoSnapshot = true;
+ultimaFirmaSnapshot = "";
 mainEl.scrollHeight = 5000;
 mainEl.scrollTop = 0;
 mainEl.clientHeight = 600;
@@ -480,7 +488,77 @@ handle("snapshot", {ready:true, model:"m", provider:"p", busy:false, messages:[
 ]});
 out.snapshotScroll = mainEl.scrollTop;
 out.snapshotScrollHeight = mainEl.scrollHeight;
-console.log(JSON.stringify(out));
+
+  // --- REGRESSIONE: polling /api/state non deve spostare gli avvisi
+  // locali (es. cambio modello) in fondo alla conversazione.
+  log.innerHTML = "";
+  ultimaFirmaSnapshot = "";
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 1000;
+  handle("snapshot", {ready:true, busy:false, messages:[
+    {role:"user", content:"prima domanda"},
+    {role:"assistant", content:"prima risposta"},
+  ]});
+  handle("model_changed", {model:"nuovo-modello"});
+  handle("user_message", {text:"seconda domanda"});
+  addText("assistant", "seconda risposta", true);
+  const messaggiAggiornati = [
+    {role:"user", content:"prima domanda"},
+    {role:"assistant", content:"prima risposta"},
+    {role:"user", content:"seconda domanda"},
+    {role:"assistant", content:"seconda risposta"},
+  ];
+  globalThis.fetch = async (url) => ({
+    ok:true, status:200,
+    json: async () => ({ready:true, busy:false, messages:messaggiAggiornati}),
+  });
+  let pollCallback = null;
+  globalThis.setInterval = (fn) => { pollCallback = fn; return 1; };
+  globalThis.clearInterval = () => {};
+  avviaPollingFallback();
+  await pollCallback();
+  out.pollingOrder = log.children.map((n) => {
+    if (n.classList.contains("system")) return "system";
+    if (n.classList.contains("user")) return "user";
+    if (n.classList.contains("assistant")) return "assistant";
+    return n.className;
+  }).join(" -> ");
+  out.pollingScrollTop = main.scrollTop;
+
+  // --- REGRESSIONE 4: l'anteprima di un'immagine generata.
+  // `image_gen` manda l'immagine in `images` dentro tool_end, non nel
+  // testo: il testo resta leggibile e la UI deve mostrare il file. Se il
+  // campo viene ignorato, l'utente legge un percorso e non vede niente.
+  log.children = [];
+  handle("turn_start", {});
+  handle("assistant", {content:"", tool_calls:[
+    {id:"call_gen", name:"image_gen", args:{prompt:"un gatto"}},
+  ]});
+  handle("tool_end", {name:"image_gen", ok:true,
+    result:"Immagine generata: immagini/gatto.png",
+    id:"call_gen", images:["data:image/png;base64,QUJD"]});
+  const anteprime = log.querySelectorAll(".tool-img");
+  out.anteprime = anteprime.length;
+  out.anteprimaSrc = anteprime.length ? anteprime[0].src : "";
+  const cardGen = log.querySelector(".tool");
+  out.anteprimaAperta = !!cardGen && cardGen.classList.contains("open");
+  out.anteprimaTesto = (function(){
+    const o = log.querySelector(".tool-out");
+    return o ? o.textContent : "";
+  })();
+  // Un'anteprima che non e' una data URL immagine non deve finire in <img>:
+  // un URL esterno dentro un evento non va caricato di nascosto.
+  log.children = [];
+  handle("turn_start", {});
+  handle("assistant", {content:"", tool_calls:[
+    {id:"call_gen2", name:"image_gen", args:{prompt:"x"}},
+  ]});
+  handle("tool_end", {name:"image_gen", ok:true, result:"ok",
+    id:"call_gen2", images:["https://esempio.invalid/a.png"]});
+  out.anteprimeEsterne = log.querySelectorAll(".tool-img").length;
+
+  console.log(JSON.stringify(out));
 """
 
 script = harness + js + probe
@@ -538,9 +616,28 @@ check("snapshot con null: niente righe bianche",
 check("la snapshot porta in fondo il log",
       res.get("snapshotScroll") == res.get("snapshotScrollHeight"),
       f"scrollTop={res.get('snapshotScroll')}, scrollHeight={res.get('snapshotScrollHeight')}")
+check("il polling conserva l'ordine dell'avviso di sistema",
+      res.get("pollingOrder") == "user -> assistant -> system -> user -> assistant",
+      str(res.get("pollingOrder")))
+check("il polling conserva la posizione di lettura",
+      res.get("pollingScrollTop") == 1000, str(res.get("pollingScrollTop")))
 check("due tool identici abbinati per id",
       res.get("abbinati") == "RISULTATO_UNO|RISULTATO_DUE #2",
       str(res.get("abbinati")))
+
+print("\n[6] L'immagine generata si vede nella chat")
+check("tool_end con images crea un'anteprima", res.get("anteprime") == 1,
+      str(res.get("anteprime")))
+check("l'anteprima usa la data URL ricevuta",
+      str(res.get("anteprimaSrc", "")).startswith("data:image/png;base64,"),
+      str(res.get("anteprimaSrc"))[:60])
+check("il riquadro si apre da solo sull'immagine",
+      res.get("anteprimaAperta") is True, str(res.get("anteprimaAperta")))
+check("il testo del tool resta leggibile",
+      "immagini/gatto.png" in str(res.get("anteprimaTesto", "")),
+      str(res.get("anteprimaTesto"))[:80])
+check("un URL esterno non diventa un'immagine",
+      res.get("anteprimeEsterne") == 0, str(res.get("anteprimeEsterne")))
 check("banner di errore mostrato", "configurazione" in res.get("banner", ""), res.get("banner", ""))
 check("send con spazi non spara nulla", res.get("emptySendNoop") is True)
 

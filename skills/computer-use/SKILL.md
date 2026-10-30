@@ -25,10 +25,10 @@ system dialogs, installers. Tools: `computer_screenshot`
 3. One action, one verification: after click or type, take
    another screenshot, `screenshot_view` it, and confirm the
    expected state before the next step.
-3. Prefer `computer_open` with the app name over navigating
+4. Prefer `computer_open` with the app name over navigating
    menus by coordinates: names survive UI restyling, pixels
    do not.
-4. Type into the focused field only: click the field first,
+5. Type into the focused field only: click the field first,
    then `computer_type`, then verify the text landed.
 
 ## Rules

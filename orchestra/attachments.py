@@ -105,6 +105,47 @@ def _magie(dati: bytes) -> tuple[str, str] | None:
     return None
 
 
+def mime_immagine(dati: bytes) -> str:
+    """Il MIME se questi byte sono un'immagine, "" altrimenti.
+
+    Serve a chi deve rimandare l'immagine a un provider (modifica, img2img):
+    il nome del file non basta, e un PDF con estensione .png non e'
+    un'immagine. La decisione la prende il magic number, come per gli
+    allegati.
+    """
+    trovato = _magie(dati)
+    if trovato and trovato[0] == "image":
+        return trovato[1]
+    return ""
+
+
+# Le ultime immagini allegate alla chat, per la modifica da parte dei tool.
+#
+# Perche' serve: un'immagine allegata vive nel messaggio come data URL, e il
+# tool `image_gen` non ha modo di leggere i messaggi. Senza questo ponte,
+# "modifica la foto che ti ho appena mandato" non avrebbe un'immagine da
+# modificare, e l'utente dovrebbe salvare il file e passare un percorso.
+#
+# Limite basso e voluto: e' una comodita', non una cronologia. Le immagini
+# sono gia' nei messaggi; qui basta l'ultima.
+_ultime_immagini: list[str] = []
+_LIMITE_ULTIME = 8
+
+
+def registra_immagini(immagini: list[str]) -> None:
+    """Ricorda le immagini dell'ultimo messaggio utente (data URL)."""
+    global _ultime_immagini
+    valide = [u for u in (immagini or [])
+              if isinstance(u, str) and u.startswith("data:image/")]
+    if valide:
+        _ultime_immagini = valide[-_LIMITE_ULTIME:]
+
+
+def ultima_immagine() -> str:
+    """L'ultima immagine allegata, o "" se non ce n'e'."""
+    return _ultime_immagini[-1] if _ultime_immagini else ""
+
+
 def tipo_descrizione(dati: bytes) -> str:
     """Che cosa dice DAVVERO questo file, per il messaggio d'errore.
 

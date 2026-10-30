@@ -22,12 +22,12 @@ time.
 
 1. `gh issue list` / `gh issue view <n>` for the real context.
 2. Branch named after what it does, never work on main directly.
-3. Small commits with messages saying why, then push.
-4. `gh pr create`: title summarizes, body says what changed
+3. Prepare small commits with messages saying why. Never commit unless the user asks.
+4. Push or create a PR only when the user explicitly asks for that external side effect.
+5. `gh pr create`: title summarizes, body says what changed
    and how it was verified.
-5. `gh pr checks`: merge only on green CI. A red CI ignored
-   is a bug sent by mail.
-6. `gh pr merge`, then delete the branch.
+6. `gh pr checks`: merge only on green CI. Merge only when the user explicitly asks.
+7. Delete a branch only with explicit user authorization; it is destructive.
 
 ## Review
 

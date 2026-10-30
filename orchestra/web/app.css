@@ -135,6 +135,13 @@
     word-break: break-word; max-height: 320px; overflow-y: auto;
   }
   .tool.open .tool-out { display: block; }
+  /* Un'immagine generata: grande abbastanza da giudicarla, mai piu' larga
+     del riquadro. Il bordo la stacca dallo sfondo scuro. */
+  .tool-img {
+    display: block; max-width: min(460px, 100%); height: auto;
+    margin-top: 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2);
+  }
 
   .sysnote {
     font: 12px var(--mono); color: var(--warn);
@@ -2018,3 +2025,28 @@ select:disabled {
   textarea { min-height: 78px; padding: 12px; }
   .mic-float { bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
+
+/* --- Bot ---------------------------------------------------------------
+   Le righe sono cliccabili perche' il gesto naturale, in una lista di
+   identita', e' cliccarle: selezionarle e poi premere "Modifica" sarebbe
+   un passaggio in piu' per la stessa cosa. */
+.bot-elenco { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.bot-riga { display: flex; align-items: baseline; gap: 10px;
+            flex-wrap: wrap;
+            padding: 8px 10px; border: 1px solid var(--border);
+            border-radius: 8px; cursor: pointer; }
+.bot-riga:hover { border-color: var(--accent-dim); }
+.bot-riga.attivo { border-color: var(--accent);
+                   background: rgba(91, 140, 255, .08); }
+.bot-nome { font-weight: 600; }
+.bot-sub { font-size: 12px; color: var(--muted); text-align: right; }
+.bot-ultimo { flex-basis: 100%; font-size: 12px; color: var(--muted);
+              margin-top: 2px; white-space: nowrap; overflow: hidden;
+              text-overflow: ellipsis; }
+.opzioni-selezione.bot-campi { display: grid;
+                               grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+                               gap: 10px; }
+.bot-campi input, .bot-campi select { width: 100%; }
+.bot-persona { display: flex; flex-direction: column; gap: 4px;
+               margin-top: 12px; }
+.bot-persona textarea { width: 100%; resize: vertical; }

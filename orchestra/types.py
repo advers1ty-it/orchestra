@@ -197,6 +197,11 @@ class ToolResult:
 
     text: str
     immagini: list[str] = field(default_factory=list)
+    # Anteprime per la UI, non per il modello: stesse data URL, ma mostrate
+    # nel riquadro del tool. Tenere le due cose separate permette a uno
+    # strumento di far VEDERE un risultato all'utente senza spendere i
+    # token della visione per rimandarlo indietro al modello.
+    anteprime: list[str] = field(default_factory=list)
 
 
 @dataclass

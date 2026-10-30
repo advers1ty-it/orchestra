@@ -446,9 +446,12 @@ function inviaSteer() {
     if (!d.ok) alert(d.error || "Steer fallito");
     else {
       // Conferma visibile: l'utente deve sapere che la guida e' stata
-      // ricevuta e verrà letta al prossimo tool, non aspettare in silenzio.
+      // ricevuta e verrà letta appena possibile, non aspettare in silenzio.
+      // Non "al prossimo tool": se il modello stava già chiudendo, lo
+      // steer lo fa riprendere prima della risposta finale.
       const anteprima = testo.length > 80 ? testo.slice(0, 80) + "…" : testo;
-      addNote(`guida inviata: «${anteprima}» — verrà letta al prossimo tool`);
+      addNote(`guida inviata: «${anteprima}» — verrà letta appena il `
+              + `modello riprende il controllo`);
     }
   });
   steerInput.focus();

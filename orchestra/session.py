@@ -282,6 +282,22 @@ class Session:
         # con ogni ricerca.
         self.progetto: str = ""
 
+        # L'identita' del bot che possiede questa sessione. Vuoto =
+        # l'agente principale, quello configurato in Opzioni: e' il caso
+        # di chi non ha mai creato un bot, e deve continuare a funzionare
+        # esattamente come prima.
+        #
+        # Il nome viaggia anche nello storico (`sessioni.bot`), perche'
+        # senza non si puo' riaprire "la conversazione di Grok": si puo'
+        # solo riaprire l'ultima di tutte.
+        self.bot: str = ""
+        # Quanti passaggi di bot ci sono sopra questo turno. 0 = turno
+        # nato dall'utente; 1 = turno chiesto da un altro bot. Il tetto e'
+        # 1: un bot puo' chiedere, il bot che riceve non puo' richiedere.
+        self._bot_depth: int = 0
+        self._bot_parla_con: list[str] = []
+        self._bot_risolutore: Any = None
+
         self.agent = Agent(
             provider,
             registry,
@@ -371,6 +387,7 @@ class Session:
                 "usage_by_model": dict(st.usage_by_model),
                 "messages": messaggi,
                 "routing": bool(self._routing_attivo),
+                "bot": self.bot,
                 "context_limit": getattr(getattr(self.agent, "config", None),
                                          "context_limit", 0) or 0,
                 # La barra misura la FINESTRA, non la storia: il cumulato
@@ -538,6 +555,181 @@ class Session:
         ))
         return True
 
+    # -- bot ----------------------------------------------------------------
+
+    # Un bot puo' chiedere a un altro bot, ma il bot che riceve non puo'
+    # richiedere: e' lo stesso tetto della delega, applicato a un contesto
+    # che pero' sopravvive. Senza, due bot gentili si risponderebbero per
+    # sempre e il conto lo scopriresti dopo.
+    BOT_PROFONDITA_MAX = 1
+    BOT_ATTESA_DEFAULT = 180.0
+    BOT_ATTESA_MAX = 600.0
+    BOT_MESSAGGIO_MAX = 6000
+
+    def attiva_bot(self, risolutore: Any, *, nome: str = "",
+                   parla_con: list[str] | None = None) -> bool:
+        """Da' a questa sessione un'identita' di bot e il tool `bot_chiedi`.
+
+        `risolutore(nome)` deve tornare un dizionario con `nome` e
+        `sessione` (la Session dell'altro bot), oppure None. La sessione
+        non sa niente del registro dei bot: sa solo chiedere, e questa e'
+        la parte che rende il modulo testabile senza un server.
+
+        `parla_con` e' l'allowlist del CHIAMANTE. Vuota = nessuno. Il
+        default non e' "tutti" perche' un permesso concesso per omissione
+        e' un permesso che nessuno ha deciso.
+        """
+        from .types import Tool
+
+        self.bot = (nome or "").strip()
+        self._bot_parla_con = [str(n).strip() for n in (parla_con or [])
+                               if str(n).strip()]
+        self._bot_risolutore = risolutore
+        if risolutore is None:
+            return False
+
+        def _chiedi(destinatario: str, messaggio: str,
+                    attesa: float = 180) -> str:
+            return self._chiama_bot(destinatario, messaggio, attesa)
+
+        # La registrazione e' idempotente: aggiornare l'allowlist di un
+        # bot gia' attivo richiama questo metodo, e `register` solleva se
+        # il nome c'e' gia'.
+        if "bot_chiedi" not in self.registry:
+            self.registry.register(Tool(
+                name="bot_chiedi",
+                description=(
+                    "Chiedi qualcosa a un altro bot, che ha una sua "
+                    "conversazione, un suo modello e un suo progetto. La "
+                    "risposta arriva quando il bot ha finito: costa un "
+                    "turno sul suo provider. Usalo solo quando quel bot sa "
+                    "o puo' fare qualcosa che tu non puoi, non per chiedere "
+                    "un parere che sai darti da solo."
+                ),
+                schema={
+                    "type": "object",
+                    "properties": {
+                        "destinatario": {
+                            "type": "string",
+                            "description": "Il nome del bot a cui chiedere.",
+                        },
+                        "messaggio": {
+                            "type": "string",
+                            "description": (
+                                "La richiesta, con il contesto che serve a "
+                                "quel bot: cosa deve fare, dove, in che "
+                                "formato. Non la tua conversazione."
+                            ),
+                        },
+                        "attesa": {
+                            "type": "number",
+                            "description": ("Secondi massimi di attesa "
+                                            "(default 180).")
+                        },
+                    },
+                    "required": ["destinatario", "messaggio"],
+                },
+                handler=_chiedi,
+            ))
+        return True
+
+    def _chiama_bot(self, destinatario: str, messaggio: str,
+                    attesa: Any = None) -> str:
+        """Manda un messaggio a un altro bot e ne aspetta la risposta.
+
+        Il turno del destinatario gira nel SUO thread, con la sua
+        profondita' a 1: se prova a chiamare a sua volta, il tool lo
+        rifiuta. Il chiamante aspetta qui, senza bloccare il server, perche'
+        questo handler gira gia' dentro il thread del turno.
+        """
+        import time as _time
+
+        nome = (destinatario or "").strip()
+        testo = (messaggio or "").strip()
+        if not nome:
+            return "ERRORE: serve il nome del bot a cui chiedere."
+        if not testo:
+            return "ERRORE: serve un messaggio da mandare."
+        if len(testo) > self.BOT_MESSAGGIO_MAX:
+            return (f"ERRORE: messaggio troppo lungo ({len(testo)} caratteri, "
+                    f"il massimo e' {self.BOT_MESSAGGIO_MAX}).")
+        if self._bot_depth >= self.BOT_PROFONDITA_MAX:
+            return ("ERRORE: un bot non puo' chiamare un altro bot da dentro "
+                    "una chiamata. Rispondi direttamente a chi ti ha "
+                    "chiesto, con quello che sai o che hai fatto.")
+        if nome.lower() == (self.bot or "").lower():
+            return "ERRORE: un bot non puo' chiamare se stesso."
+        if not self._bot_parla_con:
+            return ("ERRORE: questo bot non puo' parlare con nessun altro. "
+                    "L'utente deve aggiungere il destinatario alla sua "
+                    "lista `parla_con` nelle impostazioni dei bot.")
+        permessi = {n.lower(): n for n in self._bot_parla_con}
+        if nome.lower() not in permessi:
+            return (f"ERRORE: {self.bot!r} non ha il permesso di parlare "
+                    f"con {nome!r}. Puo' chiedere a: "
+                    f"{', '.join(self._bot_parla_con)}.")
+        if self._bot_risolutore is None:
+            return "ERRORE: nessun bot disponibile in questo momento."
+        try:
+            altro = self._bot_risolutore(nome)
+        except Exception as e:  # noqa: BLE001
+            return f"ERRORE: non riesco a trovare il bot {nome!r}: {e}"
+        if not altro or altro.get("sessione") is None:
+            return f"ERRORE: il bot {nome!r} non esiste (piu')."
+
+        sessione = altro["sessione"]
+        nome_vero = str(altro.get("nome") or nome)
+        try:
+            secondi = float(attesa) if attesa is not None else self.BOT_ATTESA_DEFAULT
+        except (TypeError, ValueError):
+            secondi = self.BOT_ATTESA_DEFAULT
+        secondi = max(5.0, min(self.BOT_ATTESA_MAX, secondi))
+
+        # Se il bot sta gia' lavorando per l'utente, non gli si mette in
+        # coda un secondo turno: `Session.send` rifiuterebbe, e il rifiuto
+        # arriverebbe come "occupato" senza spiegare che basta aspettare.
+        if sessione.busy:
+            scadenza = _time.monotonic() + secondi
+            while sessione.busy and _time.monotonic() < scadenza:
+                _time.sleep(0.25)
+            if sessione.busy:
+                return (f"[il bot {nome_vero} sta ancora lavorando per "
+                        f"l'utente: nessuna risposta entro {int(secondi)}s]")
+
+        try:
+            self.bridge.emit("bot", {
+                "fase": "chiedo", "da": self.bot, "a": nome_vero,
+            })
+        except Exception:  # noqa: BLE001
+            pass
+        involucro = (f"[messaggio dal bot {self.bot or 'principale'}]\n"
+                     f"{testo}")
+        if not sessione.send(involucro, bot_depth=self._bot_depth + 1):
+            return (f"[il bot {nome_vero} ha appena iniziato un altro "
+                    f"lavoro: riprova fra poco]")
+        finito = sessione.wait(timeout=secondi)
+        risposta = ""
+        for m in reversed(getattr(sessione.agent.state, "messages", [])):
+            if getattr(m, "role", "") == "assistant" \
+                    and (getattr(m, "content", "") or "").strip():
+                risposta = m.content.strip()
+                break
+        try:
+            self.bridge.emit("bot", {
+                "fase": "risposta", "da": self.bot, "a": nome_vero,
+                "ok": bool(finito and risposta),
+            })
+        except Exception:  # noqa: BLE001
+            pass
+        if not finito:
+            return (f"[il bot {nome_vero} sta ancora lavorando dopo "
+                    f"{int(secondi)}s: la risposta non e' pronta — non e' "
+                    f"un risultato]")
+        if not risposta:
+            return (f"[il bot {nome_vero} ha finito senza una risposta "
+                    f"testuale — non e' un risultato]")
+        return f"[risposta dal bot {nome_vero}]\n{risposta}"
+
     def _ricorda_modello_delegato(self, modello: str) -> None:
         """Il Delegatore dice quale modello ha usato davvero.
 
@@ -700,7 +892,8 @@ class Session:
         """Se l'instradamento automatico e' acceso adesso."""
         return bool(self._routing_attivo)
 
-    def send(self, user_input: str, allegati: list | None = None, scope: str | None = None) -> bool:
+    def send(self, user_input: str, allegati: list | None = None,
+             scope: str | None = None, bot_depth: int = 0) -> bool:
         """Invia un messaggio all'agente. Non blocca.
 
         Restituisce False se la sessione e' gia' occupata: rifiutiamo il
@@ -761,6 +954,11 @@ class Session:
             if self._busy:
                 return False
             self._busy = True
+            # La profondita' vale per il turno che sta per partire. Sta
+            # qui e non nel thread: il tool la legge dal proprio oggetto
+            # Session, e una sessione esegue un turno alla volta — quindi
+            # non c'e' il caso in cui due turni si contendono il valore.
+            self._bot_depth = max(0, int(bot_depth))
             self._cancel.clear()
 
         self._thread = threading.Thread(
@@ -846,6 +1044,15 @@ class Session:
                     nome = profilo_per_testo(user_input)
                 applica_profilo(self.agent.registry, nome)
             except Exception:
+                pass
+        # `bot_chiedi` e' registrato a runtime e non compare in nessun
+        # profilo: `applica_profilo` lo spegnerebbe al primo turno con un
+        # profilo scelto, e il bot smetterebbe di poter chiedere senza che
+        # nulla lo dica. Si riaccende dopo il profilo, non prima.
+        if self._bot_risolutore is not None:
+            try:
+                self.agent.registry.attiva("bot_chiedi")
+            except Exception:  # noqa: BLE001
                 pass
         try:
             self.bridge.emit("turn_start", {"input": user_input})
@@ -952,7 +1159,8 @@ class Session:
     def _nuova_sessione_db(self) -> int:
         """Crea una riga nello storico e ne torna l'id."""
         try:
-            return storico().nuova_sessione(modello=self.modello_in_uso())
+            return storico().nuova_sessione(modello=self.modello_in_uso(),
+                                            bot=self.bot)
         except Exception:
             return -1
 
@@ -1297,7 +1505,14 @@ class Session:
         self.bridge.emit("reset", {})
 
     def steer(self, testo: str) -> bool:
-        """Inietta un messaggio durante il turno in corso."""
+        """Inietta un messaggio durante il turno in corso.
+
+        Fuori da un turno non si accoda niente: la coda verrebbe letta
+        all'inizio del turno successivo e la guida finirebbe sulla
+        domanda sbagliata. Meglio dire di no adesso.
+        """
+        if not self._busy:
+            return False
         return self.agent.steer(testo)
 
     def wait(self, timeout: float | None = None) -> bool:

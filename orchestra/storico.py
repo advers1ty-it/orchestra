@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS sessioni (
     titolo      TEXT    NOT NULL DEFAULT '',
     modello     TEXT    NOT NULL DEFAULT '',
     provider    TEXT    NOT NULL DEFAULT '',
+    bot         TEXT    NOT NULL DEFAULT '',
     creata      REAL    NOT NULL,
     aggiornata  REAL    NOT NULL
 );
@@ -120,6 +121,16 @@ class Storico:
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
+            # Migrazione: i DB creati prima dei bot non hanno la colonna.
+            # Default vuoto = conversazione dell'agente principale, che e'
+            # il caso di tutte le righe gia' scritte.
+            try:
+                self._conn.execute(
+                    "ALTER TABLE sessioni ADD COLUMN bot TEXT "
+                    "NOT NULL DEFAULT ''")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
     def chiudi(self) -> None:
         with self._lock:
@@ -128,35 +139,45 @@ class Storico:
     # -- sessioni ----------------------------------------------------------
 
     def nuova_sessione(self, modello: str = "", provider: str = "",
-                       titolo: str = "") -> int:
+                       titolo: str = "", bot: str = "") -> int:
         ora = time.time()
         with self._lock:
             cur = self._conn.execute(
-                "INSERT INTO sessioni (titolo, modello, provider, creata, aggiornata)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (titolo, modello, provider, ora, ora))
+                "INSERT INTO sessioni (titolo, modello, provider, bot,"
+                " creata, aggiornata) VALUES (?, ?, ?, ?, ?, ?)",
+                (titolo, modello, provider, bot, ora, ora))
             self._conn.commit()
             return int(cur.lastrowid)
 
-    def elenco(self, limite: int = 100) -> list[dict[str, Any]]:
+    def elenco(self, limite: int = 100, bot: str | None = None) -> list[dict[str, Any]]:
         """Le sessioni più recenti, col conto dei messaggi.
 
         Il conto serve a distinguere una chat vuota — aperta per sbaglio
         e mai usata — da una con dentro il lavoro. Senza, l'elenco
         mostra righe tutte uguali.
+
+        `bot` filtra per identita'. None = tutte le conversazioni (la
+        cronologia completa), stringa = solo quelle di quel bot (quella
+        che serve quando il bot si riapre). La distinzione conta: la
+        cronologia dell'utente non deve sparire perche' un bot ha una
+        chat sua.
         """
+        where = "WHERE s.bot = ?" if bot is not None else ""
+        parametri: tuple[Any, ...] = ((bot, limite) if bot is not None
+                                      else (limite,))
         with self._lock:
             righe = self._conn.execute(
-                """
-                SELECT s.id, s.titolo, s.modello, s.provider,
+                f"""
+                SELECT s.id, s.titolo, s.modello, s.provider, s.bot,
                        s.creata, s.aggiornata,
                        (SELECT COUNT(*) FROM messaggi m
                          WHERE m.sessione_id = s.id AND m.ruolo IN ('user','assistant'))
                          AS n_messaggi
                   FROM sessioni s
+                  {where}
                  ORDER BY s.aggiornata DESC
                  LIMIT ?
-                """, (limite,)).fetchall()
+                """, parametri).fetchall()
         return [dict(r) for r in righe]
 
     def sessione(self, sessione_id: int) -> dict[str, Any] | None:

@@ -65,6 +65,13 @@ SUITES = [
     # progetto e non nella cartella di installazione: e' il difetto
     # che un test solo sulla memoria non vedrebbe.
     ("progetti", "test_progetti.py", True),
+    # I bot: identita' persistenti, sessioni separate e `bot_chiedi` con
+    # profondita' 1. Non toccano la rete: il provider e' finto.
+    ("bots", "test_bots.py", True),
+    # L'identita' dell'agente principale: nome e persona, senza dover
+    # creare un bot. Il test copre anche il caso che il prompt non venga
+    # duplicato a ogni salvataggio.
+    ("identita", "test_identita.py", True),
     ("webapp", "test_webapp.py", True),
     ("webapp-modelli", "test_webapp_models.py", True),
     # Ogni import deve risolvere su un file tracciato: _guard.py ha

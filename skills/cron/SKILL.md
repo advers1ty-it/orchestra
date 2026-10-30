@@ -2,6 +2,9 @@
 name: cron
 description: "Job programmati: crea/modifica/elimina job cron che eseguono obiettivi o comandi shell a orari programmati. Usa il tool `cron`."
 version: 1.0.0
+author: Orchestra
+categoria: base
+origine: base
 ---
 
 # cron
@@ -9,7 +12,8 @@ version: 1.0.0
 Usa il tool `cron` per programmare esecuzioni ricorrenti o one-shot.
 
 ## Quando usarlo
-- L'utente chiede di "fare X ogni giorno alle 9", "lunedi' mattina", "ogni ora", "tra 5 minuti" (usa @reboot? no: per one-shot usa un job con schedule ravvicinata o consiglia un goal con not_before).
+- L'utente chiede un'attività ricorrente (per esempio "ogni giorno alle 9", "lunedì mattina", "ogni ora").
+- Per un'attività una tantum, non creare una regola cron che potrebbe ripetersi: usa un goal con `--not-before <epoch>` oppure chiedi quando eseguirlo se l'orario non è chiaro.
 - Automatizzare report, backup, controlli periodici.
 
 ## Azioni

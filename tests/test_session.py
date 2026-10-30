@@ -380,6 +380,54 @@ check("l'assistant vuoto porta la tool call",
           and m.get("tool_calls") for m in msgs))
 check("i testi finali ci sono", sum(1 for m in msgs if m["content"].startswith("risposta")) == 2)
 
+print("\n[11] Steer: accettato durante il turno, letto prima di chiudere")
+
+
+class ProviderSteer:
+    """Blocca la prima risposta per lasciare il tempo di inserire lo steer."""
+
+    name = "steer"
+    model = "m"
+
+    def __init__(self):
+        self.calls = 0
+        self.iniziato = threading.Event()
+        self.rilascia = threading.Event()
+
+    def chat(self, messages, tools=None, **kw):
+        self.calls += 1
+        if self.calls == 1:
+            self.iniziato.set()
+            self.rilascia.wait(timeout=5)
+        return LLMResponse(content="risposta", model=self.model)
+
+
+prov_steer = ProviderSteer()
+s_steer = Session(provider=prov_steer, registry=default_registry(),
+                  system_prompt="SYS", config=LoopConfig(max_iterations=5))
+check("da fermo lo steer viene rifiutato",
+      s_steer.steer("troppo presto") is False)
+s_steer.send("lavora")
+check("il turno parte", prov_steer.iniziato.wait(timeout=5))
+check("durante il turno lo steer viene accettato",
+      s_steer.steer("usa il file giusto") is True)
+prov_steer.rilascia.set()
+check("il turno finisce", s_steer.wait(timeout=10))
+check("il modello ha riletto dopo lo steer",
+      s_steer.agent.state.iterations >= 2
+      and s_steer.agent.state.steer_count == 1,
+      f"iterazioni: {s_steer.agent.state.iterations}, "
+      f"steer letti: {s_steer.agent.state.steer_count}, "
+      f"chiamate provider: {prov_steer.calls}")
+check("lo steer e' nel contesto del modello",
+      any("usa il file giusto" in (m.content or "")
+          for m in s_steer.agent.state.messages),
+      str([(m.role, (m.content or "")[:30])
+           for m in s_steer.agent.state.messages][-4:]))
+check("la coda e' vuota a fine turno",
+      s_steer.agent.state.steer_queue == [],
+      str(s_steer.agent.state.steer_queue))
+
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

@@ -307,8 +307,8 @@ class Agent:
 
     def _execute_tool(
         self, name: str, args: dict[str, Any]
-    ) -> tuple[str, bool, list[str]]:
-        """Esegue un tool e restituisce (testo, riuscito, immagini).
+    ) -> tuple[str, bool, list[str], list[str]]:
+        """Esegue un tool e restituisce (testo, riuscito, immagini, anteprime).
 
         Restituisce SEMPRE una stringa, mai solleva. Vedi invariante 1: è
         deliberato, un agente che si blocca su un errore recuperabile è un
@@ -323,6 +323,11 @@ class Agent:
         screenshot, una pagina renderizzata) lo riempiono. Senza, il
         modello riceve "screenshot salvato in ..." e non ha modo di
         guardare lo schermo — il tool esiste ma è inutile.
+
+        Il quarto sono le anteprime per la UI: stesse immagini, ma non
+        tornano al modello. Un'immagine generata non serve rimandarla a chi
+        l'ha chiesta per prompt, e un'immagine dentro un messaggio `tool` non
+        e' accettata da tutti i provider compatibili.
         """
         tool = self.registry.get(name)
         if tool is None:
@@ -330,6 +335,7 @@ class Agent:
                 f"ERRORE: tool inesistente '{name}'. "
                 f"Disponibili: {', '.join(self.registry.all_names())}",
                 False,
+                [],
                 [],
             )
 
@@ -346,7 +352,7 @@ class Agent:
                 text = cached
                 if len(text) > self.config.tool_timeout_chars:
                     text = text[: self.config.tool_timeout_chars]
-                return text, True, []
+                return text, True, [], []
 
             result = tool.handler(**args)
             if hasattr(result, "__await__"):
@@ -356,14 +362,16 @@ class Agent:
             if isinstance(result, ToolResult):
                 text = result.text
                 immagini = list(result.immagini)
+                anteprime = list(result.anteprime)
                 # Un'immagine non si cachea: dipende dal mondo (lo schermo
                 # cambia), e il testo da solo non la riproduce. Metterla in
                 # cache darebbe al modello lo schermo di cinque minuti fa.
-                cachevole = not immagini
+                cachevole = not immagini and not anteprime
             else:
                 text = (result if isinstance(result, str)
                         else json.dumps(result, default=str))
                 immagini = []
+                anteprime = []
                 cachevole = True
             # Si cachea solo il successo: un errore transitorio inchiodato
             # per 5 minuti sarebbe peggio che ricalcolarlo.
@@ -390,7 +398,7 @@ class Agent:
                 pass
             dettaglio = f" Accetta: {attesi}." if attesi else ""
             return (f"ERRORE DI ARGOMENTI per '{name}': {e}."
-                    f"{dettaglio}"), False, []
+                    f"{dettaglio}"), False, [], []
         except Exception as e:
             self._emit(
                 "tool_error",
@@ -399,7 +407,7 @@ class Agent:
                 trace=traceback.format_exc(limit=3),
             )
             return (f"ERRORE durante l'esecuzione di '{name}': "
-                    f"{type(e).__name__}: {e}"), False, []
+                    f"{type(e).__name__}: {e}"), False, [], []
 
         if len(text) > self.config.tool_timeout_chars:
             text = (
@@ -407,7 +415,7 @@ class Agent:
                 + f"\n\n[TRONCATO: {len(text)} caratteri totali, mostro i primi "
                 f"{self.config.tool_timeout_chars}]"
             )
-        return text, True, immagini
+        return text, True, immagini, anteprime
 
     # -- il loop -----------------------------------------------------------
 
@@ -598,6 +606,16 @@ class Agent:
                     f"[{a.nome}]\n{a.testo}"
                 )
             immagini.extend(getattr(a, "immagini", []) or [])
+
+        # Il ponte per la modifica: `image_gen` non vede i messaggi, quindi
+        # le immagini appena allegate restano raggiungibili da li'. Senza,
+        # "modifica la foto che ti ho mandato" non avrebbe una foto.
+        try:
+            from .attachments import registra_immagini
+
+            registra_immagini(immagini)
+        except Exception:  # noqa: BLE001 - non deve fermare un turno
+            pass
 
         msg = Message(role="user", content=testo, images=immagini)
         self.state.messages.append(msg)
@@ -806,6 +824,15 @@ class Agent:
                     # ce n'e' piu' di uno con lo stesso nome.
                     self._emit("tool_start", name=tc.name, args=args, id=tc.id)
 
+                    # Valori di partenza: il ramo degli argomenti rotti non
+                    # esegue nessun tool, ma il messaggio e l'evento li
+                    # leggono lo stesso. Senza, il turno cade con
+                    # UnboundLocalError invece di riportare l'errore al
+                    # modello — il difetto peggiore, perché nasconde la
+                    # causa e sembra un guasto del programma.
+                    immagini: list[str] = []
+                    anteprime: list[str] = []
+
                     if tc.args_non_validi():
                         # JSON rotto: NON eseguire. Eseguire con `{}`
                         # sarebbe peggio che non eseguire (write_file
@@ -818,7 +845,8 @@ class Agent:
                             f"Inizio: {str(tc.arguments)[:120]!r}")
                         ok = False
                     else:
-                        result, ok, immagini = self._execute_tool(tc.name, args)
+                        result, ok, immagini, anteprime = self._execute_tool(
+                            tc.name, args)
 
                     # il conteggio errori si azzera SOLO su un tool riuscito.
                     # Azzerarlo sempre — come faceva prima — rendeva il
@@ -848,12 +876,25 @@ class Agent:
                         result=result[:500],
                         ok=ok,
                         id=tc.id,
+                        # Anteprime per la UI (immagini generate). Non
+                        # vanno al modello: servono a chi guarda.
+                        images=anteprime,
                         consecutive_errors=self.state.consecutive_errors,
                     )
 
                 if self.state.consecutive_errors >= self.config.max_consecutive_errors:
                     self.state.stopped_because = "troppi_errori_consecutivi"
                     return self.state
+                continue
+
+            # Uno steer puo' arrivare MENTRE il modello sta generando
+            # l'ultima risposta: la coda viene letta in cima al ciclo,
+            # quindi fino a qui non e' mai stata guardata. Senza questo
+            # controllo resterebbe in coda per il turno successivo —
+            # cioe' verrebbe applicata alla domanda sbagliata. Si torna
+            # in cima, dove viene iniettata, e il modello ripensa la
+            # risposta appena abbozzata.
+            if not resp.wants_tools and self.state.steer_queue:
                 continue
 
             # --- caso 2: risposta testuale -> finito
