@@ -638,6 +638,17 @@ function handle(kind, d) {
       primoSnapshot = false;
       const eraInFondoPrima = seiInFondo();
       const scrollTopPrima = main.scrollTop;
+      // Se la chat ha già contenuto (turno in corso o finito), non
+      // ricostruisco il DOM dallo snapshot: i nodi di sistema (errori,
+      // warning, steer, note) restano dove sono, non finiscono in fondo.
+      // Lo snapshot serve solo a popolare la UI quando è vuota (reload,
+      // prima apertura).
+      if (log.children.length > 0) {
+        setBusy(!!d.busy);
+        if (eraInFondoPrima) scrollDown();
+        else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
+        break;
+      }
       // Preserva i nodi lato client che non fanno parte dello snapshot.
       const nodiClient = Array.from(log.children).filter((n) => {
         if (!n.classList) return false;
