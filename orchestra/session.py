@@ -18,6 +18,7 @@ successivi non partono. E' l'unico modo pulito senza processi separati.
 
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import time
@@ -282,6 +283,20 @@ class Session:
         # con ogni ricerca.
         self.progetto: str = ""
 
+        # La root di un checkout isolato, quando questo turno non deve
+        # scrivere nella cartella del progetto. Arriva dall'argomento
+        # `root_isolata` di `send` e vale solo per quel turno: e' un
+        # attributo della sessione e non del thread perche' il turno gira
+        # in un thread suo, creato da `send` stesso.
+        #
+        # Vuoto = nessun isolamento, si usa la root del progetto.
+        self._root_isolata: str = ""
+
+        # Il callback che registra una proposta di merge per il lavoro
+        # isolato in corso. Vuoto = nessun lavoro isolato: il tool
+        # `proponi_merge` non e' attivo, e non c'e' niente da proporre.
+        self._proponi_merge: Any = None
+
         # L'identita' del bot che possiede questa sessione. Vuoto =
         # l'agente principale, quello configurato in Opzioni: e' il caso
         # di chi non ha mai creato un bot, e deve continuare a funzionare
@@ -425,6 +440,12 @@ class Session:
         progetto = (progetto or "").strip()
         with self._lock:
             self.progetto = progetto
+            # Cambiare progetto mentre un checkout e' impostato
+            # lascerebbe una root che non appartiene al progetto nuovo.
+            # Un turno isolato non puo' cambiare progetto (il
+            # riconoscimento e' spento), quindi qui l'isolamento o e'
+            # finito o non e' mai iniziato.
+            self._root_isolata = ""
             try:
                 self.agent.progetto = progetto
             except Exception:
@@ -450,6 +471,17 @@ class Session:
         try:
             from . import progetti as _pr
             nome = (getattr(self, "progetto", "") or "").strip()
+            isolata = (getattr(self, "_root_isolata", "") or "").strip()
+            if isolata:
+                # Un checkout isolato che sparisce non deve diventare un
+                # ritorno silenzioso alla cartella dell'utente: sarebbe
+                # esattamente il danno che l'isolamento evita. Meglio far
+                # fallire il turno.
+                if not os.path.isdir(isolata):
+                    raise RuntimeError(
+                        "il checkout isolato non esiste piu': " + isolata)
+                _pr._set_root_sessione(isolata, nome)
+                return
             if not nome:
                 _pr._set_root_sessione("", "")
                 return
@@ -458,6 +490,8 @@ class Session:
                 _pr._set_root_sessione("", "")
                 return
             _pr._set_root_sessione(percorso, nome)
+        except RuntimeError:
+            raise
         except Exception:  # noqa: BLE001
             pass
 
@@ -892,8 +926,57 @@ class Session:
         """Se l'instradamento automatico e' acceso adesso."""
         return bool(self._routing_attivo)
 
+    def _registra_tool_proposta(self) -> None:
+        """Registra `proponi_merge` sulla sessione, una volta sola.
+
+        Il tool non unisce niente: registra una proposta che l'utente
+        vede nel pannello. Tenerlo fuori dal registro finche' non c'e'
+        un checkout evita di offrire al modello un'azione che, in chat
+        normale, non avrebbe senso.
+        """
+        from .types import Tool
+
+        if "proponi_merge" in self.registry:
+            return
+
+        def _proposta(riepilogo: str, verifica: str) -> str:
+            fn = getattr(self, "_proponi_merge", None)
+            if fn is None:
+                return "[nessun checkout isolato attivo: non c'e' nulla da proporre]"
+            return str(fn(riepilogo, verifica))
+
+        self.registry.register(Tool(
+            name="proponi_merge",
+            description=(
+                "Chiamalo solo quando lavori in un checkout isolato, hai "
+                "finito le modifiche e hai eseguito le verifiche (test, "
+                "build). Committa le modifiche sul ramo isolato e registra "
+                "una proposta di merge per l'utente: NON unisce il ramo e "
+                "non tocca il progetto. Se le verifiche non sono passate, "
+                "non chiamarlo."),
+            schema={
+                "type": "object",
+                "properties": {
+                    "riepilogo": {
+                        "type": "string",
+                        "description": ("Cosa hai cambiato, in due o tre "
+                                        "righe: file e comportamento."),
+                    },
+                    "verifica": {
+                        "type": "string",
+                        "description": ("Quali comandi hai eseguito e con "
+                                        "quale risultato. Non inventare: "
+                                        "l'utente lo legge prima di unire."),
+                    },
+                },
+                "required": ["riepilogo", "verifica"],
+            },
+            handler=_proposta,
+        ))
+
     def send(self, user_input: str, allegati: list | None = None,
-             scope: str | None = None, bot_depth: int = 0) -> bool:
+             scope: str | None = None, bot_depth: int = 0,
+             root_isolata: str = "", proponi_merge: Any = None) -> bool:
         """Invia un messaggio all'agente. Non blocca.
 
         Restituisce False se la sessione e' gia' occupata: rifiutiamo il
@@ -959,6 +1042,15 @@ class Session:
             # Session, e una sessione esegue un turno alla volta — quindi
             # non c'e' il caso in cui due turni si contendono il valore.
             self._bot_depth = max(0, int(bot_depth))
+            # La root isolata si lega al turno QUI, sotto lo stesso lock
+            # che lo fa partire. Impostarla prima di `send` aprirebbe
+            # una corsa con un turno dell'utente: se quello vincesse,
+            # girerebbe nel worktree destinato al lavoro in background.
+            self._root_isolata = (os.path.abspath(os.path.expanduser(
+                str(root_isolata or ""))) if root_isolata else "")
+            if proponi_merge is not None:
+                self._registra_tool_proposta()
+            self._proponi_merge = proponi_merge
             self._cancel.clear()
 
         self._thread = threading.Thread(
@@ -1018,7 +1110,14 @@ class Session:
         # rifletterebbe il progetto vecchio, e l'agente scriverebbe
         # nella cartella sbagliata per un turno intero.
         try:
-            self._riconosci_progetto(user_input)
+            # In un checkout isolato il progetto e' gia' deciso dal
+            # lavoro: riconoscerlo dal testo potrebbe spostare il turno
+            # su un altro progetto (e quindi su un altro repository)
+            # mentre la root resta il worktree. Il nome cambierebbe e i
+            # tool scriverebbero nel posto sbagliato con l'etichetta
+            # giusta, che e' peggio di non riconoscere niente.
+            if not (getattr(self, "_root_isolata", "") or "").strip():
+                self._riconosci_progetto(user_input)
         except Exception:  # noqa: BLE001
             pass
         self._prepara_root()
@@ -1052,6 +1151,13 @@ class Session:
         if self._bot_risolutore is not None:
             try:
                 self.agent.registry.attiva("bot_chiedi")
+            except Exception:  # noqa: BLE001
+                pass
+        # Come `bot_chiedi`: il profilo puo' averlo disattivato, ma il
+        # lavoro isolato lo ha registrato apposta per questo turno.
+        if getattr(self, "_proponi_merge", None) is not None:
+            try:
+                self.agent.registry.attiva("proponi_merge")
             except Exception:  # noqa: BLE001
                 pass
         try:
@@ -1142,6 +1248,15 @@ class Session:
             # rifiuterebbe con 409. Ordine: stato, poi segnale.
             with self._lock:
                 self._busy = False
+                # Il checkout valeva per questo turno, non per la
+                # sessione: il prossimo messaggio dell'utente torna
+                # nella cartella del progetto.
+                self._root_isolata = ""
+                self._proponi_merge = None
+                try:
+                    self.registry.disattiva("proponi_merge")
+                except Exception:  # noqa: BLE001
+                    pass
                 now_free = True
             if now_free:
                 st = self.agent.state

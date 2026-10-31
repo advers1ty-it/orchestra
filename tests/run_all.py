@@ -68,6 +68,14 @@ SUITES = [
     # I bot: identita' persistenti, sessioni separate e `bot_chiedi` con
     # profondita' 1. Non toccano la rete: il provider e' finto.
     ("bots", "test_bots.py", True),
+    # La coda durevole: claim atomico, ripresa dopo il riavvio, retry
+    # esplicito e annullamento. Sono le proprieta' che una coda in RAM
+    # non puo' dare.
+    ("lavori", "test_lavori.py", True),
+    # I checkout isolati: un lavoro su un progetto git scrive in un
+    # worktree, non nella cartella che l'utente ha aperta. Git vero,
+    # perche' il confine da verificare e' dove finiscono i file.
+    ("worktree", "test_worktree.py", True),
     # L'identita' dell'agente principale: nome e persona, senza dover
     # creare un bot. Il test copre anche il caso che il prompt non venga
     # duplicato a ogni salvataggio.

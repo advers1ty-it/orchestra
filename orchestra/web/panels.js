@@ -4833,16 +4833,130 @@ function disegnaBot(d) {
     riga.appendChild(nome);
     riga.appendChild(grow);
     riga.appendChild(sub);
-    if (b.ultimo && b.ultimo.risposta) {
+    if (b.ultimo) {
       // L'ultima risposta del lavoro in background, in una riga sola.
       // Senza, per sapere com'e' andata bisogna attivare il bot e
       // aprire la conversazione — che e' proprio il passaggio che il
       // lavoro in background voleva evitare.
       const u = document.createElement("div");
-      u.className = "bot-ultimo";
-      u.textContent = "ultimo: " + b.ultimo.risposta.slice(0, 120);
-      u.title = b.ultimo.risposta;
+      const stato = b.ultimo.stato || (b.ultimo.ok ? "completato" : "fallito");
+      const esito = b.ultimo.ok && b.ultimo.risposta
+        ? "ultimo: " + b.ultimo.risposta.slice(0, 120)
+        : stato + ": " + (b.ultimo.errore || "nessun risultato").slice(0, 120);
+      u.className = "bot-ultimo" + (b.ultimo.ok ? "" : " err");
+      u.textContent = esito;
+      u.title = b.ultimo.risposta || b.ultimo.errore || "";
       riga.appendChild(u);
+    }
+    if (b.ultimo && b.ultimo.worktree && !b.ultimo.worktree.scartato) {
+      // Dove sono finiti i file del lavoro. Senza questa riga il bot
+      // scriverebbe "fatto" e l'utente non saprebbe dove guardare: il
+      // progetto aperto non contiene niente, ed e' il punto.
+      const wt = b.ultimo.worktree;
+      const w = document.createElement("div");
+      w.className = "bot-worktree";
+      w.textContent = "isolato: " + (wt.branch || "ramo") + " · "
+        + (wt.radice || wt.percorso || "");
+      w.title = wt.unisci ? "per unire: " + wt.unisci : "";
+      riga.appendChild(w);
+      const scarta = document.createElement("button");
+      scarta.className = "ghost bot-riprova";
+      scarta.textContent = "Scarta checkout";
+      scarta.addEventListener("click", (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        scartaCheckoutBot(b.ultimo.id);
+      });
+      riga.appendChild(scarta);
+    } else if (b.in_corso_worktree) {
+      const wt = b.in_corso_worktree;
+      const w = document.createElement("div");
+      w.className = "bot-worktree";
+      w.textContent = "isolato in corso: " + (wt.branch || "ramo");
+      w.title = wt.radice || "";
+      riga.appendChild(w);
+    }
+    if (b.ultimo && b.ultimo.merge && b.ultimo.merge.pronto
+        && !(b.ultimo.worktree && b.ultimo.worktree.scartato)) {
+      // Il bot ha dichiarato di aver finito E verificato. La verifica e'
+      // quella che ha scritto: si vede nel tooltip prima di decidere.
+      const m = b.ultimo.merge;
+      const rigaM = document.createElement("div");
+      rigaM.className = "bot-merge" + (m.unito ? " unito" : "");
+      if (m.unito) {
+        rigaM.textContent = "unito nel progetto"
+          + (m.commit ? ": " + String(m.commit).slice(0, 8) : "");
+        rigaM.title = m.verifica || "";
+      } else {
+        rigaM.textContent = "pronto per il merge: "
+          + (m.riepilogo || "modifiche verificate").slice(0, 120);
+        rigaM.title = m.verifica || "";
+      }
+      riga.appendChild(rigaM);
+      if (!m.unito) {
+        const btn = document.createElement("button");
+        btn.className = "ghost bot-riprova";
+        btn.textContent = "Unisci";
+        btn.title = m.verifica || "";
+        btn.addEventListener("click", (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          unisciLavoroBot(b.ultimo.id);
+        });
+        riga.appendChild(btn);
+      }
+    }
+    if (b.riprovabile) {
+      // Un lavoro interrotto dal riavvio non deve sparire: e' proprio
+      // quello che l'esecuzione durevole e' venuta a salvare. Il
+      // pulsante lo rimette in coda senza doverlo riscrivere.
+      if (!b.ultimo || b.riprovabile.id !== b.ultimo.id) {
+        const r = document.createElement("div");
+        r.className = "bot-ultimo err";
+        r.textContent = "da riprovare: "
+          + ((b.riprovabile.errore || b.riprovabile.testo || "")
+             .slice(0, 100));
+        riga.appendChild(r);
+      }
+      if (b.riprovabile.worktree && !b.riprovabile.worktree.scartato
+          && (!b.ultimo || b.riprovabile.id !== b.ultimo.id)) {
+        // Il checkout del lavoro da riprovare: senza questa riga, dopo
+        // un nuovo tentativo quello vecchio sparirebbe dal pannello e
+        // resterebbe su disco per sempre.
+        const vecchio = document.createElement("div");
+        vecchio.className = "bot-worktree";
+        vecchio.textContent = "checkout da riprovare: "
+          + (b.riprovabile.worktree.branch || "ramo");
+        vecchio.title = b.riprovabile.worktree.radice || "";
+        riga.appendChild(vecchio);
+        const scartaVecchio = document.createElement("button");
+        scartaVecchio.className = "ghost bot-riprova";
+        scartaVecchio.textContent = "Scarta checkout";
+        scartaVecchio.addEventListener("click", (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          scartaCheckoutBot(b.riprovabile.id);
+        });
+        riga.appendChild(scartaVecchio);
+      }
+      const btn = document.createElement("button");
+      btn.className = "ghost bot-riprova";
+      btn.textContent = "Riprova";
+      btn.addEventListener("click", (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        riprovaLavoroBot(b.riprovabile.id);
+      });
+      riga.appendChild(btn);
+    }
+    if (b.in_corso_id) {
+      // La coda e' su disco: un lavoro puo' restare in corso anche se la
+      // conversazione non e' quella attiva. Senza questo pulsante l'unico
+      // modo di fermarlo sarebbe aspettare o chiudere il server.
+      const btn = document.createElement("button");
+      btn.className = "ghost bot-riprova";
+      btn.textContent = "Annulla lavoro";
+      btn.addEventListener("click", (ev) => {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        annullaLavoroBot(b.in_corso_id);
+      });
+      riga.appendChild(btn);
     }
     riga.addEventListener("click", () => riempiModuloBot(b));
     el.appendChild(riga);
@@ -4968,6 +5082,79 @@ async function avviaLavoroBot() {
 async function aggiornaStatoBot() {
   await caricaBot();
   botNotaLavoro("stato aggiornato");
+}
+
+async function riprovaLavoroBot(id) {
+  if (!id) return;
+  try {
+    const r = await fetch("/api/lavori/riprova", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id }),
+    });
+    const d = await r.json();
+    if (d.error) { botNotaLavoro(d.error, true); return; }
+    botNotaLavoro("lavoro rimesso in coda");
+    await caricaBot();
+  } catch (e) {
+    botNotaLavoro("errore di rete: il lavoro non e' stato riprovato", true);
+  }
+}
+
+async function annullaLavoroBot(id) {
+  if (!id) return;
+  try {
+    const r = await fetch("/api/lavori/annulla", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id }),
+    });
+    const d = await r.json();
+    if (d.error) { botNotaLavoro(d.error, true); return; }
+    botNotaLavoro("lavoro annullato");
+    await caricaBot();
+  } catch (e) {
+    botNotaLavoro("errore di rete: il lavoro non e' stato annullato", true);
+  }
+}
+
+async function unisciLavoroBot(id) {
+  if (!id) return;
+  if (!confirm("Unire il ramo del bot nel progetto? Il progetto deve "
+      + "essere senza modifiche non committate. In caso di conflitto "
+      + "il merge viene annullato.")) return;
+  try {
+    const r = await fetch("/api/lavori/unisci", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id }),
+    });
+    const d = await r.json();
+    if (d.error) { botNotaLavoro(d.error, true); return; }
+    botNotaLavoro(d.gia_unito ? "era gia' unito" : "ramo unito nel progetto");
+    await caricaBot();
+  } catch (e) {
+    botNotaLavoro("errore di rete: merge non eseguito", true);
+  }
+}
+
+async function scartaCheckoutBot(id) {
+  if (!id) return;
+  if (!confirm("Scartare il checkout isolato? Le modifiche non "
+      + "committate del bot andranno perse.")) return;
+  try {
+    const r = await fetch("/api/lavori/scarta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id }),
+    });
+    const d = await r.json();
+    if (d.error) { botNotaLavoro(d.error, true); return; }
+    botNotaLavoro("checkout scartato");
+    await caricaBot();
+  } catch (e) {
+    botNotaLavoro("errore di rete: checkout non scartato", true);
+  }
 }
 
 async function attivaBotDaId(id) {

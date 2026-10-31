@@ -65,6 +65,7 @@
       <li><a href="#steer">Steer e Stop</a></li>
       <li><a href="#tooling">Tool & profili</a></li>
       <li><a href="#bot">Bot</a></li>
+      <li><a href="#lavori">Lavori durevoli</a></li>
       <li><a href="#identita">Identità dell'agente principale</a></li>
       <li><a href="#delega">Multi-agent & delega</a></li>
       <li><a href="#goal">Goal autonomi</a></li>
@@ -209,9 +210,24 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 <p>Un bot è un'identità salvata: nome, servizio, modello, persona, progetto e conversazione propri. Si crea da <b>Opzioni → Bot</b> o dal menu identità in testa. Servizio e modello vuoti significano "come l'app"; il progetto è un default modificabile per bot.</p>
 <ul>
   <li>Ogni bot ha una sessione separata e una cronologia etichettata col suo nome: aprire la conversazione di un altro bot richiede di attivarlo.</li>
-  <li>Da <b>Opzioni → Bot</b> si avvia un compito in background: il bot lavora senza cambiare l'identità attiva. Bot diversi avanzano in parallelo, ognuno nella propria cartella; lo stesso bot esegue un compito alla volta e accoda gli altri (max 20). Puoi cambiare bot mentre uno lavora: il turno continua nella sua sessione e lo ritrovi quando torni. La coda vive in memoria: un riavvio la svuota, la conversazione già svolta resta.</li>
+  <li>Da <b>Opzioni → Bot</b> si avvia un compito in background: il bot lavora senza cambiare l'identità attiva. Bot diversi avanzano in parallelo, ognuno nella propria cartella; lo stesso bot esegue un compito alla volta e accoda gli altri (max 20). Puoi cambiare bot mentre uno lavora: il turno continua nella sua sessione e lo ritrovi quando torni. La coda vive in <code>lavori.db</code>: un riavvio non la perde, e i lavori in attesa ripartono (vedi <b>Lavori durevoli</b>). La conversazione già svolta resta.</li>
   <li><code>bot_chiedi</code> permette a un bot di chiedere a un altro, con risposta sincrona. Profondità massima 1 e allowlist <code>parla_con</code>: vuota significa che il bot non può parlare con nessuno.</li>
   <li>Non sono processi separati: condividono chiavi, permessi e processo, quindi non sono una sandbox. Non si svegliano da soli: un lavoro parte quando l'utente lo avvia (o quando un altro bot lo chiama).</li>
+</ul>
+</section>
+
+<section id="lavori">
+<h2>Lavori durevoli</h2>
+<p>I compiti in background dei bot sono salvati in <code>lavori.db</code> nella cartella dati, non in memoria: un riavvio non svuota la coda.</p>
+<ul>
+  <li>All'avvio i lavori <code>in_attesa</code> ripartono da soli, nello stesso ordine per bot.</li>
+  <li>Un lavoro trovato <code>in_corso</code> viene marcato <code>interrotto</code>, non rieseguito alla cieca: un turno a metà può aver già scritto file o speso token. Dal pannello Bot puoi riprovarlo o annullare quello in corso.</li>
+  <li>L'unità atomica è il turno intero: non si riprende a metà di una tool call. Il campo <code>checkpoint</code> è pronto per i consumatori che sanno ripartire da un passo.</li>
+  <li>Se il progetto del bot è un repository git con almeno un commit, ogni lavoro scrive in un <b>worktree isolato</b>: un checkout separato in <code>worktrees/</code> nella cartella dati, sul ramo <code>orchestra/lavoro-&lt;id&gt;</code>. La cartella aperta non viene toccata e due lavori sullo stesso progetto non si sovrappongono. Il checkout parte da HEAD: le modifiche non committate non vengono copiate.</li>
+  <li>Il pannello Bot mostra ramo e percorso; <b>Scarta checkout</b> elimina il checkout e le modifiche non committate del bot. I progetti non git lavorano nella cartella normale. Un repository git senza commit (o senza git disponibile) fa fallire il lavoro invece di ripiegare sulla cartella dell'utente: non c'è una base da cui partire. Il checkout è un vero albero di lavoro, quindi su repository grandi occupa spazio e tempo. <code>ORCHESTRA_WORKTREE=0</code> spegne l'isolamento; se il progetto è git e il checkout non si crea, il lavoro fallisce invece di ripiegare sulla cartella dell'utente. Eliminare un bot scarta i suoi checkout non ancora scartati.</li>
+  <li>Se le verifiche sono passate, il bot può chiamare <code>proponi_merge</code>: committa sul ramo isolato tutto ciò che ha lasciato nel checkout (i file ignorati restano fuori) e registra una proposta con riepilogo e verifica. Il pannello mostra <b>pronto per il merge</b> e il pulsante <b>Unisci</b>. Il merge resta una decisione dell'utente, non del bot.</li>
+  <li><b>Unisci</b> rifiuta un progetto con modifiche non committate e annulla il merge in caso di conflitto: il repository resta com'era. La verifica mostrata è quella dichiarata dal bot, non viene rieseguita automaticamente. Senza proposta resta il <code>git merge</code> manuale.</li>
+  <li>API: <code>GET /api/lavori</code>, <code>POST /api/lavori/riprova</code>, <code>POST /api/lavori/annulla</code>, <code>POST /api/lavori/scarta</code>, <code>POST /api/lavori/unisci</code>.</li>
 </ul>
 </section>
 

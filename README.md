@@ -43,6 +43,8 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 - **Gate di accettazione** — un lavoro interrotto (max iterazioni, errori, budget) non viene mai archiviato come completato: diventa `failed` con il motivo, oppure viene ritentato fino a `max_attempts`. Criteri dichiarativi opzionali (es. “il file report.md deve esistere e contenere X”).
 - **Delega multi-agente** — il padre affida sotto-compiti a figli con contesto minimale; retry opzionale con modelli alternativi.
 - **Identità dell'agente principale** — nome e persona/istruzioni configurabili da Opzioni → Identità, senza dover creare un bot. Valgono quando non è attivo un bot e restano dopo le regole di sistema.
+- **Lavori durevoli** — la coda in background dei bot vive su SQLite: un riavvio non la perde, i lavori in attesa ripartono e quelli interrotti a metà si riprovano dal pannello invece di essere rieseguiti alla cieca.
+- **Checkout isolati** — un lavoro su un progetto git scrive in un worktree separato (`orchestra/lavoro-<id>`), non nella cartella che hai aperta: due bot non si sovrappongono e le modifiche non committate restano intatte. Se ha testato e funziona, il bot propone il merge con riepilogo e verifica; il pannello mostra il ramo, permette di scartare il checkout e di unire con **Unisci**, che rifiuta un progetto sporco e annulla i conflitti. Unire resta una scelta esplicita dell'utente.
 - **Bot** — identità salvate con modello, persona, progetto e conversazione propri. Puoi avviare un compito in background per ogni bot: bot diversi lavorano insieme, ognuno nella propria cartella, senza contendersi la sessione attiva. Si passano un compito anche con `bot_chiedi` solo se l'allowlist lo consente (profondità 1, nessun ciclo); lo stesso bot esegue un turno alla volta.
 - **Coda automatica** — scheduler a singolo consumatore (CLI, API o bottone “Coda” nella UI), spento di default perché consuma token veri.
 - **Benchmark onesto** — misura i modelli per categoria di compito con verifiche oggettive (niente LLM che giudicano LLM).
@@ -58,6 +60,8 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 | `goal.py` | Obiettivi persistenti, scheduler, retry |
 | `delega.py` / `recupero.py` | Sub-agenti e politiche di retry |
 | `bots.py` | Identità persistenti, sessioni separate e ponte fra bot |
+| `lavori.py` | Coda durevole su SQLite per i lavori in background |
+| `worktree.py` | Checkout git isolati per i lavori dei bot |
 | `identita.py` | Nome e persona dell'agente principale, senza creare un bot |
 | `accettazione.py` | Gate di completamento e criteri dichiarativi |
 | `tools/` | Pacchetto dei tool: `__init__.py` registro e profili, `_guard.py` le guardie condivise, un modulo per tool |

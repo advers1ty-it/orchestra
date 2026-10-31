@@ -175,8 +175,12 @@ class OrchestraApp:
         # code separate, una per bot, con un filo che le consuma. E' il
         # pezzo che permette a due bot di avanzare insieme — la sessione
         # attiva resta una sola, e la UI non deve seguire due stream.
-        self._bots_lavori: dict[int, dict[str, Any]] = {}
-        self._bots_lavori_lock = threading.RLock()
+        #
+        # La coda vive in SQLite (`lavori.py`), non in questo dizionario:
+        # qui restano solo i fili, che sono un dettaglio del processo e
+        # devono sparire con lui. La verita' e' su disco.
+        self._bots_fili: dict[int, threading.Thread] = {}
+        self._bots_fili_lock = threading.RLock()
         # Lo storico. La sessione appena creata non ha ancora un id: o è
         # nuova, o deve caricare l'ultima conversazione da disco.
         #
@@ -1227,17 +1231,24 @@ class OrchestraApp:
             # Lo stato dei lavori in background. `busy` da solo non basta:
             # un compito in coda non ha ancora reso la sessione occupata,
             # e la UI deve poter dire "in coda: 2" prima che parta.
-            lav = (getattr(self, "_bots_lavori", {}) or {}).get(int(b["id"]))
-            if lav is not None:
-                with self._lock_lavori_bot():
-                    voce["coda"] = len(lav.get("coda") or [])
-                    voce["in_corso"] = str(lav.get("in_corso") or "")
-                    ultimo = lav.get("ultimo")
-                    voce["ultimo"] = dict(ultimo) if ultimo else None
-            else:
-                voce["coda"] = 0
-                voce["in_corso"] = ""
-                voce["ultimo"] = None
+            #
+            # Qui si legge il database, non la memoria del processo: un
+            # lavoro rimasto in coda prima di un riavvio deve comparire
+            # nello stesso modo di uno appena messo.
+            try:
+                from . import lavori as lavori_mod
+
+                riass = lavori_mod.riassunto("bot", str(b["id"]))
+            except Exception:  # noqa: BLE001
+                riass = {}
+            voce["coda"] = int(riass.get("in_attesa") or 0)
+            voce["in_corso"] = str(riass.get("in_corso_testo") or "")
+            voce["in_corso_id"] = int(riass.get("in_corso_id") or 0)
+            voce["in_corso_worktree"] = riass.get("in_corso_worktree")
+            voce["ultimo"] = riass.get("ultimo")
+            voce["riprovabile"] = riass.get("riprovabile")
+            voce["interrotti"] = int(riass.get("interrotti") or 0)
+            voce["falliti"] = int(riass.get("falliti") or 0)
             fuori.append(voce)
         return fuori
 
@@ -1257,17 +1268,34 @@ class OrchestraApp:
     # pagamento che nessuno ha chiesto.
     MAX_LAVORI_BOT = 20
 
-    def _lavori_bot(self) -> dict[int, dict[str, Any]]:
-        lavori = getattr(self, "_bots_lavori", None)
-        if lavori is None:
-            lavori = self._bots_lavori = {}
-        return lavori
+    def _fili_bot(self) -> dict[int, threading.Thread]:
+        fili = getattr(self, "_bots_fili", None)
+        if fili is None:
+            fili = self._bots_fili = {}
+        return fili
 
-    def _lock_lavori_bot(self) -> threading.RLock:
-        lock = getattr(self, "_bots_lavori_lock", None)
+    def _lock_fili_bot(self) -> threading.RLock:
+        lock = getattr(self, "_bots_fili_lock", None)
         if lock is None:
-            lock = self._bots_lavori_lock = threading.RLock()
+            lock = self._bots_fili_lock = threading.RLock()
         return lock
+
+    def _avvia_filo_bot(self, ident: int) -> None:
+        """Avvia il consumatore di una coda, se non c'e' gia'.
+
+        Il lock e' RLock perche' il chiamante puo' gia' tenerlo mentre
+        accoda: l'operazione e' "registra il filo", non "esegui il
+        turno", e non deve aspettare il lavoro per finire.
+        """
+        with self._lock_fili_bot():
+            filo = self._fili_bot().get(ident)
+            if filo is not None and filo.is_alive():
+                return
+            filo = threading.Thread(
+                target=self._gira_lavori_bot, args=(ident,),
+                daemon=True, name=f"orchestra-bot-{ident}")
+            self._fili_bot()[ident] = filo
+            filo.start()
 
     def avvia_lavoro_bot(self, bot_id: int | str | None,
                          testo: str) -> dict[str, Any]:
@@ -1279,8 +1307,12 @@ class OrchestraApp:
         possono girare insieme — la Session ha un turno solo — ma due
         bot diversi hanno sessioni e fili diversi, quindi avanzano
         davvero in parallelo.
+
+        La coda e' su disco: se il server muore subito dopo questa
+        chiamata, il lavoro e' ancora li' al riavvio.
         """
         from . import bots as bots_mod
+        from . import lavori as lavori_mod
 
         b = bots_mod.per_id(bot_id) if bot_id not in (None, "", 0, "0") \
             else None
@@ -1292,91 +1324,348 @@ class OrchestraApp:
         if len(testo) > Session.BOT_MESSAGGIO_MAX:
             raise ValueError("compito troppo lungo")
         ident = int(b["id"])
-        with self._lock_lavori_bot():
-            # Costruire la sessione qui, e non nel filo, fa fallire subito
-            # un provider mal configurato: l'utente vede l'errore sul
-            # pulsante invece di un lavoro che non parte e non dice
-            # perche'. Il filo la riusa dal runtime.
-            self._sessione_bot(b)
-            stato = self._lavori_bot().setdefault(
-                ident, {"coda": [], "in_corso": "", "iniziato": 0.0,
-                        "filo": None, "ultimo": None})
-            # Il tetto comprende quello in corso: con MAX=1 un bot puo'
-            # avere un lavoro alla volta, non uno in corso piu' uno in
-            # attesa. Contare solo la coda faceva sembrare il limite
-            # piu' largo di quanto sia.
-            impegnati = len(stato["coda"]) + (1 if stato["in_corso"] else 0)
-            if impegnati >= self.MAX_LAVORI_BOT:
-                raise RuntimeError(
-                    f"troppi lavori in coda per questo bot "
-                    f"(max {self.MAX_LAVORI_BOT})")
-            stato["coda"].append({"testo": testo, "creato": time.time()})
-            filo = stato.get("filo")
-            if filo is None or not filo.is_alive():
-                filo = threading.Thread(
-                    target=self._gira_lavori_bot, args=(ident,),
-                    daemon=True, name=f"orchestra-bot-{ident}")
-                stato["filo"] = filo
-                filo.start()
-            in_coda = len(stato["coda"])
-        return {"ok": True, "bot": b["nome"], "in_coda": in_coda}
+        # Costruire la sessione qui, e non nel filo, fa fallire subito un
+        # provider mal configurato: l'utente vede l'errore sul pulsante
+        # invece di un lavoro che non parte e non dice perche'.
+        self._sessione_bot(b)
+        # Inserimento e avvio del filo sotto lo stesso lock con cui il
+        # consumatore decide di uscire: senza, un lavoro accodato
+        # nell'istante fra "coda vuota" e "filo terminato" resterebbe
+        # orfano fino al prossimo riavvio.
+        with self._lock_fili_bot():
+            lavoro = lavori_mod.accoda(
+                "bot", str(ident), {"testo": testo}, titolo=testo,
+                max_tentativi=1, limite=self.MAX_LAVORI_BOT)
+            self._avvia_filo_bot(ident)
+            riass = lavori_mod.riassunto("bot", str(ident))
+        return {"ok": True, "bot": b["nome"],
+                "in_coda": int(riass.get("in_attesa") or 0)
+                           + int(riass.get("in_corso") or 0),
+                "lavoro": int(lavoro["id"])}
 
     def _gira_lavori_bot(self, ident: int) -> None:
         """Consuma la coda di un bot, un compito alla volta.
 
-        Il filo non tiene mai il lock mentre aspetta un turno: il lock
-        protegge la coda, non il lavoro. Tenerlo durante `send`
-        bloccherebbe `elenco_bot` per minuti e la UI sembrerebbe morta.
+        La coda e' su disco; questo filo e' solo il consumatore. Il lock
+        dei fili non si tiene durante un turno: servirebbe a bloccare
+        `elenco_bot` e la UI per minuti. Lo si prende solo per decidere
+        se uscire e per non lasciare un lavoro orfano mentre si esce.
         """
-        from . import bots as bots_mod
+        from . import lavori as lavori_mod
 
+        errori_db = 0
         while True:
-            with self._lock_lavori_bot():
-                stato = self._lavori_bot().get(ident)
-                if stato is None or not stato["coda"]:
-                    if stato is not None:
-                        stato["filo"] = None
-                    return
-                voce = stato["coda"].pop(0)
-                stato["in_corso"] = voce["testo"]
-                stato["iniziato"] = time.time()
-            esito: dict[str, Any]
             try:
-                b = bots_mod.per_id(ident)
-                if b is None:
-                    esito = {"ok": False, "risposta": "",
-                             "errore": "il bot non esiste piu'"}
-                else:
-                    sess = self._sessione_bot(b)
-                    # La sessione puo' essere occupata da un turno
-                    # dell'utente o da `bot_chiedi`: si aspetta, non si
-                    # accoda un secondo turno nella Session (che lo
-                    # rifiuterebbe). Il tetto e' il tempo, non un numero
-                    # di tentativi: un turno lungo e' normale.
-                    while not sess.send(voce["testo"]):
-                        time.sleep(0.2)
-                    while sess.busy:
-                        time.sleep(0.2)
-                    risposta = ""
+                lavoro = lavori_mod.prossimo("bot", str(ident))
+                errori_db = 0
+            except Exception:  # noqa: BLE001
+                # Un lock conteso o un disco momentaneamente occupato non
+                # deve uccidere il consumatore: si riprova. Dopo qualche
+                # errore di fila, pero', si esce e lascia il lavoro in
+                # coda: meglio fermarsi che girare a vuoto per sempre.
+                errori_db += 1
+                if errori_db >= 5:
+                    with self._lock_fili_bot():
+                        if self._fili_bot().get(ident) is threading.current_thread():
+                            self._fili_bot().pop(ident, None)
+                    return
+                time.sleep(0.5)
+                continue
+            if lavoro is None:
+                with self._lock_fili_bot():
+                    # La ricontrollata sotto lock chiude la corsa con
+                    # `avvia_lavoro_bot`: se un lavoro e' stato appena
+                    # inserito, il filo non muore e lo prende.
                     try:
-                        for m in reversed(sess.snapshot().get("messages", [])):
-                            if (m.get("role") == "assistant"
-                                    and (m.get("content") or "").strip()):
-                                risposta = (m.get("content") or "").strip()
-                                break
+                        if lavori_mod.ha_in_attesa("bot", str(ident)):
+                            continue
                     except Exception:  # noqa: BLE001
                         pass
-                    esito = {"ok": bool(risposta), "risposta": risposta[:400],
-                             "errore": "" if risposta else "nessuna risposta"}
-            except Exception as e:  # noqa: BLE001
-                esito = {"ok": False, "risposta": "",
-                         "errore": f"{type(e).__name__}: {e}"}
-            with self._lock_lavori_bot():
-                stato = self._lavori_bot().get(ident)
-                if stato is not None:
-                    stato["in_corso"] = ""
-                    stato["ultimo"] = {**esito, "testo": voce["testo"][:200],
-                                       "fine": time.time()}
+                    if self._fili_bot().get(ident) is threading.current_thread():
+                        self._fili_bot().pop(ident, None)
+                return
+            self._esegui_lavoro_bot(ident, lavoro)
+
+    def _esegui_lavoro_bot(self, ident: int,
+                           lavoro: dict[str, Any]) -> None:
+        """Esegue un lavoro gia' rivendicato e ne chiude lo stato.
+
+        `prima` e' il confine della conversazione: si prende prima di
+        mandare il messaggio, cosi' la risposta del lavoro non si confonde
+        con un turno dell'utente che stava gia' sulla stessa sessione.
+        """
+        from . import bots as bots_mod
+        from . import lavori as lavori_mod
+
+        job_id = int(lavoro["id"])
+        testo = str((lavoro.get("payload") or {}).get("testo") or "")
+        try:
+            b = bots_mod.per_id(ident)
+            if b is None:
+                lavori_mod.fallisci(job_id, "il bot non esiste piu'")
+                return
+            sess = self._sessione_bot(b)
+            # Il checkout isolato e' per QUESTO lavoro. Si crea prima del
+            # turno e resta dopo, cosi' l'utente puo' rivedere i file: un
+            # worktree che sparisce a fine turno sarebbe solo un posto
+            # dove il bot ha buttato il lavoro.
+            #
+            # Progetto non git (o ORCHESTRA_WORKTREE=0): None, si lavora
+            # nella cartella normale come prima. Un progetto git che non
+            # riesce a creare il checkout invece fa fallire il lavoro:
+            # scrivere nel repository dell'utente "per ripiego" sarebbe
+            # esattamente il danno che l'isolamento evita.
+            info = None
+            percorso_progetto = ""
+            if b.get("progetto"):
+                from . import progetti as progetti_mod
+                percorso_progetto = (progetti_mod.percorso_di(
+                    b["progetto"]) or "")
+            if percorso_progetto:
+                from . import worktree as worktree_mod
+                info = worktree_mod.prepara(percorso_progetto, job_id)
+                if info:
+                    lavori_mod.salva_checkpoint(job_id, {"worktree": info})
+            radice_isolata = str((info or {}).get("radice") or "")
+            proposta = None
+            if info:
+                def proposta(riepilogo, verifica, _job=job_id,
+                             _info=info):
+                    riepilogo = str(riepilogo or "").strip()
+                    verifica = str(verifica or "").strip()
+                    if not riepilogo or not verifica:
+                        return ("[proposta non registrata: servono il "
+                                "riepilogo e la verifica]")
+                    # Un merge unisce commit, non file: si committa il
+                    # lavoro DENTRO il checkout prima di proporlo.
+                    try:
+                        primo = riepilogo.splitlines()[0][:120]
+                        commit = worktree_mod.commit_modifiche(
+                            _info, "orchestra: " + primo)
+                    except Exception as e:  # noqa: BLE001
+                        return ("[proposta non registrata: "
+                                f"{type(e).__name__}: {e}]")
+                    dati = {
+                        "pronto": True,
+                        "riepilogo": riepilogo[:2000],
+                        "verifica": verifica[:4000],
+                        "branch": str(_info.get("branch") or ""),
+                        "commit": str(commit.get("commit") or ""),
+                        "ts": time.time(),
+                    }
+                    lavori_mod.aggiorna_checkpoint(_job, {"merge": dati})
+                    return ("proposta registrata: l'utente decidera' se "
+                            "unire. Non unire tu e non modificare il "
+                            "progetto principale.")
+            prima = 0
+            while True:
+                if lavori_mod.stato(job_id) == "annullato":
+                    return
+                if sess.busy:
+                    lavori_mod.batti(job_id)
+                    time.sleep(0.2)
+                    continue
+                try:
+                    prima = len(sess.snapshot().get("messages", []))
+                except Exception:  # noqa: BLE001
+                    prima = 0
+                if radice_isolata:
+                    avviato = sess.send(
+                        testo, root_isolata=radice_isolata,
+                        proponi_merge=proposta)
+                else:
+                    avviato = sess.send(testo)
+                if avviato:
+                    break
+                # Un turno dell'utente o `bot_chiedi` ha vinto la corsa:
+                # si aspetta, non si accoda un secondo turno.
+                time.sleep(0.2)
+            ultimo_battito = 0.0
+            while sess.busy:
+                if lavori_mod.stato(job_id) == "annullato":
+                    sess.cancel()
+                    break
+                ora = time.monotonic()
+                if ora - ultimo_battito >= 2.0:
+                    lavori_mod.batti(job_id)
+                    ultimo_battito = ora
+                time.sleep(0.2)
+            if lavori_mod.stato(job_id) == "annullato":
+                while sess.busy:
+                    time.sleep(0.2)
+                return
+            risposta = ""
+            try:
+                messaggi = sess.snapshot().get("messages", [])
+                for m in reversed(messaggi[prima:]):
+                    if (m.get("role") == "assistant"
+                            and (m.get("content") or "").strip()):
+                        risposta = (m.get("content") or "").strip()
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+            if risposta:
+                lavori_mod.completa(job_id, risposta)
+            else:
+                lavori_mod.fallisci(job_id, "nessuna risposta")
+        except Exception as e:  # noqa: BLE001
+            try:
+                lavori_mod.fallisci(job_id, f"{type(e).__name__}: {e}")
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _riprendi_lavori_bot(self) -> int:
+        """Recupera le code dopo un avvio.
+
+        I lavori in corso appartenevano a un processo morto e vengono
+        marcati `interrotti`, non rieseguiti: un turno a meta' puo' avere
+        gia' scritto file o speso token. Quelli in attesa non hanno ancora
+        toccato niente e ripartono subito.
+        """
+        from . import lavori as lavori_mod
+
+        try:
+            interrotti = lavori_mod.interrompi_in_corso(
+                "bot", "interrotto dal riavvio del server: riprova il lavoro")
+        except Exception:  # noqa: BLE001
+            interrotti = 0
+        try:
+            chiavi = lavori_mod.chiavi_con_attesa("bot")
+        except Exception:  # noqa: BLE001
+            chiavi = []
+        for chiave in chiavi:
+            try:
+                ident = int(chiave)
+            except (TypeError, ValueError):
+                continue
+            if ident > 0:
+                self._avvia_filo_bot(ident)
+        return interrotti
+
+    def riprova_lavoro(self, lavoro_id: int | str) -> dict[str, Any]:
+        """Rimette in coda un lavoro fallito o interrotto e lo riavvia."""
+        from . import lavori as lavori_mod
+
+        lavoro = lavori_mod.ottieni(lavoro_id)
+        if lavoro is None:
+            raise ValueError("lavoro inesistente")
+        if lavoro.get("tipo") != "bot":
+            raise ValueError("tipo di lavoro non gestito da questo pannello")
+        nuovo = lavori_mod.riprova(int(lavoro["id"]))
+        if nuovo is None:
+            raise RuntimeError("questo lavoro non si puo' riprovare")
+        try:
+            ident = int(nuovo["chiave"])
+        except (TypeError, ValueError):
+            raise ValueError("lavoro senza un bot valido")
+        self._avvia_filo_bot(ident)
+        return nuovo
+
+    def unisci_lavoro(self, lavoro_id: int | str) -> dict[str, Any]:
+        """Unisce il ramo del bot nel progetto, su richiesta dell'utente.
+
+        Il bot puo' solo proporre, con il tool `proponi_merge`; qui
+        l'utente accetta. Si rifiuta se il working tree del progetto non
+        e' pulito: il merge non deve mescolare il lavoro del bot con
+        modifiche non committate dell'utente, ne' lasciare conflitti
+        aperti in una cartella che magari non sta guardando.
+        """
+        from . import lavori as lavori_mod
+        from . import worktree as worktree_mod
+
+        lavoro = lavori_mod.ottieni(lavoro_id)
+        if lavoro is None:
+            raise ValueError("lavoro inesistente")
+        if lavoro.get("tipo") != "bot":
+            raise ValueError("tipo di lavoro non gestito da questo pannello")
+        if lavoro.get("stato") != "completato":
+            raise ValueError("si unisce solo un lavoro completato")
+        checkpoint = lavoro.get("checkpoint") or {}
+        if not isinstance(checkpoint, dict):
+            checkpoint = {}
+        merge = checkpoint.get("merge")
+        if not isinstance(merge, dict) or not merge.get("pronto"):
+            raise ValueError("il bot non ha proposto un merge per questo lavoro")
+        if merge.get("unito"):
+            return {"ok": True, "gia_unito": True, "lavoro": lavoro,
+                    "commit": str(merge.get("commit") or "")}
+        info = checkpoint.get("worktree")
+        if not isinstance(info, dict) or info.get("scartato"):
+            raise RuntimeError(
+                "il checkout isolato non c'e' piu': non c'e' niente da unire")
+        esito = worktree_mod.unisci(
+            info, commit_atteso=str(merge.get("commit") or ""))
+        nuovo_merge = {**merge, "unito": True,
+                       "gia_unito": bool(esito.get("gia_unito")),
+                       "commit": str(esito.get("commit") or ""),
+                       "unito_il": time.time()}
+        aggiornato = lavori_mod.aggiorna_checkpoint(
+            int(lavoro["id"]), {"merge": nuovo_merge})
+        return {"ok": True, "commit": nuovo_merge["commit"],
+                "gia_unito": nuovo_merge["gia_unito"],
+                "lavoro": aggiornato or lavoro}
+
+    def scarta_checkout_lavoro(self, lavoro_id: int | str) -> dict[str, Any]:
+        """Butta via il worktree di un lavoro chiuso.
+
+        Non unisce niente: il ramo del bot e' una proposta, e un merge
+        automatico nel repository dell'utente sarebbe una decisione presa
+        al posto suo. Se la proposta va bene si usa `unisci_lavoro`.
+        """
+        from . import lavori as lavori_mod
+        from . import worktree as worktree_mod
+
+        lavoro = lavori_mod.ottieni(lavoro_id)
+        if lavoro is None:
+            raise ValueError("lavoro inesistente")
+        if lavoro.get("stato") in lavori_mod.ATTIVI:
+            raise RuntimeError(
+                "il lavoro e' ancora attivo: annullalo prima di scartare "
+                "il checkout")
+        # `annullato` e' gia' terminale, ma il turno puo' essere ancora
+        # in corso mentre si ferma: cancellare il checkout sotto i piedi
+        # del consumatore farebbe scrivere il bot in una cartella che non
+        # esiste piu'. Si aspetta che la sessione sia libera.
+        if lavoro.get("stato") == "annullato":
+            try:
+                ident = int(lavoro.get("chiave") or 0)
+            except (TypeError, ValueError):
+                ident = 0
+            rt = (getattr(self, "_bots_runtime", {}) or {}).get(ident)
+            if rt is not None and getattr(rt.get("sessione"), "busy", False):
+                raise RuntimeError(
+                    "il turno annullato si sta ancora fermando: riprova "
+                    "tra un istante")
+        checkpoint = lavoro.get("checkpoint") or {}
+        info = checkpoint.get("worktree") if isinstance(checkpoint, dict) else None
+        if not isinstance(info, dict) or not info.get("percorso"):
+            raise ValueError("questo lavoro non ha un checkout isolato")
+        if info.get("scartato"):
+            return {"ok": True, "gia_scartato": True, "lavoro": lavoro}
+        worktree_mod.rimuovi(info)
+        aggiornato = lavori_mod.aggiorna_checkpoint(
+            int(lavoro["id"]), {"worktree": {**info, "scartato": True}})
+        return {"ok": True, "lavoro": aggiornato or lavoro}
+
+    def annulla_lavoro(self, lavoro_id: int | str) -> dict[str, Any]:
+        """Annulla un lavoro in attesa o in corso."""
+        from . import lavori as lavori_mod
+
+        lavoro = lavori_mod.ottieni(lavoro_id)
+        if lavoro is None:
+            raise ValueError("lavoro inesistente")
+        if lavoro.get("tipo") != "bot":
+            raise ValueError("tipo di lavoro non gestito da questo pannello")
+        annullato = lavori_mod.annulla(int(lavoro["id"]))
+        if annullato is None:
+            raise RuntimeError("questo lavoro non e' piu' annullabile")
+        # NON si chiama `Session.cancel()` da qui. Se il lavoro sta
+        # aspettando che la sessione si liberi, quella sessione potrebbe
+        # essere occupata da un turno dell'utente: annullare il lavoro
+        # non deve fermare la chat. Il consumatore vede lo stato
+        # `annullato` al giro successivo e chiama `cancel()` solo se e'
+        # davvero lui a stare eseguendo il turno.
+        return annullato
 
     def identita(self) -> dict[str, str]:
         """Nome e persona dell'agente principale (vuoti = Orchestra)."""
@@ -1581,12 +1870,19 @@ class OrchestraApp:
             raise RuntimeError(
                 "il bot sta lavorando: attendi o annulla prima di "
                 "modificarlo")
-        lav = (getattr(self, "_bots_lavori", {}) or {}).get(
-            int(bot_id)) if str(bot_id).isdigit() else None
-        if lav is not None and (lav.get("coda") or lav.get("in_corso")):
-            raise RuntimeError(
-                "il bot ha lavori in coda: attendi che finiscano prima "
-                "di modificarlo")
+        if str(bot_id).isdigit():
+            try:
+                from . import lavori as lavori_mod
+
+                riass = lavori_mod.riassunto("bot", str(int(bot_id)))
+                if riass.get("in_attesa") or riass.get("in_corso"):
+                    raise RuntimeError(
+                        "il bot ha lavori in coda: attendi che finiscano "
+                        "prima di modificarlo")
+            except RuntimeError:
+                raise
+            except Exception:  # noqa: BLE001
+                pass
         b = bots_mod.aggiorna(bot_id, **campi)
         if b is None:
             return None
@@ -1606,9 +1902,17 @@ class OrchestraApp:
         b = bots_mod.per_id(bot_id)
         if b is None:
             return False
-        lav = (getattr(self, "_bots_lavori", {}) or {}).get(int(b["id"]))
-        if lav is not None and (lav.get("coda") or lav.get("in_corso")):
-            raise RuntimeError("il bot ha lavori in coda: attendi o annulla")
+        try:
+            from . import lavori as lavori_mod
+
+            riass = lavori_mod.riassunto("bot", str(b["id"]))
+            if riass.get("in_attesa") or riass.get("in_corso"):
+                raise RuntimeError(
+                    "il bot ha lavori in coda: attendi o annulla")
+        except RuntimeError:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
         # Il controllo va PRIMA di cambiare identita': altrimenti si
         # tornerebbe al principale e solo dopo si scoprirebbe che il bot
         # non si puo' eliminare, lasciando l'utente su un'identita'
@@ -1619,8 +1923,28 @@ class OrchestraApp:
         if int(b["id"]) == int(getattr(self, "_bot_attivo_id", 0) or 0):
             self.attiva_bot(None)
         (getattr(self, "_bots_runtime", {}) or {}).pop(int(b["id"]), None)
-        (getattr(self, "_bots_lavori", {}) or {}).pop(int(b["id"]), None)
-        return bots_mod.elimina(b["id"])
+        (getattr(self, "_bots_fili", {}) or {}).pop(int(b["id"]), None)
+        fatto = bots_mod.elimina(b["id"])
+        if fatto:
+            try:
+                from . import lavori as lavori_mod
+
+                # I checkout del bot non devono restare orfani: senza la
+                # riga del lavoro nessuno saprebbe piu' che esiste, e
+                # nessuno potrebbe scartarli dal pannello. Best effort:
+                # un checkout gia' spostato a mano non deve impedire
+                # l'eliminazione del bot.
+                from . import worktree as worktree_mod
+                for info in lavori_mod.worktree_di("bot", str(b["id"])):
+                    if not info.get("scartato"):
+                        try:
+                            worktree_mod.rimuovi(info)
+                        except Exception:  # noqa: BLE001
+                            pass
+                lavori_mod.elimina_chiave("bot", str(b["id"]))
+            except Exception:  # noqa: BLE001
+                pass
+        return fatto
 
     def _ripristina_bot(self) -> None:
         """Riapri l'ultimo bot attivo, se c'era.
@@ -1844,6 +2168,13 @@ class OrchestraApp:
             # Dopo il modello: il bot attivo puo' averne uno suo, e la
             # riparazione del modello riguarda l'agente principale.
             app._ripristina_bot()
+            # Le code dei bot sono su disco: un lavoro messo prima del
+            # riavvio deve ripartire adesso. I lavori a meta' vengono
+            # marcati interrotti, non rieseguiti alla cieca.
+            try:
+                app._riprendi_lavori_bot()
+            except Exception:  # noqa: BLE001
+                pass
             # La finestra del modello attivo, se il catalogo lo conosce.
             # In try separato: se il catalogo non si apre, l'app parte
             # comunque col default di 120k. Un limite prudente batte un
@@ -2892,6 +3223,26 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 })
             except Exception as e:  # noqa: BLE001
                 self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+        elif path == "/api/lavori":
+            # La coda durevole, in sola lettura. Il pannello Bot legge il
+            # riassunto dentro /api/bots; questa rotta serve a chi vuole
+            # vedere i singoli lavori (e ai test del motore).
+            from . import lavori as lavori_mod
+            import urllib.parse as _up
+
+            # `urlparse` e non `split("?", 1)[1]`: la rotta deve
+            # rispondere anche senza query, altrimenti un client che la
+            # chiama “nuda” prende un IndexError invece dell'elenco.
+            query = _up.parse_qs(_up.urlparse(self.path).query)
+            tipo = (query.get("tipo") or [""])[0].strip() or None
+            chiave = (query.get("chiave") or [""])[0].strip() or None
+            try:
+                limite = int((query.get("limite") or ["50"])[0])
+            except (TypeError, ValueError):
+                limite = 50
+            self._json({"ok": True,
+                        "lavori": lavori_mod.elenca(
+                            tipo=tipo, chiave=chiave, limite=limite)})
         elif path == "/api/locali":
             # Separato perche' e' lento per costruzione: si interrogano
             # motori in ascolto su localhost e una porta chiusa puo'
@@ -3390,6 +3741,8 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                     "/api/progetto", "/api/identita", "/api/bots/crea",
                     "/api/bots/attiva", "/api/bots/aggiorna",
                     "/api/bots/elimina", "/api/bots/avvia",
+                    "/api/lavori/riprova", "/api/lavori/annulla",
+                    "/api/lavori/scarta", "/api/lavori/unisci",
                     "/api/remote/start",
                     "/api/remote/stop", "/api/remote/status",
                     "/api/remote/info"):
@@ -3744,6 +4097,46 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 self._json({"error": str(e)}, 400)
                 return
             self._json(risultato)
+        elif path == "/api/lavori/unisci":
+            try:
+                risultato = self.app.unisci_lavoro(body.get("id"))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            self._json(risultato)
+        elif path == "/api/lavori/scarta":
+            try:
+                risultato = self.app.scarta_checkout_lavoro(body.get("id"))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            self._json(risultato)
+        elif path == "/api/lavori/riprova":
+            try:
+                lavoro = self.app.riprova_lavoro(body.get("id"))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            self._json({"ok": True, "lavoro": lavoro})
+        elif path == "/api/lavori/annulla":
+            try:
+                lavoro = self.app.annulla_lavoro(body.get("id"))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            self._json({"ok": True, "lavoro": lavoro})
         elif path == "/api/progetto":
             # POST {progetto: nome}: imposta il progetto attivo.
             # La risposta porta anche i progetti conosciuti (per il
