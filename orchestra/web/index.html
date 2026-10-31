@@ -547,7 +547,34 @@
                      placeholder="nomi, separati da virgola"
                      autocomplete="off">
             </label>
+            <label>Tool consentiti
+              <input id="bot-policy-tools" type="text"
+                     placeholder="vuoto = quelli del profilo"
+                     autocomplete="off">
+            </label>
+            <label>Tool vietati
+              <input id="bot-policy-nega-tools" type="text"
+                     placeholder="es. computer_click, image_gen"
+                     autocomplete="off">
+            </label>
+            <label>Shell consentita
+              <input id="bot-policy-shell" type="text"
+                     placeholder="vuoto = tutti; es. git, npm, python"
+                     autocomplete="off">
+            </label>
+            <label>Shell vietata
+              <input id="bot-policy-nega-shell" type="text"
+                     placeholder="sottostringhe, es. rm -rf, sudo"
+                     autocomplete="off">
+            </label>
           </div>
+          <p class="opzioni-nota">
+            La policy vale per questo bot (e per i figli che delega).
+            &Egrave; un limite in-process, non una sandbox: non isola il
+            processo. Con una shell consentita restano ammessi solo i
+            programmi elencati, ma un programma ammesso pu&ograve; fare
+            quello che sa fare.
+          </p>
           <label class="bot-persona">Persona / compito
             <textarea id="bot-persona" rows="4"
                       placeholder="Come deve comportarsi questo bot, e di cosa si occupa."></textarea>
@@ -787,6 +814,15 @@
     <div class="side-sez side-sez-tracce" id="side-sez-tracce">
       <div class="side-testata">
         <span class="side-titolo">Tracce</span>
+      </div>
+      <div class="side-filtri-tracce">
+        <select id="traccia-filtro-esito" class="small"
+                title="Mostra solo un esito">
+          <option value="">tutti gli esiti</option>
+        </select>
+        <label class="small dim" title="Solo turni con almeno un errore">
+          <input id="traccia-filtro-errori" type="checkbox"> solo errori
+        </label>
       </div>
       <ul id="side-tracce" class="side-tracce"></ul>
     </div>

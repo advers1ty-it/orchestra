@@ -312,6 +312,9 @@ class Session:
         self._bot_depth: int = 0
         self._bot_parla_con: list[str] = []
         self._bot_risolutore: Any = None
+        # La policy del bot (tool e shell ammessi). Vuota = nessun
+        # limite oltre al profilo: e' il caso dell'agente principale.
+        self._policy: dict[str, list[str]] = {}
 
         self.agent = Agent(
             provider,
@@ -599,6 +602,18 @@ class Session:
     BOT_ATTESA_DEFAULT = 180.0
     BOT_ATTESA_MAX = 600.0
     BOT_MESSAGGIO_MAX = 6000
+
+    def imposta_policy(self, policy: dict[str, Any] | None) -> dict[str, list[str]]:
+        """Limita tool e shell di questa sessione. None o {} = nessun limite.
+
+        La policy non si applica subito al registro: il registro viene
+        rifatto a ogni turno, e applicarla qui verrebbe cancellato dal
+        profilo. Si salva, e `_esegui_turno` la applica dopo il profilo.
+        """
+        from . import policy as policy_mod
+
+        self._policy = policy_mod.normalizza(policy)
+        return self._policy
 
     def attiva_bot(self, risolutore: Any, *, nome: str = "",
                    parla_con: list[str] | None = None) -> bool:
@@ -1160,6 +1175,27 @@ class Session:
                 self.agent.registry.attiva("proponi_merge")
             except Exception:  # noqa: BLE001
                 pass
+        # La policy viene DOPO il profilo e DOPO i tool runtime: e'
+        # l'ultima parola, e vale anche per `bot_chiedi` e
+        # `proponi_merge`. Se una allowlist non li nomina, il bot non li
+        # ha — che e' quello che "tool consentiti" significa. Chi vuole
+        # un bot che delega deve metterli nella lista, insieme a
+        # `parla_con` per `bot_chiedi`.
+        try:
+            from . import policy as policy_mod
+            policy_mod.attiva(self._policy)
+            policy_mod.applica_al_registro(self.agent.registry, self._policy)
+        except Exception:  # noqa: BLE001
+            # Una policy che non si applica non deve diventare "nessun
+            # limite": si toglie tutto, che e' il lato sicuro. I due
+            # registri (tools e types) hanno nomi diversi per la stessa
+            # cosa, e qui non si assume quale sia.
+            try:
+                from . import policy as policy_mod
+                for tool in policy_mod.attivi(self.agent.registry):
+                    policy_mod.spegni(self.agent.registry, tool.name)
+            except Exception:  # noqa: BLE001
+                pass
         try:
             self.bridge.emit("turn_start", {"input": user_input})
             try:
@@ -1231,6 +1267,15 @@ class Session:
                 {"message": f"{type(e).__name__}: {e}"},
             )
         finally:
+            # La policy valeva per questo thread/turno, non per il
+            # processo: il thread finisce qui, ma azzerarla esplicitamente
+            # evita che un riuso del thread (o un test) porti in giro i
+            # limiti di un bot che non sta piu' lavorando.
+            try:
+                from . import policy as policy_mod
+                policy_mod.disattiva()
+            except Exception:  # noqa: BLE001
+                pass
             # Persistenza a fine turno, nel `finally`: un turno annullato
             # o caduto per errore ha già prodotto domanda e risposta
             # parziale, e buttarle via vuol dire ripetere la domanda per

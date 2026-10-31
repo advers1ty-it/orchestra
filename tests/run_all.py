@@ -68,6 +68,11 @@ SUITES = [
     # I bot: identita' persistenti, sessioni separate e `bot_chiedi` con
     # profondita' 1. Non toccano la rete: il provider e' finto.
     ("bots", "test_bots.py", True),
+    # La policy dei bot: allowlist di tool e di shell, applicata dopo il
+    # profilo. Nessun comando eseguito: si verifica il confine, non il
+    # contenuto. Copre anche il figlio della delega, che nasce con tutti
+    # i tool e senza questa riga sarebbe la via per aggirare la policy.
+    ("policy", "test_policy.py", True),
     # La coda durevole: claim atomico, ripresa dopo il riavvio, retry
     # esplicito e annullamento. Sono le proprieta' che una coda in RAM
     # non puo' dare.
@@ -88,6 +93,10 @@ SUITES = [
     ("frontend", "test_frontend_split.py", True),
     ("ui", "test_ui.py", True),
     ("traccia-modale", "test_traccia_modale.py", True),
+    # I filtri della traccia stanno nella query SQL: la lista e' gia'
+    # tagliata, e filtrare nel client nasconderebbe il turno fallito di
+    # ieri dietro cinquanta turni riusciti di oggi.
+    ("traccia-filtri", "test_traccia_filtri.py", True),
     ("istruzioni", "test_istruzioni.py", True),
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),

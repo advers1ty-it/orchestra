@@ -547,8 +547,18 @@ function showVersion(v) {
 // per turno recente; al click, la sequenza esatta degli eventi.
 // Codici di esito in parole: l'utente legge "completato",
 // non "risposta_finale".
-function etichettaEsito(esito) {
-  return {
+// I codici di esito in un posto solo: la lista, il filtro e il dettaglio
+// devono dire la stessa parola per lo stesso codice. Prima la mappa
+// stava dentro `etichettaEsito`, e il filtro avrebbe dovuto ripeterla.
+// Una funzione che ritorna la mappa, non una `const`: panels.js chiama
+// `caricaSideTracce()` all'avvio, e i file sono concatenati in un ordine
+// in cui questa parte di main.js arriva DOPO. Una `const` sarebbe in
+// temporal dead zone, e la lista delle tracce morirebbe all'avvio con
+// "Cannot access before initialization". Le funzioni sono gia'
+// disponibili quando il file viene definito.
+var _esitiTraccia = null;
+function esitiTraccia() {
+  if (!_esitiTraccia) _esitiTraccia = {
     risposta_finale: "completato",
     max_iterations: "fermato al limite",
     canceled_da_should_continue: "annullato",
@@ -561,13 +571,39 @@ function etichettaEsito(esito) {
     // invece di farlo. Diverso da "solo parole": qui qualcosa e' stato
     // fatto, e il lavoro e' rimasto a meta'.
     annuncio_finale: "fermato su un annuncio",
-  }[esito || ""] || esito || "?";
+  };
+  return _esitiTraccia;
 }
+function etichettaEsito(esito) {
+  return esitiTraccia()[esito || ""] || esito || "?";
+}
+
+var _filtroTraccePieno = false;
+function popolaFiltroTracce() {
+  const sel = $("traccia-filtro-esito");
+  if (!sel || _filtroTraccePieno) return;
+  for (const [valore, label] of Object.entries(esitiTraccia())) {
+    const o = document.createElement("option");
+    o.value = valore;
+    o.textContent = label;
+    sel.appendChild(o);
+  }
+  _filtroTraccePieno = true;
+}
+
 async function caricaSideTracce() {
   const ul = $("side-tracce");
   if (!ul) return;
+  popolaFiltroTracce();
   try {
-    const d = await (await fetch("/api/tracce")).json();
+    // I filtri vanno al server: la lista e' gia' tagliata, e filtrare
+    // qui nasconderebbe le tracce vecchie che non sono nella pagina.
+    const q = new URLSearchParams();
+    const esito = ($("traccia-filtro-esito") || {}).value || "";
+    const errori = !!($("traccia-filtro-errori") || {}).checked;
+    if (esito) q.set("esito", esito);
+    if (errori) q.set("errori", "1");
+    const d = await (await fetch("/api/tracce" + (q.toString() ? "?" + q : ""))).json();
     const tracce = (d.tracce || []).slice(0, 15);
     ul.replaceChildren();
     if (!tracce.length) {
@@ -616,6 +652,8 @@ function chiudiModaleTraccia() {
   m.classList.remove("show");
 }
 on($("traccia-chiudi"), "click", chiudiModaleTraccia);
+on($("traccia-filtro-esito"), "change", caricaSideTracce);
+on($("traccia-filtro-errori"), "change", caricaSideTracce);
 on($("traccia-modal"), "click", (e) => {
   // click sul fondo (non sulla scatola) chiude
   if (e.target === e.currentTarget) chiudiModaleTraccia();
@@ -641,19 +679,46 @@ async function apriTraccia(id, btn) {
     det.appendChild(intest);
     const ol = document.createElement("ol");
     ol.className = "side-traccia-eventi";
+    const inizio = Number(t.riepilogo.ts) || 0;
     for (const e of (t.eventi || [])) {
       const li = document.createElement("li");
       const tipo = e.tipo;
       let riga = tipo;
-      if (tipo === "tool_start") riga = `tool → ${e.dati.name}`;
-      else if (tipo === "tool_end") riga = `tool ${e.dati.name}: ${e.dati.ok ? "ok" : "errore"}`;
-      else if (tipo === "assistant") riga = e.dati.content && e.dati.content.trim()
-        ? `assistant: ${e.dati.content.trim().slice(0, 60)}` : "assistant (chiama tool)";
-      else if (tipo === "verifica") riga = `verifica: ${e.dati.ok ? "passata" : e.dati.motivo}`;
-      else if (tipo === "gira_a_vuoto") riga = `GIRA A VUOTO su ${e.dati.tool}`;
-      else if (tipo === "fallback_triggered") riga = `fallback → ${e.dati.model || e.dati.provider}`;
-      else if (tipo === "compaction") riga = `compattazione ${e.dati.tokens_before}→${e.dati.tokens_after}`;
-      li.textContent = riga;
+      if (tipo === "tool_start") {
+        const args = e.dati.args ? JSON.stringify(e.dati.args) : "";
+        riga = `tool → ${e.dati.name}${args ? " " + args.slice(0, 120) : ""}`;
+      } else if (tipo === "tool_end") {
+        riga = `tool ${e.dati.name}: ${e.dati.ok ? "ok" : "errore"}`;
+        if (!e.dati.ok && e.dati.result)
+          riga += ` — ${String(e.dati.result).split("\n")[0].slice(0, 120)}`;
+      } else if (tipo === "assistant") {
+        riga = e.dati.content && e.dati.content.trim()
+          ? `assistant: ${e.dati.content.trim().slice(0, 80)}`
+          : "assistant (chiama tool)";
+      } else if (tipo === "verifica") {
+        riga = `verifica: ${e.dati.ok ? "passata" : e.dati.motivo}`;
+      } else if (tipo === "gira_a_vuoto") {
+        riga = `GIRA A VUOTO su ${e.dati.tool}`;
+      } else if (tipo === "fallback_triggered") {
+        riga = `fallback → ${e.dati.model || e.dati.provider}`;
+      } else if (tipo === "compaction") {
+        riga = `compattazione ${e.dati.tokens_before}→${e.dati.tokens_after}`;
+      }
+      // Il payload grezzo e' la ragione per cui si apre una traccia:
+      // "quale argomento ha passato" e "cosa e' tornato" non stanno
+      // nella riga. Chiuso di default perche' un turno ha decine di
+      // eventi e aprirli tutti rende la sequenza illeggibile.
+      const dettaglio = document.createElement("details");
+      const summary = document.createElement("summary");
+      const offset = inizio ? `+${(e.ts - inizio).toFixed(2)}s` : "";
+      summary.textContent = `${offset ? offset + " " : ""}${riga}`;
+      const pre = document.createElement("pre");
+      const grezzo = JSON.stringify(e.dati, null, 2) || "{}";
+      pre.textContent = grezzo.length > 8000
+        ? grezzo.slice(0, 8000) + "\n… (troncato)" : grezzo;
+      dettaglio.appendChild(summary);
+      dettaglio.appendChild(pre);
+      li.appendChild(dettaglio);
       li.className = "side-traccia-ev " + (tipo === "tool_end" && !e.dati.ok ? "err" : "");
       ol.appendChild(li);
     }

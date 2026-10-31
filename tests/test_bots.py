@@ -401,11 +401,16 @@ try:
     check("porta i progetti per il modulo", isinstance(d.get("progetti"), list))
 
     stato, d = richiesta("/api/bots/crea",
-                         {"nome": "HttpBot", "persona": "prova"})
+                         {"nome": "HttpBot", "persona": "prova",
+                          "policy": {"tools": ["read_file"],
+                                     "shell": ["git"]}})
     check("POST crea un bot",
           stato == 200 and d.get("bot", {}).get("nome") == "HttpBot",
           f"{stato} {str(d)[:160]}")
     http_id = (d.get("bot") or {}).get("id")
+    check("e salva la policy",
+          (d.get("bot") or {}).get("policy", {}).get("tools") == ["read_file"],
+          str((d.get("bot") or {}).get("policy")))
 
     stato, d = richiesta("/api/bots/crea", {"nome": "HttpBot"})
     check("un doppione risponde 400", stato == 400, str(stato))
@@ -413,16 +418,23 @@ try:
           str(d.get("error")))
 
     stato, d = richiesta("/api/bots/aggiorna",
-                         {"id": http_id, "persona": "nuova persona"})
+                         {"id": http_id, "persona": "nuova persona",
+                          "policy": {"nega_shell": ["rm -rf"]}})
     check("POST aggiorna", stato == 200
           and d.get("bot", {}).get("persona") == "nuova persona",
           f"{stato} {str(d)[:160]}")
+    check("e aggiorna la policy",
+          (d.get("bot") or {}).get("policy", {}).get("nega_shell") == ["rm -rf"],
+          str((d.get("bot") or {}).get("policy")))
 
     stato, d = richiesta("/api/bots/attiva", {"id": http_id})
     check("POST attiva cambia identita'", stato == 200
           and app_http.session.bot == "HttpBot", f"{stato} {str(d)[:160]}")
     check("e la risposta porta il bot",
           (d.get("bot") or {}).get("nome") == "HttpBot")
+    check("la sessione attiva ha la policy del bot",
+          (getattr(app_http.session, "_policy", {}) or {}).get("nega_shell")
+          == ["rm -rf"], str(getattr(app_http.session, "_policy", None)))
 
     stato, d = richiesta("/api/state")
     check("lo stato espone il bot attivo",

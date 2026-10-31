@@ -46,10 +46,11 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 - **Lavori durevoli** — la coda in background dei bot vive su SQLite: un riavvio non la perde, i lavori in attesa ripartono e quelli interrotti a metà si riprovano dal pannello invece di essere rieseguiti alla cieca.
 - **Checkout isolati** — un lavoro su un progetto git scrive in un worktree separato (`orchestra/lavoro-<id>`), non nella cartella che hai aperta: due bot non si sovrappongono e le modifiche non committate restano intatte. Se ha testato e funziona, il bot propone il merge con riepilogo e verifica; il pannello mostra il ramo, permette di scartare il checkout e di unire con **Unisci**, che rifiuta un progetto sporco e annulla i conflitti. Unire resta una scelta esplicita dell'utente.
 - **Bot** — identità salvate con modello, persona, progetto e conversazione propri. Puoi avviare un compito in background per ogni bot: bot diversi lavorano insieme, ognuno nella propria cartella, senza contendersi la sessione attiva. Si passano un compito anche con `bot_chiedi` solo se l'allowlist lo consente (profondità 1, nessun ciclo); lo stesso bot esegue un turno alla volta.
+- **Policy per bot** — quattro liste per bot: tool consentiti, tool vietati, shell consentita e shell vietata. La policy si applica dopo il profilo (restringe, non allarga), il divieto vince sull'allowlist e un figlio nato da `delega` la eredita. Con la shell in allowlist le sostituzioni `$(...)` e i backtick sono rifiutati anche dentro le virgolette doppie. È un limite in-process: non è una sandbox del sistema operativo.
 - **Coda automatica** — scheduler a singolo consumatore (CLI, API o bottone “Coda” nella UI), spento di default perché consuma token veri.
 - **Benchmark onesto** — misura i modelli per categoria di compito con verifiche oggettive (niente LLM che giudicano LLM).
 - **Permessi** — file fuori dalla cartella di lavoro e automazioni richiedono conferma esplicita; senza canale di conferma, default = nega.
-- **Diagnostica** — `orchestra doctor`, pannello Diagnosi nella UI, docs integrate su `/docs`.
+- **Diagnostica** — `orchestra doctor`, pannello Diagnosi nella UI, docs integrate su `/docs`. Le **tracce** dei turni restano in `storico.db`: la sidebar le filtra per esito e per errori, e il dettaglio mostra gli argomenti e i risultati dei tool, non solo i nomi.
 - **Consiglio (Roast Room)** — pannello per far dibattere una decisione tra advisor in round, con verdict del chair e export PDF. L’idea e parte dell’interfaccia del tavolo sono ispirate al progetto open source “Roast Room” (citazione dovuta agli autori originali).
 
 ## Struttura
@@ -60,6 +61,7 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 | `goal.py` | Obiettivi persistenti, scheduler, retry |
 | `delega.py` / `recupero.py` | Sub-agenti e politiche di retry |
 | `bots.py` | Identità persistenti, sessioni separate e ponte fra bot |
+| `policy.py` | Policy per bot: tool e shell ammessi, applicata dopo il profilo |
 | `lavori.py` | Coda durevole su SQLite per i lavori in background |
 | `worktree.py` | Checkout git isolati per i lavori dei bot |
 | `identita.py` | Nome e persona dell'agente principale, senza creare un bot |
@@ -77,6 +79,7 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 
 - Il server ascolta solo su `127.0.0.1` e **non ha autenticazione**: è pensato per uso locale, singolo utente. Non esporlo su rete senza protezioni.
 - La sandbox dei file è una guardia sui percorsi, non un isolamento di processo: non far eseguire all’agente comandi che non lanceresti tu.
+- La policy dei bot restringe tool e comandi shell, ma resta in-process: un interprete consentito (per esempio `python`) può fare quello che sa fare. Non sostituisce un container.
 - Le chiavi API stanno solo nel tuo `.env` locale, mai nel repo.
 
 ## Test

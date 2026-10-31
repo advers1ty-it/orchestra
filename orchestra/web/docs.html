@@ -212,6 +212,9 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   <li>Ogni bot ha una sessione separata e una cronologia etichettata col suo nome: aprire la conversazione di un altro bot richiede di attivarlo.</li>
   <li>Da <b>Opzioni → Bot</b> si avvia un compito in background: il bot lavora senza cambiare l'identità attiva. Bot diversi avanzano in parallelo, ognuno nella propria cartella; lo stesso bot esegue un compito alla volta e accoda gli altri (max 20). Puoi cambiare bot mentre uno lavora: il turno continua nella sua sessione e lo ritrovi quando torni. La coda vive in <code>lavori.db</code>: un riavvio non la perde, e i lavori in attesa ripartono (vedi <b>Lavori durevoli</b>). La conversazione già svolta resta.</li>
   <li><code>bot_chiedi</code> permette a un bot di chiedere a un altro, con risposta sincrona. Profondità massima 1 e allowlist <code>parla_con</code>: vuota significa che il bot non può parlare con nessuno.</li>
+  <li><b>Policy del bot.</b> In <b>Opzioni → Bot</b>: <i>Tool consentiti</i> (vuota = quelli del profilo), <i>Tool vietati</i>, <i>Shell consentita</i> (nomi di programma) e <i>Shell vietata</i> (sottostringhe). Si applica <b>dopo</b> il profilo: restringe, non allarga; il divieto vince sull'allowlist. Anche i tool runtime (<code>bot_chiedi</code>, <code>proponi_merge</code>) seguono la stessa lista: per far chiedere un bot ad altri, aggiungi <code>bot_chiedi</code>.</li>
+  <li>La shell consentita confronta il primo programma di ogni sezione (<code>;</code>, <code>&amp;&amp;</code>, <code>|</code>, newline). Con l'allowlist attiva le sostituzioni <code>$(...)</code>, i backtick e <code>&lt;(...)</code> sono rifiutati anche dentro le virgolette doppie; le virgolette singole le rendono testo. Un figlio nato da <code>delega</code> eredita la policy del padre.</li>
+  <li>La policy è <b>in-process</b>, non una sandbox del sistema operativo: un programma consentito (per esempio <code>python</code>) può fare tutto quello che sa fare. <code>run_shell</code> risponde <code>NON ESEGUITO</code> con la regola violata.</li>
   <li>Non sono processi separati: condividono chiavi, permessi e processo, quindi non sono una sandbox. Non si svegliano da soli: un lavoro parte quando l'utente lo avvia (o quando un altro bot lo chiama).</li>
 </ul>
 </section>
@@ -228,6 +231,17 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   <li>Se le verifiche sono passate, il bot può chiamare <code>proponi_merge</code>: committa sul ramo isolato tutto ciò che ha lasciato nel checkout (i file ignorati restano fuori) e registra una proposta con riepilogo e verifica. Il pannello mostra <b>pronto per il merge</b> e il pulsante <b>Unisci</b>. Il merge resta una decisione dell'utente, non del bot.</li>
   <li><b>Unisci</b> rifiuta un progetto con modifiche non committate e annulla il merge in caso di conflitto: il repository resta com'era. La verifica mostrata è quella dichiarata dal bot, non viene rieseguita automaticamente. Senza proposta resta il <code>git merge</code> manuale.</li>
   <li>API: <code>GET /api/lavori</code>, <code>POST /api/lavori/riprova</code>, <code>POST /api/lavori/annulla</code>, <code>POST /api/lavori/scarta</code>, <code>POST /api/lavori/unisci</code>.</li>
+</ul>
+</section>
+
+<section id="tracce">
+<h2>Tracce dei turni</h2>
+<p>Ogni turno lascia una traccia in <code>storico.db</code>: esito, modello, iterazioni, tool, token, durata e la sequenza degli eventi strutturali. Serve a rispondere a "perché quel task è andato così" senza rieseguirlo.</p>
+<ul>
+  <li>Nella sidebar <b>Tracce</b> ci sono le ultime 50. Il filtro per esito e <b>solo errori</b> viene applicato dal database, non dopo il taglio della lista: un turno fallito di ieri non sparisce dietro cinquanta turni riusciti di oggi.</li>
+  <li>Al click si apre il modale con la sequenza e l'offset di ogni evento; ogni riga si espande nel payload grezzo — argomenti dei tool, risultati, motivo della verifica.</li>
+  <li>I chunk di streaming non vengono salvati uno a uno: centinaia di eventi per turno renderebbero la sequenza illeggibile.</li>
+  <li>API: <code>GET /api/tracce?esito=&lt;codice&gt;&amp;errori=1&amp;limite=N</code>, <code>GET /api/tracce/&lt;id&gt;</code>.</li>
 </ul>
 </section>
 

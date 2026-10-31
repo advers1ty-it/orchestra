@@ -1701,6 +1701,14 @@ select:disabled {
    la sequenza degli eventi. Sobrio: è uno strumento di diagnosi, non
    deve competere con la chat. */
 .side-tracce { list-style: none; margin: 0; padding: 0; }
+.side-filtri-tracce { display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; margin: 4px 0 8px; }
+.side-filtri-tracce select { flex: 1 1 120px; min-width: 0;
+  background: var(--panel-2, rgba(255,255,255,.05)); color: var(--fg, #eee);
+  border: 1px solid var(--border, #333); border-radius: 6px;
+  padding: 4px 6px; font-size: 12px; }
+.side-filtri-tracce label { display: inline-flex; align-items: center;
+  gap: 4px; white-space: nowrap; }
 .side-traccia .side-meta { color: var(--muted, #999); }
 /* Il dettaglio vive in un modale: aperto sotto la lista, finiva fuori
    dal viewport, e il click sembrava non funzionare. */
@@ -1713,8 +1721,13 @@ select:disabled {
 .traccia-modal-corpo { flex:1; overflow-y:auto; min-height:0; }
 .side-traccia-dettaglio { font-size: 12px; }
 .side-traccia-eventi { margin: 4px 0 0; padding-left: 18px; }
-.side-traccia-eventi li { margin: 1px 0; color: var(--fg, #ddd); }
-.side-traccia-ev.err { color: var(--danger, #c05050); }
+.side-traccia-eventi li { margin: 3px 0; color: var(--fg, #ddd); }
+.side-traccia-ev.err summary { color: var(--danger, #c05050); }
+.side-traccia-eventi details summary { cursor: pointer; }
+.side-traccia-eventi pre { margin: 4px 0 6px 14px; padding: 6px 8px;
+  max-height: 240px; overflow: auto; white-space: pre-wrap;
+  word-break: break-word; background: var(--panel-2, rgba(255,255,255,.04));
+  border-radius: 6px; font-size: 11px; line-height: 1.35; }
 
 /* Intestazione uniforme di ogni sezione della sidebar: titolo a sinistra,
    eventuale controllo a destra. Prima solo Cronologia aveva il contenitore

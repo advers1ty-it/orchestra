@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 
+from .. import policy as policy_mod
 from ..types import Tool
 from ._guard import (
     ROOT,
@@ -45,6 +46,16 @@ def tool_run_shell() -> Tool:
     posix = _detect_posix_shell()
 
     def handler(command: str, timeout: int = 60) -> str:
+        # La policy del bot viene PRIMA del gate: non ha senso chiedere
+        # all'utente il permesso per un comando che la policy ha gia'
+        # vietato. La domanda sarebbe una scelta finta, e la risposta
+        # "si'" non cambierebbe niente.
+        blocco = policy_mod.motivo_blocco(command)
+        if blocco:
+            return (
+                f"NON ESEGUITO: {blocco}.\n"
+                f"Comando: {command[:200]}"
+            )
         # Il percorso e' il confine di sicurezza, e vale anche per la
         # shell: se l'agente chiede il permesso per read_file e poi usa
         # `cat` per arrivarci lo stesso, il permesso non protegge

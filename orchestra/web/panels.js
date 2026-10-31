@@ -4719,6 +4719,10 @@ function riempiModuloBot(b) {
     "bot-profilo": b ? (b.profilo || "") : "",
     "bot-parla": b ? (b.parla_con || []).join(", ") : "",
     "bot-persona": b ? (b.persona || "") : "",
+    "bot-policy-tools": b ? ((b.policy || {}).tools || []).join(", ") : "",
+    "bot-policy-nega-tools": b ? ((b.policy || {}).nega_tools || []).join(", ") : "",
+    "bot-policy-shell": b ? ((b.policy || {}).shell || []).join(", ") : "",
+    "bot-policy-nega-shell": b ? ((b.policy || {}).nega_shell || []).join(", ") : "",
   };
   for (const [id, valore] of Object.entries(campi)) {
     const el = $(id);
@@ -4827,6 +4831,16 @@ function disegnaBot(d) {
                    b.progetto || "nessun progetto"];
     if (b.parla_con && b.parla_con.length)
       pezzi.push("parla con " + b.parla_con.join(", "));
+    if (b.policy && ((b.policy.tools || []).length || (b.policy.shell || []).length
+                     || (b.policy.nega_tools || []).length
+                     || (b.policy.nega_shell || []).length)) {
+      const parti = [];
+      if ((b.policy.tools || []).length) parti.push((b.policy.tools || []).length + " tool");
+      if ((b.policy.nega_tools || []).length) parti.push((b.policy.nega_tools || []).length + " vietati");
+      if ((b.policy.shell || []).length) parti.push("shell: " + (b.policy.shell || []).join(", "));
+      if ((b.policy.nega_shell || []).length) parti.push("nega: " + (b.policy.nega_shell || []).join(", "));
+      pezzi.push("policy " + parti.join(", "));
+    }
     if (b.busy) pezzi.push("al lavoro");
     if (b.coda) pezzi.push("in coda: " + b.coda);
     sub.textContent = pezzi.join(" · ");
@@ -4975,6 +4989,10 @@ async function caricaBot() {
   }
 }
 
+function listaDaCampo(id) {
+  return ($(id).value || "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 function datiModuloBot() {
   const parla = ($("bot-parla").value || "")
     .split(",").map((s) => s.trim()).filter(Boolean);
@@ -4986,6 +5004,12 @@ function datiModuloBot() {
     profilo: $("bot-profilo").value || "",
     persona: $("bot-persona").value || "",
     parla_con: parla,
+    policy: {
+      tools: listaDaCampo("bot-policy-tools"),
+      nega_tools: listaDaCampo("bot-policy-nega-tools"),
+      shell: listaDaCampo("bot-policy-shell"),
+      nega_shell: listaDaCampo("bot-policy-nega-shell"),
+    },
   };
 }
 

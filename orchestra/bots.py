@@ -40,12 +40,14 @@ Un bot non parla mai con se stesso, e questo non si configura.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import threading
 import time
 from typing import Any
 
+from . import policy as policy_mod
 from .dati import percorso as percorso_dati
 
 _DB = "bots.db"
@@ -75,6 +77,10 @@ CREATE TABLE IF NOT EXISTS bots (
     progetto    TEXT    NOT NULL DEFAULT '',
     profilo     TEXT    NOT NULL DEFAULT '',
     parla_con   TEXT    NOT NULL DEFAULT '',
+    -- Le quattro liste della policy, in JSON. Sta nella riga del bot e
+    -- non in una tabella a parte: una policy senza il suo bot non ha
+    -- significato, e si legge sempre insieme alla configurazione.
+    policy      TEXT    NOT NULL DEFAULT '{}',
     creato      REAL    NOT NULL,
     aggiornato  REAL    NOT NULL
 );
@@ -95,6 +101,14 @@ def _db() -> sqlite3.Connection:
     conn = sqlite3.connect(percorso_db(), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    # I database creati prima della policy non hanno la colonna, e
+    # `CREATE TABLE IF NOT EXISTS` non li tocca. La migrazione e'
+    # idempotente: dopo la prima volta l'ALTER fallisce e si ignora.
+    try:
+        conn.execute("ALTER TABLE bots ADD COLUMN policy TEXT NOT NULL "
+                     "DEFAULT '{}'")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     return conn
 
@@ -123,6 +137,20 @@ def _norm_lista(valore: str | list[str] | tuple[str, ...]) -> list[str]:
     return out
 
 
+def _policy_da_riga(testo: Any) -> dict[str, list[str]]:
+    """La policy salvata, o quella vuota se il JSON e' rotto.
+
+    Un JSON rotto non deve impedire di leggere il bot: la configurazione
+    resta visibile e modificabile, e la policy torna vuota. Il contrario
+    — un bot che non si carica per una parentesi — e' peggio, perche'
+    l'utente non ha modo di correggerlo dalla UI.
+    """
+    try:
+        return policy_mod.normalizza(json.loads(testo or "{}"))
+    except (ValueError, TypeError):
+        return policy_mod.normalizza({})
+
+
 def _riga(r: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": int(r["id"]),
@@ -133,6 +161,7 @@ def _riga(r: sqlite3.Row) -> dict[str, Any]:
         "progetto": str(r["progetto"] or ""),
         "profilo": str(r["profilo"] or ""),
         "parla_con": _norm_lista(str(r["parla_con"] or "")),
+        "policy": _policy_da_riga(r["policy"] if "policy" in r.keys() else "{}"),
         "creato": float(r["creato"] or 0.0),
         "aggiornato": float(r["aggiornato"] or 0.0),
     }
@@ -236,7 +265,8 @@ def _valida_parla_con(nomi: list[str], escludi: str = "") -> list[str]:
 
 def crea(nome: str, *, provider: str = "", modello: str = "",
          persona: str = "", progetto: str = "", profilo: str = "",
-         parla_con: str | list[str] | None = None) -> dict[str, Any]:
+         parla_con: str | list[str] | None = None,
+         policy: dict[str, Any] | None = None) -> dict[str, Any]:
     """Crea un bot. Il nome e' l'unica cosa obbligatoria.
 
     Provider e modello vuoti NON significano "nessun modello": la
@@ -250,6 +280,7 @@ def crea(nome: str, *, provider: str = "", modello: str = "",
         raise ValueError("serve un nome per il bot")
     p = _valida_provider(provider)
     prof = _valida_profilo(profilo)
+    pol = policy_mod.normalizza(policy)
     persona = (persona or "").strip()[:MAX_PERSONA]
     progetto = (progetto or "").strip()
     with _LOCK:
@@ -268,10 +299,11 @@ def crea(nome: str, *, provider: str = "", modello: str = "",
         try:
             cur = conn.execute(
                 "INSERT INTO bots (nome, provider, modello, persona,"
-                " progetto, profilo, parla_con, creato, aggiornato)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " progetto, profilo, parla_con, policy, creato, aggiornato)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (n, p, (modello or "").strip(), persona, progetto, prof,
-                 ", ".join(con), ora, ora))
+                 ", ".join(con), json.dumps(pol, ensure_ascii=False), ora,
+                 ora))
             conn.commit()
             nuovo = int(cur.lastrowid)
         finally:
@@ -308,6 +340,9 @@ def aggiorna(bot_id: int | str, **campi: Any) -> dict[str, Any] | None:
         richiesti = _norm_lista(campi["parla_con"])
         valori["parla_con"] = ", ".join(
             _valida_parla_con(richiesti, escludi=nome_finale))
+    if "policy" in campi and campi["policy"] is not None:
+        valori["policy"] = json.dumps(
+            policy_mod.normalizza(campi["policy"]), ensure_ascii=False)
     if not valori:
         return attuale
     valori["aggiornato"] = time.time()

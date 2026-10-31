@@ -151,15 +151,37 @@ class RegistratoreTurno:
             return None
 
 
-def ultime(limite: int = 30) -> list[dict[str, Any]]:
-    """Le tracce recenti, per la lista in UI."""
+def ultime(limite: int = 30, *, esito: str | None = None,
+           solo_errori: bool = False) -> list[dict[str, Any]]:
+    """Le tracce recenti, per la lista in UI.
+
+    I filtri stanno QUI, non nel client: la lista e' tagliata dal
+    `LIMIT`, e filtrare dopo aver letto 50 righe su 5000 non trova le
+    tracce vecchie che interessano. "Perche' quel task e' fallito" e'
+    spesso una domanda su un turno di ieri, non sull'ultimo.
+    """
+    try:
+        limite = max(1, min(int(limite or 30), 500))
+    except (TypeError, ValueError):
+        limite = 30
+    dove: list[str] = []
+    parametri: list[Any] = []
+    if esito:
+        dove.append("esito = ?")
+        parametri.append(str(esito))
+    if solo_errori:
+        dove.append("errori > 0")
+    sql = (
+        "SELECT id, sessione_id, ts, durata_s, esito, iterazioni, "
+        "tool_chiamate, errori, token, modello, evento_finale, n_eventi "
+        "FROM tracce"
+        + (" WHERE " + " AND ".join(dove) if dove else "")
+        + " ORDER BY ts DESC LIMIT ?"
+    )
     try:
         with _LOCK:
             conn = _db()
-            righe = conn.execute(
-                "SELECT id, sessione_id, ts, durata_s, esito, iterazioni, "
-                "tool_chiamate, errori, token, modello, evento_finale, n_eventi "
-                "FROM tracce ORDER BY ts DESC LIMIT ?", (limite,)).fetchall()
+            righe = conn.execute(sql, (*parametri, limite)).fetchall()
             conn.close()
         chiavi = ["id", "sessione_id", "ts", "durata_s", "esito",
                   "iterazioni", "tool_chiamate", "errori", "token",

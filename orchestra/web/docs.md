@@ -54,6 +54,9 @@
 - Da **Opzioni → Bot** puoi avviare un compito in background: il bot lavora nella sua sessione senza cambiare l'identità attiva. Bot diversi avanzano davvero in parallelo, ciascuno nella propria cartella; lo stesso bot esegue un compito alla volta e accoda gli altri (max 20). Puoi cambiare bot mentre uno lavora: il turno continua nella sua sessione e lo ritrovi quando torni. Puoi anche attivare un bot già in corso e vedere il turno live, ma non puoi mandargli un secondo messaggio finché non finisce. La coda vive in `lavori.db`: un riavvio non la perde, e i lavori in attesa ripartono (vedi **Lavori durevoli**). La conversazione già svolta resta nella cronologia.
 - `bot_chiedi` è l'altra forma di collaborazione: un bot chiede a un altro dentro il proprio turno, in modo sincrono. È diversa dal lavoro in background, che non blocca chi lo ha avviato.
 - `bot_chiedi` permette a un bot di chiedere a un altro: la risposta è sincrona e il turno del destinatario costa sul suo provider. I limiti sono strutturali: profondità 1 (chi riceve non può richiamare) e allowlist `parla_con` (vuota = nessuno).
+- **Policy del bot**. In **Opzioni → Bot** quattro liste: `Tool consentiti` (vuota = quelli del profilo), `Tool vietati`, `Shell consentita` (nomi di programma, vuota = tutti) e `Shell vietata` (sottostringhe). La policy si applica **dopo** il profilo: restringe, non allarga, e un tool fuori dal profilo resta fuori anche se compare tra i consentiti. Il divieto vince sull'allowlist. Anche i tool runtime (`bot_chiedi`, `proponi_merge`) seguono la stessa lista: se usi un'allowlist di tool e vuoi che il bot chieda ad altri, aggiungi `bot_chiedi`.
+- La shell consentita confronta il primo programma di ogni sezione (`;`, `&&`, `||`, `|`, newline). Con l'allowlist attiva le sostituzioni `$(...)`, i backtick e `<(...)` vengono rifiutati — anche dentro le virgolette doppie, dove la shell le esegue. Le virgolette singole le rendono testo.
+- La policy è **in-process**, non una sandbox del sistema operativo: un programma consentito (per esempio `python`) può fare tutto quello che sa fare. Un figlio nato da `delega` eredita la policy del padre, così la delega non è una via per aggirarla. `run_shell` risponde `NON ESEGUITO` con la regola violata, invece di lasciare che il comando fallisca da solo.
 - Non sono processi separati: condividono chiavi, permessi e processo. Non sono una sandbox. Non si avviano da soli in background: ricevono un turno quando l'utente o un altro bot glielo manda.
 
 ## Lavori durevoli
@@ -66,6 +69,12 @@
 - **Unisci** rifiuta un progetto con modifiche non committate e annulla il merge in caso di conflitto: il repository resta com'era. La verifica mostrata è quella dichiarata dal bot: non viene rieseguita automaticamente. Se la proposta non c'è, il pulsante non compare (resta il `git merge` manuale).
 - `ORCHESTRA_WORKTREE=0` spegne l'isolamento. Se il progetto è git ma il checkout non si crea, il lavoro fallisce invece di ripiegare sulla cartella dell'utente. Eliminare un bot scarta i suoi checkout non ancora scartati.
 - API: `GET /api/lavori`, `POST /api/lavori/riprova`, `POST /api/lavori/annulla`, `POST /api/lavori/scarta`, `POST /api/lavori/unisci`.
+
+## Tracce dei turni
+- Ogni turno lascia una traccia in `storico.db`: esito, modello, iterazioni, tool, token, durata e la sequenza degli eventi strutturali. Serve a rispondere a "perché quel task è andato così" senza rieseguirlo.
+- Nella sidebar **Tracce** ci sono le ultime 50; il filtro per esito e **solo errori** viene applicato dal database, non dopo il taglio della lista: un turno fallito di ieri non sparisce dietro cinquanta turni riusciti di oggi.
+- Al click si apre il modale con la sequenza e l'offset di ogni evento; ogni riga si espande nel payload grezzo — argomenti dei tool, risultati, motivo della verifica. I chunk di streaming non vengono salvati uno a uno: centinaia di eventi per turno renderebbero la sequenza illeggibile.
+- API: `GET /api/tracce?esito=<codice>&errori=1&limite=N`, `GET /api/tracce/<id>`.
 
 ## Agente principale
 - Anche l'agente principale ha un'identità: **Opzioni → Identità**, con nome e persona/istruzioni. Non serve creare un bot per personalizzarlo.

@@ -1780,6 +1780,10 @@ class OrchestraApp:
             sess.agent.config.tool_profile = bot["profilo"]
         if bot.get("progetto"):
             sess.imposta_progetto(bot["progetto"])
+        # La policy si salva nella sessione e si applica a ogni turno,
+        # dopo il profilo: applicarla qui la farebbe cancellare dal
+        # profilo che `_esegui_turno` rifa' da capo.
+        sess.imposta_policy(bot.get("policy"))
         self._bots_runtime[ident] = {"config": bot, "sessione": sess}
         self._collega_delega(sess)
         # Riapri l'ultima conversazione DI QUESTO bot, non l'ultima di
@@ -2084,6 +2088,17 @@ class OrchestraApp:
             try:
                 figlio.progetto = progetto
                 figlio._aggiorna_prompt()
+            except Exception:  # noqa: BLE001
+                pass
+            # Il figlio non allarga i permessi del padre: nasce con
+            # `default_registry()` (tutti i tool), e senza questa riga la
+            # delega sarebbe la porta per aggirare la policy del bot.
+            # Il thread e' lo stesso del padre, quindi la policy della
+            # shell e' gia' attiva; qui si restringe il registro.
+            try:
+                from . import policy as policy_mod
+                policy_mod.applica_al_registro(
+                    figlio.registry, getattr(sess, "_policy", {}) or {})
             except Exception:  # noqa: BLE001
                 pass
             return figlio
@@ -2824,9 +2839,24 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             self._json(self._api_remote_status({}))
         elif path == "/api/tracce":
             # Le tracce recenti: la diagnosi dopo il fatto. "Perché quel
-            # task ha sbagliato" senza doverlo ripetere.
+            # task ha sbagliato" senza doverlo ripetere. I filtri sono
+            # nella query e vengono applicati alla query SQL, non dopo:
+            # un turno fallito di ieri non deve sparire dietro cinquanta
+            # turni riusciti di oggi.
+            import urllib.parse as _up
+
             from .traccia import ultime
-            self._json({"tracce": ultime(limite=50)})
+
+            q = _up.parse_qs(_up.urlparse(self.path).query)
+            esito = ((q.get("esito") or [""])[0] or "").strip() or None
+            solo_errori = ((q.get("errori") or [""])[0] or "").strip() \
+                in ("1", "true", "si", "sì")
+            try:
+                limite = int((q.get("limite") or ["50"])[0])
+            except (TypeError, ValueError):
+                limite = 50
+            self._json({"tracce": ultime(limite=limite, esito=esito,
+                                          solo_errori=solo_errori)})
         elif path == "/api/routing":
             # Stato dell'instradamento automatico (il POST sta in do_POST).
             if self.app.session is None:
@@ -4042,7 +4072,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         elif path == "/api/bots/crea":
             campi = {k: body.get(k) for k in
                      ("nome", "provider", "modello", "persona", "progetto",
-                      "profilo", "parla_con") if k in body}
+                      "profilo", "parla_con", "policy") if k in body}
             try:
                 b = self.app.crea_bot(**campi)
             except ValueError as e:
@@ -4062,7 +4092,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         elif path == "/api/bots/aggiorna":
             campi = {k: body.get(k) for k in
                      ("nome", "provider", "modello", "persona", "progetto",
-                      "profilo", "parla_con") if k in body}
+                      "profilo", "parla_con", "policy") if k in body}
             try:
                 b = self.app.aggiorna_bot(body.get("id"), **campi)
             except RuntimeError as e:
