@@ -125,6 +125,13 @@ function seiInFondo() {
 let seguiTurno = false;
 let primoSnapshot = true;
 let ultimaFirmaSnapshot = "";
+// La conversazione che il log sta mostrando. Il server la manda con ogni
+// snapshot (`sessione_id`): confrontarla e' l'unico modo per accorgersi
+// che lo snapshot appartiene a un'altra chat. La firma dei messaggi non
+// basta: due conversazioni diverse possono avere lo stesso numero di
+// messaggi e lo stesso ultimo testo, ed e' esattamente il caso in cui
+// aprire una chat dalla cronologia non cambiava niente a schermo.
+let sessioneSnapshot = null;
 
 function scrollDown() {
   // Non scrollare se l'utente sta selezionando testo nella chat: lo
@@ -538,8 +545,14 @@ function avviaPollingFallback() {
         }
         const firma = String(snap.messages.length) + "::" +
           String(snap.messages.length ? (snap.messages[snap.messages.length-1].content || "") : "");
+        // Anche qui il cambio conversazione va riconosciuto: due chat con
+        // la stessa firma hanno lo stesso numero di messaggi, e senza
+        // questo confronto il polling (tunnel lento) restava sulla vecchia.
+        const cambiaSessione = ("sessione_id" in snap) &&
+          snap.sessione_id !== sessioneSnapshot;
+        if ("sessione_id" in snap) sessioneSnapshot = snap.sessione_id;
         // Confronto grezzo: numero di messaggi (e firma).
-        if (firma !== ultimaFirmaSnapshot) {
+        if (cambiaSessione || firma !== ultimaFirmaSnapshot) {
           const eraInFondoPrima = seiInFondo();
           const scrollTopPrima = main.scrollTop;
           // Ricostruisci la chat come fa lo snapshot del SSE.
@@ -577,7 +590,9 @@ function avviaPollingFallback() {
           setBusy(!!snap.busy);
           // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
           // ripristina lo scroll precedente (evita il salto in cima).
-          if (eraInFondoPrima) scrollDown();
+          // Su un'altra conversazione la posizione di prima non vale.
+          if (cambiaSessione) main.scrollTop = main.scrollHeight;
+          else if (eraInFondoPrima) scrollDown();
           else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
         }
       }
@@ -650,12 +665,21 @@ function handle(kind, d) {
       ready = true;
       renderStats(d);
       loadModels();
+      // Se lo snapshot e' di un'ALTRA conversazione, va ricostruito
+      // comunque e subito: aprire una chat dalla cronologia ha gia'
+      // cambiato l'id sul server, e senza questo il clic selezionava la
+      // riga ma la chat restava quella di prima fino al refresh.
+      const cambiaSessione = ("sessione_id" in d) &&
+        d.sessione_id !== sessioneSnapshot;
+      if ("sessione_id" in d) sessioneSnapshot = d.sessione_id;
       // Durante un turno attivo non ricostruire il DOM: evita flicker e
       // spostamenti del ragionamento. Il sync completo avviene a fine turno.
+      // (Un cambio conversazione durante un turno non e' possibile: il
+      // server risponde 409, quindi non c'e' nulla da proteggere qui.)
       const eraPrimoSnapshot = primoSnapshot;
       if (primoSnapshot) {
         primoSnapshot = false;
-      } else if (d.busy) {
+      } else if (d.busy && !cambiaSessione) {
         setBusy(true);
         return;
       }
@@ -665,7 +689,7 @@ function handle(kind, d) {
       // Se lo snapshot non e' cambiato, non ricostruire: evita il refresh
       // forzato che cancella la selezione del testo e fa sparire i
       // messaggi lato client (gateway, ragionamento).
-      if (!primoSnapshot && firma === ultimaFirmaSnapshot) {
+      if (!cambiaSessione && firma === ultimaFirmaSnapshot) {
         setBusy(!!d.busy);
         return;
       }
@@ -678,7 +702,7 @@ function handle(kind, d) {
       // warning, steer, note) restano dove sono, non finiscono in fondo.
       // Lo snapshot serve solo a popolare la UI quando è vuota (reload,
       // prima apertura).
-      if (log.children.length > 0) {
+      if (log.children.length > 0 && !cambiaSessione) {
         setBusy(!!d.busy);
         if (eraInFondoPrima) scrollDown();
         else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
@@ -735,7 +759,9 @@ function handle(kind, d) {
       setBusy(!!d.busy);
       // Il primo snapshot inizializza la chat: mostra subito gli ultimi
       // messaggi. Gli aggiornamenti successivi conservano invece la lettura.
-      if (eraPrimoSnapshot) main.scrollTop = main.scrollHeight;
+      // Su un'altra conversazione la posizione di prima non significa
+      // niente: si parte dal fondo anche li'.
+      if (eraPrimoSnapshot || cambiaSessione) main.scrollTop = main.scrollHeight;
       else if (eraInFondoPrima) scrollDown();
       else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
       break;

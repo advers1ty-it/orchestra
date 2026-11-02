@@ -394,6 +394,13 @@ class Session:
                                      "name": m.name,
                                      "tool_call_id": m.tool_call_id})
             return {
+                # L'identita' della conversazione, non dei messaggi. La UI
+                # non puo' ricavarla dal contenuto: due chat diverse con lo
+                # stesso numero di messaggi si assomigliano, e senza questo
+                # campo il client non sa che lo snapshot che ha in mano e'
+                # di un'altra conversazione — era il motivo per cui aprire
+                # una chat dalla cronologia non cambiava niente a schermo.
+                "sessione_id": self._sessione_id,
                 "busy": self._busy,
                 "iterations": st.iterations,
                 "total_tokens": st.total_tokens,

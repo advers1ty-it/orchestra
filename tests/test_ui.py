@@ -526,6 +526,41 @@ out.snapshotScrollHeight = mainEl.scrollHeight;
   }).join(" -> ");
   out.pollingScrollTop = main.scrollTop;
 
+  // --- REGRESSIONE 5: aprire una conversazione dalla cronologia deve
+  // cambiare la chat. Il server manda `sessione_id` con ogni snapshot: due
+  // chat diverse possono avere la STESSA firma (numero di messaggi e
+  // ultimo testo) e il log a schermo non e' vuoto, quindi senza il
+  // confronto dell'id il clic selezionava la riga ma la chat restava quella
+  // di prima fino al refresh della pagina.
+  log.children = [];
+  sessioneSnapshot = null;
+  ultimaFirmaSnapshot = "";
+  main.scrollHeight = 4000;
+  main.clientHeight = 600;
+  main.scrollTop = 4000;
+  handle("snapshot", {ready:true, sessione_id:11, busy:false, messages:[
+    {role:"user", content:"prima domanda"},
+    {role:"assistant", content:"risposta identica"},
+  ]});
+  out.chatPrima = log.children.map(n=>n.textContent).join("|");
+  main.scrollTop = 0;
+  handle("snapshot", {ready:true, sessione_id:12, busy:false, messages:[
+    {role:"user", content:"altra domanda"},
+    {role:"assistant", content:"risposta identica"},
+  ]});
+  out.chatDopo = log.children.map(n=>n.textContent).join("|");
+  out.chatDopoSenzaPrima = !log.children.some(n => n.textContent.includes("prima domanda"));
+  out.chatDopoScroll = main.scrollTop;
+  // Lo stesso snapshot della stessa chat non ricostruisce niente: un
+  // refresh forzato a ogni evento cancellerebbe la selezione del testo.
+  addNote("nota locale");
+  const _nodiPrima = log.children.length;
+  handle("snapshot", {ready:true, sessione_id:12, busy:false, messages:[
+    {role:"user", content:"altra domanda"},
+    {role:"assistant", content:"risposta identica"},
+  ]});
+  out.chatStessaIntatta = log.children.length === _nodiPrima;
+
   // --- REGRESSIONE 4: l'anteprima di un'immagine generata.
   // `image_gen` manda l'immagine in `images` dentro tool_end, non nel
   // testo: il testo resta leggibile e la UI deve mostrare il file. Se il
@@ -624,6 +659,17 @@ check("il polling conserva la posizione di lettura",
 check("due tool identici abbinati per id",
       res.get("abbinati") == "RISULTATO_UNO|RISULTATO_DUE #2",
       str(res.get("abbinati")))
+# --- REGRESSIONE: cambiare conversazione aggiorna la chat senza reload.
+check("aprire un'altra chat mostra i suoi messaggi",
+      "altra domanda" in str(res.get("chatDopo", "")),
+      str(res.get("chatDopo", ""))[:120])
+check("la conversazione precedente sparisce dal log",
+      res.get("chatDopoSenzaPrima") is True,
+      str(res.get("chatDopo", ""))[:120])
+check("cambiare chat porta in fondo",
+      res.get("chatDopoScroll") == 4000, str(res.get("chatDopoScroll")))
+check("la stessa chat non viene ricostruita a ogni snapshot",
+      res.get("chatStessaIntatta") is True)
 
 print("\n[6] L'immagine generata si vede nella chat")
 check("tool_end con images crea un'anteprima", res.get("anteprime") == 1,
