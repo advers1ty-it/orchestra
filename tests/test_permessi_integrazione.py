@@ -77,6 +77,12 @@ gate.chiedi = chiedi
 T.set_permission_gate(gate)
 
 risultato = {}
+# Il confronto e' fra percorsi CANONICI: su Windows la cartella temporanea
+# arriva come `RUNNER~1` da `tempfile` e come `runneradmin` da `resolve()`,
+# e due stringhe diverse per lo stesso file farebbero sembrare rotto un
+# confine che funziona. E' lo stesso difetto gia' corretto in `Gate` e nel
+# test del worktree: la stringa grezza non e' l'identita' di un percorso.
+atteso = str(Path(segreto).resolve())
 threading.Thread(target=lambda: risultato.update(
     p=str(_safe_path(segreto))), daemon=True).start()
 # si controlla PRIMA che la risposta arrivi (il thread risponde dopo
@@ -86,11 +92,11 @@ time.sleep(0.08)
 check("il tool e' fermo finche' non rispondi",
       "p" not in risultato, str(risultato))
 check("la domanda e' partita con il percorso giusto",
-      eventi and eventi[0][1] == segreto, str(eventi))
+      eventi and eventi[0][1] == atteso, str(eventi))
 time.sleep(0.4)
 check("dopo la risposta il tool prosegue", "p" in risultato, str(risultato))
 check("il percorso restituito e' quello giusto",
-      risultato.get("p") == segreto, str(risultato.get("p")))
+      risultato.get("p") == atteso, str(risultato.get("p")))
 
 print("\n[4] Un percorso vietato non arriva mai a chiedere")
 eventi.clear()
