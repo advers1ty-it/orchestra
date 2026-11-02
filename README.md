@@ -89,3 +89,5 @@ python tests/run_all.py
 ```
 
 La suite gira senza rete (l’e2e col provider vero si salta da solo senza chiave). Alcuni test vogliono il server acceso su `8737`. Dettagli e filosofia dei test nella documentazione integrata (`/docs`).
+
+La stessa suite gira da sola su GitHub Actions (`.github/workflows/ci.yml`): a ogni push e a ogni pull request, su Ubuntu e Windows, senza chiavi vere — il server di test e la cartella dati se li crea `tests/run_all.py`. Una volta al giorno un job separato esegue l’e2e con la chiave vera dal secret `OPENROUTER_API_KEY`. Se il secret manca, l’e2e si salta e lo dice: non risulta verde.

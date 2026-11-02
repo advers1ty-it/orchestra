@@ -1,0 +1,148 @@
+# CI di Orchestra.
+#
+# Perché esiste: `tests/run_all.py` è completo, ma finché lo lancia solo chi
+# si ricorda, l'unica rete di sicurezza del progetto è la memoria di una
+# persona. Qui la stessa suite gira su una macchina appena creata, senza il
+# `.env` di sviluppo e senza un server già acceso: se passa qui, passa da un
+# checkout pulito.
+#
+# Due corsie, perché non costano la stessa cosa:
+#
+#  - `suite`   — ogni push e ogni pull request, su Ubuntu e Windows. Non usa
+#                chiavi vere: ogni suite di questa corsia parla con provider
+#                finti. Windows c'è perché è la piattaforma di sviluppo e
+#                diversi percorsi (shell, permessi, autostart) cambiano lì.
+#  - `notturna` — una volta al giorno, con la chiave vera, `test_e2e`, che è
+#                l'unico test che parla davvero con un provider. Non può
+#                girare su ogni push: costa soldi e dipende da un servizio
+#                esterno. `workflow_dispatch` la esegue a mano — e solo lei,
+#                così "lancia il workflow" significa "verifica l'API
+#                adesso" e non "spendi token senza saperlo".
+#
+# Nota su `test_decisions_schema`: sta nella suite, ma sonda un endpoint
+# alpha su un modello gratuito che OpenRouter può ritirare da un giorno
+# all'altro (è successo con `inception/mercury-decide:free`). Quando non
+# risponde più, la sonda si dichiara "non avvenuta" invece di far fallire
+# la corsia: il rosso racconterebbe la scomparsa di un modello di terzi,
+# non un difetto di Orchestra.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # 03:17 UTC, non alle 03:00: le corse programmate all'ora tonda si
+    # accodano dietro tutte le altre e partono con decine di minuti di
+    # ritardo. Un minuto dispari non cambia niente di sostanziale e
+    # toglie l'attesa.
+    - cron: "17 3 * * *"
+
+# Un push nuovo sulla stessa branch annulla la corsa precedente: quello che
+# conta è l'ultimo commit, non la coda di quelli di dieci minuti fa.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: Suite (${{ matrix.os }})
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      # Un sistema rotto non deve nascondere l'altro: se Ubuntu fallisce,
+      # voglio lo stesso sapere se Windows è verde.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # La suite ha bisogno di un'app configurata: senza configurazione il
+      # server di test risponde 503 e le suite HTTP fallirebbero per un
+      # motivo che non è un difetto del codice. La chiave qui è un segnaposto
+      # e nessun test la usa: serve solo a far costruire il provider. Il file
+      # `.env` è in .gitignore, quindi questo passaggio non tocca il repo.
+      #
+      # In Python e non con `cp`/`printf` perché gli stessi passi devono
+      # valere anche su Windows, dove la shell è PowerShell.
+      - name: Configurazione di test (chiave finta)
+        shell: python
+        run: |
+          import pathlib
+          src = pathlib.Path("orchestra/.env.example")
+          dst = pathlib.Path("orchestra/.env")
+          testo = src.read_text(encoding="utf-8")
+          finta = "OPENROUTER_API_KEY=sk-or-v1-segnaposto-ci"
+          if "OPENROUTER_API_KEY=" in testo:
+              testo = testo.replace("OPENROUTER_API_KEY=", finta, 1)
+          else:
+              testo += "\n" + finta + "\n"
+          dst.write_text(testo, encoding="utf-8")
+          print("scritto", dst, "con una chiave segnaposto")
+
+      - name: Suite
+        run: python tests/run_all.py
+
+  notturna:
+    name: API vera (notturna)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUNBUFFERED: "1"
+      # Il segreto non viene mai stampato: viene scritto nel `.env` da uno
+      # script che lo legge dall'ambiente. Se non è configurato, `test_e2e`
+      # si salta da solo e lo dice — non finge di aver verificato niente.
+      CHIAVE_OPENROUTER: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Configurazione con la chiave vera
+        shell: python
+        run: |
+          import os, pathlib
+          src = pathlib.Path("orchestra/.env.example")
+          dst = pathlib.Path("orchestra/.env")
+          testo = src.read_text(encoding="utf-8")
+          chiave = os.environ.get("CHIAVE_OPENROUTER", "").strip()
+          if chiave:
+              testo = testo.replace("OPENROUTER_API_KEY=",
+                                    "OPENROUTER_API_KEY=" + chiave, 1)
+          dst.write_text(testo, encoding="utf-8")
+          print("chiave presente:", bool(chiave))
+
+      - name: End-to-end con provider vero
+        # Quando il provider non risponde, `test_e2e` stampa "IL PROVIDER NON
+        # HA RISPOSTO" ed esce 1: il runner lo classifica come corsa non
+        # avvenuta, non come test rosso. La CI non addolcisce il verdetto,
+        # lo eredita — e senza chiave la suite si salta dichiarandolo.
+        run: python tests/test_e2e.py

@@ -72,6 +72,22 @@ def accettato(domanda):
     return codice in (200, 429)
 
 
+# Pre-volo: la sonda misura un contratto su un modello gratuito di
+# OpenRouter, e un modello gratuito puo' essere ritirato senza preavviso
+# (e' successo: `inception/mercury-decide:free` risponde 404 "This model
+# is unavailable for free"). In quel caso non c'e' nessun contratto da
+# verificare: non e' un difetto di Orchestra, ed e' inutile far fallire
+# ogni push per un oggetto che non esiste piu'. Il runner riconosce questo
+# testo e lo conta come corsa non avvenuta, non come test rosso.
+_codice, _dettaglio = _chiedi({"type": "noul", "instructions": "x"})
+if _codice not in (200, 429):
+    print(f"\nLA SONDA NON E' PIU' DISPONIBILE: HTTP {_codice} — {_dettaglio}")
+    print("  Non e' un difetto di Orchestra: l'endpoint o il modello")
+    print("  gratuito su cui questa sonda misura il contratto non risponde.")
+    print("  Quando torna disponibile, la sonda riparte da sola.")
+    print("\nPASS 0  FAIL 0  (nessuna verifica possibile)")
+    sys.exit(1)
+
 print("[1] Il tipo `noul` vuole `instructions`")
 check("noul da solo non basta", not accettato({"type": "noul"}),
       "accettato senza istruzioni")

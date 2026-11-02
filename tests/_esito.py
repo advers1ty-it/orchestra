@@ -49,6 +49,18 @@ _SINTOMI_NON_PARTITO = (
     "IndentationError",
 )
 
+# I sintomi di una corsa che NON E' POTUTA AVVENIRE: non un difetto del
+# codice, ma nemmeno una verifica. Il test li stampa in stdout ed esce con
+# un codice non-zero, cosi' il runner lo sa dalla bocca del test stesso
+# invece di indovinarlo dal codice di uscita — che e' lo stesso di un
+# test che ha trovato un difetto.
+_SINTOMI_NON_AVVENUTO = (
+    # l'e2e parla con il provider vero
+    "IL PROVIDER NON HA RISPOSTO",
+    # una sonda su un endpoint di terzi che non risponde piu'
+    "LA SONDA NON E' PIU' DISPONIBILE",
+)
+
 
 class Esito:
     """Il risultato di una suite, con la ragione del fallimento."""
@@ -163,9 +175,15 @@ def classifica(codice, stdout, stderr):
     # sul codice. Il test lo dice ("IL PROVIDER NON HA RISPOSTO"), e
     # non e' un difetto: e' la rete. Confonderlo con un test rosso
     # fa litigare con il provider invece che col codice.
-    if "IL PROVIDER NON HA RISPOSTO" in (stdout or ""):
-        return Esito(NON_AVVENUTO, codice, stdout, stderr,
-                    _prima_riga_significativa(stdout))
+    #
+    # Stessa cosa per le sonde su endpoint di terzi: se il modello
+    # gratuito su cui misurano un contratto viene ritirato, la sonda non
+    # puo' verificare niente — e un rosso fisso su una funzione che non
+    # esiste piu' e' rumore che nasconde i difetti veri.
+    for sintomo in _SINTOMI_NON_AVVENUTO:
+        if sintomo in (stdout or ""):
+            return Esito(NON_AVVENUTO, codice, stdout, stderr,
+                        _prima_riga_significativa(stdout))
 
     return Esito(FALLITO, codice, stdout, stderr, _elenco_falliti(stdout))
 

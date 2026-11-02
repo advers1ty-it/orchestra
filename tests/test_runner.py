@@ -132,6 +132,17 @@ check("e' NON AVVENUTO", esito.stato == NON_AVVENUTO, esito.stato)
 check("NON e' FALLITO", esito.stato != FALLITO, esito.stato)
 check("e NON e' un crash", esito.stato != CRASH, esito.stato)
 
+# Stessa cosa per una sonda su un endpoint di terzi: se il modello su cui
+# misura viene ritirato, non c'e' niente da verificare. Un rosso fisso su
+# una funzione sparita e' rumore che nasconde i difetti veri — ma NON e'
+# un verde: il riepilogo deve dirlo.
+out = ("LA SONDA NON E' PIU' DISPONIBILE: HTTP 404 — This model is "
+       "unavailable for free\n")
+esito = classifica(1, out, "")
+check("una sonda ritirata e' NON AVVENUTO", esito.stato == NON_AVVENUTO,
+      esito.stato)
+check("e non e' FALLITO", esito.stato != FALLITO, esito.stato)
+
 print("\n[5] La parola 'ImportError' in stdout NON crea un falso 'non partito'")
 # Un test puo' parlare di ImportError parlando di un difetto che ha
 # trovato in un altro programma. Se il classificatore guardasse lo
