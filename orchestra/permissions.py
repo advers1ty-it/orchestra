@@ -287,8 +287,17 @@ class Gate:
         if self.dentro_root(p):
             return "concesso"
 
-        # 2. percorsi vietati: nessuna delle quattro scelte li sblocca
-        motivo = self.percorso_sensibile(p)
+        # 2. percorsi vietati: nessuna delle quattro scelte li sblocca.
+        #
+        # Si controlla anche il percorso COSI' COM'E' STATO SCRITTO, non
+        # solo quello risolto: `/bin/ls` su Ubuntu e' un symlink che
+        # `resolve()` porta in `/usr/lib/cargo/bin/coreutils/ls`, e il
+        # divieto su `/bin` spariva. Non era un buco grave — il gate
+        # chiedeva comunque — ma un divieto che si aggira con un symlink
+        # non e' un divieto.
+        scritto = Path(os.path.abspath(str(percorso))) if not Path(percorso).is_absolute() \
+            else Path(os.path.normpath(str(percorso)))
+        motivo = self.percorso_sensibile(p) or self.percorso_sensibile(scritto)
         if motivo:
             return "negato"
 
@@ -422,7 +431,10 @@ class Gate:
 
     def revoca(self, percorso: str) -> bool:
         """Toglie un permesso concesso (sessione/sempre) o dimentica un "mai"."""
-        k = self._chiave(Path(str(percorso)))
+        # Come per il consenso: la revoca deve usare la stessa chiave
+        # canonica, o toglie un permesso che non c'e' e lascia in piedi
+        # quello vero. Su Windows succedeva con i nomi brevi 8.3.
+        k = self._chiave(self._canonico(percorso))
         with self._lock:
             tolto = self._sessione.pop(k, None) is not None
             tolto = k in self._sempre or tolto

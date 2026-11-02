@@ -81,7 +81,12 @@ check("il gate nega", "permesso non concesso" in r4, r4[:90])
 print("\n[6] I percorsi sensibili non si sbloccano con una concessione")
 gate4 = Gate(root=root, chiedi=lambda r: Risposta("sessione"))
 T.set_permission_gate(gate4)
-vietato = "C:/Windows/System32/config/SAM"
+# Un percorso sensibile VERO su questa piattaforma: "C:/Windows/..." su
+# Linux e' relativo, quindi il gate non ha niente da negare e il comando
+# parte per davvero (e fallisce perche' il file non esiste) — un rosso che
+# parla del test, non del controllo.
+vietato = ("C:/Windows/System32/config/SAM" if os.name == "nt"
+           else "/etc/shadow")
 r5 = t.handler("cat " + vietato)
 check("un percorso di sistema resta negato",
       "NON ESEGUITO" in r5 or "BLOCCATO" in r5, r5[:90])

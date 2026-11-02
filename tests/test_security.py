@@ -96,7 +96,11 @@ check("non espone il contenuto del file", "boot loader" not in out.lower())
 
 print("\n[4] read_file: guardia coerente")
 rf = default_registry().get("read_file")
-for bad in ["../../../Windows/win.ini", "..\\..\\secrets.txt", "/etc/passwd"]:
+# Il traversal va scritto con il separatore di QUESTA piattaforma: su Linux
+# `..\\..\\secrets.txt` e' un nome di file, non una risalita, e il test
+# accusa la guardia di averlo letto quando in realta' non stava uscendo.
+_risalita = "..\\..\\secrets.txt" if os.name == "nt" else "../../secrets.txt"
+for bad in ["../../../Windows/win.ini", _risalita, "/etc/passwd"]:
     try:
         rf.handler(path=bad)
         check(f"read_file blocca {bad[:30]}", False, "ha letto!")
@@ -143,8 +147,12 @@ tool_out = "\n".join(m.content for m in st.messages if m.role == "tool")
 rifiutato = "NON ESEGUITO" in tool_out or "BLOCCATO" in tool_out
 check("nessun segreto trapelato", "sk-" not in tool_out and rifiutato, tool_out[:80])
 check("il modello ha visto il rifiuto", rifiutato, tool_out[:80])
+# Il messaggio deve nominare il percorso toccato, in qualunque modo il
+# sistema lo scriva. Prima si cercava una drive Windows: su Linux il
+# percorso era `/home/runner/...` e il test falliva pur essendo corretto.
+_atteso = os.path.abspath(os.path.join(WORK, "..", "..", ".env"))
 check("e ha visto il percorso che ha toccato",
-      "D:\\" in tool_out or "C:\\" in tool_out, tool_out[:90])
+      os.path.dirname(_atteso).lower() in tool_out.lower(), tool_out[:120])
 
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
