@@ -199,7 +199,12 @@ def test_root() -> None:
     root_base = str(_guard._root())
 
     pr._set_root_sessione(p1, "Sito Ristorante")
-    check("la root segue il progetto", str(_guard._root()).lower() == os.path.abspath(p1).lower(),
+    # `realpath` da entrambi i lati: su Windows la cartella temporanea puo'
+    # arrivare come `RUNNER~1` mentre il codice restituisce il nome lungo.
+    # Sono lo stesso posto, e la forma non e' quello che si sta provando.
+    check("la root segue il progetto",
+          os.path.normcase(os.path.realpath(str(_guard._root()))) ==
+          os.path.normcase(os.path.realpath(p1)),
           f"{_guard._root()} invece di {p1}")
     check("il nome del progetto e' leggibile",
           pr._root_progetto() == "Sito Ristorante", pr._root_progetto())

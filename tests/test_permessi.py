@@ -80,10 +80,28 @@ g3 = Gate(root=root)
 for p in ("C:/Windows/System32/drivers/etc/hosts",
           "C:/Program Files/una cosa/x.dll",
           "/etc/passwd", "/bin/ls", "/System/Library/x"):
-    esito = g3.valuta(p, "leggere")
     if os.name == "nt" and p.startswith("/"):
         continue  # su Windows quei path non sono sensibili perche' non esistono
-    check(f"negato: {p}", esito == "negato", esito)
+    if os.name != "nt" and p[1:2] == ":":
+        # Su POSIX `C:/Windows/...` e' un percorso RELATIVO (nessuna
+        # unita'): finisce dentro la root e non c'e' niente da negare.
+        # Prima il test lo trattava come assoluto e falliva su Linux per
+        # una ragione che col gate non c'entrava.
+        continue
+    esito = g3.valuta(p, "leggere")
+    dettaglio = esito
+    if esito != "negato":
+        # Se un percorso sensibile non viene negato, serve sapere COME e'
+        # stato interpretato: il solo "chiedi" non dice se il problema e'
+        # il resolve, il confronto o la lista.
+        pp = Path(p)
+        try:
+            risolto = pp.resolve()
+        except OSError:
+            risolto = pp
+        dettaglio = (f"{esito} — risolto {risolto}, "
+                     f"sensibile {g3.percorso_sensibile(risolto)!r}")
+    check(f"negato: {p}", esito == "negato", dettaglio)
 
 print("\n[4] Chiavi e credenziali vietate ovunque")
 g4 = Gate(root=root)

@@ -91,7 +91,11 @@ gate.chiedi_all_utente(esterno, "leggere")
 r = reg.get("list_dir").handler(esterno)
 check("il listing non muore con ValueError", "ValueError" not in r, r[:90])
 check("mostra i file", "package.json" in r, r[:160])
-check("e le directory, estese", os.path.join(esterno, ".bundle") in r, r[:200])
+# `realpath`: su Windows la cartella temporanea puo' arrivare nella forma
+# breve `RUNNER~1`, mentre il listing riporta quella lunga. La directory
+# e' la stessa, e il test deve provare che c'e', non come si scrive.
+check("e le directory, estese",
+      os.path.realpath(os.path.join(esterno, ".bundle")) in r, r[:200])
 
 r2 = reg.get("list_dir").handler(os.path.join(esterno, ".bundle"))
 check("e si puo' riaprire una sottocartoria", "ValueError" not in r2, r2[:90])

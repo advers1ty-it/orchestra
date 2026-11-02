@@ -102,7 +102,11 @@ def radice_repo(percorso: str) -> str | None:
         return None
     if r.returncode != 0 or not (r.stdout or "").strip():
         return None
-    radice = os.path.abspath((r.stdout or "").strip())
+    # `realpath` allinea la forma del percorso: git puo' restituire il
+    # nome breve 8.3 o il case originale, e chi confronta ha in mano
+    # l'altra forma. Vale anche per `prepara`, che chiama `_sotto_percorso`
+    # con questo valore.
+    radice = os.path.realpath(os.path.abspath((r.stdout or "").strip()))
     if not os.path.isdir(radice):
         return None
     # Un repository bare non ha un working tree da cui partire.
@@ -146,7 +150,13 @@ def _sotto_percorso(progetto: str, radice: str) -> str:
     `worktree / quella sottocartella`. Un progetto fuori dal repository
     non puo' succedere dopo `radice_repo`, ma si controlla lo stesso.
     """
-    rel = os.path.relpath(os.path.abspath(progetto), radice)
+    # realpath da entrambi i lati: git restituisce la radice nella forma
+    # che conosce il sistema (`C:/Users/runneradmin/...`), mentre il
+    # progetto puo' arrivare nella forma breve `C:/Users/RUNNER~1/...`.
+    # Sono la stessa cartella, ma relpath fra le due produce `..\..\...`
+    # e il lavoro moriva con "il progetto non e' dentro il repository" —
+    # su Windows, solo in CI, cioe' nel posto dove i nomi brevi esistono.
+    rel = os.path.relpath(os.path.realpath(progetto), os.path.realpath(radice))
     if rel == os.pardir or rel.startswith(os.pardir + os.sep):
         raise WorktreeError("il progetto non e' dentro il repository")
     return rel

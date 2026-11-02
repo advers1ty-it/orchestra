@@ -172,10 +172,25 @@ class Gate:
         return str(p).lower() if os.name == "nt" else str(p)
 
     def dentro_root(self, p: Path) -> bool:
+        """Se p sta dentro la root, con lo stesso "dentro" del sistema.
+
+        `relative_to` da solo non basta su Windows: il confronto e'
+        sensibile alle maiuscole e alla forma in cui il percorso e'
+        scritto, e la stessa cartella puo' arrivare come
+        `C:\\Users\\RUNNER~1\\...` da una parte e
+        `C:\\Users\\runneradmin\\...` dall'altra. Non e' una differenza
+        teorica: sulla CI di Windows il gate negava il consenso su file
+        che stavano dentro la root, perche' i due lati non si
+        riconoscevano. `normcase` allinea separatori e maiuscole, e
+        `commonpath` dice se uno e' sotto l'altro senza costruire il
+        percorso relativo.
+        """
         try:
-            p.relative_to(self.root)
-            return True
+            a = os.path.normcase(str(p))
+            b = os.path.normcase(str(self.root))
+            return os.path.commonpath([a, b]) == b
         except ValueError:
+            # unita' diverse o percorso relativo contro assoluto: e' fuori
             return False
 
     def percorso_sensibile(self, p: Path) -> str:
@@ -236,16 +251,20 @@ class Gate:
         """
         p = Path(percorso)
         if not p.is_absolute():
-            p = (self.root / percorso).resolve()
-        else:
-            # p.exists() su un path di sistema (C:\Windows\System32\config\SAM)
-            # solleva PermissionError, non False: "accesso negato" non e'
-            # "non esiste". Il gate deve NEGARE quei path, non morire.
-            try:
-                esiste = p.exists()
-            except OSError:
-                esiste = False
-            p = p.resolve() if esiste else Path(os.path.normpath(str(p)))
+            p = self.root / percorso
+        # SEMPRE resolve, anche quando il file non esiste: resolve lavora
+        # sul pezzo piu' lungo che esiste, e cosi' normalizza symlink,
+        # maiuscole e nomi brevi 8.3. Prima il ramo "non esiste" usava
+        # solo normpath, e su Windows il percorso restava nella forma
+        # `RUNNER~1` mentre la root era `runneradmin`: due stringhe diverse
+        # per la stessa cartella, e il file veniva giudicato fuori dalla
+        # root. `p.exists()` su un path di sistema puo' sollevare
+        # PermissionError, non False; qui non serve saperlo, perche' non
+        # decidiamo piu' in base all'esistenza.
+        try:
+            p = p.resolve()
+        except (OSError, RuntimeError):
+            p = Path(os.path.abspath(str(p)))
 
         # 1. dentro la root: nessuna domanda, e' il posto di lavoro
         if self.dentro_root(p):

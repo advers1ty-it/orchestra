@@ -97,7 +97,12 @@ print("\n[2] Un progetto git ha un checkout separato")
 
 repo = repo_con_commit()
 progetto = os.path.join(repo, "app")
-check("la radice del repo e' quella giusta", wt.radice_repo(progetto) == repo,
+# Confronto con `realpath` da entrambi i lati: su Windows la cartella
+# temporanea puo' essere nella forma breve `RUNNER~1` mentre git restituisce
+# quella lunga. Prima il test falliva per la forma, non per la radice.
+check("la radice del repo e' quella giusta",
+      os.path.normcase(os.path.realpath(str(wt.radice_repo(progetto)))) ==
+      os.path.normcase(os.path.realpath(repo)),
       str(wt.radice_repo(progetto)))
 info = wt.prepara(progetto, 101)
 check("il checkout e' stato creato", bool(info), str(info))

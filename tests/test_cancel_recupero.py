@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -142,6 +143,13 @@ reg2 = ToolRegistry()
 reg2.register(tool_list_dir())
 
 
+# Una cartella fuori sia dalla root sia dal repository, e che esiste su
+# ogni sistema. Un percorso scritto a mano ("C:/Users/adver/Documents") su
+# Linux e' relativo e finisce DENTRO la root: il gate non ha niente da
+# chiedere, e il test accusa il gate di non chiedere.
+FUORI_ROOT = tempfile.mkdtemp(prefix="orch-fuori-permesso-")
+
+
 class ChiedeFuori:
     """Il provider chiede list_dir su un path FUORI dalla root.
 
@@ -166,7 +174,7 @@ class ChiedeFuori:
         return LLMResponse(
             content="",
             tool_calls=[ToolCall(id=f"t{self.n}", name="list_dir",
-                                 arguments=json.dumps({"path": "C:/Users/adver/Documents"}))],
+                                 arguments=json.dumps({"path": FUORI_ROOT}))],
             model="m",
         )
 

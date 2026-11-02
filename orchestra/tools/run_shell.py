@@ -117,15 +117,19 @@ def tool_run_shell() -> Tool:
             # separatore come il modello si aspetta
             shell_cmd = f'"{posix}" -lc {_sq(command)}'
         creationflags = 0
-        preexec_fn = None
         if os.name == "nt":
             # nuovo process group: libera taskkill di chiudere tutto l'albero.
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-        else:
-            try:
-                preexec_fn = os.setsid
-            except AttributeError:
-                preexec_fn = None
+        # Su POSIX il nuovo process group lo fa `start_new_session`, non
+        # `preexec_fn=os.setsid`. Passarli tutti e due non e' ridondante:
+        # e' un errore. `start_new_session` chiama setsid() in C prima di
+        # `preexec_fn`, e la seconda chiamata trova il processo gia' capo
+        # della sessione e solleva EPERM — in Python si vede come
+        # "Exception occurred in preexec_fn", che uccide il comando. Su
+        # Windows quel ramo non girava mai, quindi il difetto e' rimasto
+        # invisibile finche' la CI non ha eseguito i test su Linux.
+        # `start_new_session` e' anche l'unica forma sicura con thread
+        # attivi (il server HTTP ne ha sempre).
         if posix:
             # Passa il comando come singolo argomento a bash -lc.
             # Niente shell=True: con cmd.exe i backslash e le virgolette
@@ -140,7 +144,6 @@ def tool_run_shell() -> Tool:
                 env=_sandbox_env(),
                 creationflags=creationflags,
                 start_new_session=(os.name != "nt"),
-                preexec_fn=preexec_fn,
             )
         else:
             proc = subprocess.Popen(
@@ -154,7 +157,6 @@ def tool_run_shell() -> Tool:
                 env=_sandbox_env(),
                 creationflags=creationflags,
                 start_new_session=(os.name != "nt"),
-                preexec_fn=preexec_fn,
             )
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
