@@ -621,8 +621,9 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
                 "lanciare un obiettivo")
         provider = build_provider(provider_name, model=model, env=env)
         reg = default_registry()
-        _attacca_delega(reg, env, int(goal.get("max_iterations") or 60),
-                        recovery=goal.get("recovery") or {})
+        delega_attiva = _attacca_delega(
+            reg, env, int(goal.get("max_iterations") or 60),
+            recovery=goal.get("recovery") or {})
         profile = goal.get("profile")
         if profile == "auto":
             profile = profilo_per_testo(goal["objective"])
@@ -631,6 +632,13 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
                 applica_profilo(reg, profile)
             except Exception:
                 pass
+        # `delega` e `delega_multi` sono registrati a runtime e non
+        # compaiono in nessun profilo: il profilo li spegnerebbe, e un
+        # goal con un profilo scelto perderebbe la delega senza che
+        # niente lo dica.
+        if delega_attiva:
+            from .delega import riattiva_delega
+            riattiva_delega(reg)
         prompt = (
             "Hai un obiettivo da raggiungere. Lavora in autonomia: analizza, "
             "modifica i file, verifica con comandi oggettivi, e termina solo "
@@ -767,6 +775,49 @@ def _attacca_delega(reg: Any,
             "contesto": {"type": "string"}},
             "required": ["obiettivo"]},
         handler=_delega,
+    ))
+
+    def _delega_multi(obiettivi: list[str], contesto: str = "",
+                      timeout_s: int | None = None) -> str:
+        """Più compiti insieme, senza retry automatico.
+
+        Il retry di `delega_con_recupero` forza un modello alternativo
+        per il tentativo successivo, e lo fa con un dizionario condiviso
+        (`modello_forzato`) che `fabbrica` legge: in parallelo i figli si
+        vedrebbero il modello l'uno dell'altro, e il confronto non
+        sarebbe più fra modelli ma fra due corse. Quindi qui il recovery
+        non si applica: chi vuole riprovare un figlio lo delega di
+        nuovo con `delega`.
+        """
+        try:
+            if not isinstance(obiettivi, list) or not obiettivi:
+                return "[delega_multi: serve una lista di obiettivi]"
+            timeout = None
+            if timeout_s:
+                try:
+                    timeout = max(30.0, min(900.0, float(timeout_s)))
+                except (TypeError, ValueError):
+                    timeout = None
+            figli = deleg.delega_multi([str(o) for o in obiettivi],
+                                       contesto, timeout=timeout)
+            from .delega import resoconto_multi
+            return (resoconto_multi([str(o) for o in obiettivi], figli)
+                    + "\n\n" + deleg.resoconto())
+        except Exception as e:  # noqa: BLE001
+            return f"[delega multipla fallita: {e}]"
+
+    reg.register(Tool(
+        name="delega_multi",
+        description=("Affida PIÙ compiti indipendenti insieme a "
+                     "sub-agenti e aspetta che finiscano: un resoconto "
+                     "per figlio, risultati separati. Il retry con "
+                     "modelli alternativi non si applica qui."),
+        schema={"type": "object", "properties": {
+            "obiettivi": {"type": "array", "items": {"type": "string"}},
+            "contesto": {"type": "string"},
+            "timeout_s": {"type": "integer"}},
+            "required": ["obiettivi"]},
+        handler=_delega_multi,
     ))
     return True
 def start_goal(objective: str, env: dict[str, str] | None = None,

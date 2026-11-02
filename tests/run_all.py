@@ -103,6 +103,12 @@ SUITES = [
     ("permessi", "test_permessi.py", True),
     ("permessi-persistenza", "test_permessi_persistenza.py", True),
     ("permesso-shell", "test_permesso_shell.py", True),
+    # La delega, nelle due forme. `test_delega.py` c'era ma non era nel
+    # runner; il secondo e' nuovo e copre le tre cose che il figlio
+    # sincrono non aveva: il tetto sotto lock, la scadenza, e l'ordine
+    # dei risultati uguale a quello degli obiettivi.
+    ("delega", "test_delega.py", True),
+    ("delega-multi", "test_delega_multi.py", True),
     ("eventi-bridge", "test_eventi_bridge.py", True),
     ("eventi-client", "test_eventi_client.py", True),
     ("switch-servizio", "test_switch_servizio.py", True),

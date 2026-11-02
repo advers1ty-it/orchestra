@@ -260,11 +260,16 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 <section id="delega">
 <h2>Multi-agent & delega</h2>
 <p>Il padre può delegare subtask a figli on-demand se il tool <code>delega</code> è registrato (aggiunto in `default_registry` solo con profilo/condizioni appropriate). Delega best-effort: fall-back se catalog o modello non disponibile.</p>
+<p><strong>Più figli insieme:</strong> <code>delega_multi</code> prende una lista di obiettivi, li esegue in thread con un tetto di concorrenza (default 3, tetto totale dei figli invariato), aspetta al massimo <code>timeout_s</code> secondi per <em>tutto</em> il gruppo (30–900, default 240) e torna un resoconto per figlio, nello stesso ordine della lista.</p>
 <ul>
+  <li>Un figlio che non finisce entro la scadenza ha esito <code>scaduto</code>, non <code>errore</code>: non si sa se ha sbagliato, si sa che non ha finito. Gli si chiede di fermarsi al passo successivo; un figlio già in corso non si può uccidere, e il motivo lo dice.</li>
+  <li>I risultati restano <strong>separati</strong>: unire il lavoro di due figli è una decisione del padre, non un automatismo — come per i worktree.</li>
+  <li>I figli lavorano nella stessa cartella: usarli per compiti indipendenti (letture, verifiche, ricerche), non per scrivere gli stessi file.</li>
   <li>Profondità max, # figli limitato.</li>
-  <li>Costo per figlio aggiunto al resoconto (se catalogo).</li>
+  <li>Costo per figlio aggiunto al resoconto (se catalogo); con più figli il prezzo è quello del modello di ciascuno, non l'ultimo scelto.</li>
   <li>Il figlio non può delegare a sua volta (tetto profondità).</li>
   <li>Recovery opzionale nei goal: <code>recovery={max_retry, modelli_alternativi, accorcia_contesto}</code>. Di default nessun retry; i tetti strutturali non si ritentano mai.</li>
+  <li>Nei goal c'è anche <code>delega_multi</code>, ma il recovery resta sulla delega singola: il retry forza un modello alternativo con uno stato condiviso, e in parallelo i figli si vedrebbero il modello l'uno dell'altro. Per riprovare un figlio, lo si delega di nuovo con <code>delega</code>.</li>
 </ul>
 </section>
 

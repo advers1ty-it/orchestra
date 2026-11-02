@@ -943,9 +943,13 @@ function handle(kind, d) {
       break;
     }
     case "delega": {
+      // "scaduto" non è "errore": nella chat la differenza si vede,
+      // perché il padre deve poter capire se rifare il compito o no.
       const esito = {risposto: "fatto", esaurito: "senza risposta",
+                     scaduto: "tempo scaduto",
                      errore: "errore"}[d.esito] || d.esito;
-      addNote(`delega a un sub-agente (${d.modello || "senza modello"}, ` +
+      const quale = d.indice ? ` [${d.indice}/${d.totale || "?"}]` : "";
+      addNote(`delega${quale} a un sub-agente (${d.modello || "senza modello"}, ` +
               `${d.passi || 0} passi): ${esito} — "${String(d.obiettivo || "").slice(0, 70)}"`);
       break;
     }

@@ -265,6 +265,11 @@ class Session:
         self.registry = registry
         self._catalogo_per_costo: Any = None
         self._modello_delegato: str = ""
+        # Con `delega_multi` i figli girano in thread diversi e possono
+        # usare modelli diversi: il modello "ricordato" per il costo dev'essere
+        # quello del thread che sta calcolando. Con un campo solo, il costo di
+        # un figlio finiva sul modello di un altro (o su nessuno).
+        self._locale_costo = threading.local()
         self._fabbrica_figlio: Any = None
         self._delegatore: Any = None
         # Id della sessione nello storico su disco. None = non si salva
@@ -597,6 +602,90 @@ class Session:
             },
             handler=_delega,
         ))
+
+        def _delega_multi(obiettivi: list[str], contesto: str = "",
+                          timeout_s: int | None = None) -> str:
+            """Più compiti insieme, un resoconto per figlio.
+
+            Il risultato non è la fusione dei lavori: è un elenco. Unire
+            due agenti che hanno scritto file è una decisione, e la
+            prende il padre guardando cosa hanno fatto.
+            """
+            if self._delegatore is None:
+                return "[delega non attiva]"
+            if not isinstance(obiettivi, list) or not obiettivi:
+                return "[delega_multi: serve una lista di obiettivi]"
+            timeout = None
+            if timeout_s:
+                # Il tetto lo mette il padre, ma non può metterlo a 3
+                # secondi: un figlio che parte e viene fermato subito
+                # costa token e non produce niente.
+                try:
+                    timeout = max(30.0, min(900.0, float(timeout_s)))
+                except (TypeError, ValueError):
+                    timeout = None
+            figli = self._delegatore.delega_multi(
+                [str(o) for o in obiettivi], contesto, timeout=timeout)
+            for n, (obiettivo, f) in enumerate(zip(obiettivi, figli), 1):
+                # l'evento va al padre: è così che nella chat si vede che
+                # un figlio sta lavorando invece che il padre sembrare fermo
+                try:
+                    self.bridge.emit("delega", {
+                        "obiettivo": str(obiettivo)[:160],
+                        "esito": f.esito,
+                        "passi": f.passi,
+                        "modello": f.modello,
+                        "costo": f.costo,
+                        "indice": n,
+                        "totale": len(figli),
+                    })
+                except Exception:
+                    pass
+            from .delega import resoconto_multi
+            return (resoconto_multi([str(o) for o in obiettivi], figli)
+                    + "\n\n" + self._delegatore.resoconto())
+
+        self.registry.register(Tool(
+            name="delega_multi",
+            description=("Affida PIÙ compiti indipendenti insieme a "
+                         "sub-agenti, e aspetta che finiscano. Ognuno parte "
+                         "con una finestra vuota e torna con la sua "
+                         "risposta: i risultati restano separati, "
+                         "l'unione la decidi tu. Usarlo quando i compiti "
+                         "non dipendono uno dall'altro (leggere tre file, "
+                         "verificare due ipotesi, cercare in due cartelle "
+                         "diverse). NON usarlo per compiti in sequenza — lì "
+                         "il secondo ha bisogno di ciò che ha trovato il "
+                         "primo — né per far scrivere più figli sugli "
+                         "stessi file: lavorano nella stessa cartella."),
+            schema={
+                "type": "object",
+                "properties": {
+                    "obiettivi": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": ("I compiti, uno per elemento. "
+                                        "Ognuno deve essere finito e "
+                                        "indipendente dagli altri."),
+                    },
+                    "contesto": {
+                        "type": "string",
+                        "description": ("Cosa devono sapere tutti i figli: "
+                                        "percorsi, formato atteso, soglie. "
+                                        "NON la conversazione."),
+                    },
+                    "timeout_s": {
+                        "type": "integer",
+                        "description": ("Secondi per TUTTO il gruppo "
+                                        "(30-900, default 240). I figli "
+                                        "che non finiscono tornano "
+                                        "'scaduto', non 'errore'."),
+                    },
+                },
+                "required": ["obiettivi"],
+            },
+            handler=_delega_multi,
+        ))
         return True
 
     # -- bot ----------------------------------------------------------------
@@ -795,6 +884,7 @@ class Session:
         che e' la stessa cosa che non misurare niente.
         """
         self._modello_delegato = modello
+        self._locale_costo.modello = modello
 
     def _tariffa_delegato(self, token: int) -> float | None:
         """Costo di `token` token per il modello che il figlio usa.
@@ -810,7 +900,7 @@ class Session:
         un'altra.
         """
         cat = getattr(self, "_catalogo_per_costo", None)
-        mod = getattr(self, "_modello_delegato", None)
+        mod = getattr(self._locale_costo, "modello", "")
         if cat is None or not mod:
             return None
         prof = cat.models.get(mod) if hasattr(cat, "models") else None
@@ -1175,6 +1265,13 @@ class Session:
                 self.agent.registry.attiva("bot_chiedi")
             except Exception:  # noqa: BLE001
                 pass
+        # Come `bot_chiedi`: `delega` e `delega_multi` li registra la
+        # sessione a runtime, e non compaiono in nessun profilo. Senza
+        # `riattiva_delega` il primo turno con un profilo scelto li
+        # spegne, e l'agente perde la delega senza che niente lo dica.
+        if self._delegatore is not None:
+            from .delega import riattiva_delega
+            riattiva_delega(self.agent.registry)
         # Come `bot_chiedi`: il profilo puo' averlo disattivato, ma il
         # lavoro isolato lo ha registrato apposta per questo turno.
         if getattr(self, "_proponi_merge", None) is not None:
@@ -1183,11 +1280,11 @@ class Session:
             except Exception:  # noqa: BLE001
                 pass
         # La policy viene DOPO il profilo e DOPO i tool runtime: e'
-        # l'ultima parola, e vale anche per `bot_chiedi` e
-        # `proponi_merge`. Se una allowlist non li nomina, il bot non li
-        # ha — che e' quello che "tool consentiti" significa. Chi vuole
-        # un bot che delega deve metterli nella lista, insieme a
-        # `parla_con` per `bot_chiedi`.
+        # l'ultima parola, e vale anche per `bot_chiedi`,
+        # `proponi_merge`, `delega` e `delega_multi`. Se una allowlist non
+        # li nomina, il bot non li ha — che e' quello che "tool
+        # consentiti" significa. Chi vuole un bot che delega deve
+        # metterli nella lista, insieme a `parla_con` per `bot_chiedi`.
         try:
             from . import policy as policy_mod
             policy_mod.attiva(self._policy)
