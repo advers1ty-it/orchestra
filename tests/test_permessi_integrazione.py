@@ -94,7 +94,13 @@ check("il percorso restituito e' quello giusto",
 
 print("\n[4] Un percorso vietato non arriva mai a chiedere")
 eventi.clear()
-vietato = "C:\\Windows\\System32\\drivers\\etc\\hosts"
+# Il percorso sensibile va scelto per piattaforma, come negli altri test
+# dei permessi: su POSIX `C:\Windows\...` e' un percorso RELATIVO (nessuna
+# unita'), quindi cade dentro la root e non c'e' niente da negare. Il test
+# lo trattava come assoluto e su Ubuntu accuso' la guardia di un difetto
+# che non c'era — l'ha trovato la CI, perche' il test era fuori dal runner.
+vietato = ("C:\\Windows\\System32\\drivers\\etc\\hosts" if os.name == "nt"
+           else "/etc/hosts")
 try:
     _safe_path(vietato)
     check("il percorso vietato viene negato", False, "e' passato")
