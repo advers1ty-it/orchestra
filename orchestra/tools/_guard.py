@@ -307,6 +307,20 @@ def _percorso_fuori(command: str) -> str:
         candidato = come_windows(command[m.start():m.end()].rstrip("/"))
         if candidato and not _dentro_root(candidato):
             return candidato
+    # Percorsi assoluti POSIX fuori dai prefissi noti: su Linux `/tmp/...`,
+    # `/etc/...`, `/bin/...` sono assoluti e stanno fuori dalla root, e
+    # prima non li vedeva nessuno. Il confine della shell valeva solo su
+    # Windows: `cat /etc/passwd` passava senza domanda, e senza gate non
+    # veniva nemmeno fermato. La CI su Ubuntu l'ha trovato subito.
+    #
+    # Il lookbehind esclude `://` (un URL non e' un percorso) e le slash
+    # consecutive; `%a%b` e le sostituzioni `sed s/a/b/` restano fuori
+    # perche' la slash e' preceduta da una lettera o da un altro carattere
+    # di parola.
+    for m in re.finditer(r"(?<![\w:/])/(?!/)[^\s'\";|&)<>]+", command):
+        candidato = m.group(0).rstrip("/.,;")
+        if candidato and len(candidato) > 1 and not _dentro_root(candidato):
+            return candidato
     if "../" in command or "..\\" in command:
         # si risolve solo il PRIMO token che sembra un percorso: passare
         # l'intero comando a resolve() lo tratta come un nome di file e
@@ -371,6 +385,14 @@ def _check_shell_access(command: str) -> str | None:
     for m in re.finditer(r"[a-z]:[\\/][^\s'\";|&<>]{0,200}", low):
         candidato = command[m.start():m.end()].rstrip("/\\")
         if candidato and not _dentro_root(candidato):
+            return f"il comando punta fuori dal progetto ({candidato}): {command[:120]}"
+
+    # 2b) percorsi assoluti POSIX: stesso ragionamento, e prima mancavano.
+    # Senza questa riga, su Linux la riserva che vale quando il gate non
+    # c'e' (CLI, benchmark) lasciava passare `cat /etc/passwd`.
+    for m in re.finditer(r"(?<![\w:/])/(?!/)[^\s'\";|&<>]{0,200}", command):
+        candidato = m.group(0).rstrip("/.,;")
+        if candidato and len(candidato) > 1 and not _dentro_root(candidato):
             return f"il comando punta fuori dal progetto ({candidato}): {command[:120]}"
 
     # 3) home esplicita: solo se la home e' davvero fuori

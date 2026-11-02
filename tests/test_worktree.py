@@ -208,9 +208,14 @@ if checkout:
     prov.rilascia.set()
     check("il turno finisce", attendi(lambda: not sess.busy))
     radici_turno = [r for nome, r in prov.radici if nome == "orchestra-turn"]
+    # Confronto canonico: su Windows la cartella temporanea arriva come
+    # `RUNNER~1` mentre la root isolata e' gia' nel nome lungo. E' lo
+    # stesso posto, e la forma non e' quello che il test sta provando.
     check("i tool hanno visto il checkout",
-          bool(radici_turno) and radici_turno[0] == os.path.abspath(
-              checkout["radice"]), str(prov.radici))
+          bool(radici_turno) and
+          os.path.normcase(os.path.realpath(radici_turno[0])) ==
+          os.path.normcase(os.path.realpath(checkout["radice"])),
+          str(prov.radici))
     check("a fine turno la root isolata sparisce", sess._root_isolata == "",
           sess._root_isolata)
     wt.rimuovi(checkout)

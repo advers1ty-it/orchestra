@@ -193,6 +193,28 @@ class Gate:
             # unita' diverse o percorso relativo contro assoluto: e' fuori
             return False
 
+    @staticmethod
+    def _canonico(percorso: str | os.PathLike[str]) -> Path:
+        """Il percorso nella forma che vale per i confronti.
+
+        `resolve()` normalizza symlink, maiuscole e — su Windows — i nomi
+        brevi 8.3. Lavora anche sui file che non esistono (risolve il
+        pezzo piu' lungo che c'e'), quindi non serve che il percorso sia
+        reale per poterlo confrontare.
+
+        Va usato OVUNQUE si costruisca una chiave: se `valuta` canonicalizza
+        e `chiedi_all_utente` no, il consenso viene ricordato su una
+        stringa e cercato su un'altra. E' esattamente quello che succedeva
+        su Windows in CI, dove la stessa cartella arrivava come `RUNNER~1`
+        da una parte e `runneradmin` dall'altra: l'utente concedeva, e
+        l'operazione successiva chiedeva di nuovo.
+        """
+        p = Path(percorso)
+        try:
+            return p.resolve()
+        except (OSError, RuntimeError):
+            return Path(os.path.abspath(str(p)))
+
     def percorso_sensibile(self, p: Path) -> str:
         """Ritorna il motivo per cui il percorso e' vietato, o ''.
 
@@ -252,19 +274,14 @@ class Gate:
         p = Path(percorso)
         if not p.is_absolute():
             p = self.root / percorso
-        # SEMPRE resolve, anche quando il file non esiste: resolve lavora
-        # sul pezzo piu' lungo che esiste, e cosi' normalizza symlink,
-        # maiuscole e nomi brevi 8.3. Prima il ramo "non esiste" usava
-        # solo normpath, e su Windows il percorso restava nella forma
-        # `RUNNER~1` mentre la root era `runneradmin`: due stringhe diverse
-        # per la stessa cartella, e il file veniva giudicato fuori dalla
-        # root. `p.exists()` su un path di sistema puo' sollevare
-        # PermissionError, non False; qui non serve saperlo, perche' non
-        # decidiamo piu' in base all'esistenza.
-        try:
-            p = p.resolve()
-        except (OSError, RuntimeError):
-            p = Path(os.path.abspath(str(p)))
+        # SEMPRE canonicalizzato, anche quando il file non esiste (vedi
+        # `_canonico`): prima il ramo "non esiste" usava solo normpath e
+        # su Windows il percorso restava nella forma breve `RUNNER~1`
+        # mentre la root era `runneradmin` — due stringhe per la stessa
+        # cartella. `p.exists()` su un path di sistema puo' sollevare
+        # PermissionError, e non serve piu' saperlo: non decidiamo in base
+        # all'esistenza.
+        p = self._canonico(p)
 
         # 1. dentro la root: nessuna domanda, e' il posto di lavoro
         if self.dentro_root(p):
@@ -351,7 +368,9 @@ class Gate:
         scelta = (risp.scelta or "mai").strip()
         if scelta == "una_volta":
             return True
-        k = self._chiave(Path(str(percorso)))
+        # Stessa canonicalizzazione di `valuta`: una chiave costruita in
+        # un altro modo non verrebbe mai ritrovata.
+        k = self._chiave(self._canonico(percorso))
         concesso = False
         da_salvare = False
         with self._lock:
