@@ -103,6 +103,12 @@ SUITES = [
     ("permessi", "test_permessi.py", True),
     ("permessi-persistenza", "test_permessi_persistenza.py", True),
     ("permesso-shell", "test_permesso_shell.py", True),
+    # Il gate provato da solo non basta: qui si prova il percorso intero
+    # (tool che chiede, evento che parte, risposta che torna). Era scritto
+    # dal 0.5.x ma non era nel runner, quindi non girava — e intanto era
+    # morto su un'import vecchio (`tools._safe_path`), senza che nessuno
+    # lo dicesse. Un test fuori dal runner non è un test.
+    ("permessi-integrazione", "test_permessi_integrazione.py", True),
     # La delega, nelle due forme. `test_delega.py` c'era ma non era nel
     # runner; il secondo e' nuovo e copre le tre cose che il figlio
     # sincrono non aveva: il tetto sotto lock, la scadenza, e l'ordine

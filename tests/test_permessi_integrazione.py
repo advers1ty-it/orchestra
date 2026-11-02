@@ -35,13 +35,17 @@ os.environ["ORCHESTRA_ROOT"] = root
 os.environ.pop("ORCHESTRA_HOME", None)
 
 from orchestra import tools as T  # noqa: E402
+# `_safe_path` non e' riesportata da `orchestra.tools`: vive nella guardia
+# condivisa. Il test importava `T._safe_path` e dal 0.5.x moriva con
+# AttributeError — e, non essendo nel runner, nessuno se ne accorgeva.
+from orchestra.tools._guard import _safe_path  # noqa: E402
 from orchestra.permissions import Gate, Risposta  # noqa: E402
 from orchestra.types import Tool  # noqa: E402
 
 print("\n[1] Senza gate, fuori dalla root e' negato")
 T.set_permission_gate(None)
 try:
-    T._safe_path(segreto)
+    _safe_path(segreto)
     check("il percorso fuori viene negato", False, "e' passato")
 except ValueError:
     check("il percorso fuori viene negato", True)
@@ -50,7 +54,7 @@ except PermissionError:
 
 print("\n[2] Dentro la root passa sempre, anche senza gate")
 dentro = os.path.join(root, "ok.txt")
-check("il percorso dentro passa", str(T._safe_path("ok.txt")) == str(Path(dentro).resolve()))
+check("il percorso dentro passa", str(_safe_path("ok.txt")) == str(Path(dentro).resolve()))
 
 print("\n[3] Il tool si ferma e aspetta la risposta")
 eventi = []
@@ -74,7 +78,7 @@ T.set_permission_gate(gate)
 
 risultato = {}
 threading.Thread(target=lambda: risultato.update(
-    p=str(T._safe_path(segreto))), daemon=True).start()
+    p=str(_safe_path(segreto))), daemon=True).start()
 # si controlla PRIMA che la risposta arrivi (il thread risponde dopo
 # 0.2s): controllare dopo significherebbe misurare la risposta, non
 # l'attesa
@@ -92,7 +96,7 @@ print("\n[4] Un percorso vietato non arriva mai a chiedere")
 eventi.clear()
 vietato = "C:\\Windows\\System32\\drivers\\etc\\hosts"
 try:
-    T._safe_path(vietato)
+    _safe_path(vietato)
     check("il percorso vietato viene negato", False, "e' passato")
 except PermissionError:
     check("il percorso vietato viene negato", True)
@@ -105,7 +109,7 @@ print("\n[5] 'Mai' blocca anche quando il gate chiede")
 gate2 = Gate(root=root, chiedi=lambda r: Risposta("mai"))
 T.set_permission_gate(gate2)
 try:
-    T._safe_path(segreto)
+    _safe_path(segreto)
     check("con 'mai' il tool si ferma", False, "e' passato")
 except PermissionError:
     check("con 'mai' il tool si ferma", True)
@@ -115,7 +119,7 @@ print("\n[6] Il benchmark non ha nessuno a cui chiedere: nega")
 gate3 = Gate(root=root, chiedi=None)
 T.set_permission_gate(gate3)
 try:
-    T._safe_path(segreto)
+    _safe_path(segreto)
     check("senza canale si nega", False, "e' passato")
 except PermissionError:
     check("senza canale si nega", True)
