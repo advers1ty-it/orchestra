@@ -391,8 +391,17 @@ check("il turno riprovato e' stato eseguito",
 
 # Annullare un lavoro che sta aspettando la sessione non deve fermare
 # il turno dell'utente che la sta usando.
-da_fermare = lv.accoda("bot", str(ident), {"testo": "in attesa della sessione"})
-lv.prossimo("bot", str(ident))
+#
+# Coda separata, senza consumatore. Con la chiave del bot gia' avviato dal
+# riavvio, il thread di ripresa prende il lavoro appena accodato e lo
+# completa prima che il test lo annulli: su CI (piu' veloce) la suite
+# moriva con "questo lavoro non e' piu' annullabile", che non e' un
+# difetto ma una corsa. La proprieta' da provare e' l'annullamento, non
+# chi arriva primo fra il test e un thread di sfondo.
+CHIAVE_ISOLATA = f"{ident}-senza-consumatore"
+da_fermare = lv.accoda("bot", CHIAVE_ISOLATA,
+                       {"testo": "in attesa della sessione"})
+lv.prossimo("bot", CHIAVE_ISOLATA)
 sess.busy = True
 annullato = app.annulla_lavoro(da_fermare["id"])
 check("annullare un lavoro in corso lo chiude",
