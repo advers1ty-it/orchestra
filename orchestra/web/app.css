@@ -1639,6 +1639,13 @@ select:disabled {
 /* Toggle verifica (✓) e popover. Coerente con la graffetta: ghost,
    stesso ingombro. "acceso" lo distingue a colpo d'occhio. */
 #btn-verifica.acceso { color: var(--accent); background: var(--panel-2, rgba(255,255,255,.08)); }
+/* Il piano acceso deve leggersi come uno stato, non come un bottone
+   premuto per caso: stessa forma del toggle verifica. */
+#btn-piano.acceso { color: var(--accent); background: var(--panel-2, rgba(255,255,255,.08)); }
+/* Un piano ha i passi su righe separate. Con lo spazio collassato
+   diventava un paragrafo unico, illeggibile proprio quando bisogna
+   decidere se approvarlo. */
+#domanda-testo.piano { white-space: pre-wrap; text-align: left; }
 /* Pulsante microfono floating: in basso a destra sopra la chat, piccolo,
    semitrasparente, non intrusivo. Scompare quando non disponibile. */
 .mic-float {

@@ -33,6 +33,7 @@ from .fallback import (
     get_chain_for_provider, should_fallback
 )
 from .budget import budget_guard, BudgetLimits
+from . import piano as piano_mod
 from .types import (
     LLMResponse, Message, ToolCall, ToolRegistry, ToolResult, new_id,
 )
@@ -190,6 +191,11 @@ class Agent:
             fallback_chain: list[ChainEntry] | None = None,
         ) -> None:
             self._cancel_flag = False
+            # Modalita' piano: i tool che modificano sono bloccati finche'
+            # `proponi_piano` non ottiene un'approvazione. Vive sull'agente
+            # (non sulla sessione) perche' vale anche per CLI, benchmark e
+            # delega, dove una Session non c'e'.
+            self.modalita_piano = False
             self.provider = provider
             self.registry = registry
             self.system_prompt = system_prompt
@@ -342,6 +348,14 @@ class Agent:
                 [],
                 [],
             )
+
+        # Modalita' piano: il blocco sta QUI e non nei singoli tool.
+        # Sparso nei tool, dimenticarsene in uno solo basta a rendere la
+        # modalita' una promessa: un tool nuovo che scrive non la
+        # rispetterebbe finche' qualcuno non si ricorda di aggiungerlo.
+        if (self.modalita_piano and not piano_mod.approvato()
+                and name in piano_mod.TOOL_CHE_CAMBIANO):
+            return (piano_mod.BLOCCATO.format(nome=name), False, [], [])
 
         try:
             # Cache sui tool puri: se lo stesso calcolo è già stato fatto,
@@ -526,7 +540,23 @@ class Agent:
             progetto = ""
         # Il progetto viene DOPO le skill: le skill dicono COME
         # lavorare, il progetto dice SU COSA.
-        volatile = (extra + progetto).strip()
+        #
+        # La modalita' piano viene PRIMA di tutto: cambia cosa puo'
+        # fare l'agente, e leggerlo dopo le skill lo rende una nota a
+        # pie' di pagina su un divieto che sta gia' incontrando.
+        blocco_piano = ""
+        if self.modalita_piano:
+            blocco_piano = (
+                "## Modalita' piano ATTIVA\n"
+                "I tool che modificano (scritture, shell, test, cron, MCP) "
+                "sono bloccati finche' `proponi_piano` non riceve "
+                "un'approvazione. Leggi e cerca quanto basta a capire, poi "
+                "proponi UN piano con `proponi_piano`: cosa hai capito, i "
+                "file che tocchi, i comandi che esegui. Dopo "
+                "l'approvazione esegui esattamente quei passi, senza "
+                "allargarti. Se l'utente rifiuta, non insistere con lo "
+                "stesso piano: chiedi cosa cambiare o fermati.\n\n")
+        volatile = (blocco_piano + extra + progetto).strip()
         # PERCHE' DUE MESSAGGI DI SISTEMA E NON UNO.
         #
         # Il primo blocco (regole, persona, memoria) e' il prefisso che i
@@ -694,6 +724,11 @@ class Agent:
         # l'agent puo' essere usato anche senza sessione (CLI, benchmark,
         # delega), e il flag deve stare a posto ovunque.
         self._cancel_flag = False
+        # L'approvazione di un piano vale per il turno in cui e' stata
+        # data. Al turno dopo si torna a proporre: e' il senso della
+        # modalita', e un'approvazione che resta accesa trasforma la
+        # prima volta in un permesso permanente.
+        piano_mod.nuovo_turno()
 
         if self._budget_state:
             self._budget_state.reset_task()

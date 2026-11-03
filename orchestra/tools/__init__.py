@@ -53,6 +53,7 @@ from .ricerca import tool_find_files, tool_search_text  # noqa: E402
 from .analisi_python import tool_analisi_python  # noqa: E402
 from .esegui_test import tool_run_tests  # noqa: E402
 from .ask_user import tool_ask_user  # noqa: E402
+from .piano import tool_proponi_piano  # noqa: E402
 from .run_shell import tool_run_shell  # noqa: E402
 from .calculate import tool_calculate  # noqa: E402
 from .memoria import tool_memoria  # noqa: E402
@@ -192,6 +193,7 @@ Come lavori:
 - Per orientarti in un file Python grande usa `analisi_python` (`simboli`, `import`, `chiamate`, `usi`, `sintassi`) invece di leggerlo tutto: dice firme e righe senza il corpo.
 - Per verificare una modifica usa `run_tests`: rileva il comando che il progetto usa. Se non lo trova, non inventarlo — chiedi o leggi il progetto. Una modifica non e' fatta finche' il test che la copre non e' verde (o finche' non dici perche' quel test non si puo' girare).
 - Se un dato che non puoi leggere decide il lavoro (un nome, quale dei due file, un requisito ambiguo), usa `ask_user` e aspetta: una domanda breve costa meno di tre file scritti sull'ipotesi sbagliata. Non chiedere quello che puoi verificare con gli strumenti, e non chiedere conferma di un lavoro che l'utente vede.
+- In modalita' piano i tool che modificano sono bloccati: prima leggi, poi proponi i passi con `proponi_piano` e aspetta. Un piano e' concreto (file, comandi, cosa cambia), non un'intenzione. Dopo l'approvazione fai quello e basta; un rifiuto non si ritenta uguale.
 - Rispondi in modo conciso. Niente preamboli, niente ripetizioni di quello che hai già detto.
 - Quando hai finito, dì in una riga cosa hai fatto e dove sta il risultato.
 
@@ -292,7 +294,7 @@ _PROFILI: dict[str, set[str]] = {
 # verificare, che e' il momento peggiore per indovinare.
 for _nomi_profilo in _PROFILI.values():
     _nomi_profilo.update({"search_text", "find_files", "ask_user",
-                          "analisi_python", "run_tests"})
+                          "proponi_piano", "analisi_python", "run_tests"})
 del _nomi_profilo
 
 
@@ -373,7 +375,7 @@ def default_registry() -> ToolRegistry:
     for tool in (tool_read_file(), tool_write_file(), tool_edit_file(),
                  tool_list_dir(), tool_search_text(), tool_find_files(),
                  tool_analisi_python(), tool_run_tests(),
-                 tool_ask_user(),
+                 tool_ask_user(), tool_proponi_piano(),
                  tool_run_shell(), tool_calculate(),
                  tool_memoria(), tool_web_cerca(), tool_web_leggi(),
                  tool_storico_cerca(), tool_cron(),

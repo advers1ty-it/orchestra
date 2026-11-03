@@ -38,6 +38,10 @@ from typing import Any, Callable
 # Oltre questo una "domanda" non e' una domanda: e' il prompt di sistema
 # incollato per sbaglio, e nella modale non si legge.
 MAX_TESTO = 2000
+# Un piano invece e' lungo per natura: otto passi con i file toccati
+# superano i 2000 caratteri, e troncarlo taglierebbe proprio la fine,
+# cioe' l'ultimo passo — quello che l'utente deve approvare.
+MAX_TESTO_PIANO = 6000
 MAX_OPZIONI = 6
 MAX_OPZIONE = 200
 # Quanto si aspetta una risposta. Lo stesso dei permessi: chi non
@@ -62,18 +66,26 @@ def canale_attivo() -> bool:
     return _emetti is not None
 
 
-def crea(testo: str, opzioni: list[str] | None = None) -> dict[str, Any]:
+def crea(testo: str, opzioni: list[str] | None = None,
+         tipo: str = "domanda") -> dict[str, Any]:
     """Registra una domanda in attesa e restituisce il suo evento.
 
     Le opzioni sono suggerimenti, non una scelta obbligata: la UI le
     mostra come bottoni che riempiono il campo, e la risposta resta
     libera. Un elenco chiuso sarebbe un permesso travestito.
+
+    `tipo="piano"` conserva le righe e alza il tetto: un piano si legge
+    per passi, e schiacciarlo in una riga lo rende illeggibile proprio
+    nel momento in cui l'utente deve decidere.
     """
-    domanda = " ".join(str(testo or "").split()).strip()
+    piano = tipo == "piano"
+    domanda = (str(testo or "").replace("\r\n", "\n").strip()
+               if piano else " ".join(str(testo or "").split()).strip())
     if not domanda:
         raise ValueError("la domanda e' vuota")
-    if len(domanda) > MAX_TESTO:
-        domanda = domanda[:MAX_TESTO].rstrip() + "…"
+    limite = MAX_TESTO_PIANO if piano else MAX_TESTO
+    if len(domanda) > limite:
+        domanda = domanda[:limite].rstrip() + "…"
     pulite = []
     for o in (opzioni or [])[:MAX_OPZIONI]:
         testo_opzione = " ".join(str(o or "").split()).strip()
@@ -83,6 +95,7 @@ def crea(testo: str, opzioni: list[str] | None = None) -> dict[str, Any]:
         "id": uuid.uuid4().hex,
         "testo": domanda,
         "opzioni": pulite,
+        "tipo": "piano" if piano else "domanda",
         "ts": time.time(),
     }
     with _LOCK:

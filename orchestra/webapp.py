@@ -4409,6 +4409,18 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 self._json({"ok": True})
             except RuntimeError as e:
                 self._json({"error": str(e)}, 409)
+        elif path == "/api/piano":
+            # Modalita' piano: si accende e si spegne, non si "concede
+            # una volta". Un flag che vale per il turno sarebbe un
+            # permesso travestito, e l'utente non saprebbe piu' in che
+            # stato si trova.
+            attivo = bool(body.get("attivo", True))
+            try:
+                s.imposta_piano(attivo)
+            except RuntimeError as e:
+                self._json({"error": str(e)}, 409)
+                return
+            self._json({"ok": True, "attivo": attivo})
         elif path == "/api/system":
             prompt = (body.get("prompt") or "").strip()
             if not prompt:

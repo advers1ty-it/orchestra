@@ -85,6 +85,13 @@
           aria-label="Apri il pannello laterale">&#9776;</button>
   <button id="btn-undo" class="ghost" title="Annulla l'ultima modifica ai file"
           aria-label="Annulla l'ultima modifica ai file">&#8630;</button>
+  <!-- Modalita' piano: l'agente legge, propone, e aspetta. E' un
+       interruttore, non un pulsante: lo stato deve restare visibile
+       anche mentre non lo si usa, o non si sa piu' perche' l'agente
+       chiede sempre il permesso di scrivere. -->
+  <button id="btn-piano" class="ghost" aria-pressed="false"
+          title="Modalita' piano: propone i passi e aspetta l'approvazione prima di modificare"
+          aria-label="Modalita' piano">Piano</button>
   <div class="grow"></div>
   <button id="btn-opzioni" class="ghost h-sec" title="Chiavi API e servizi gratuiti">Opzioni</button>
   <button id="btn-goal" class="ghost h-sec" title="Obiettivo autonomo">Obiettivo</button>
@@ -179,7 +186,7 @@
      riempiono il campo, non una scelta chiusa. -->
 <div id="domanda" class="permesso hidden">
   <div class="permesso-box">
-    <b>L'agente chiede</b>
+    <b id="domanda-titolo">L'agente chiede</b>
     <div class="permesso-percorso" id="domanda-testo"></div>
     <div class="permesso-permetti" id="domanda-opzioni"></div>
     <div class="domanda-campo">

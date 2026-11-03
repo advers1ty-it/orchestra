@@ -96,6 +96,50 @@ async function annullaModifica() {
 const btnUndo = document.getElementById("btn-undo");
 if (btnUndo) btnUndo.addEventListener("click", annullaModifica);
 
+// Modalita' piano. E' un interruttore, e lo stato lo tiene il server:
+// il browser lo mostra e basta. Tenerlo solo qui vorrebbe dire che due
+// schede (o un refresh) mostrano una cosa e l'agente fa l'altra.
+let pianoAttivo = false;
+
+function aggiornaPiano(attivo) {
+  pianoAttivo = !!attivo;
+  const b = document.getElementById("btn-piano");
+  if (!b) return;
+  b.classList.toggle("acceso", pianoAttivo);
+  b.setAttribute("aria-pressed", pianoAttivo ? "true" : "false");
+  b.title = pianoAttivo
+    ? "Modalita' piano attiva: l'agente propone i passi e aspetta l'approvazione"
+    : "Modalita' piano: propone i passi e aspetta l'approvazione prima di modificare";
+}
+
+async function cambiaPiano() {
+  const b = document.getElementById("btn-piano");
+  if (b) b.disabled = true;
+  try {
+    const r = await fetch("/api/piano", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attivo: !pianoAttivo }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.error) {
+      addNote(d.error || `modalita' piano non cambiata (${r.status})`);
+      return;
+    }
+    aggiornaPiano(!!d.attivo);
+    addNote(d.attivo
+      ? "modalita' piano attiva: legge, propone i passi, aspetta l'ok"
+      : "modalita' piano spenta: l'agente puo' modificare direttamente");
+  } catch (e) {
+    addNote(`modalita' piano non cambiata: ${e}`);
+  } finally {
+    if (b) b.disabled = false;
+  }
+}
+
+const btnPiano = document.getElementById("btn-piano");
+if (btnPiano) btnPiano.addEventListener("click", cambiaPiano);
+
 function autoGrow() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";

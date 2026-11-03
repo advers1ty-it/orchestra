@@ -466,7 +466,15 @@ let domandaAttiva = null;
 
 function mostraDomanda(d) {
   domandaAttiva = d.id;
-  $("domanda-testo").textContent = d.testo || "";
+  // Un piano non e' una domanda: ha dei passi da leggere e una decisione
+  // da prendere. Chiamarlo "L'agente chiede" fa sembrare che chieda un
+  // dettaglio, e il titolo e' la prima cosa che si legge.
+  const ePiano = d.tipo === "piano";
+  const titolo = $("domanda-titolo");
+  if (titolo) titolo.textContent = ePiano ? "Piano proposto" : "L'agente chiede";
+  const testo = $("domanda-testo");
+  testo.textContent = d.testo || "";
+  testo.classList.toggle("piano", ePiano);
   const opzioni = $("domanda-opzioni");
   opzioni.innerHTML = "";
   for (const o of d.opzioni || []) {
@@ -475,7 +483,12 @@ function mostraDomanda(d) {
     b.textContent = o;
     b.addEventListener("click", () => {
       $("domanda-input").value = o;
-      $("domanda-input").focus();
+      // Su un piano il clic E' la decisione: riempire il campo e
+      // aspettare un secondo clic trasforma "Approva" in due passaggi,
+      // e il secondo si dimentica. Sulle domande resta com'era, perche'
+      // li' l'opzione e' solo un punto di partenza per scrivere.
+      if (ePiano) inviaRisposta();
+      else $("domanda-input").focus();
     });
     opzioni.appendChild(b);
   }
@@ -757,6 +770,12 @@ function handle(kind, d) {
       // messaggi lato client (gateway, ragionamento).
       if (!cambiaSessione && firma === ultimaFirmaSnapshot) {
         setBusy(!!d.busy);
+        // Il piano non entra nella firma (non e' un messaggio), quindi
+        // puo' cambiare mentre lo snapshot e' "identico": senza questo,
+        // il toggle resterebbe indietro finche' non arriva un messaggio.
+        if ("piano" in d && typeof aggiornaPiano === "function") {
+          aggiornaPiano(!!d.piano);
+        }
         return;
       }
       ultimaFirmaSnapshot = firma;
@@ -823,6 +842,12 @@ function handle(kind, d) {
       // Ripristina gli avvisi locali vicino ai messaggi accanto a cui erano.
       ripristinaNodiClient(nodiClient);
       setBusy(!!d.busy);
+      // Lo stato della modalita' piano vive sul server: se il toggle non
+      // lo segue, dopo un refresh dice il contrario di quello che
+      // l'agente sta facendo.
+      if ("piano" in d && typeof aggiornaPiano === "function") {
+        aggiornaPiano(!!d.piano);
+      }
       // Il primo snapshot inizializza la chat: mostra subito gli ultimi
       // messaggi. Gli aggiornamenti successivi conservano invece la lettura.
       // Su un'altra conversazione la posizione di prima non significa
@@ -841,6 +866,11 @@ function handle(kind, d) {
       // anche questa ferma il turno, ma la risposta e' testo: modale
       // diversa, stesso blocco.
       mostraDomanda(d);
+      break;
+    case "piano":
+      // Acceso o spento da un'altra scheda (o dalla CLI): il bottone
+      // deve dirlo senza aspettare il prossimo snapshot.
+      if (typeof aggiornaPiano === "function") aggiornaPiano(!!d.attivo);
       break;
     case "model_changed":
       // Il modello e' cambiato da solo (router o fallback): il bottone

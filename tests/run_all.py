@@ -118,6 +118,9 @@ SUITES = [
     # Le domande libere dell'agente: senza canale il tool deve dirlo,
     # non aspettare un utente che non c'e'.
     ("domande", "test_domande.py", True),
+    # Modalita' piano: un turno intero in cui il modello prova a scrivere
+    # prima del piano, viene fermato, propone, e scrive solo dopo l'ok.
+    ("piano", "test_piano.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),

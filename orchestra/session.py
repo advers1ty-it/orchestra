@@ -419,6 +419,10 @@ class Session:
                 "messages": messaggi,
                 "routing": bool(self._routing_attivo),
                 "bot": self.bot,
+                # La UI deve poter mostrare il toggle acceso dopo un
+                # refresh: senza, il piano resta attivo e il bottone
+                # dice il contrario.
+                "piano": bool(getattr(self.agent, "modalita_piano", False)),
                 "context_limit": getattr(getattr(self.agent, "config", None),
                                          "context_limit", 0) or 0,
                 # La barra misura la FINESTRA, non la storia: il cumulato
@@ -1733,6 +1737,22 @@ class Session:
         if not self._cambia_modello(model_id):
             return False
         self.bridge.emit("model_changed", {"model": model_id})
+        return True
+
+    def imposta_piano(self, attivo: bool) -> bool:
+        """Accende o spegne la modalita' piano, a sessione ferma.
+
+        A turno in corso non si cambia: il modello sta gia' leggendo il
+        blocco di contesto che descrive la modalita', e cambiarlo a meta'
+        vorrebbe dire bloccargli un tool dopo che glielo ha promesso (o
+        il contrario). Si ferma il turno, si cambia, si riparte.
+        """
+        with self._lock:
+            if self._busy:
+                raise RuntimeError("sessione occupata: attendi o annulla prima")
+            self.agent.modalita_piano = bool(attivo)
+            self.agent._aggiorna_prompt()
+        self.bridge.emit("piano", {"attivo": bool(attivo)})
         return True
 
     def cancel(self) -> bool:
