@@ -173,6 +173,25 @@
   </div>
 </div>
 
+<!-- Domanda di chiarimento (`ask_user`). Stessa modale del permesso:
+     l'agente e' fermo e aspetta, e questo deve vedersi subito. Qui la
+     risposta e' testo libero; le opzioni sono scorciatoie che
+     riempiono il campo, non una scelta chiusa. -->
+<div id="domanda" class="permesso hidden">
+  <div class="permesso-box">
+    <b>L'agente chiede</b>
+    <div class="permesso-percorso" id="domanda-testo"></div>
+    <div class="permesso-permetti" id="domanda-opzioni"></div>
+    <div class="domanda-campo">
+      <input id="domanda-input" type="text" placeholder="Scrivi la risposta…"
+             autocomplete="off">
+      <button id="domanda-invia" class="primary">Rispondi</button>
+    </div>
+    <div class="permesso-nota dim small">Il turno e' fermo in attesa.
+      La domanda scade dopo cinque minuti.</div>
+  </div>
+</div>
+
 <!-- Opzioni: chiavi API e servizi gratuiti.
      Il pannello piu' sensibile dell'app, perche' qui si scrivono le
      credenziali. Per questo non mostra mai un valore gia' salvato: solo

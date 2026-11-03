@@ -722,11 +722,54 @@ class AnthropicAdapter:
                 "description": f.get("description", ""),
                 "input_schema": f.get("parameters", {"type": "object"}),
             })
+        # Anthropic non ha caching automatico: un prefisso si riusa solo
+        # se lo si marca. I tool non cambiano da un turno all'altro e sono
+        # la parte piu' grande del prompt iniziale, quindi il punto di
+        # cache va sull'ultimo. La prima scrittura costa 1.25x, le
+        # letture 0.1x: conviene quando la conversazione continua, che e'
+        # il caso normale di un agente; una singola domanda paga un 25%
+        # in piu' su quella parte. La misura vera va fatta con una chiave,
+        # non dedotta da qui.
+        if out:
+            out[-1]["cache_control"] = {"type": "ephemeral"}
         return out
+
+    @staticmethod
+    def _marca_coda(converted: list[dict[str, Any]]) -> None:
+        """Marca l'ultimo blocco dell'ultimo messaggio.
+
+        Dentro un turno l'agente fa piu' giri: il prefisso di system e
+        tool e' gia' in cache, ma senza questo ogni giro ripaga anche
+        tutta la conversazione (letture di file, output dei test). Con
+        la coda marcata il giro successivo la legge a 0.1x e scrive solo
+        quello che ha aggiunto.
+        """
+        if not converted:
+            return
+        content = converted[-1].get("content")
+        if isinstance(content, list) and content:
+            ultimo = content[-1]
+            if isinstance(ultimo, dict):
+                ultimo["cache_control"] = {"type": "ephemeral"}
+
+    @staticmethod
+    def _system_blocks(system: str) -> list[dict[str, Any]]:
+        """Il system come blocco marcato per la cache.
+
+        Regole, istruzioni del progetto e memoria stanno tutte qui, e
+        cambiano molto meno di frequente di quanto si paghino: senza
+        marcatura ogni turno le ripaga intere.
+        """
+        return [{
+            "type": "text",
+            "text": system,
+            "cache_control": {"type": "ephemeral"},
+        }]
 
     def chat(self, messages, tools=None, *, temperature=0.7, max_tokens=4096,
              stop=None, reasoning_level=None) -> LLMResponse:
         system, converted = self._convert_messages(messages)
+        self._marca_coda(converted)
         payload: dict[str, Any] = {
             "model": self.model,
             "max_tokens": max_tokens,
@@ -734,7 +777,7 @@ class AnthropicAdapter:
             "temperature": temperature,
         }
         if system:
-            payload["system"] = system
+            payload["system"] = self._system_blocks(system)
         converted_tools = self._convert_tools(tools) if tools else []
         if converted_tools:
             payload["tools"] = converted_tools

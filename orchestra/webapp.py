@@ -308,6 +308,13 @@ class OrchestraApp:
 
         gate = Gate(chiedi=chiedi)
         set_permission_gate(gate)
+        # Le domande libere (`ask_user`) usano lo stesso bridge ma un
+        # registro separato: la risposta e' testo, non una delle quattro
+        # scelte di permesso, e mescolarle renderebbe "si'" un permesso.
+        from . import domande
+
+        domande.imposta_canale(
+            lambda d: self.session.bridge.emit("domanda_utente", d))
         return gate
 
     def gate_root(self) -> Any:
@@ -4500,6 +4507,26 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 self._json({"error": "nessuna domanda in attesa con quell'id"}, 404)
                 return
             self._json({"ok": True, "stato": gate.stato()})
+        elif path == "/api/risposta":
+            # La risposta a una domanda di `ask_user`. Testo libero, una
+            # sola volta: la prima risposta vince e la domanda sparisce
+            # dall'attesa, cosi' un secondo invio non la sovrascrive.
+            rid = (body.get("id") or "").strip()
+            testo = str(body.get("testo") or "").strip()
+            if not rid:
+                self._json({"error": "manca l'id della domanda"}, 400)
+                return
+            if not testo:
+                self._json({"error": "la risposta e' vuota"}, 400)
+                return
+            from . import domande as domande_mod
+
+            if not domande_mod.rispondi(rid, testo):
+                self._json(
+                    {"error": "nessuna domanda in attesa con quell'id "
+                              "(scaduta o gia' risposta)"}, 404)
+                return
+            self._json({"ok": True})
         elif path == "/api/skill/file":
             self._skill_file()
         elif path == "/api/skill":

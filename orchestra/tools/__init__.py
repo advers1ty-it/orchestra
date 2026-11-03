@@ -50,6 +50,7 @@ from .write_file import tool_write_file  # noqa: E402
 from .edit_file import tool_edit_file  # noqa: E402
 from .list_dir import tool_list_dir  # noqa: E402
 from .ricerca import tool_find_files, tool_search_text  # noqa: E402
+from .ask_user import tool_ask_user  # noqa: E402
 from .run_shell import tool_run_shell  # noqa: E402
 from .calculate import tool_calculate  # noqa: E402
 from .memoria import tool_memoria  # noqa: E402
@@ -186,6 +187,7 @@ Come lavori:
 - Se uno strumento restituisce un errore, leggi l'errore e correggi. Non ripetere la stessa chiamata identica.
 - Preferisci `list_dir` e `read_file` a indovinare il contenuto di un file.
 - Per trovare qualcosa usa `search_text` (contenuto: `file:riga: testo`) e `find_files` (nomi con glob). Non elencare cartelle a caso e non leggere file interi per cercare una riga: costa token e tempo.
+- Se un dato che non puoi leggere decide il lavoro (un nome, quale dei due file, un requisito ambiguo), usa `ask_user` e aspetta: una domanda breve costa meno di tre file scritti sull'ipotesi sbagliata. Non chiedere quello che puoi verificare con gli strumenti, e non chiedere conferma di un lavoro che l'utente vede.
 - Rispondi in modo conciso. Niente preamboli, niente ripetizioni di quello che hai già detto.
 - Quando hai finito, dì in una riga cosa hai fatto e dove sta il risultato.
 
@@ -202,7 +204,7 @@ Quando cercare sul web:
 
 Fuori dalla cartella di lavoro:
 - Gli strumenti accettano percorsi ASSOLUTI, non solo relativi. Puoi quindi leggere C:\Users\tuonome\Documenti (o /home/tuonome/Documenti) senza portare nulla dentro il progetto.
-- Se il percorso è fuori, all'utente compare una domanda con quattro scelte: una volta, per questa sessione, sempre, mai. Non devi fare nulla: la domanda la fa lo strumento e aspetta. Tu non hai strumenti per chiedere e non devi spiegare come fare.
+- Se il percorso è fuori, all'utente compare una domanda con quattro scelte: una volta, per questa sessione, sempre, mai. Non devi fare nulla: la domanda la fa lo strumento e aspetta. Non spiegare all'utente come concedere il permesso.
 - Se l'utente nega, il messaggio lo dice. Non riprovare lo stesso percorso con un altro strumento e non presentarlo come un errore: è una risposta, non un guasto. Rispettala e prova un'altra strada, o spiega in una riga che ti serve quel permesso.
 - Alcuni percorsi non sono negabili da nessuna scelta (file di credenziali, cartelle di sistema). Se è così, lo strumento lo dice: è una decisione del sistema, non un errore da riprovare.
 - Non dire mai "non posso accedere a <cartella>" senza averci provato. Se hai la conferma che è irraggiungibile, allora sì, e in una riga spiega perché e cosa hai tentato.
@@ -278,8 +280,13 @@ _PROFILI: dict[str, set[str]] = {
 # i file e' il modo normale di non indovinare, e un profilo "base" senza
 # ricerca costringe l'agente a leggere file interi per trovare una riga.
 # Costa poco, non esce dalla root e non ha effetti collaterali.
+#
+# `ask_user` sta in ogni profilo per la stessa ragione: chiedere non e'
+# una capacita' da sbloccare. Un profilo "base" che non puo' chiedere
+# costringe l'agente a indovinare proprio quando ha meno strumenti per
+# verificare, che e' il momento peggiore per indovinare.
 for _nomi_profilo in _PROFILI.values():
-    _nomi_profilo.update({"search_text", "find_files"})
+    _nomi_profilo.update({"search_text", "find_files", "ask_user"})
 del _nomi_profilo
 
 
@@ -359,6 +366,7 @@ def default_registry() -> ToolRegistry:
     # "Attivo qui" vuol dire "attivo finche' nessuno dice il contrario".
     for tool in (tool_read_file(), tool_write_file(), tool_edit_file(),
                  tool_list_dir(), tool_search_text(), tool_find_files(),
+                 tool_ask_user(),
                  tool_run_shell(), tool_calculate(),
                  tool_memoria(), tool_web_cerca(), tool_web_leggi(),
                  tool_storico_cerca(), tool_cron(),

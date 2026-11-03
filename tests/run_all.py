@@ -104,6 +104,12 @@ SUITES = [
     # L'undo delle scritture: senza, un file sovrascritto per errore e'
     # perso per chi non usa git.
     ("annulla", "test_annulla.py", True),
+    # Le domande libere dell'agente: senza canale il tool deve dirlo,
+    # non aspettare un utente che non c'e'.
+    ("domande", "test_domande.py", True),
+    # Prompt caching: i marcatori Anthropic e nessun campo estraneo
+    # nell'adapter OpenAI-compatibile.
+    ("cache-prompt", "test_prompt_cache.py", True),
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),

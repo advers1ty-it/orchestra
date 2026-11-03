@@ -457,6 +457,72 @@ on($("permesso-ses"), "click", () => rispondiPermesso("sessione"));
   on($("permesso-sempre"), "click", () => rispondiPermesso("sempre"));
 on($("permesso-mai"), "click", () => rispondiPermesso("mai"));
 
+// ---- Domande libere dell'agente (tool ask_user) --------------------
+// Il tool e' fermo in un thread: la modale e' l'unico modo di farlo
+// ripartire, quindi non si chiude con Escape e non si ignora. Le
+// opzioni riempiono il campo, non lo bloccano: la risposta resta
+// libera, perche' il modello ha chiesto un dato, non un permesso.
+let domandaAttiva = null;
+
+function mostraDomanda(d) {
+  domandaAttiva = d.id;
+  $("domanda-testo").textContent = d.testo || "";
+  const opzioni = $("domanda-opzioni");
+  opzioni.innerHTML = "";
+  for (const o of d.opzioni || []) {
+    const b = document.createElement("button");
+    b.className = "ghost";
+    b.textContent = o;
+    b.addEventListener("click", () => {
+      $("domanda-input").value = o;
+      $("domanda-input").focus();
+    });
+    opzioni.appendChild(b);
+  }
+  $("domanda-input").value = "";
+  $("domanda").classList.remove("hidden");
+  $("domanda-input").focus();
+}
+
+function nascondiDomanda() {
+  $("domanda").classList.add("hidden");
+  domandaAttiva = null;
+}
+
+async function inviaRisposta() {
+  if (!domandaAttiva) return;
+  const testo = $("domanda-input").value.trim();
+  if (!testo) { $("domanda-input").focus(); return; }
+  const id = domandaAttiva;
+  // blocc subito: due Invio non devono mandare due risposte, e la
+  // seconda troverebbe la domanda gia' chiusa
+  domandaAttiva = null;
+  $("domanda-invia").disabled = true;
+  nascondiDomanda();
+  try {
+    const r = await fetch("/api/risposta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, testo }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      addText("error", err.error || `risposta non accettata (${r.status})`);
+    } else {
+      addNote(`risposta inviata: ${testo}`);
+    }
+  } catch (e) {
+    addText("error", "risposta non arrivata: " + e);
+  } finally {
+    $("domanda-invia").disabled = false;
+  }
+}
+
+on($("domanda-invia"), "click", inviaRisposta);
+on($("domanda-input"), "keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); inviaRisposta(); }
+});
+
 // chiudere il pannello Opzioni mentre c'e' una domanda: la domanda
 // resta, non e' un avviso che si nasconde
 
@@ -770,6 +836,11 @@ function handle(kind, d) {
       // l'agente si e' fermo e aspetta. Va mostrato subito e per
       // primo: e' l'unico evento che blocca tutto il resto.
       mostraPermesso(d);
+      break;
+    case "domanda_utente":
+      // anche questa ferma il turno, ma la risposta e' testo: modale
+      // diversa, stesso blocco.
+      mostraDomanda(d);
       break;
     case "model_changed":
       // Il modello e' cambiato da solo (router o fallback): il bottone

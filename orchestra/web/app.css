@@ -441,6 +441,12 @@ header select { max-width: 230px; }
 .permesso-permetti .pericolo { color: #ffb4b4; border-color: rgba(255,107,107,.5); }
 .permesso-nota { margin-top: 12px; line-height: 1.5; }
 
+/* Domanda libera: la modale e' quella del permesso, il campo no. */
+.domanda-campo { display: flex; gap: 8px; margin-top: 12px; }
+.domanda-campo input { flex: 1 1 auto; min-width: 0; }
+#domanda-opzioni:empty { display: none; }
+#domanda-opzioni { margin-bottom: 0; }
+
 /* Permessi: stato e prova */
 .opzioni-permessi {
   display: flex; flex-direction: column; gap: 8px;
