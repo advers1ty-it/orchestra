@@ -121,20 +121,27 @@ check("il messaggio di sistema pure",
 check("la conversazione resta",
       any(m.role == "user" and m.content == "lavoro in corso"
           for m in app.session.agent.state.messages))
-app.salva_identita("Nuovo", "diverso")
+# Una sentinella, non una parola normale. Con "diverso" il test era
+# fragile: quella parola compare nel prompt di sistema ("non assumere un
+# sistema operativo diverso da quello che gli strumenti mostrano"), e il
+# controllo "non deve restare" falliva per una collisione lessicale
+# invece che per un'identita' rimasta. Una sentinella non puo' comparire
+# per caso, e il test torna a provare cio' che dice di provare.
+SENTINELLA = "persona-sentinella-9f3c"
+app.salva_identita("Nuovo", SENTINELLA)
 check("cambiare persona non lascia la vecchia",
       "allegro" not in app.session.agent.system_prompt,
       app.session.agent.system_prompt[-160:])
-check("e mette la nuova", "diverso" in app.session.agent.system_prompt)
+check("e mette la nuova", SENTINELLA in app.session.agent.system_prompt)
 check("il blocco non si duplica a ogni salvataggio",
       app.session.agent.system_prompt.count("Sei «Nuovo»") == 1,
       app.session.agent.system_prompt[-300:])
 check("il file riflette l'ultimo salvataggio",
-      idt.carica() == {"nome": "Nuovo", "persona": "diverso"}, str(idt.carica()))
+      idt.carica() == {"nome": "Nuovo", "persona": SENTINELLA}, str(idt.carica()))
 app.salva_identita("", "")
 check("svuotare l'identita' toglie il blocco dal prompt",
       "Sei «" not in app.session.agent.system_prompt
-      and "diverso" not in app.session.agent.system_prompt,
+      and SENTINELLA not in app.session.agent.system_prompt,
       app.session.agent.system_prompt[-200:])
 
 print("\n[5] Con un bot attivo si aggiorna il principale, non il bot")
