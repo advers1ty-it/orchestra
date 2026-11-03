@@ -56,6 +56,7 @@ _RELEASE_*.md
 # La home del server di test: la cronologia che le suite HTTP scrivono
 # non e' quella dell'utente, e non ha senso nel repository.
 tests/_dati_test_server/
+tests/_probe_cancel_processi/
 # I permessi che i test scrivono: sono generati, e contengono i path
 # temporanei di ogni run. Non sono roba da versionare.
 tests/_dati_test/permessi.json
