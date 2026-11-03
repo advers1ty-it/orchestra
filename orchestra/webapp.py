@@ -1190,9 +1190,17 @@ class OrchestraApp:
             persona = (persona or "").strip() or ident["persona"]
         prompt_con_memoria = identita_mod.componi_prompt(
             prompt_con_memoria, nome_bot, persona, bot=e_bot)
+        _provider = build_provider(provider_name, model=model,
+                                   env=load_env(ENV_PATH) | os.environ)
+        # Il riassunto del contesto usa un modello vero. Prima `summarize`
+        # restava None e la compaction ripiegava sul troncamento
+        # testa/coda: in una conversazione lunga spariva il centro, cioe'
+        # le decisioni e gli errori gia' risolti. Il costo e' di una
+        # chiamata corta, e solo quando il contesto si riempie davvero.
+        from .context import summarizer_llm
+
         return Session(
-                    provider=build_provider(provider_name, model=model,
-                                            env=load_env(ENV_PATH) | os.environ),
+                    provider=_provider,
                     registry=default_registry(),
                     system_prompt=prompt_con_memoria,
                     config=LoopConfig(max_iterations=num("ORCHESTRA_MAX_ITERS", 20),
@@ -1200,6 +1208,7 @@ class OrchestraApp:
                                                           keep_recent=8,
                                                           reasoning_level=_env.get("ORCHESTRA_REASONING") or None,
                                                           tool_profile=_env.get("ORCHESTRA_TOOL_PROFILE") or None),
+                    summarize=summarizer_llm(_provider),
                 )
 
     # -- bot ----------------------------------------------------------------

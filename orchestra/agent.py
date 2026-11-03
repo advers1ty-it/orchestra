@@ -239,6 +239,10 @@ class Agent:
             # costa token per tornare allo stesso errore. Dopo due colpi
             # gli si dice di smettere; dopo tre si chiude col lavoro fatto.
             self._chiamate_identiche: dict[str, int] = {}
+            # Quante volte la risposta e' arrivata troncata dal tetto di
+            # output. Serve al tetto dei "continua": senza, un modello con
+            # max_tokens basso brucerebbe tutte le iterazioni a riprovare.
+            self._troncamenti: int = 0
             # Budget. Lo stato si crea SEMPRE, anche senza limiti espliciti:
             # saltare la creazione perche' "non mi hanno passato niente"
             # faceva leggere il .env a BudgetGuard senza che nessuno gli
@@ -658,6 +662,7 @@ class Agent:
         self._verifica_tentativo = 0
         self._verifica_esaurita = False
         self._chiamate_identiche = {}
+        self._troncamenti = 0
 
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):
@@ -737,7 +742,21 @@ class Agent:
                 if prompt_tokens == 0 and completion_tokens == 0:
                     prompt_tokens = resp.total_tokens // 2
                     completion_tokens = resp.total_tokens - prompt_tokens
-                cost_usd = (prompt_tokens + completion_tokens) / 1000 * 0.001
+                # Il prezzo vero, dal tariffario popolato dal catalogo.
+                # Se il modello non e' nel tariffario si usa una stima
+                # dichiarata ($1 per milione): e' meglio di una costante
+                # uguale per tutti, che faceva sembrare caro un modello
+                # gratuito e gratis uno da $15/M. La stima resta un
+                # ripiego, non la regola.
+                try:
+                    from .prezzi import costo as _costo
+
+                    cost_usd = _costo(resp.model, prompt_tokens,
+                                      completion_tokens)
+                except Exception:  # noqa: BLE001
+                    cost_usd = None
+                if cost_usd is None:
+                    cost_usd = (prompt_tokens + completion_tokens) / 1_000_000
                 violations = budget_guard().record_usage(
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
@@ -749,6 +768,39 @@ class Agent:
                     self._emit("budget_violation", violations=violations)
                     self.state.stopped_because = "budget_exceeded"
                     return self.state
+
+            # --- risposta troncata dal tetto di output --------------------
+            #
+            # `finish_reason=length` vuol dire "mi sono fermato perche' non
+            # avevo piu' token", NON "ho finito". Trattarla come risposta
+            # finale chiude il turno su un testo a meta' e nessuno lo dice:
+            # l'utente vede un file che si interrompe a meta' riga e un
+            # "completato" sopra. Si continua dal punto in cui il modello
+            # si e' fermato, con un tetto ai "continua" per non bruciare il
+            # turno se il modello non riesce a stare nel limite.
+            motivo_fine = (getattr(resp, "finish_reason", "") or "").lower()
+            if (motivo_fine in {"length", "max_tokens", "max_output_tokens"}
+                    and not resp.wants_tools):
+                self._troncamenti += 1
+                self._emit(
+                    "troncato",
+                    motivo=motivo_fine,
+                    tentativo=self._troncamenti,
+                    completion_tokens=getattr(resp, "completion_tokens", 0),
+                )
+                if self._troncamenti <= 2:
+                    self._nota_sistema(
+                        "LA TUA ULTIMA RISPOSTA E' STATA TRONCATA dal tetto "
+                        "di token di output: il testo si interrompe a meta'.\n"
+                        "Non ripetere quello che hai gia' scritto e non "
+                        "ricominciare da capo. CONTINUA esattamente dal punto "
+                        "in cui ti sei fermato, senza preamboli. Se stavi "
+                        "ragionando e non hai ancora scritto la risposta, "
+                        "chiudi il ragionamento e scrivi la risposta adesso, "
+                        "in modo piu' breve.",
+                        "__troncato__",
+                    )
+                    continue
 
             # --- anti-gira-a-vuoto: la stessa identica chiamata ripetuta --
             #

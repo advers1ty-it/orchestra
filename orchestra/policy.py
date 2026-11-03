@@ -325,6 +325,64 @@ def _consentito(command: str, consentiti: list[str]) -> bool:
     return True
 
 
+# Comandi che distruggono la macchina e non hanno un uso legittimo dentro
+# un progetto. Non sono la policy del bot: valgono SEMPRE, anche senza
+# policy. "Nessuna policy" vuol dire "nessun limite sui tool del bot",
+# non "puoi formattare il disco": un agente che sbaglia una variabile non
+# deve poter cancellare la radice, e l'utente non ha modo di fermarlo
+# mentre il comando gira.
+#
+# La lista e' volutamente corta e specifica. Bloccare "tutto cio' che e'
+# distruttivo" non e' possibile (ogni `rm` lo e' per qualcuno), e una
+# regola troppo larga verrebbe aggirata o disattivata. Questi sono i casi
+# in cui il danno e' irreversibile e il beneficio e' nullo.
+_RADICI = r"(?:/|/\*|~/?|\$home|%userprofile%|%systemdrive%|[a-z]:[\\/]?\*?)"
+
+_DISTRUTTIVI: tuple[tuple[str, str], ...] = (
+    (r"\brm\s+(?:-{1,2}[a-z-]+\s+)*" + _RADICI + r"(?=\s|$|;|&|\|)",
+     "cancellazione ricorsiva di una radice (rm -rf /)"),
+    (r"\brm\s+(?:-[a-z]*[rf][a-z]*\s+)+\./?(?=\s|$)",
+     "cancellazione dell'intera cartella di lavoro (rm -rf .)"),
+    (r"\brm\s+(?:-[a-z]*[rf][a-z]*\s+)+\*(?=\s|$)",
+     "cancellazione di tutto il contenuto della cartella (rm -rf *)"),
+    (r"\b(del|erase)\s+[^\n|;&]*(?:/[fsq]\b[^\n|;&]*){1,4}[a-z]:[\\/]?(?:\*|\\|\s|$)",
+     "cancellazione di un intero disco (del /f /s /q)"),
+    (r"\b(rd|rmdir)\s+(?:/[sq]\s+)*[a-z]:[\\/]?(?:\*|\s|$)",
+     "cancellazione di un intero disco (rd /s /q)"),
+    (r"\bformat\s+[a-z]:", "formattazione di un disco (format)"),
+    (r"\bmkfs(?:\.\w+)?\b", "formattazione di un filesystem (mkfs)"),
+    (r"\bdd\b[^\n]*\bof\s*=\s*/dev/",
+     "scrittura diretta su un device (dd of=/dev/...)"),
+    (r"\bdiskpart\b", "partizionamento del disco (diskpart)"),
+    (r"\bbcdedit\b", "modifica del boot loader (bcdedit)"),
+    (r"\bvssadmin\s+delete\b", "cancellazione delle shadow copy (vssadmin)"),
+    (r"\bcipher\s+/w\b", "cancellazione sicura del disco (cipher /w)"),
+    (r"\b(clear-disk|initialize-disk|format-volume)\b",
+     "inizializzazione di un disco (PowerShell)"),
+    (r"\breg\s+delete\s+(hklm|hkey_local_machine)\b",
+     "cancellazione del registro di sistema"),
+    (r"\bshutdown\s+(/s|/r|-h|-p)\b", "spegnimento o riavvio della macchina"),
+    (r"\b(stop-computer|restart-computer)\b",
+     "spegnimento o riavvio della macchina"),
+    (r":\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", "fork bomb"),
+    (r"\bchmod\s+-R\s+777\s+/\s*$", "permessi aperti su tutto il filesystem"),
+)
+
+
+def _distruttivo(testo: str) -> str | None:
+    """Il motivo per cui il comando e' catastrofico, o None.
+
+    Si normalizzano gli spazi prima di cercare: `rm   -rf   /` e
+    `rm -rf /` sono lo stesso comando, e la prima forma e' quella che
+    basta per non far scattare un controllo scritto con un solo spazio.
+    """
+    low = re.sub(r"\s+", " ", str(testo or "").lower()).strip()
+    for schema, motivo in _DISTRUTTIVI:
+        if re.search(schema, low):
+            return motivo
+    return None
+
+
 def motivo_blocco(command: str) -> str | None:
     """Perche' questo comando non si puo' eseguire, o None.
 
@@ -335,6 +393,14 @@ def motivo_blocco(command: str) -> str | None:
     p = corrente()
     testo = str(command or "")
     minuscolo = testo.lower()
+
+    # Prima di tutto: i comandi che distruggono la macchina. Non dipendono
+    # dalla policy del bot, e non c'e' una scelta dell'utente che li
+    # renda accettabili.
+    catastrofico = _distruttivo(testo)
+    if catastrofico:
+        return f"comando distruttivo bloccato: {catastrofico}"
+
     for vietato in p["nega_shell"]:
         if vietato.lower() in minuscolo:
             return (f"la policy vieta i comandi che contengono "

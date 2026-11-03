@@ -20,7 +20,7 @@ mai. Il modello deve poter vedere dove si trova.
 
 from __future__ import annotations
 
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 from .types import Message
 
@@ -38,11 +38,28 @@ def estimate_tokens(text: str) -> int:
 
 
 def message_tokens(msg: Message) -> int:
-    """Stima del costo di un messaggio, schema dei tool incluso."""
+    """Stima del costo di un messaggio, immagini e ragionamento inclusi.
+
+    Prima contava solo `content`. Le immagini e il `reasoning` viaggiano
+    al provider lo stesso, ma non entravano nella stima: con uno
+    screenshot (~1.100 token) o un modello che ragiona, il conteggio
+    era molto sotto il reale, la compaction non scattava, e la richiesta
+    tornava 400 per contesto pieno. Un conteggio che ignora cio' che
+    spedisci non e' una stima prudente, e' una stima sbagliata.
+    """
     total = estimate_tokens(msg.content)
     total += 4  # overhead di ruolo e delimitatori
     for tc in msg.tool_calls:
         total += estimate_tokens(tc.name) + estimate_tokens(tc.arguments) + 4
+    # Le immagini non si tokenizzano come testo: si paga la risoluzione,
+    # non i byte. ~1.100 e' il valore misurato per uno screenshot 1280x800
+    # su un modello con vision: abbastanza alto da far scattare la
+    # compaction un giro prima, che e' il lato giusto su cui sbagliare.
+    for _ in (getattr(msg, "images", None) or []):
+        total += 1100
+    ragionamento = getattr(msg, "reasoning", "") or ""
+    if ragionamento:
+        total += estimate_tokens(ragionamento)
     return total
 
 
@@ -195,6 +212,51 @@ def _senza_tool_orfani(messaggi: list[Message]) -> list[Message]:
         else:
             tenuti.append(m)
     return tenuti
+
+
+def summarizer_llm(provider: Any, *, max_tokens: int = 700) -> Summarizer:
+    """Un `Summarizer` che usa un modello vero, con ripiego onesto.
+
+    Il riassunto a testa/coda esisteva perche' nessuno passava un
+    `summarize` alla `Session`: il codice del riassunto con modello c'era
+    ed era morto. In una conversazione lunga il troncamento butta via
+    proprio il centro (le decisioni, gli errori gia' risolti), e il
+    modello ricomincia a chiedere cose gia' fatte.
+
+    Il prompt e' piccolo e vincolato: si chiede di conservare cio' che
+    serve a CONTINUARE, non di raccontare. Se il modello non risponde (o
+    risponde vuoto) si torna al troncamento: un riassunto peggiore e'
+    meglio di un turno che muore perche' il riassunto e' fallito.
+    """
+
+    def _riassumi(testo: str, *, keep_hint: str = "") -> str:
+        if not testo.strip():
+            return ""
+        sistema = (
+            "Riassumi la conversazione tecnica che ricevi. Conserva: "
+            "l'obiettivo dell'utente, le decisioni prese, i file e i "
+            "comandi che contano, gli errori gia' risolti e quelli "
+            "ancora aperti, i vincoli e le preferenze dette. Togli i "
+            "pettegolezzi, i tentativi falliti che non hanno insegnato "
+            "niente, e le ripetizioni. Scrivi in italiano, massimo 15 "
+            "righe, in forma di elenco. Non inventare nulla che non sia "
+            "nel testo."
+        )
+        if keep_hint:
+            sistema += f" Cosa non perdere: {keep_hint}."
+        try:
+            resp = provider.chat(
+                [Message(role="system", content=sistema),
+                 Message(role="user", content=testo)],
+                temperature=0.2,
+                max_tokens=max_tokens,
+            )
+            fuori = (getattr(resp, "content", "") or "").strip()
+        except Exception:  # noqa: BLE001 - un riassunto non deve uccidere il turno
+            fuori = ""
+        return fuori or _naive_summarize(testo)
+
+    return _riassumi
 
 
 def _naive_summarize(transcript: str, limit: int = 1200) -> str:

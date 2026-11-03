@@ -138,8 +138,12 @@ def instrada(cat: Catalog, richiesta: str, *,
     distingue da un classifier che non ha girato, e la prima fa
     fallire il turno mentre la seconda passa inosservata.
     """
-    # Se scope e' fornito, usa quello come categoria
-    if scope and scope in [c[0] for c in CATEGORIE]:
+    # Se scope e' fornito, usa quello come categoria. `code` e' una
+    # categoria vera ma non sta in `CATEGORIE` (e' il default, non una
+    # parola chiave): senza il caso esplicito, un ripiego per un task di
+    # codice ricadeva sul default per caso, e uno per `writing` perdeva
+    # la categoria e ripiegava su un modello da codice.
+    if scope and (scope == "code" or scope in [c[0] for c in CATEGORIE]):
         cat_id = scope
     else:
         cat_id = categoria(richiesta)
@@ -236,4 +240,5 @@ def il_successivo(scelta: Scelta, cat: Catalog, *,
     resta che dargli un altro compito. Con, c'è una fila e si sa chi
     viene dopo.
     """
-    return instrada(cat, "", solo_gratis=solo_gratis, escluso=scelta.modello)
+    return instrada(cat, "", solo_gratis=solo_gratis, escluso=scelta.modello,
+                    provider=provider, scope=scelta.categoria or None)

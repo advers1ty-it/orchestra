@@ -246,6 +246,16 @@ class Catalog:
                 prof.last_measured = prev.last_measured
             prof.capabilities = {c: "unknown" for c in CATEGORIES}
             cat.models[info.id] = prof
+        # Il tariffario del budget si popola da qui: e' l'unico punto in
+        # cui i prezzi veri passano per il processo. Senza, l'agente
+        # calcolerebbe il costo con una costante unica e i tetti in
+        # dollari sarebbero numeri decorativi.
+        try:
+            from .prezzi import registra_catalogo
+
+            registra_catalogo(cat.models.values())
+        except Exception:  # noqa: BLE001
+            pass
         cat.load_measurements()
         return cat
 

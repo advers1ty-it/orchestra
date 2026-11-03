@@ -887,6 +887,19 @@ function handle(kind, d) {
       addNote(`contesto compattato: ${d.tokens_before} → ${d.tokens_after} token ` +
               `(potati ${d.tools_pruned} tool, fusi ${d.history_merged} turni)`);
       break;
+    // La risposta e' stata tagliata dal tetto di output. Senza una riga
+    // qui l'utente vede un testo che si interrompe a meta' e un
+    // "completato" sopra, senza niente in mezzo che spieghi perche'.
+    case "troncato":
+      if ((d.tentativo || 0) <= 2) {
+        addNote(`risposta troncata dal limite di token (${d.motivo || "length"}): ` +
+                `continuo dal punto in cui si era fermata.`);
+      } else {
+        addNote(`risposta ancora troncata dopo due riprese: chiudo col ` +
+                `testo che c'e'. Alza il tetto di output o chiedi un ` +
+                `lavoro piu' piccolo.`);
+      }
+      break;
     // Niente nota quando non c'e' nulla da potare: era rumore a ogni
     // turno ("sotto soglia... sta lavorando") e si confondeva con un
     // vero avanzamento. Solo la compattazione vera merita una riga.

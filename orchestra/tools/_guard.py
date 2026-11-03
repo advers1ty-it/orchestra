@@ -85,6 +85,57 @@ def _gate() -> Any:
     return _GATE
 
 
+# File e cartelle che restano vietati ANCHE dentro la root.
+#
+# Il confine "dentro/fuori" non basta: `.env`, `.ssh`, `id_rsa` stanno
+# quasi sempre DENTRO il progetto su cui si lavora, ed erano leggibili
+# con `read_file(".env")` mentre la shell li bloccava gia'. Un controllo
+# che vale per un tool e non per l'altro non e' un controllo, e' una
+# porta girevole: si passa dal tool che non lo applica.
+#
+# I template di `.env` sono ammessi (non contengono segreti, e leggerli
+# serve a sapere quali chiavi scrivere). Tutto il resto di `.env*` no:
+# `.env.local`, `.env.production` e `.env.bak` contengono le stesse chiavi.
+_CARTELLE_SEGRETE = {".ssh", ".aws", ".gnupg", ".docker", ".config/orchestra"}
+_NOMI_SEGRETI = {
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+    "id_ecdsa_sk", "id_ed25519_sk",
+    ".netrc", ".npmrc", ".git-credentials", "credentials", "win.ini",
+}
+_ENV_MODELLI = {
+    ".env.example", ".env.sample", ".env.template", ".env.dist",
+    ".env.defaults",
+}
+
+
+def _motivo_sensibile(p: Path) -> str:
+    """Perche' questo percorso e' protetto, o stringa vuota.
+
+    Si guardano i NOMI, non i prefissi assoluti: un `.env` in un progetto
+    e' lo stesso file di un `.env` nella home, e il tool non deve poterlo
+    leggere solo perche' il progetto e' la cartella di lavoro.
+
+    `.git/config` e' in elenco perche' i remote possono contenere un token
+    nell'URL (`https://token@github.com/...`), ed era gia' protetto nella
+    shell: qui si applica la stessa regola ai tool file.
+    """
+    nome = p.name.lower()
+    if nome.startswith(".env") and nome not in _ENV_MODELLI:
+        return nome
+    if nome in _NOMI_SEGRETI:
+        return nome
+    for parte in p.parts[:-1]:
+        if parte.lower().replace("\\", "/") in _CARTELLE_SEGRETE:
+            return parte
+    try:
+        rel = p.relative_to(_root()).as_posix().lower()
+    except Exception:  # noqa: BLE001
+        rel = ""
+    if rel == ".git/config" or rel.endswith("/.git/config"):
+        return ".git/config"
+    return ""
+
+
 def _safe_path(rel: str) -> Path:
     """Risolve un path, dentro la root per default, fuori solo se autorizzato.
 
@@ -96,12 +147,27 @@ def _safe_path(rel: str) -> Path:
     vale per questa volta, per la sessione, o per mai. Se non c'e'
     nessuno (CLI, benchmark) si nega, perche' il default sicuro e'
     negare e non tirare a indovinare.
+
+    I file di credenziali sono negati PRIMA della domanda: non sono una
+    scelta che l'utente puo' concedere per sbaglio in un riquadro, e il
+    messaggio deve dirlo invece di far credere che basti riprovare.
     """
     root = _root()
     p = (root / rel).resolve()
 
     dentro = _dentro_root(str(p))
     if dentro:
+        # Dentro la root il confine non basta: `.env` sta nel progetto, e
+        # senza questo controllo era leggibile mentre la shell lo negava.
+        motivo = _motivo_sensibile(p)
+        if motivo:
+            raise PermissionError(
+                f"percorso protetto ({motivo}): {rel}. I file di "
+                f"credenziali non si leggono ne' si scrivono con gli "
+                f"strumenti, nemmeno dentro la cartella di lavoro. Se "
+                f"serve davvero, aprilo fuori dall'agente: qui la risposta "
+                f"e' no, e riprovare non cambia niente."
+            )
         return p
 
     gate = _gate()

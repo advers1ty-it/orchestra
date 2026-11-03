@@ -313,6 +313,86 @@ check("compaction emette l'evento", any(k == "compaction" for k, _ in EVENTS),
 check("compaction: evento col suo dizionario",
       any(k == "compaction" and "tokens_before" in d for k, d in EVENTS))
 
+# ------------------------------------------------------------ RICERCA E COSTI
+print("\n[9] Ricerca nel progetto, risposte troncate, costo vero")
+import shutil  # noqa: E402
+
+RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROVA = os.path.join(RADICE, "_test_cerca")
+shutil.rmtree(PROVA, ignore_errors=True)
+os.makedirs(PROVA)
+with open(os.path.join(PROVA, "codice.py"), "w", encoding="utf-8") as f:
+    f.write("AGO_NEL_PAGLIAIO = 1\n")
+with open(os.path.join(PROVA, ".env"), "w", encoding="utf-8") as f:
+    f.write("AGO_NEL_PAGLIAIO=2\n")
+reg_c = default_registry()
+trovato = reg_c.get("search_text").handler(
+    pattern="AGO_NEL_PAGLIAIO", path="_test_cerca")
+check("search_text trova il contenuto", "codice.py:1" in trovato, trovato[:120])
+check("search_text non legge i file di credenziali",
+      ".env" not in trovato, trovato[:160])
+check("find_files trova per nome",
+      "codice.py" in reg_c.get("find_files").handler(
+          pattern="*.py", path="_test_cerca"))
+check("search_text spiega una regex rotta",
+      "ERRORE" in reg_c.get("search_text").handler(pattern="(."))
+shutil.rmtree(PROVA, ignore_errors=True)
+
+# Le immagini e il reasoning viaggiano al provider e vanno contati: prima
+# non lo erano, e la compaction non scattava mai su un turno con screenshot.
+msg_img = Message(role="user", content="guarda",
+                  images=["data:image/png;base64,AAAA"])
+check("message_tokens conta le immagini",
+      count_tokens([msg_img]) >= 1100, str(count_tokens([msg_img])))
+msg_reason = Message(role="assistant", content="ok", reasoning="x" * 3600)
+check("message_tokens conta il ragionamento",
+      count_tokens([msg_reason]) >= 1000, str(count_tokens([msg_reason])))
+
+# Il costo non e' piu' una costante uguale per tutti: il tariffario
+# distingue gratis, caro, e "non lo so".
+from orchestra.catalog import ModelInfo  # noqa: E402
+from orchestra.prezzi import costo, registra  # noqa: E402
+
+registra(ModelInfo(id="test/gratis"))
+registra(ModelInfo(id="test/caro", prompt_price=15.0, completion_price=60.0))
+check("un modello gratuito costa zero", costo("test/gratis", 1000, 1000) == 0.0,
+      str(costo("test/gratis", 1000, 1000)))
+check("un modello caro costa il suo prezzo",
+      abs((costo("test/caro", 1000, 1000) or 0) - 0.075) < 1e-9,
+      str(costo("test/caro", 1000, 1000)))
+check("un modello sconosciuto non inventa un prezzo",
+      costo("test/ignoto", 1000, 1000) is None)
+
+
+class Troncante(FakeProvider):
+    """Prima risposta tagliata dal tetto di output, poi quella vera."""
+
+    def __init__(self):
+        super().__init__([], name="troncante")
+        self.n = 0
+
+    def chat(self, messages, tools=None, **kw):
+        self.n += 1
+        if self.n == 1:
+            return LLMResponse(content="prima meta", model="fake-1",
+                               prompt_tokens=10, completion_tokens=5,
+                               finish_reason="length")
+        return resp("seconda meta")
+
+
+EVENTI_TRONCO = []
+prov_t = Troncante()
+a_t = Agent(prov_t, ToolRegistry(), "SYS", LoopConfig(max_iterations=5),
+            on_event=lambda k, d: EVENTI_TRONCO.append(k))
+a_t._budget_state = None
+st_t = a_t.run("scrivi tutto")
+check("finish_reason=length non chiude il turno",
+      prov_t.n == 2, f"chiamate: {prov_t.n}")
+check("la risposta troncata viene continuata",
+      "seconda meta" in a_t.final_text(), a_t.final_text()[:80])
+check("l'evento di troncamento arriva alla UI",
+      "troncato" in EVENTI_TRONCO, str(EVENTI_TRONCO))
+
 # pulizia
 for f in ["_test_probe.txt", "_test_err.txt"]:
     p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), f)

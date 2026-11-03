@@ -28,11 +28,73 @@ ha bisogno di nient'altro, ed è la metà più utile delle due.
 
 from __future__ import annotations
 
+import ipaddress
 import re
+import socket
+import urllib.error
+import urllib.request
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from ..types import Tool
+
+
+def _rete_locale(host: str) -> bool:
+    """Vero se l'host porta a questa macchina o alla rete locale.
+
+    `web_leggi` accettava qualunque http(s), compresi `http://127.0.0.1:8080`
+    e `http://192.168.1.1`. Con un server locale aperto (o il router, o il
+    metadata endpoint di un cloud) il tool diventava un modo per leggere
+    servizi interni e farsi restituire il contenuto al modello.
+
+    Si risolve il nome e si guardano TUTTI gli indirizzi: un dominio
+    pubblico puo' puntare a 127.0.0.1 (DNS rebinding), e controllare solo
+    la stringa dell'host non lo vede.
+    """
+    h = (host or "").strip().lower().rstrip(".")
+    if not h:
+        return True
+    if h == "localhost" or h.endswith(".localhost") or h in {
+            "localhost.localdomain", "ip6-localhost", "metadata"}:
+        return True
+    try:
+        info = socket.getaddrinfo(h, None)
+    except (socket.gaierror, OSError):
+        # Nome che non risolve: la richiesta fallira' comunque, e non c'e'
+        # niente da proteggere. Non si blocca per non trasformare un DNS
+        # lento in un messaggio di sicurezza falso.
+        return False
+    for voce in info:
+        try:
+            ip = ipaddress.ip_address(str(voce[4][0]).split("%", 1)[0])
+        except ValueError:
+            continue
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return True
+        # 100.64.0.0/10 (CGNAT) non e' "private" in tutte le versioni di
+        # Python, ma non e' nemmeno pubblico: alcuni provider la usano per
+        # i servizi interni.
+        if ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10"):
+            return True
+    return False
+
+
+class _RedirectPubblico(urllib.request.HTTPRedirectHandler):
+    """Segue i redirect solo verso indirizzi pubblici.
+
+    Controllare l'URL iniziale non basta: un sito pubblico puo' rispondere
+    302 verso `http://169.254.169.254/...` e urllib lo seguirebbe da solo,
+    prima che il nostro controllo veda qualcosa. Il redirect si valida
+    PRIMA di seguirlo, che e' l'unico punto in cui si puo' ancora dire no.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401
+        host = urlparse(newurl).hostname or ""
+        if _rete_locale(host):
+            raise urllib.error.HTTPError(
+                newurl, code, "redirect verso rete locale bloccato", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 # Quanto prendiamo da una pagina. Una risposta troppo lunga torna al
 # modello come muro di testo e costa token senza che legga la metà; troppo
@@ -153,7 +215,15 @@ def tool_web_leggi() -> Tool:
             # il disco saltando `read_file` e il suo gate dei permessi.
             # Fuori http/https non si passa.
             return f"Schema non ammesso: {p.scheme or '(nessuno)'}. Solo http e https."
-        import urllib.request
+        if _rete_locale(p.hostname or ""):
+            return (
+                f"Indirizzo di rete locale bloccato: {p.hostname}. "
+                f"`web_leggi` legge solo siti pubblici: un servizio su "
+                f"localhost o sulla rete di casa non e' una pagina web, ed "
+                f"e' il modo classico per far leggere all'agente qualcosa "
+                f"che non dovrebbe vedere. Se devi leggere un file locale, "
+                f"usa `read_file`."
+            )
         # Chiariamo chi siamo: molti siti rispondono 403 a un client
         # senza User-Agent, e l'errore sembra di rete invece che di
         # presentazione.
@@ -161,11 +231,18 @@ def tool_web_leggi() -> Tool:
             "User-Agent": "Mozilla/5.0 (compatible; Orchestra/1.0)",
             "Accept": "text/html,application/xhtml+xml,text/plain,*/*",
         })
+        opener = urllib.request.build_opener(_RedirectPubblico)
         try:
-            with urllib.request.urlopen(req, timeout=25) as resp:
+            with opener.open(req, timeout=25) as resp:
                 grezzo = resp.read(1_200_000).decode(
                     resp.headers.get_content_charset() or "utf-8", "replace")
                 finale = urljoin(u, resp.geturl())
+                # Il redirect e' gia' stato validato, ma il controllo
+                # sull'URL finale resta: un handler del provider puo'
+                # cambiare l'host senza passare da `redirect_request`.
+                if _rete_locale(urlparse(finale).hostname or ""):
+                    return (f"La pagina ha portato a un indirizzo di rete "
+                            f"locale ({urlparse(finale).hostname}), bloccato.")
         except urllib.error.HTTPError as e:
             return f"La pagina ha risposto {e.code} {e.reason}. URL: {u}"
         except Exception as e:

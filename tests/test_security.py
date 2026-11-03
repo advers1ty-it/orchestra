@@ -109,6 +109,31 @@ for bad in ["../../../Windows/win.ini", _risalita, "/etc/passwd"]:
     except Exception as e:
         check(f"read_file blocca {bad[:30]}", False, f"tipo inatteso: {type(e).__name__}")
 
+print("\n[4b] dentro la root i file di credenziali sono protetti lo stesso")
+# Il caso vero: `.env` sta DENTRO il progetto, quindi il confine
+# dentro/fuori non lo tocca. Prima era leggibile con read_file mentre la
+# shell lo negava: si passava dal tool che non applica il controllo.
+with open(os.path.join(WORK, ".env"), "w", encoding="utf-8") as f:
+    f.write("CHIAVE=segreto\n")
+with open(os.path.join(WORK, ".env.example"), "w", encoding="utf-8") as f:
+    f.write("CHIAVE=\n")
+for nome in (".env", ".env.local"):
+    try:
+        rf.handler(path=nome)
+        check(f"read_file nega {nome} dentro la root", False, "ha letto!")
+    except PermissionError:
+        check(f"read_file nega {nome} dentro la root", True)
+    except Exception as e:
+        check(f"read_file nega {nome} dentro la root", False,
+              f"tipo inatteso: {type(e).__name__}")
+try:
+    default_registry().get("write_file").handler(path=".env", content="x")
+    check("write_file non puo' riscrivere .env", False, "ha scritto!")
+except PermissionError:
+    check("write_file non puo' riscrivere .env", True)
+check("il template .env.example resta leggibile",
+      "CHIAVE" in rf.handler(path=".env.example"))
+
 print("\n[5] il blocco non uccide il loop")
 from orchestra import Agent, LoopConfig, LLMResponse  # noqa: E402
 from orchestra.types import ToolCall  # noqa: E402

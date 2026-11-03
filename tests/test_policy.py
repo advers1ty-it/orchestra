@@ -132,8 +132,18 @@ check("in virgolette singole la sostituzione e' testo",
       pol.motivo_blocco("echo '$(whoami)'") is None,
       str(pol.motivo_blocco("echo '$(whoami)'")))
 pol.disattiva()
-check("senza policy la shell non ha limiti",
-      pol.motivo_blocco("curl https://esempio; rm -rf /") is None)
+# La riga diceva `is None`: senza policy, `rm -rf /` passava. Non era un
+# dettaglio del test, era il comportamento — e il primo comando che un
+# modello sbaglia puo' essere quello. Ora i comandi catastrofici sono
+# bloccati SEMPRE, anche senza policy; il resto resta libero.
+check("senza policy la shell resta libera",
+      pol.motivo_blocco("curl https://esempio; git status") is None)
+check("senza policy `rm -rf /` non passa piu'",
+      pol.motivo_blocco("curl https://esempio; rm -rf /") is not None,)
+check("senza policy `rm -rf .` non passa piu'",
+      pol.motivo_blocco("rm -rf .") is not None)
+check("un rm normale dentro il progetto passa",
+      pol.motivo_blocco("rm build/output.js") is None)
 
 pol.attiva({"nega_shell": ["rm -rf", "sudo"]})
 check("il deny blocca anche se il programma e' consentito",
