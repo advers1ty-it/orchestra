@@ -261,11 +261,27 @@ s7.set_system_prompt("TERZO")
 s7.send("c")
 s7.wait(timeout=10)
 s7.set_system_prompt("QUARTO")
-sysmsgs = [m.content for m in s7.agent.state.messages if m.role == "system"]
-check("un solo system prompt", len(sysmsgs) == 1, str(sysmsgs))
+sysmsgs = [m.content for m in s7.agent.state.messages
+           if m.role == "system" and m.name != "__contesto__"]
+# Il contesto volatile (skill/progetto) viaggia in un secondo messaggio
+# di sistema, per non invalidare il prefisso in cache: qui si verifica che
+# il blocco STABILE resti uno solo e aggiornato, e che il volatile non si
+# moltiplichi turno dopo turno.
+volatili = [m for m in s7.agent.state.messages
+            if m.role == "system" and m.name == "__contesto__"]
+check("un solo system prompt stabile", len(sysmsgs) == 1, str(sysmsgs))
 check("system prompt aggiornato", sysmsgs[0] == "QUARTO", str(sysmsgs))
+check("al massimo un blocco di contesto volatile",
+      len(volatili) <= 1, str([m.content for m in volatili]))
 check("contesto preservato dopo l'update",
       sum(1 for m in s7.agent.state.messages if m.role == "user") == 3)
+
+s7.send("d")
+s7.wait(timeout=10)
+sysmsgs = [m.content for m in s7.agent.state.messages
+           if m.role == "system" and m.name != "__contesto__"]
+check("il prompt aggiornato sopravvive al turno dopo",
+      sysmsgs == ["QUARTO"], str(sysmsgs))
 
 print("\n[8] Errori del provider non lasciano la sessione appesa")
 class BrokenProvider:

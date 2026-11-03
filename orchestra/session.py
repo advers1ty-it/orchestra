@@ -518,8 +518,13 @@ class Session:
         perdere il contesto.
         """
         with self._lock:
+            # Anche l'Agent deve saperlo: all'inizio di ogni turno
+            # `_aggiorna_prompt` riallinea il blocco stabile a
+            # `system_prompt`, e senza questa riga il prompt appena
+            # impostato tornava quello di prima al messaggio successivo.
+            self.agent.system_prompt = prompt
             for m in self.agent.state.messages:
-                if m.role == "system":
+                if m.role == "system" and m.name != "__contesto__":
                     m.content = prompt
                     return
             self.agent.state.messages.insert(
