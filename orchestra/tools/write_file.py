@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..types import Tool
-from ._guard import _safe_path
+from ._guard import _root, _safe_path
 
 
 def _registra(p, azione: str) -> None:
@@ -35,6 +35,16 @@ def tool_write_file() -> Tool:
         p = _safe_path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         existed = p.exists()
+        # Checkpoint PRIMA della scrittura: dopo, la versione vecchia non
+        # esiste piu' da nessuna parte. Se il checkpoint fallisce si
+        # scrive lo stesso: un lavoro non salvato e' peggio di un lavoro
+        # non annullabile.
+        try:
+            from ..checkpoint import registra
+
+            registra(p, _root(), "scrittura")
+        except Exception:  # noqa: BLE001
+            pass
         p.write_text(content, encoding="utf-8")
         verb = "aggiornato" if existed else "creato"
         _registra(p, verb)

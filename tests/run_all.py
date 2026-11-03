@@ -98,6 +98,12 @@ SUITES = [
     # ieri dietro cinquanta turni riusciti di oggi.
     ("traccia-filtri", "test_traccia_filtri.py", True),
     ("istruzioni", "test_istruzioni.py", True),
+    # Le istruzioni del repository (AGENTS.md, CLAUDE.md): senza, l'agente
+    # usa i comandi che conosce invece di quelli del progetto.
+    ("progetto", "test_istruzioni_progetto.py", True),
+    # L'undo delle scritture: senza, un file sovrascritto per errore e'
+    # perso per chi non usa git.
+    ("annulla", "test_annulla.py", True),
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),

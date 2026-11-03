@@ -12,7 +12,7 @@ Ora il pacchetto esiste e il tool sta dentro, importabile come gli altri.
 from __future__ import annotations
 
 from ..types import Tool
-from ._guard import _safe_path
+from ._guard import _root, _safe_path
 
 
 def _sostituisci(testo: str, trova: str, sostituisci: str, quante: int) -> tuple[str, int]:
@@ -86,6 +86,14 @@ def tool_edit_file() -> Tool:
             return (f"DRY-RUN: {fatte} sostituzioni su {occorrenze} "
                     f"occorrenze in {path} (nessuna scrittura)")
 
+        # Checkpoint prima di sovrascrivere: e' l'unico momento in cui
+        # esiste ancora la versione da cui si puo' tornare indietro.
+        try:
+            from ..checkpoint import registra
+
+            registra(p, _root(), "modifica")
+        except Exception:  # noqa: BLE001
+            pass
         p.write_text(nuovo, encoding="utf-8")
         resto = occorrenze - fatte
         msg = f"Sostituite {fatte} occorrenze in {path}"

@@ -141,6 +141,12 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 </ul>
 </section>
 
+<section id="istruzioni-progetto">
+<h2>Istruzioni del progetto e undo</h2>
+<p>Prima di lavorare, Orchestra legge le convenzioni del repository: <code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>.cursorrules</code> e <code>.github/copilot-instructions.md</code> nella radice del progetto attivo. Il testo entra nel prompt dopo le regole di sicurezza, che restano prioritarie; oltre 8000 caratteri viene troncato e lo dichiara.</p>
+<p>Ogni scrittura di <code>write_file</code> e <code>edit_file</code> lascia un checkpoint nella cartella dati (non nel progetto, per non sporcare diff e ricerche). Il pulsante <strong>&#8630;</strong> in alto annulla l'ultima modifica: un clic torna alla versione precedente, due clic tornano indietro di due scritture, e un file creato da zero viene rimosso. Il registro tiene le ultime 30 scritture; i file sopra 5 MB non vengono copiati e l'undo lo dice invece di saltare a una modifica piu' vecchia.</p>
+</section>
+
 <section id="ui">
 <h2>Interfaccia web</h2>
 <div class="grid">

@@ -128,6 +128,14 @@ def _build_agent(env: dict[str, str], extra_prompt: str = "") -> Agent:
     provider = build_provider(provider_name, model=model, env=env)
     reg = default_registry()
     prompt = SYSTEM_PROMPT + (f"\n\n{extra_prompt}" if extra_prompt else "")
+    # Le istruzioni del repository valgono anche da CLI: chi lancia
+    # Orchestra dentro un progetto si aspetta che legga AGENTS.md, non
+    # solo che lo faccia la web UI.
+    from .istruzioni_progetto import blocco_prompt as _blocco_progetto
+
+    istruzioni = _blocco_progetto()
+    if istruzioni:
+        prompt = f"{prompt}\n\n{istruzioni}"
     return Agent(provider, reg, prompt, _config(env), on_event=_on_event)
 
 

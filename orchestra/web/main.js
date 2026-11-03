@@ -78,6 +78,24 @@ async function reset() {
   } catch (e) { addText("error", String(e)); }
 }
 
+// L'undo dei file: non tocca la conversazione, quindi non chiede
+// conferma. Un clic, un file com'era prima; due clic, due scritture
+// indietro. Se non c'e' niente lo dice, invece di tacere.
+async function annullaModifica() {
+  try {
+    const r = await fetch("/api/annulla", { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) {
+      addNote(d.error || `niente da annullare (${r.status})`);
+      return;
+    }
+    addNote(`annullato: ${d.percorso} — ${d.azione_fatta}`);
+  } catch (e) { addNote(`annullamento fallito: ${e}`); }
+}
+
+const btnUndo = document.getElementById("btn-undo");
+if (btnUndo) btnUndo.addEventListener("click", annullaModifica);
+
 function autoGrow() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 200) + "px";

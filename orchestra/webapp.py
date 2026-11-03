@@ -62,13 +62,20 @@ def _prompt_base_con_memoria() -> str:
     si puo' ricostruire tutto (si perderebbe la conversazione), quindi il
     punto di partenza va ricomposto allo stesso modo.
     """
+    from .istruzioni_progetto import blocco_prompt as blocco_progetto
     from .tools.memoria import blocco_prompt
 
     prompt = SYSTEM_PROMPT
+    # Le istruzioni del repository (AGENTS.md, CLAUDE.md, ...) stanno tra
+    # le regole e i fatti personali: sono piu' specifiche delle regole
+    # generali, ma non possono sovrascriverle.
+    istruzioni = blocco_progetto()
+    if istruzioni:
+        prompt = f"{prompt}\n\n{istruzioni}"
     importanti = blocco_prompt()
     if importanti:
         prompt = (
-            f"{SYSTEM_PROMPT}\n\n"
+            f"{prompt}\n\n"
             f"---\n"
             f"Cose che valgono in ogni conversazione. Non ripeterle "
             f"se non servono. Per tutto il resto hai il tool "
@@ -1675,6 +1682,21 @@ class OrchestraApp:
         # `annullato` al giro successivo e chiama `cancel()` solo se e'
         # davvero lui a stare eseguendo il turno.
         return annullato
+
+    def annulla_modifica(self) -> dict[str, Any]:
+        """Rimette l'ultimo file toccato dall'agente com'era prima.
+
+        Solleva ValueError quando non c'e' niente da annullare: la UI
+        deve poter distinguere "non ho fatto niente" da "ho fallito".
+        """
+        from . import checkpoint
+
+        voce = checkpoint.annulla_ultima()
+        if voce is None:
+            raise ValueError(
+                "nessuna modifica da annullare: il registro degli "
+                "ultimi file toccati e' vuoto")
+        return voce
 
     def identita(self) -> dict[str, str]:
         """Nome e persona dell'agente principale (vuoti = Orchestra)."""
@@ -5092,6 +5114,15 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             keys_mod.scrivi(ENV_PATH, "ORCHESTRA_BUDGET", "")
             self.app.env.pop("ORCHESTRA_BUDGET", None)
             self._json({"ok": True, "messaggio": "Budget riportato ai valori di default"})
+        elif path == "/api/annulla":
+            # L'undo delle scritture: rimette l'ultimo file com'era.
+            # Non tocca la conversazione, quindi non serve una sessione
+            # viva: il registro e' su disco e sopravvive al riavvio.
+            try:
+                voce = self.app.annulla_modifica()
+            except (ValueError, RuntimeError) as e:
+                self._json({"ok": False, "error": str(e)}, 400); return
+            self._json({"ok": True, **voce})
         elif path == "/api/prova":
             # Prova manuale: un prompt, un modello, tutta la trascrizione.
             # Diversa dal benchmark: qui non c'e' un punteggio, c'e' la

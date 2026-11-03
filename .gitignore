@@ -83,3 +83,4 @@ Python/
 # Stato runtime delle code durevoli e dei bot nelle suite di test.
 tests/_dati_test/lavori.db*
 tests/_dati_test/bots.db*
+tests/_dati_test/checkpoint/
