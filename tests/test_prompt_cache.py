@@ -119,6 +119,20 @@ check("l'ultimo blocco e' marcato",
       blocchi[-1].get("cache_control") == {"type": "ephemeral"}, str(blocchi[-1]))
 
 
+print("\n[6] Prefisso stabile e blocco volatile: due blocchi, una cache")
+a = Cattura()
+a.chat([Message(role="system", content="BASE-STABILE"),
+        Message(role="system", content="SKILL E PROGETTO"),
+        Message(role="user", content="ciao")])
+blocchi = (a.visto or {}).get("system") or []
+check("ci sono due blocchi", len(blocchi) == 2, str(len(blocchi)))
+check("il primo e' il prefisso", blocchi and blocchi[0].get("text") == "BASE-STABILE")
+check("il secondo e' il volatile",
+      len(blocchi) > 1 and blocchi[1].get("text") == "SKILL E PROGETTO")
+check("solo il primo e' marcato per la cache",
+      blocchi and blocchi[0].get("cache_control") == {"type": "ephemeral"}
+      and len(blocchi) > 1 and "cache_control" not in blocchi[1], str(blocchi))
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

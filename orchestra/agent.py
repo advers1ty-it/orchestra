@@ -524,16 +524,58 @@ class Agent:
             progetto = self._blocco_progetto()
         except Exception:
             progetto = ""
-        if not extra and not progetto:
-            return                      # niente da aggiungere: identico
         # Il progetto viene DOPO le skill: le skill dicono COME
         # lavorare, il progetto dice SU COSA.
-        nuovo = self.system_prompt + extra + progetto
+        volatile = (extra + progetto).strip()
+        # PERCHE' DUE MESSAGGI DI SISTEMA E NON UNO.
+        #
+        # Il primo blocco (regole, persona, memoria) e' il prefisso che i
+        # provider mettono in cache. Le skill e il progetto cambiano con
+        # l'ultimo messaggio utente: se stessero dentro quel blocco, ogni
+        # turno cambierebbe il prefisso e la cache non colpirebbe MAI,
+        # rendendo inutile marcare system e tool. Qui il blocco volatile
+        # sta dopo il primo, quindi non invalida il prefisso.
+        if not volatile:
+            self._rimuovi_contesto_volatile()
+            return
+        contesto = None
+        for m in self.state.messages:
+            if m.role == "system" and m.name == "__contesto__":
+                contesto = m
+                break
+        if contesto is None:
+            inserimento = 0
+            for i, m in enumerate(self.state.messages):
+                if m.role == "system":
+                    inserimento = i + 1
+            contesto = Message(role="system", content=volatile,
+                               name="__contesto__")
+            self.state.messages.insert(inserimento, contesto)
+        else:
+            contesto.content = volatile
+        # Il blocco stabile resta quello di partenza. Se l'identita' e'
+        # cambiata, `self.system_prompt` e' gia' quello nuovo e va
+        # riallineato qui: il vecchio contenuto potrebbe essere rimasto
+        # nella lista da prima del cambio.
+        for m in self.state.messages:
+            if m.role == "system" and m.name != "__contesto__":
+                m.content = self.system_prompt
+                break
+
+    def _rimuovi_contesto_volatile(self) -> None:
+        """Toglie il blocco skill/progetto quando non c'e' piu' nulla.
+
+        Senza, cambiando progetto verso una cartella senza istruzioni il
+        modello continuerebbe a leggere quelle del progetto precedente.
+        """
+        rimasti = [m for m in self.state.messages
+                   if not (m.role == "system" and m.name == "__contesto__")]
+        if len(rimasti) != len(self.state.messages):
+            self.state.messages[:] = rimasti
         for m in self.state.messages:
             if m.role == "system":
-                m.content = nuovo
-                return
-        self.state.messages.insert(0, Message(role="system", content=nuovo))
+                m.content = self.system_prompt
+                break
 
     def steer(self, testo: str) -> bool:
         """Inietta un messaggio durante il turno in corso."""

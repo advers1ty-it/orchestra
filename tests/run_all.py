@@ -110,6 +110,11 @@ SUITES = [
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),
+    # Il prefisso non deve cambiare fra un turno e l'altro, o la cache
+    # non colpisce mai.
+    ("prefisso", "test_prefisso_stabile.py", True),
+    # Il testo che arriva dal web e' dato, non istruzioni.
+    ("non-fidato", "test_non_fidato.py", True),
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),

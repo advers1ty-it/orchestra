@@ -709,7 +709,11 @@ class AnthropicAdapter:
                 if not content:
                     content.append({"type": "text", "text": ""})
                 out.append({"role": "user", "content": content})
-        return ("\n\n".join(system).strip(), out)
+        # Lista, non stringa: il primo blocco e' il prefisso stabile e
+        # va marcato per la cache da solo; il secondo (skill, istruzioni
+        # del progetto) cambia con l'ultimo messaggio e non deve
+        # invalidare il primo.
+        return ([s.strip() for s in system if s.strip()], out)
 
     def _convert_tools(self, tools):
         out = []
@@ -753,18 +757,21 @@ class AnthropicAdapter:
                 ultimo["cache_control"] = {"type": "ephemeral"}
 
     @staticmethod
-    def _system_blocks(system: str) -> list[dict[str, Any]]:
-        """Il system come blocco marcato per la cache.
+    def _system_blocks(parti: list[str]) -> list[dict[str, Any]]:
+        """I blocchi di system, con la cache solo sul prefisso stabile.
 
-        Regole, istruzioni del progetto e memoria stanno tutte qui, e
-        cambiano molto meno di frequente di quanto si paghino: senza
-        marcatura ogni turno le ripaga intere.
+        Anthropic mette in cache il prefisso fino a ogni `cache_control`.
+        Marcando solo il primo blocco, il secondo (skill e istruzioni del
+        progetto, che cambiano con l'ultimo messaggio) resta fuori dalla
+        cache e cambiarlo non invalida regole e memoria.
         """
-        return [{
-            "type": "text",
-            "text": system,
-            "cache_control": {"type": "ephemeral"},
-        }]
+        blocchi = []
+        for i, testo in enumerate(parti):
+            blocco: dict[str, Any] = {"type": "text", "text": testo}
+            if i == 0:
+                blocco["cache_control"] = {"type": "ephemeral"}
+            blocchi.append(blocco)
+        return blocchi
 
     def chat(self, messages, tools=None, *, temperature=0.7, max_tokens=4096,
              stop=None, reasoning_level=None) -> LLMResponse:

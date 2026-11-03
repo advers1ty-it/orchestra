@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ..types import Tool
-from .web import _html_a_testo, _titolo
+from .web import _blocco_non_fidato, _html_a_testo, _titolo
 
 
 def _browser_exe() -> str | None:
@@ -98,7 +98,10 @@ def tool_browser_render() -> Tool:
                         r.headers.get_content_charset() or "utf-8", "replace")
             except Exception as e:  # noqa: BLE001
                 return f"browser non disponibile e fetch leggero fallito: {e}"
-            return _html_a_testo(grezzo)[:6000] or f"Non trovo testo su {u}."
+            testo = _html_a_testo(grezzo)[:6000]
+            if not testo:
+                return f"Non trovo testo su {u}."
+            return _blocco_non_fidato(testo, u)
         work = os.path.join(tempfile.gettempdir(), "orchestra_browser")
         os.makedirs(work, exist_ok=True)
         try:
@@ -130,7 +133,7 @@ def tool_browser_render() -> Tool:
         if len(testo) > 6000:
             testo = testo[:6000] + f"\n\n[...troncato: {len(testo)} caratteri]"
         prefisso = f"# {titolo}\n{u}\n\n" if titolo else f"{u}\n\n"
-        return prefisso + testo
+        return prefisso + _blocco_non_fidato(testo, u)
 
     return Tool(
         name="browser_render",
