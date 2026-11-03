@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import signal as _signal
 import subprocess
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -239,6 +240,62 @@ def _kill_tree(pid: int) -> None:
             os.kill(pid, _signal.SIGKILL)
         except Exception:
             pass
+
+
+# --------------------------------------------------------------------------
+# I sottoprocessi attivi, per annullare davvero
+#
+# `request_cancel()` fermava il turno al prossimo controllo, ma il
+# controllo arriva quando il tool ritorna: un `npm install` o un
+# `sleep 300` restava vivo per tutta la sua durata, e l'utente vedeva
+# "annullato" mentre il processo continuava a scrivere sul disco. Qui il
+# processo viene registrato appena parte, e chi annulla lo trova per
+# ucciderlo.
+#
+# La chiave e' il thread: una sessione esegue il turno in un thread suo,
+# quindi annullare una sessione non ammazza i comandi di un'altra.
+_PROC_LOCK = threading.Lock()
+_PROC: dict[int, set] = {}
+
+
+def registra_processo(proc: Any) -> None:
+    """Segna un processo come "in corso per questo thread"."""
+    with _PROC_LOCK:
+        _PROC.setdefault(threading.get_ident(), set()).add(proc)
+
+
+def dimentica_processo(proc: Any) -> None:
+    """Toglie il processo dal registro: e' finito da solo."""
+    with _PROC_LOCK:
+        vivi = _PROC.get(threading.get_ident())
+        if not vivi:
+            return
+        vivi.discard(proc)
+        if not vivi:
+            _PROC.pop(threading.get_ident(), None)
+
+
+def termina_processi(ident: int | None = None) -> int:
+    """Uccide gli alberi dei processi del thread indicato.
+
+    Torna quanti ne ha fermati. `ident=None` vale per il thread
+    corrente; la sessione passa l'ident del thread che esegue il turno.
+    """
+    chiave = threading.get_ident() if ident is None else ident
+    with _PROC_LOCK:
+        proc_list = list(_PROC.pop(chiave, ()))
+    for proc in proc_list:
+        # Il segno serve a `run_shell`: senza, l'output parziale di un
+        # comando ucciso sembra un comando finito con exit 1.
+        try:
+            proc._orchestra_interrotto = True
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            _kill_tree(proc.pid)
+        except Exception:  # noqa: BLE001
+            pass
+    return len(proc_list)
 
 
 # --------------------------------------------------------------------------

@@ -17,6 +17,8 @@ from ._guard import (
     _root,
     _sandbox_env,
     _sq,
+    dimentica_processo,
+    registra_processo,
 )
 
 
@@ -158,6 +160,9 @@ def tool_run_shell() -> Tool:
                 creationflags=creationflags,
                 start_new_session=(os.name != "nt"),
             )
+        # Da qui in poi il processo e' visibile a chi annulla: senza
+        # registrazione `cancel()` aspettava la fine naturale del comando.
+        registra_processo(proc)
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
             r = subprocess.CompletedProcess(
@@ -170,6 +175,14 @@ def tool_run_shell() -> Tool:
             except subprocess.TimeoutExpired:
                 proc.kill()
             return f"TIMEOUT dopo {timeout}s: comando interrotto e processo terminato"
+        finally:
+            dimentica_processo(proc)
+        # Un processo ucciso da fuori (cancel) torna con un codice di
+        # uscita che dipende dall'OS: dirlo esplicitamente evita che il
+        # modello legga l'output parziale come "comando finito".
+        if getattr(proc, "_orchestra_interrotto", False):
+            return (f"INTERROTTO: comando terminato dalla cancellazione "
+                    f"(exit={r.returncode}).\n{(r.stdout or '')[:2000]}")
 
         out = (r.stdout or "") + (("\n[stderr]\n" + r.stderr) if r.stderr else "")
         hint = ""

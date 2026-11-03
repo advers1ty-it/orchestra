@@ -22,6 +22,7 @@ all'avvio perche' sbagliarlo significa esporre le chiavi API.
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import sys
@@ -2747,6 +2748,73 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         else:
             cfg.verifica_compito = None
 
+    # -- difese contro il browser di un altro sito ------------------------
+    #
+    # Il token remoto protegge chi arriva da fuori, ma non protegge dal
+    # CSRF: una pagina qualsiasi aperta nel browser puo' fare una POST
+    # verso 127.0.0.1:8737, e se il server e' in locale non c'e' token da
+    # indovinare. Il browser manda `Origin`, quindi si confronta con
+    # l'Host: se non coincidono, la richiesta viene da un'altra origine e
+    # non e' un'azione dell'utente su questa app.
+    _RATE_LOCK = threading.Lock()
+    _RATE: dict[str, list[float]] = {}
+
+    def _origine_ammessa(self) -> bool:
+        """True se la POST arriva da questa stessa origine."""
+        if (self.headers.get("Sec-Fetch-Site") or "").lower() == "cross-site":
+            return False
+        orig = (self.headers.get("Origin") or "").strip()
+        if not orig:
+            # Client non-browser (curl, script, CLI): niente Origin. Il
+            # token remoto resta l'autorizzazione per quelli.
+            return True
+        if orig.lower() == "null":
+            return False
+        try:
+            o = urllib.parse.urlsplit(orig)
+        except ValueError:
+            return False
+        if o.scheme not in ("http", "https"):
+            return False
+        host = (self.headers.get("Host") or "").strip().lower()
+        if not host:
+            return False
+
+        def _norm(valore: str) -> str:
+            # http://host:80 e http://host sono la stessa origine.
+            for prefisso, porta in (("http://", ":80"), ("https://", ":443")):
+                if valore.startswith(prefisso) and valore.endswith(porta):
+                    return valore[: -len(porta)]
+            return valore
+
+        return _norm(o.netloc.lower()) == _norm(host)
+
+    def _limite(self, chiave: str, massimo: int, finestra: float) -> float:
+        """Finestra scorrevole. Torna 0 se si puo' passare, o i secondi."""
+        ora = time.monotonic()
+        with self._RATE_LOCK:
+            voci = self._RATE.setdefault(chiave, [])
+            voci[:] = [t for t in voci if ora - t < finestra]
+            if len(voci) >= massimo:
+                return max(0.1, finestra - (ora - voci[0]))
+            voci.append(ora)
+            # Pulizia opportunistica: senza, un IP che cambia chiave a
+            # ogni richiesta fa crescere il dizionario per sempre.
+            if len(self._RATE) > 512:
+                for k in [k for k, v in self._RATE.items()
+                          if not v or ora - v[-1] > 3600]:
+                    self._RATE.pop(k, None)
+            return 0.0
+
+    def _troppe_richieste(self, chiave: str, massimo: int,
+                          finestra: float) -> bool:
+        attesa = self._limite(chiave, massimo, finestra)
+        if not attesa:
+            return False
+        self._json({"error": "troppe richieste",
+                    "riprova": int(attesa) + 1}, 429)
+        return True
+
     def _gate_remoto(self, path: str) -> bool:
         # Accesso remoto: se attivo e il client non e' localhost, serve
         # un token valido. Restituisce True se la richiesta puo' proseguire.
@@ -2756,16 +2824,22 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         if ip in ("127.0.0.1", "::1", "localhost"):
             return True
         tok = getattr(self.app, "token_remoto", "") or ""
+
+        def _uguale(a: str, b: str) -> bool:
+            # Confronto a tempo costante: `==` si ferma al primo byte
+            # diverso, e su una rete reale la differenza si misura.
+            return bool(a) and bool(b) and hmac.compare_digest(a, b)
+
         # cookie
         for part in (self.headers.get("Cookie") or "").split(";"):
             part = part.strip()
             if part.startswith("orchestra_tok="):
                 val = urllib.parse.unquote(part[len("orchestra_tok="):])
-                if tok and val == tok:
+                if _uguale(val, tok):
                     return True
         # bearer
         auth = self.headers.get("Authorization") or ""
-        if auth.startswith("Bearer ") and auth[7:].strip() == tok and tok:
+        if auth.startswith("Bearer ") and _uguale(auth[7:].strip(), tok):
             return True
         # non autorizzato: risposta
         if path.startswith("/api/"):
@@ -3765,6 +3839,18 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?")[0]
+        # CSRF: una pagina di un altro sito non deve poter comandare
+        # l'agente con una POST verso 127.0.0.1. Sta PRIMA di tutto,
+        # perche' anche il login e' una POST.
+        if not self._origine_ammessa():
+            self._json({"error": "origine non ammessa"}, 403)
+            return
+        ip = (self.client_address[0] or "") if self.client_address else ""
+        # Tetto generale: nessuna applicazione vera manda 600 POST in
+        # dieci secondi, e un flood locale blocca il server per tutti
+        # (un thread per connessione).
+        if self._troppe_richieste(f"post:{ip}", 600, 10.0):
+            return
         # /api/login e /api/logout sono sempre raggiungibili (il primo
         # serve proprio a ottenere il cookie).
         if path not in ("/api/login", "/api/logout"):
@@ -3773,12 +3859,18 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         # Login remoto: non richiede sessione ne' token (e' il modo per
         # ottenerlo).
         if path == "/api/login":
+            # Il token remoto e' l'unica credenziale: senza un limite, un
+            # client puo' provarne milioni. Sei tentativi al minuto per
+            # IP lasciano passare un errore di battitura e fermano il resto.
+            if self._troppe_richieste(f"login:{ip}", 6, 60.0):
+                return
             try:
                 body = self._body()
             except ValueError as e:
                 self._json({"error": str(e)}, 400); return
             tok = (body.get("token") or "").strip()
-            if tok and tok == (self.app.token_remoto or ""):
+            atteso = self.app.token_remoto or ""
+            if tok and atteso and hmac.compare_digest(tok, atteso):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Set-Cookie",

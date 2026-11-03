@@ -86,6 +86,64 @@ try:
 except U.UpdateError:
     check("zip senza radice rifiutato", True)
 
+print("\n[5] Integrita': asset, digest, zip-slip")
+
+rel = {"zipball_url": "https://api.github.com/zipball",
+       "assets": [{"name": "orchestra-0.6.0.zip",
+                   "browser_download_url": "https://example.test/a.zip",
+                   "digest": "sha256:abc123"}]}
+check("l'asset vince sullo zipball",
+      U.scegli_asset(rel) == "https://example.test/a.zip")
+check("il digest dell'asset viene letto",
+      U._asset_scelto(rel) == ("https://example.test/a.zip", "abc123"))
+solo_zipball = {"zipball_url": "https://api.github.com/zipball", "assets": []}
+check("senza asset si usa lo zipball",
+      U.scegli_asset(solo_zipball) == "https://api.github.com/zipball")
+check("lo zipball non ha digest dichiarato",
+      U._asset_scelto(solo_zipball)[1] == "")
+
+# Un archivio valido: il digest giusto passa, quello sbagliato no.
+buono = os.path.join(tempfile.mkdtemp(prefix="dl-"), "buono.zip")
+with zipfile.ZipFile(buono, "w") as z:
+    z.writestr("radice/file.txt", "x")
+import hashlib  # noqa: E402
+with open(buono, "rb") as fh:
+    giusto = hashlib.sha256(fh.read()).hexdigest()
+dest = os.path.join(tempfile.mkdtemp(prefix="dl-"), "scarico.zip")
+url = "file:///" + buono.replace("\\", "/")
+check("con il digest giusto scarica",
+      U.scarica(url, None, dest, giusto) == giusto)
+try:
+    U.scarica(url, None, dest, "0" * 64)
+    check("con il digest sbagliato rifiuta", False, "accettato")
+except U.UpdateError as e:
+    check("con il digest sbagliato rifiuta", "sha256" in str(e), str(e))
+
+# GitHub che risponde HTML invece dello zip.
+html = os.path.join(tempfile.mkdtemp(prefix="dl-"), "errore.html")
+with open(html, "w", encoding="utf-8") as fh:
+    fh.write("<html>rate limit</html>")
+try:
+    U.scarica("file:///" + html.replace("\\", "/"), None,
+              dest, "")
+    check("un corpo HTML non passa per zip", False, "accettato")
+except U.UpdateError as e:
+    check("un corpo HTML non passa per zip", "non e' uno zip" in str(e),
+          str(e))
+
+# Zip-slip: un percorso che esce dalla cartella viene rifiutato PRIMA di
+# estrarre, non riparato in silenzio.
+slip = os.path.join(tempfile.mkdtemp(prefix="rel-"), "slip.zip")
+with zipfile.ZipFile(slip, "w") as z:
+    z.writestr("radice/../../fuori.txt", "x")
+try:
+    U.applica(slip, root)
+    check("zip-slip rifiutato", False, "accettato")
+except U.UpdateError as e:
+    check("zip-slip rifiutato", "esce dalla cartella" in str(e), str(e))
+check("l'estrazione non ha scritto fuori",
+      not os.path.exists(os.path.join(os.path.dirname(root), "fuori.txt")))
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

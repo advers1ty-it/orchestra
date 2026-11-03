@@ -32,6 +32,10 @@ os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 
 SUITES = [
     ("offline", "test_offline.py", True),
+    # I due tool che leggono la struttura e girano i test: analisi_python
+    # e run_tests. Il secondo esegue un processo vero, quindi passa dalle
+    # guardie di run_shell (root, policy, gate).
+    ("strumenti-codice", "test_strumenti_codice.py", True),
     ("resilienza", "test_resilience.py", True),
     ("orchestrazione", "test_orchestrazione.py", True),
     ("update", "test_update.py", True),
@@ -41,6 +45,10 @@ SUITES = [
     # Dopo lo stop, l'agente deve poter tornare a lavorare. Il flag di
     # cancel restava acceso e ogni tool veniva annullato prima di partire.
     ("cancel-recupero", "test_cancel_recupero.py", True),
+    # Annullare deve uccidere il comando, non solo fermare il turno: qui
+    # si avvia un processo lento, si annulla, e si verifica che non arrivi
+    # in fondo.
+    ("cancel-processi", "test_cancel_processi.py", True),
     # Un messaggio role="tool" rompe il Nous (e altri proxy) in due modi:
     # 400 "Missing required parameter: 'tool_call_id'" se non ha un id, e
     # 400 "is a tool result, but it does not follow an assistant message
@@ -86,6 +94,9 @@ SUITES = [
     # duplicato a ogni salvataggio.
     ("identita", "test_identita.py", True),
     ("webapp", "test_webapp.py", True),
+    # CSRF e forza bruta: una pagina di un altro sito non deve comandare
+    # l'agente via 127.0.0.1, e il token remoto non si prova a indovinare.
+    ("webapp-csrf", "test_webapp_csrf.py", True),
     ("webapp-modelli", "test_webapp_models.py", True),
     # Ogni import deve risolvere su un file tracciato: _guard.py ha
     # dimostrato che un file ignorato rompe solo le installazioni.

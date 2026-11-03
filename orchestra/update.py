@@ -26,6 +26,7 @@ if __name__ == "__main__" and os.path.dirname(os.path.abspath(__file__)) in sys.
     # prima di qualsiasi altro import.
     sys.path.remove(os.path.dirname(os.path.abspath(__file__)))
 
+import hashlib
 import io
 import json
 import shutil
@@ -66,18 +67,34 @@ class InfoRelease:
     tag: str
     versione: str
     zip_url: str
+    # sha256 dell'archivio, quando GitHub lo dichiara (`digest` sugli
+    # asset). Vuoto per lo zipball, che GitHub genera al volo e non
+    # descrive: in quel caso l'integrita' e' quella del TLS, e va detto.
+    sha256: str = ""
 
 
 def scegli_asset(release: dict, fallback_zipball: str = "") -> str:
     """Sceglie lo zip da scaricare: prima un asset .zip della release,
     altrimenti lo zipball del sorgente (serve token se privato)."""
+    return _asset_scelto(release, fallback_zipball)[0]
+
+
+def _asset_scelto(release: dict,
+                  fallback_zipball: str = "") -> tuple[str, str]:
+    """(url, sha256). L'asset vince sullo zipball: e' quello che il
+    manutentore ha caricato, e GitHub lo accompagna con un digest."""
     assets = release.get("assets") or []
     for a in assets:
         url = str(a.get("browser_download_url") or "")
         nome = str(a.get("name") or "")
         if url and nome.lower().endswith(".zip"):
-            return url
-    return fallback_zipball or str(release.get("zipball_url") or "")
+            digest = str(a.get("digest") or "")
+            if digest.startswith("sha256:"):
+                digest = digest[len("sha256:"):]
+            else:
+                digest = ""
+            return url, digest
+    return fallback_zipball or str(release.get("zipball_url") or ""), ""
 
 
 def radice_installazione() -> str:
@@ -151,10 +168,15 @@ def ultima_release(repo: str, token: str | None) -> InfoRelease:
     except Exception as e:  # noqa: BLE001 - rete varia, messaggio unico
         raise UpdateError(f"GitHub non raggiungibile: {e}")
     tag = str(d.get("tag_name") or "")
-    zip_url = str(d.get("zipball_url") or "")
+    # GitHub da' anche gli asset caricati a mano: se c'e' uno zip della
+    # release e' quello giusto, e porta un digest verificabile. Prima si
+    # usava SEMPRE lo zipball, ignorando l'asset: il codice che sceglieva
+    # l'asset esisteva, ma nessuno lo chiamava.
+    zip_url, sha256 = _asset_scelto(d)
     if not tag or not zip_url:
         raise UpdateError("nessuna release pubblicata su GitHub")
-    return InfoRelease(tag=tag, versione=versione_da_tag(tag), zip_url=zip_url)
+    return InfoRelease(tag=tag, versione=versione_da_tag(tag),
+                       zip_url=zip_url, sha256=sha256)
 
 
 def controlla(repo: str, token: str | None = None,
@@ -165,22 +187,74 @@ def controlla(repo: str, token: str | None = None,
     rel = ultima_release(repo, token)
     loc = versione_locale(root)
     return {"locale": loc, "remota": rel.versione, "tag": rel.tag,
-            "aggiornamento": rel.versione != loc, "zip_url": rel.zip_url}
+            "aggiornamento": rel.versione != loc, "zip_url": rel.zip_url,
+            "sha256": rel.sha256}
 
 
-def scarica(zip_url: str, token: str | None, dest: str) -> None:
+def scarica(zip_url: str, token: str | None, dest: str,
+            sha256: str = "") -> str:
+    """Scarica e verifica. Torna l'impronta calcolata.
+
+    Tre controlli che prima non c'erano: un corpo che non e' uno zip
+    (GitHub che risponde con una pagina d'errore), un digest dichiarato
+    dalla release che non corrisponde, e un file troncato. Ognuno di
+    questi arrivava ad `applica` come zip valido solo per caso, e il
+    risultato peggiore non era l'errore: era applicare meta' aggiornamento
+    sopra un'installazione che funzionava.
+    """
     try:
+        impronta = hashlib.sha256()
+        primo = b""
         with urllib.request.urlopen(_richiesta(zip_url, token),
                                     timeout=120) as f:
             with open(dest, "wb") as fh:
-                shutil.copyfileobj(f, fh)
+                while True:
+                    pezzo = f.read(65536)
+                    if not pezzo:
+                        break
+                    if not primo:
+                        primo = pezzo[:4]
+                    impronta.update(pezzo)
+                    fh.write(pezzo)
     except Exception as e:  # noqa: BLE001
         raise UpdateError(f"download fallito: {e}")
+    if not primo.startswith(b"PK"):
+        raise UpdateError(
+            "il download non e' uno zip: GitHub ha risposto con un'altra "
+            "cosa (errore, pagina HTML, limite di richieste). "
+            "Aggiornamento annullato, installazione intatta.")
+    calcolato = impronta.hexdigest()
+    if sha256 and calcolato != sha256.strip().lower():
+        raise UpdateError(
+            "sha256 non corrispondente: l'archivio scaricato non e' quello "
+            "della release. Aggiornamento annullato, installazione intatta.")
+    return calcolato
 
 
 def _conservare(rel_path: str) -> bool:
     parti = rel_path.split(os.sep)
     return rel_path in CONSERVA or parti[0] in CONSERVA or parti[-1] in CONSERVA
+
+
+def _valida_nomi(nomi: list[str]) -> None:
+    """Rifiuta percorsi che uscirebbero dalla cartella di estrazione.
+
+    `zipfile.extractall` moderno sanifica gia' `..` e i percorsi
+    assoluti, ma questo non e' un motivo per fidarsi: la sanificazione
+    e' cambiata tra versioni di Python, e un archivio che contiene
+    `../../qualcosa` e' un archivio che non dovrebbe essere applicato,
+    non uno da riparare in silenzio. Meglio dirlo.
+    """
+    for n in nomi:
+        pulito = n.replace("\\", "/")
+        if pulito.startswith("/") or (len(pulito) > 1 and pulito[1] == ":"):
+            raise UpdateError(
+                f"zip non valido: percorso assoluto ({n}). "
+                f"Aggiornamento annullato.")
+        if ".." in pulito.split("/"):
+            raise UpdateError(
+                f"zip non valido: percorso che esce dalla cartella ({n}). "
+                f"Aggiornamento annullato.")
 
 
 def _radice_zip(nomi: list[str]) -> str:
@@ -212,6 +286,7 @@ def applica(zip_path: str, root: str | None = None) -> dict:
     root = os.path.abspath(root or radice_installazione())
     with zipfile.ZipFile(zip_path) as z:
         nomi = z.namelist()
+        _valida_nomi(nomi)
         base = _radice_zip(nomi)
         tmp = tempfile.mkdtemp(prefix="orchestra-update-")
         try:
@@ -286,7 +361,8 @@ def aggiorna(repo: str, token: str | None = None,
     fd, tmpzip = tempfile.mkstemp(suffix=".zip", prefix="orchestra-rel-")
     os.close(fd)
     try:
-        scarica(info["zip_url"], token, tmpzip)
+        info["sha256_calcolato"] = scarica(info["zip_url"], token, tmpzip,
+                                          info.get("sha256") or "")
         esito = applica(tmpzip, root)
     finally:
         try:

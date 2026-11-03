@@ -233,6 +233,7 @@ class Session:
         self._lock = threading.RLock()
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
+        self._thread_ident: int | None = None
         self._busy = False
         # Due pezzi che l'app fornisce e che dipendono dal provider:
         # scegliere un modello alternativo, e cambiare il modello a
@@ -1177,6 +1178,9 @@ class Session:
             name="orchestra-turn",
         )
         self._thread.start()
+        # L'ident serve a `cancel()` per raggiungere i processi del turno
+        # anche quando il thread e' gia' finito (o l'ident viene riusato).
+        self._thread_ident = self._thread.ident
         return True
 
     def _run_turn(self, user_input: str, allegati: list | None = None) -> None:
@@ -1732,11 +1736,24 @@ class Session:
         return True
 
     def cancel(self) -> bool:
-        """Chiede l'arresto gentile. Il turno in corso finisce."""
+        """Arresta il turno in corso, sottoprocessi compresi.
+
+        Il flag da solo fermava il loop al controllo successivo, cioe'
+        quando il tool tornava: un `npm install` o un `sleep 300` restava
+        vivo e l'utente vedeva "annullato" mentre il comando continuava a
+        scrivere sul disco. `termina_processi` chiude gli alberi avviati
+        dal thread del turno.
+        """
         if not self._busy:
             return False
         self._cancel.set()
         self.agent.request_cancel()
+        try:
+            from .tools._guard import termina_processi
+            ident = getattr(self, "_thread_ident", None)
+            termina_processi(ident)
+        except Exception:  # noqa: BLE001
+            pass
         self.bridge.emit("cancel_requested", {})
         return True
 
