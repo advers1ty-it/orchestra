@@ -162,7 +162,7 @@ def tipo_descrizione(dati: bytes) -> str:
     if dati.startswith(b"RIFF") and dati[8:12] == b"WEBP":
         return "un'immagine WebP"
     if dati.startswith(b"PK\x03\x04"):
-        return "un archivio zip (un .docx o .xlsx sono zip)"
+        return "un archivio zip (un .docx, .xlsx o .pptx sono zip)"
     if dati.startswith(b"GIF") or dati.startswith(b"BM"):
         return "un file di un altro formato"
     return "un formato che non conosco"
@@ -192,6 +192,20 @@ def allega(nome: str, dati: bytes) -> Attachment:
         # che il contenuto e' un PNG: non e' un testo, e' un file che
         # mente.
         estensione = os.path.splitext(nome)[1].lower().lstrip(".")
+        if estensione in ("docx", "xlsx", "pptx"):
+            # Un file Office e' uno zip di XML: si legge come testo, che
+            # costa quasi niente ed e' esatto. Se lo zip non contiene le
+            # parti che il formato richiede, il messaggio lo dice.
+            from . import office
+
+            try:
+                _tipo, testo = office.estrai(nome, dati)
+            except office.OfficeError as e:
+                raise AttachmentError(str(e)) from None
+            return Attachment(nome=nome, kind="testo",
+                              mime=f"application/vnd.openxmlformats-"
+                                   f"officedocument.{estensione}",
+                              testo=testo)
         if estensione in ("pdf", "png", "jpg", "jpeg", "gif", "webp"):
             raise AttachmentError(
                 f"{nome}: il contenuto non corrisponde all'estensione. "
@@ -203,7 +217,8 @@ def allega(nome: str, dati: bytes) -> Attachment:
         except UnicodeDecodeError:
             raise AttachmentError(
                 f"{nome}: formato non riconosciuto. Allega un'immagine "
-                f"(png, jpg, gif, webp), un PDF o un file di testo."
+                f"(png, jpg, gif, webp), un PDF, un `.docx`/`.xlsx`/`.pptx` "
+                f"o un file di testo."
             ) from None
         if len(testo) > 200_000:
             raise AttachmentError(

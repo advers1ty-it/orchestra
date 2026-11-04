@@ -2969,6 +2969,15 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 limite = 50
             self._json({"tracce": ultime(limite=limite, esito=esito,
                                           solo_errori=solo_errori)})
+        elif path == "/api/diff":
+            # Le modifiche del turno in corso, con le righe cambiate.
+            # Il confine lo segna l'Agent a inizio turno; qui si legge e
+            # si calcola il diff al momento della richiesta, cosi' la
+            # vista mostra lo stato vero del file, non quello di meta'
+            # turno.
+            from . import checkpoint
+
+            self._json({"modifiche": checkpoint.modifiche_turno()})
         elif path == "/api/routing":
             # Stato dell'instradamento automatico (il POST sta in do_POST).
             if self.app.session is None:

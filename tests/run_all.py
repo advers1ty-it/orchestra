@@ -121,6 +121,15 @@ SUITES = [
     # Modalita' piano: un turno intero in cui il modello prova a scrivere
     # prima del piano, viene fermato, propone, e scrive solo dopo l'ok.
     ("piano", "test_piano.py", True),
+    # I tool di sola lettura di un giro partono insieme; una scrittura
+    # rimette tutto in fila, e l'ordine dei risultati resta quello.
+    ("parallelo", "test_parallelo.py", True),
+    # Il diff delle modifiche del turno: il confine e' il turno, e il
+    # diff mostra le righe vere.
+    ("diff", "test_diff.py", True),
+    # .docx/.xlsx/.pptx come testo, senza dipendenze e senza fidarsi
+    # dell'estensione.
+    ("office", "test_office.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),

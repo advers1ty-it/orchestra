@@ -1732,6 +1732,27 @@ select:disabled {
   border:1px solid var(--border,#333); border-radius:12px;
   width:880px; max-width:94vw; height:80vh; display:flex; flex-direction:column; padding:14px; }
 .traccia-modal-corpo { flex:1; overflow-y:auto; min-height:0; }
+
+/* Il diff multi-file: un blocco per file, ogni riga colorata dal suo
+   segno. La larghezza serve perche' un diff di codice va letto senza
+   andare a capo a ogni riga: lo scroll orizzontale e' meno peggio di un
+   diff illeggibile. */
+.diff-modal-box { width: 1040px; height: 84vh; }
+.diff-file { margin-bottom: 18px; }
+.diff-testa { display:flex; justify-content:space-between; gap:12px;
+  align-items:baseline; padding:6px 2px; border-bottom:1px solid var(--border,#333);
+  margin-bottom:6px; }
+.diff-nome { font-family:ui-monospace,monospace; font-size:12.5px; font-weight:600; }
+.diff-stat { font-size:11px; color:var(--dim,#999); white-space:nowrap; }
+.diff-stat.nuovo { color:var(--ok,#4a9); }
+.diff-testo { margin:0; padding:8px 0; overflow-x:auto; font-size:12px;
+  line-height:1.45; background:rgba(0,0,0,.25); border-radius:6px; }
+.diff-riga { display:block; padding:0 10px; white-space:pre;
+  font-family:ui-monospace,monospace; }
+.diff-riga.aggiunta { background:rgba(70,160,90,.16); color:#b7e3c2; }
+.diff-riga.tolta { background:rgba(190,70,70,.16); color:#f0b8b8; }
+.diff-riga.chunk { color:var(--dim,#999); }
+.diff-riga.meta { color:var(--dim,#999); }
 .side-traccia-dettaglio { font-size: 12px; }
 .side-traccia-eventi { margin: 4px 0 0; padding-left: 18px; }
 .side-traccia-eventi li { margin: 3px 0; color: var(--fg, #ddd); }

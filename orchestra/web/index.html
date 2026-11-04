@@ -85,6 +85,11 @@
           aria-label="Apri il pannello laterale">&#9776;</button>
   <button id="btn-undo" class="ghost" title="Annulla l'ultima modifica ai file"
           aria-label="Annulla l'ultima modifica ai file">&#8630;</button>
+  <!-- Le modifiche del turno: non annulla niente, mostra. E' il
+       complemento dell'undo: prima si guarda cosa e' cambiato, poi si
+       decide se tornare indietro. -->
+  <button id="btn-diff" class="ghost" title="Le modifiche ai file in questo turno, riga per riga"
+          aria-label="Modifiche del turno">&#916;</button>
   <!-- Modalita' piano: l'agente legge, propone, e aspetta. E' un
        interruttore, non un pulsante: lo stato deve restare visibile
        anche mentre non lo si usa, o non si sa piu' perche' l'agente
@@ -1080,6 +1085,18 @@
     <div class="traccia-modal-corpo">
       <div id="side-traccia-dettaglio" class="side-traccia-dettaglio"></div>
     </div>
+  </div>
+</div>
+<div id="diff-modal" class="traccia-modal" hidden>
+  <div class="traccia-modal-box diff-modal-box">
+    <div class="panel-head">
+      <div><b>Modifiche del turno</b> <span class="dim">cosa ha toccato l'agente, riga per riga</span></div>
+      <div>
+        <button id="diff-aggiorna" class="ghost" title="Rileggi i file adesso">&#8634;</button>
+        <button id="diff-chiudi" class="ghost">Chiudi</button>
+      </div>
+    </div>
+    <div class="traccia-modal-corpo" id="diff-corpo"></div>
   </div>
 </div>
 <div id="mem-modal" class="mem-modal" hidden>

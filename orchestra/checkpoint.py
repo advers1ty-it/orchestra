@@ -205,6 +205,128 @@ def annulla_ultima() -> dict[str, Any] | None:
         return {**voce, "azione_fatta": azione}
 
 
+# Quanti caratteri di diff per file e in tutto. Un file generato di
+# 5000 righe produrrebbe un diff che nessuno legge, e la UI lo dovrebbe
+# disegnare tutto: meglio dire "troncato" che fingere di averlo mostrato.
+MAX_DIFF_FILE = 20_000
+MAX_DIFF_TOTALE = 80_000
+
+
+def _file_turno() -> Path:
+    return _dir() / "turno.json"
+
+
+def nuovo_turno() -> None:
+    """Segna l'inizio di un turno: il diff parte da qui.
+
+    Non azzera niente e non tocca i backup: l'undo continua a funzionare
+    anche su una scrittura di due turni fa. Questo dice solo "quali
+    modifiche appartengono al turno che sto per eseguire" — un confine,
+    non una cancellazione.
+    """
+    try:
+        with _LOCK:
+            tmp = str(_file_turno()) + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"ts": time.time()}, f)
+            os.replace(tmp, _file_turno())
+    except OSError:
+        pass  # un diff mancante non deve fermare il turno
+
+
+def _testo(percorso: Path) -> str | None:
+    """Il contenuto come testo, None se non e' testo leggibile."""
+    try:
+        dati = percorso.read_bytes()
+    except OSError:
+        return None
+    if b"\x00" in dati[:8000]:
+        return None
+    return dati.decode("utf-8", errors="replace")
+
+
+def _diff(vecchio: str | None, nuovo: str | None, percorso: str) -> str:
+    """Il diff unificato tra due versioni, o una riga che dice perche' no."""
+    if vecchio is None or nuovo is None:
+        return "(file binario o illeggibile: niente diff)"
+    import difflib
+
+    righe = list(difflib.unified_diff(
+        vecchio.splitlines(), nuovo.splitlines(),
+        fromfile=f"a/{percorso}", tofile=f"b/{percorso}",
+        n=2, lineterm="",
+    ))
+    if not righe:
+        # Capita con una riscrittura identica: il file e' stato salvato ma
+        # il contenuto non e' cambiato, e dire "0 righe" va bene.
+        return ""
+    testo = "\n".join(righe)
+    if len(testo) > MAX_DIFF_FILE:
+        testo = testo[:MAX_DIFF_FILE] + "\n... (diff troncato)"
+    return testo
+
+
+def modifiche_turno() -> list[dict[str, Any]]:
+    """Le scritture del turno in corso, dalla piu' vecchia, con il diff.
+
+    Vuoto quando il turno non ha ancora toccato niente. Non solleva mai:
+    la vista e' un extra, e un manifest rotto non deve rompere la chat.
+    """
+    try:
+        with open(_file_turno(), encoding="utf-8") as f:
+            inizio = float(json.load(f).get("ts") or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return []
+    if not inizio:
+        return []
+    out: list[dict[str, Any]] = []
+    usati = 0
+    for voce in _voci():
+        if float(voce.get("ts") or 0) < inizio:
+            continue
+        percorso = str(voce.get("percorso") or voce.get("assoluto") or "?")
+        p = Path(str(voce.get("assoluto") or ""))
+        aggiunte = tolte = 0
+        if voce.get("saltata"):
+            diff = f"(non annullabile: {voce['saltata']})"
+            stato = "non tracciato"
+        else:
+            vecchio = None
+            if voce.get("esisteva") and voce.get("backup"):
+                vecchio = _testo(_dir() / str(voce["backup"]))
+            nuovo = _testo(p) if p.is_file() else None
+            if not voce.get("esisteva"):
+                stato = "nuovo"
+                vecchio = ""
+            elif nuovo is None:
+                # Cancellato: _testo torna None sia per binario sia per
+                # file assente, e distinguerlo qui e' l'unica differenza
+                # che conta per chi guarda.
+                stato = "cancellato" if not p.is_file() else "binario"
+            else:
+                stato = "modificato"
+            if not voce.get("esisteva"):
+                nuovo = _testo(p) if p.is_file() else ""
+            diff = _diff(vecchio, nuovo, percorso)
+            aggiunte = sum(1 for r in diff.splitlines()
+                           if r.startswith("+") and not r.startswith("+++"))
+            tolte = sum(1 for r in diff.splitlines()
+                        if r.startswith("-") and not r.startswith("---"))
+        if usati > MAX_DIFF_TOTALE:
+            diff = "(diff omesso: troppe modifiche in un turno)"
+        usati += len(diff)
+        out.append({
+            "percorso": percorso,
+            "azione": voce.get("azione") or "modifica",
+            "stato": stato,
+            "aggiunte": aggiunte,
+            "tolte": tolte,
+            "diff": diff,
+            "ts": voce.get("ts"),
+        })
+    return out
+
+
 def storico(limite: int = MAX_VOCI) -> list[dict[str, Any]]:
     """Le ultime scritture, dalla piu' recente. Per la UI e i test."""
     with _LOCK:
@@ -222,3 +344,7 @@ def svuota() -> None:
                 except OSError:
                     pass
         _salva([])
+        try:
+            _file_turno().unlink()
+        except OSError:
+            pass

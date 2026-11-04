@@ -96,6 +96,103 @@ async function annullaModifica() {
 const btnUndo = document.getElementById("btn-undo");
 if (btnUndo) btnUndo.addEventListener("click", annullaModifica);
 
+// Le modifiche del turno. L'undo dice "torna indietro su un file";
+// questo dice "guarda cosa e' cambiato", che e' la domanda da fare
+// prima di decidere se annullare.
+function apriDiff() {
+  const m = $("diff-modal");
+  if (!m) return;
+  m.hidden = false;
+  m.classList.add("show");
+  caricaDiff();
+}
+
+function chiudiDiff() {
+  const m = $("diff-modal");
+  if (!m) return;
+  m.hidden = true;
+  m.classList.remove("show");
+}
+
+function classeRiga(riga) {
+  if (riga.startsWith("+++") || riga.startsWith("---")) return " meta";
+  if (riga.startsWith("@@")) return " chunk";
+  if (riga.startsWith("+")) return " aggiunta";
+  if (riga.startsWith("-")) return " tolta";
+  return "";
+}
+
+async function caricaDiff() {
+  const corpo = $("diff-corpo");
+  if (!corpo) return;
+  corpo.replaceChildren();
+  const attesa = document.createElement("p");
+  attesa.className = "small dim";
+  attesa.textContent = "carico...";
+  corpo.appendChild(attesa);
+  try {
+    const r = await fetch("/api/diff");
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `errore ${r.status}`);
+    const mods = d.modifiche || [];
+    corpo.replaceChildren();
+    if (!mods.length) {
+      const p = document.createElement("p");
+      p.className = "small dim";
+      p.textContent = "In questo turno l'agente non ha ancora toccato file. " +
+        "Un file scritto prima dell'ultimo messaggio non compare qui: " +
+        "l'undo lo conosce lo stesso.";
+      corpo.appendChild(p);
+      return;
+    }
+    for (const m of mods) {
+      const blocco = document.createElement("div");
+      blocco.className = "diff-file";
+      const testa = document.createElement("div");
+      testa.className = "diff-testa";
+      const nome = document.createElement("span");
+      nome.className = "diff-nome";
+      nome.textContent = m.percorso;
+      const stat = document.createElement("span");
+      stat.className = "diff-stat " + (m.stato === "nuovo" ? "nuovo" : "");
+      stat.textContent = `${m.stato} · +${m.aggiunte} \u2212${m.tolte}`;
+      testa.append(nome, stat);
+      blocco.appendChild(testa);
+      if (m.diff) {
+        const pre = document.createElement("pre");
+        pre.className = "diff-testo";
+        for (const riga of m.diff.split("\n")) {
+          const s = document.createElement("span");
+          s.className = "diff-riga" + classeRiga(riga);
+          // textContent, non innerHTML: un diff contiene il file, e il
+          // file puo' contenere qualsiasi cosa.
+          s.textContent = riga || " ";
+          pre.appendChild(s);
+        }
+        blocco.appendChild(pre);
+      }
+      corpo.appendChild(blocco);
+    }
+  } catch (e) {
+    corpo.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "small dim";
+    p.textContent = `non riesco a leggere le modifiche: ${e}`;
+    corpo.appendChild(p);
+  }
+}
+
+on($("btn-diff"), "click", apriDiff);
+on($("diff-chiudi"), "click", chiudiDiff);
+on($("diff-aggiorna"), "click", caricaDiff);
+on($("diff-modal"), "click", (e) => {
+  if (e.target === e.currentTarget) chiudiDiff();
+});
+document.addEventListener("keydown", (e) => {
+  const m = $("diff-modal");
+  if (e.key === "Escape" && m && !m.hidden) chiudiDiff();
+});
+
 // Modalita' piano. E' un interruttore, e lo stato lo tiene il server:
 // il browser lo mostra e basta. Tenerlo solo qui vorrebbe dire che due
 // schede (o un refresh) mostrano una cosa e l'agente fa l'altra.

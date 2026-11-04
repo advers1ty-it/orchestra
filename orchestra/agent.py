@@ -34,6 +34,7 @@ from .fallback import (
 )
 from .budget import budget_guard, BudgetLimits
 from . import piano as piano_mod
+from . import parallelo as parallelo_mod
 from .types import (
     LLMResponse, Message, ToolCall, ToolRegistry, ToolResult, new_id,
 )
@@ -77,6 +78,10 @@ class LoopConfig:
     # ogni giro costa token. Meglio il lavoro imperfetto col motivo che
     # girare in tondo.
     max_tentativi_verifica: int = 3
+    # Le chiamate di sola lettura di uno stesso giro partono insieme
+    # (vedi orchestra/parallelo.py). Spegnibile perche' e' un'ottimizzazione
+    # di tempo, non una funzione: chi vuole la sequenza esatta la chiede.
+    parallelo: bool = True
 
 
 @dataclass
@@ -314,6 +319,58 @@ class Agent:
                        tokens=report["tokens_before"],
                        limit=self.config.context_limit,
                        sopra_soglia=sopra)
+
+    def _prepara_parallelo(
+        self, chiamate: list[ToolCall]
+    ) -> tuple[dict[str, tuple], set[str]]:
+        """Esegue insieme le chiamate di sola lettura di questo giro.
+
+        Ritorna ({id: esito}, {id gia' avviati}). Vuoto vuol dire "in
+        fila": un giro misto (legge e scrive) non e' parallelizzabile,
+        perche' l'ordine e' informazione e due scritture sullo stesso file
+        sarebbero una corsa. Anche un argomento rotto manda tutto in fila:
+        quel ramo deve produrre l'errore nell'ordine giusto.
+
+        Il cancel si controlla PRIMA di partire: annullare a meta' batch
+        lascerebbe tool gia' in volo senza un posto dove scrivere l'esito.
+        """
+        if not getattr(self.config, "parallelo", True) or len(chiamate) < 2:
+            return {}, set()
+        if self._cancel_requested():
+            return {}, set()
+        for tc in chiamate:
+            tool = self.registry.get(tc.name)
+            if (tool is None or tc.args_non_validi()
+                    or not parallelo_mod.sola_lettura(tc.name)):
+                return {}, set()
+            # La modalita' piano non c'entra con la lettura, ma se un
+            # giorno un tool finisse in entrambi gli elenchi il blocco
+            # deve valere anche qui.
+            if (self.modalita_piano and not piano_mod.approvato()
+                    and tc.name in piano_mod.TOOL_CHE_CAMBIANO):
+                return {}, set()
+
+        # Tutti gli start subito: la UI deve vedere cinque righe che
+        # partono insieme, non cinque che partono dopo che hanno finito.
+        for tc in chiamate:
+            self._emit("tool_start", name=tc.name, args=tc.parsed_args(),
+                       id=tc.id)
+
+        import concurrent.futures as cf
+
+        esiti: dict[str, tuple] = {}
+        with cf.ThreadPoolExecutor(max_workers=min(4, len(chiamate))) as pool:
+            futuri = {
+                pool.submit(self._execute_tool, tc.name, tc.parsed_args()): tc
+                for tc in chiamate
+            }
+            for futuro, tc in futuri.items():
+                try:
+                    esiti[tc.id] = futuro.result()
+                except Exception as e:  # noqa: BLE001 - un tool non uccide il turno
+                    esiti[tc.id] = (
+                        f"ERRORE nel tool '{tc.name}': {e}", False, [], [])
+        return esiti, {tc.id for tc in chiamate}
 
     def _execute_tool(
         self, name: str, args: dict[str, Any]
@@ -729,6 +786,15 @@ class Agent:
         # modalita', e un'approvazione che resta accesa trasforma la
         # prima volta in un permesso permanente.
         piano_mod.nuovo_turno()
+        # Il confine del diff multi-file: da qui in poi ogni scrittura
+        # appartiene a questo turno, e la vista delle modifiche parte da
+        # questo istante. Non azzera i backup, quindi l'undo continua a
+        # funzionare anche su cio' che e' stato scritto prima.
+        try:
+            from . import checkpoint as checkpoint_mod
+            checkpoint_mod.nuovo_turno()
+        except Exception:  # noqa: BLE001 - un diff mancante non ferma il turno
+            pass
 
         if self._budget_state:
             self._budget_state.reset_task()
@@ -921,6 +987,7 @@ class Agent:
             # --- caso 1: il modello ha chiesto tool -> esegui e continua
             if resp.wants_tools:
                 chiamate = list(resp.tool_calls)
+                esiti, avviate = self._prepara_parallelo(chiamate)
                 for i, tc in enumerate(chiamate):
                     if self._cancel_requested():
                         # Ogni tool_call deve avere il suo risultato,
@@ -951,7 +1018,9 @@ class Agent:
                     # `id` va nei due eventi: e' il modo perche' la UI
                     # abbini il risultato al tool giusto quando in un turno
                     # ce n'e' piu' di uno con lo stesso nome.
-                    self._emit("tool_start", name=tc.name, args=args, id=tc.id)
+                    if tc.id not in avviate:
+                        self._emit("tool_start", name=tc.name, args=args,
+                                   id=tc.id)
 
                     # Valori di partenza: il ramo degli argomenti rotti non
                     # esegue nessun tool, ma il messaggio e l'evento li
@@ -962,7 +1031,12 @@ class Agent:
                     immagini: list[str] = []
                     anteprime: list[str] = []
 
-                    if tc.args_non_validi():
+                    if tc.id in esiti:
+                        # Gia' eseguito dal batch di sola lettura: qui si
+                        # fa solo la contabilita', nello stesso ordine in
+                        # cui il modello ha chiesto le chiamate.
+                        result, ok, immagini, anteprime = esiti[tc.id]
+                    elif tc.args_non_validi():
                         # JSON rotto: NON eseguire. Eseguire con `{}`
                         # sarebbe peggio che non eseguire (write_file
                         # riscriverebbe il file vuoto), e eseguire con
