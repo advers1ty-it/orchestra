@@ -1,21 +1,40 @@
 """Client MCP (Model Context Protocol).
 
-Permette a Orchestra di connettersi a server MCP esterni (stdio o SSE/HTTP)
-ed esporre i loro tool come strumenti nativi. Le configurazioni dei server
-sono salvate in `mcp_servers.json` nella cartella dati.
+Permette a Orchestra di connettersi a server MCP esterni — stdio, HTTP
+streamable o SSE — ed esporre i loro tool come strumenti nativi. Le
+configurazioni stanno in `mcp_servers.json` nella cartella dati.
+
+TRE COSE CHE QUI SONO DIVERSE DA PRIMA
+
+1. Il trasporto e' separato dal protocollo (`mcp_trasporti.py`): aggiungere
+   HTTP o SSE non ha ricopiato l'handshake, e non esistono tre initialize
+   leggermente diversi.
+2. Risorse e prompt fanno parte del protocollo, non solo i tool. Di un
+   server si leggono `resources/list` + `resources/read` e `prompts/list`
+   + `prompts/get`, e la capacita' dichiarata in `initialize` decide se
+   chiederli: un server che non li ha non deve rispondere -32601 a ogni
+   connessione.
+3. Se il canale muore, ci si riconnette e si rifa' l'handshake. Solo un
+   errore di trasporto lo giustifica: un tool che risponde "argomento
+   sbagliato" non si risolve riavviando il server, e ritentarlo
+   raddoppierebbe l'errore.
 """
 from __future__ import annotations
 
 import json
 import os
-import queue
-import subprocess
 import threading
-import time
 import uuid
 from typing import Any
 
 from .dati import cartella_dati, percorso
+from .mcp_trasporti import (
+    PROTOCOLLO,
+    ErroreMCP,
+    ErroreTrasporto,
+    Trasporto,
+    crea,
+)
 
 
 def _path() -> str:
@@ -27,7 +46,8 @@ def _load_config() -> list[dict[str, Any]]:
     if not os.path.exists(p):
         return []
     try:
-        data = json.load(open(p, encoding="utf-8"))
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
     except (json.JSONDecodeError, OSError):
         return []
     if isinstance(data, list):
@@ -45,114 +65,86 @@ def _save_config(servers: list[dict[str, Any]]) -> None:
     os.replace(tmp, _path())
 
 
-class StdioConnection:
-    def __init__(self, cfg: dict[str, Any]):
+class Connessione:
+    """Un server MCP connesso: trasporto, capacita', tool, risorse, prompt."""
+
+    def __init__(self, sid: str, cfg: dict[str, Any]) -> None:
+        self.sid = sid
         self.cfg = cfg
-        self.name = cfg.get("name") or cfg.get("id") or "mcp"
-        self.proc: subprocess.Popen | None = None
-        self._lock = threading.Lock()
-        self._pending: dict[int, queue.Queue] = {}
-        self._next_id = 1
-        self._reader: threading.Thread | None = None
+        self.name = cfg.get("name") or sid
+        self.trasporto: Trasporto = crea(cfg)
         self.tools: list[dict[str, Any]] = []
+        self.resources: list[dict[str, Any]] = []
+        self.prompts: list[dict[str, Any]] = []
+        self.capabilities: dict[str, Any] = {}
+        self.server_info: dict[str, Any] = {}
+        self.protocol = PROTOCOLLO
         self.initialized = False
         self.error = ""
+        self.riconnessioni = 0
 
-    def start(self, timeout: float = 20.0) -> bool:
+    def start(self, timeout: float = 20.0, *, riconnessione: bool = False) -> bool:
         self.error = ""
-        try:
-            env = dict(os.environ)
-            for k, v in (self.cfg.get("env") or {}).items():
-                env[str(k)] = str(v)
-            cmd = [self.cfg.get("command")] + list(self.cfg.get("args") or [])
-            self.proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                env=env,
-            )
-        except Exception as e:
-            self.error = f"avvio fallito: {type(e).__name__}: {e}"
+        if not self.trasporto.start(timeout):
+            self.error = self.trasporto.error or "trasporto non avviato"
             return False
-        self._reader = threading.Thread(target=self._read_loop, daemon=True)
-        self._reader.start()
         try:
-            r = self.request("initialize", {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
+            r = self.trasporto.request("initialize", {
+                "protocolVersion": PROTOCOLLO,
+                "capabilities": {"roots": {"listChanged": False}},
                 "clientInfo": {"name": "Orchestra", "version": "0.5"},
             }, timeout=timeout)
             if not isinstance(r, dict):
-                raise RuntimeError("risposta initialize non valida")
-            self.request("notifications/initialized", {}, timeout=5.0, notify=True)
-            tr = self.request("tools/list", {}, timeout=timeout)
+                raise ErroreTrasporto("risposta initialize non valida")
+            self.protocol = str(r.get("protocolVersion") or PROTOCOLLO)
+            self.capabilities = r.get("capabilities") or {}
+            self.server_info = r.get("serverInfo") or {}
+            self.trasporto.request("notifications/initialized", {},
+                                   timeout=5.0, notify=True)
+            tr = self.trasporto.request("tools/list", {}, timeout=timeout)
             if isinstance(tr, dict):
                 self.tools = list(tr.get("tools") or [])
+            # Le capacita' decidono cosa chiedere. Se un server le omette
+            # ma implementa resources/*, si perde la lista: meglio di
+            # chiedere a ogni server due metodi che non ha.
+            if "resources" in self.capabilities:
+                self._carica_risorse(timeout)
+            if "prompts" in self.capabilities:
+                self._carica_prompt(timeout)
             self.initialized = True
+            if riconnessione:
+                self.riconnessioni += 1
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.error = f"handshake fallito: {type(e).__name__}: {e}"
             self.stop()
             return False
 
-    def _read_loop(self) -> None:
+    def _carica_risorse(self, timeout: float) -> None:
         try:
-            assert self.proc is not None and self.proc.stdout is not None
-            for line in self.proc.stdout:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                rid = obj.get("id")
-                if rid is None:
-                    continue
-                with self._lock:
-                    q = self._pending.get(rid)
-                if q is not None:
-                    q.put(obj)
-        except Exception:
-            pass
+            r = self.trasporto.request("resources/list", {}, timeout=timeout)
+            if isinstance(r, dict):
+                self.resources = list(r.get("resources") or [])
+        except ErroreMCP as e:
+            # -32601: il server dichiara la capacita' ma non il metodo.
+            # Non e' un motivo per non usare il server.
+            if e.codice != -32601:
+                raise
 
-    def request(self, method: str, params: Any = None, timeout: float = 20.0,
-                notify: bool = False) -> Any:
-        if self.proc is None or self.proc.stdin is None:
-            raise RuntimeError("processo non avviato")
-        if notify:
-            msg = {"jsonrpc": "2.0", "method": method, "params": params or {}}
-            self.proc.stdin.write(json.dumps(msg) + "\n")
-            self.proc.stdin.flush()
-            return None
-        with self._lock:
-            rid = self._next_id
-            self._next_id += 1
-            q = queue.Queue()
-            self._pending[rid] = q
-        msg = {"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {}}
+    def _carica_prompt(self, timeout: float) -> None:
         try:
-            self.proc.stdin.write(json.dumps(msg) + "\n")
-            self.proc.stdin.flush()
-        except Exception as e:
-            with self._lock:
-                self._pending.pop(rid, None)
-            raise RuntimeError(f"scrittura fallita: {e}")
-        try:
-            obj = q.get(timeout=timeout)
-        except queue.Empty:
-            with self._lock:
-                self._pending.pop(rid, None)
-            raise RuntimeError(f"timeout dopo {timeout}s su {method}")
-        with self._lock:
-            self._pending.pop(rid, None)
-        if isinstance(obj, dict) and "error" in obj:
-            err = obj["error"]
-            raise RuntimeError(str(err.get("message") if isinstance(err, dict) else err))
-        return obj.get("result") if isinstance(obj, dict) else obj
+            r = self.trasporto.request("prompts/list", {}, timeout=timeout)
+            if isinstance(r, dict):
+                self.prompts = list(r.get("prompts") or [])
+        except ErroreMCP as e:
+            if e.codice != -32601:
+                raise
+
+    def request(self, method: str, params: Any = None,
+                timeout: float = 30.0) -> Any:
+        if not self.initialized:
+            raise ErroreTrasporto(f"{self.name}: non connesso")
+        return self.trasporto.request(method, params, timeout=timeout)
 
     def call_tool(self, tool_name: str, arguments: dict[str, Any] | None = None,
                   timeout: float = 60.0) -> Any:
@@ -163,19 +155,13 @@ class StdioConnection:
 
     def stop(self) -> None:
         try:
-            if self.proc is not None:
-                self.proc.terminate()
-                try:
-                    self.proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    self.proc.kill()
-        except Exception:
+            self.trasporto.stop()
+        except Exception:  # noqa: BLE001
             pass
-        self.proc = None
         self.initialized = False
 
 
-_connections: dict[str, StdioConnection] = {}
+_connections: dict[str, Connessione] = {}
 _lock = threading.Lock()
 
 
@@ -194,12 +180,15 @@ def list_servers() -> list[dict[str, Any]]:
             "transport": cfg.get("transport") or "stdio",
             "command": cfg.get("command"),
             "args": cfg.get("args") or [],
-            "env": cfg.get("env") or {},
             "url": cfg.get("url"),
             "enabled": bool(cfg.get("enabled", True)),
             "connected": bool(conn and conn.initialized),
             "error": (conn.error if conn else ""),
             "tools": (len(conn.tools) if conn else 0),
+            "resources": (len(conn.resources) if conn else 0),
+            "prompts": (len(conn.prompts) if conn else 0),
+            "protocol": (conn.protocol if conn else ""),
+            "reconnects": (conn.riconnessioni if conn else 0),
         })
     return out
 
@@ -232,26 +221,54 @@ def remove_server(sid: str) -> bool:
     return True
 
 
+def _apri(sid: str, cfg: dict[str, Any], timeout: float,
+          *, riconnessione: bool = False) -> tuple[Connessione | None, str]:
+    """Apre e fa l'handshake. Ritorna (connessione, errore da mostrare)."""
+    try:
+        conn = Connessione(sid, cfg)
+    except ValueError as e:
+        return None, str(e)
+    if not conn.start(timeout, riconnessione=riconnessione):
+        errore = conn.error or "connessione fallita (vedi i log del server)"
+        conn.stop()
+        return None, errore
+    return conn, ""
+
+
 def connect(sid: str, timeout: float = 20.0) -> dict[str, Any]:
     cfg = _find_config(sid)
     if cfg is None:
         return {"ok": False, "error": "server sconosciuto"}
     disconnect(sid)
-    transport = (cfg.get("transport") or "stdio").lower()
-    if transport != "stdio":
-        return {"ok": False, "error": f"transport '{transport}' non supportato (solo stdio)"}
-    if not cfg.get("command"):
-        return {"ok": False, "error": "command mancante"}
-    conn = StdioConnection(cfg)
-    ok = conn.start(timeout=timeout)
+    conn, errore = _apri(sid, cfg, timeout)
+    if conn is None:
+        return {"ok": False, "error": errore}
     with _lock:
-        if ok:
-            _connections[sid] = conn
-        else:
-            _connections.pop(sid, None)
-    if ok:
-        _aggiorna_tool_cache()
-    return {"ok": ok, "error": conn.error, "tools": len(conn.tools)}
+        _connections[sid] = conn
+    _aggiorna_cache()
+    return {"ok": True, "error": "", "tools": len(conn.tools),
+            "resources": len(conn.resources), "prompts": len(conn.prompts),
+            "transport": cfg.get("transport") or "stdio",
+            "protocol": conn.protocol}
+
+
+def _riconnetti(sid: str, timeout: float = 20.0) -> Connessione | None:
+    """Riapre un server morto. None se non si riesce (e lo dice)."""
+    cfg = _find_config(sid)
+    if cfg is None:
+        return None
+    with _lock:
+        vecchia = _connections.pop(sid, None)
+    if vecchia is not None:
+        vecchia.stop()
+    conn, _errore = _apri(sid, cfg, timeout,
+                         riconnessione=vecchia is not None)
+    if conn is None:
+        return None
+    with _lock:
+        _connections[sid] = conn
+    _aggiorna_cache()
+    return conn
 
 
 def disconnect(sid: str) -> bool:
@@ -259,9 +276,14 @@ def disconnect(sid: str) -> bool:
         conn = _connections.pop(sid, None)
     if conn is not None:
         conn.stop()
-        _aggiorna_tool_cache()
+        _aggiorna_cache()
         return True
     return False
+
+
+def _connessione(sid: str) -> Connessione | None:
+    with _lock:
+        return _connections.get(sid)
 
 
 def connect_all(timeout: float = 20.0) -> list[dict[str, Any]]:
@@ -275,19 +297,24 @@ def connect_all(timeout: float = 20.0) -> list[dict[str, Any]]:
 
 
 _tool_cache: list[dict[str, Any]] = []
+_resource_cache: list[dict[str, Any]] = []
+_prompt_cache: list[dict[str, Any]] = []
 _cache_lock = threading.Lock()
 
 
 def _prefixed(server: str, tool: str) -> str:
-    safe = "".join(c if c.isalnum() or c == "_" else "_" for c in (server + "__" + tool))
+    safe = "".join(c if c.isalnum() or c == "_" else "_"
+                   for c in (server + "__" + tool))
     if not safe.startswith("mcp_"):
         safe = "mcp_" + safe
     return safe
 
 
-def _aggiorna_tool_cache() -> None:
-    global _tool_cache
-    nuova: list[dict[str, Any]] = []
+def _aggiorna_cache() -> None:
+    global _tool_cache, _resource_cache, _prompt_cache
+    nuova_t: list[dict[str, Any]] = []
+    nuova_r: list[dict[str, Any]] = []
+    nuova_p: list[dict[str, Any]] = []
     for sid, conn in list(_connections.items()):
         if not (conn and conn.initialized):
             continue
@@ -297,16 +324,42 @@ def _aggiorna_tool_cache() -> None:
             tname = t.get("name")
             if not tname:
                 continue
-            nuova.append({
+            nuova_t.append({
                 "server_id": sid,
                 "server": server_name,
                 "name": tname,
                 "prefixed": _prefixed(server_name, tname),
                 "description": t.get("description") or "",
-                "inputSchema": t.get("inputSchema") or {"type": "object", "properties": {}},
+                "inputSchema": t.get("inputSchema") or {
+                    "type": "object", "properties": {}},
+            })
+        for r in conn.resources or []:
+            uri = r.get("uri")
+            if not uri:
+                continue
+            nuova_r.append({
+                "server_id": sid,
+                "server": server_name,
+                "uri": uri,
+                "name": r.get("name") or uri,
+                "description": r.get("description") or "",
+                "mimeType": r.get("mimeType") or "",
+            })
+        for p in conn.prompts or []:
+            nome = p.get("name")
+            if not nome:
+                continue
+            nuova_p.append({
+                "server_id": sid,
+                "server": server_name,
+                "name": nome,
+                "description": p.get("description") or "",
+                "arguments": p.get("arguments") or [],
             })
     with _cache_lock:
-        _tool_cache = nuova
+        _tool_cache = nuova_t
+        _resource_cache = nuova_r
+        _prompt_cache = nuova_p
 
 
 def list_tools() -> list[dict[str, Any]]:
@@ -314,41 +367,76 @@ def list_tools() -> list[dict[str, Any]]:
         return [dict(t) for t in _tool_cache]
 
 
-def call_tool(prefixed: str, arguments: dict[str, Any] | None = None) -> str:
-    info = None
+def list_resources(sid: str | None = None) -> list[dict[str, Any]]:
     with _cache_lock:
-        for t in _tool_cache:
-            if t["prefixed"] == prefixed:
-                info = t
-                break
+        risorse = [dict(r) for r in _resource_cache]
+    return [r for r in risorse if not sid or r["server_id"] == sid]
+
+
+def list_prompts(sid: str | None = None) -> list[dict[str, Any]]:
+    with _cache_lock:
+        prompt = [dict(p) for p in _prompt_cache]
+    return [p for p in prompt if not sid or p["server_id"] == sid]
+
+
+def _testo_da_contenuto(contenuto: Any) -> str:
+    if not isinstance(contenuto, list):
+        return json.dumps(contenuto, ensure_ascii=False, default=str)
+    parti: list[str] = []
+    for c in contenuto:
+        if not isinstance(c, dict):
+            parti.append(str(c))
+            continue
+        tipo = c.get("type")
+        if tipo == "text":
+            parti.append(str(c.get("text") or ""))
+        elif tipo == "image":
+            parti.append(f"[immagine {c.get('mimeType') or '?'}]")
+        elif tipo == "resource":
+            risorsa = c.get("resource") or {}
+            uri = risorsa.get("uri") if isinstance(risorsa, dict) else ""
+            parti.append(f"[risorsa {uri}]")
+        elif tipo == "audio":
+            parti.append(f"[audio {c.get('mimeType') or '?'}]")
+        else:
+            parti.append(json.dumps(c, ensure_ascii=False, default=str))
+    return "\n".join(parti)
+
+
+def call_tool(prefixed: str, arguments: dict[str, Any] | None = None) -> str:
+    with _cache_lock:
+        info = next((t for t in _tool_cache if t["prefixed"] == prefixed), None)
     if info is None:
         return f"tool MCP sconosciuto: {prefixed}"
     sid = info["server_id"]
-    with _lock:
-        conn = _connections.get(sid)
+    conn = _connessione(sid)
     if conn is None or not conn.initialized:
-        return f"server MCP non connesso: {info['server']}"
+        conn = _riconnetti(sid)
+        if conn is None:
+            return f"server MCP non connesso: {info['server']}"
     try:
         res = conn.call_tool(info["name"], arguments or {})
-    except Exception as e:
+    except ErroreTrasporto as e:
+        # Il canale e' morto: si riapre e si riprova UNA volta. Se anche
+        # la seconda fallisce, il problema non e' il canale e ritentare
+        # sarebbe solo un terzo errore.
+        conn = _riconnetti(sid)
+        if conn is None:
+            return (f"il server MCP '{info['server']}' si e' disconnesso e "
+                    f"la riconnessione non e' riuscita: {e}")
+        if not any(t.get("name") == info["name"] for t in conn.tools):
+            return (f"il server MCP '{info['server']}' e' stato riconnesso "
+                    f"ma non offre piu' il tool '{info['name']}'")
+        try:
+            res = conn.call_tool(info["name"], arguments or {})
+        except Exception as e2:  # noqa: BLE001
+            return f"errore MCP dopo la riconnessione: {type(e2).__name__}: {e2}"
+    except Exception as e:  # noqa: BLE001
         return f"errore MCP: {type(e).__name__}: {e}"
     if isinstance(res, dict):
         content = res.get("content")
-        if isinstance(content, list):
-            parti = []
-            for c in content:
-                if isinstance(c, dict):
-                    if c.get("type") == "text":
-                        parti.append(str(c.get("text") or ""))
-                    elif c.get("type") == "image":
-                        parti.append(f"[image {c.get('mimeType')}]")
-                    elif c.get("type") == "resource":
-                        parti.append(str(c.get("resource") or ""))
-                    else:
-                        parti.append(json.dumps(c, ensure_ascii=False))
-                else:
-                    parti.append(str(c))
-            testo = "\n".join(parti)
+        if content is not None:
+            testo = _testo_da_contenuto(content)
             if res.get("isError"):
                 testo = "ERRORE: " + (testo or str(res))
             return testo or json.dumps(res, ensure_ascii=False)
@@ -356,10 +444,99 @@ def call_tool(prefixed: str, arguments: dict[str, Any] | None = None) -> str:
     return str(res)
 
 
+def read_resource(uri: str, sid: str | None = None) -> str:
+    """Il contenuto di una risorsa, per URI. Senza sid si cerca fra tutte."""
+    with _cache_lock:
+        risorse = list(_resource_cache)
+    candidate = [r for r in risorse if r["uri"] == uri
+                 and (not sid or r["server_id"] == sid)]
+    if not candidate:
+        return f"risorsa MCP sconosciuta: {uri}"
+    info = candidate[0]
+    server = info["server_id"]
+    conn = _connessione(server) or _riconnetti(server)
+    if conn is None:
+        return f"server MCP non connesso: {info['server']}"
+
+    def _leggi(c: Connessione) -> Any:
+        return c.request("resources/read", {"uri": uri})
+
+    try:
+        res = _leggi(conn)
+    except ErroreTrasporto as e:
+        conn = _riconnetti(server)
+        if conn is None:
+            return (f"il server MCP '{info['server']}' si e' disconnesso e "
+                    f"la riconnessione non e' riuscita: {e}")
+        res = _leggi(conn)
+    except Exception as e:  # noqa: BLE001
+        return f"errore MCP: {type(e).__name__}: {e}"
+    contenuti = (res or {}).get("contents") if isinstance(res, dict) else None
+    if not isinstance(contenuti, list):
+        return json.dumps(res, ensure_ascii=False, default=str)
+    parti: list[str] = []
+    for c in contenuti:
+        if not isinstance(c, dict):
+            parti.append(str(c))
+        elif isinstance(c.get("text"), str):
+            parti.append(c["text"])
+        elif c.get("blob"):
+            parti.append(f"[contenuto binario {c.get('mimeType') or '?'}, "
+                         f"{len(str(c['blob']))} caratteri base64]")
+        else:
+            parti.append(json.dumps(c, ensure_ascii=False, default=str))
+    return "\n".join(parti)
+
+
+def get_prompt(nome: str, argomenti: dict[str, Any] | None = None,
+               sid: str | None = None) -> str:
+    """Un prompt del server, gia' riempito con gli argomenti."""
+    with _cache_lock:
+        prompt = list(_prompt_cache)
+    candidate = [p for p in prompt if p["name"] == nome
+                 and (not sid or p["server_id"] == sid)]
+    if not candidate:
+        return f"prompt MCP sconosciuto: {nome}"
+    info = candidate[0]
+    server = info["server_id"]
+    conn = _connessione(server) or _riconnetti(server)
+    if conn is None:
+        return f"server MCP non connesso: {info['server']}"
+
+    def _prendi(c: Connessione) -> Any:
+        return c.request("prompts/get", {"name": nome,
+                                         "arguments": argomenti or {}})
+
+    try:
+        res = _prendi(conn)
+    except ErroreTrasporto as e:
+        conn = _riconnetti(server)
+        if conn is None:
+            return (f"il server MCP '{info['server']}' si e' disconnesso e "
+                    f"la riconnessione non e' riuscita: {e}")
+        res = _prendi(conn)
+    except Exception as e:  # noqa: BLE001
+        return f"errore MCP: {type(e).__name__}: {e}"
+    if not isinstance(res, dict):
+        return str(res)
+    righe: list[str] = []
+    if res.get("description"):
+        righe.append(str(res["description"]))
+    for m in res.get("messages") or []:
+        if not isinstance(m, dict):
+            continue
+        ruolo = m.get("role") or "?"
+        contenuto = m.get("content")
+        testo = (contenuto.get("text") if isinstance(contenuto, dict)
+                 else contenuto)
+        righe.append(f"[{ruolo}] {testo}")
+    return "\n".join(righe) or json.dumps(res, ensure_ascii=False, default=str)
+
+
 def registra_tool_nel_registro(registry) -> None:
     try:
         from .tools import Tool
-    except Exception:
+    except Exception:  # noqa: BLE001
         from .tools.__init__ import Tool
     for info in list_tools():
         nome = info["prefixed"]
@@ -379,7 +556,7 @@ def registra_tool_nel_registro(registry) -> None:
         try:
             registry.registra(tool)
             registry.attiva(tool.name)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
 
@@ -387,4 +564,6 @@ def stato() -> dict[str, Any]:
     return {
         "servers": list_servers(),
         "tools": list_tools(),
+        "resources": list_resources(),
+        "prompts": list_prompts(),
     }

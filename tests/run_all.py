@@ -130,6 +130,9 @@ SUITES = [
     # .docx/.xlsx/.pptx come testo, senza dipendenze e senza fidarsi
     # dell'estensione.
     ("office", "test_office.py", True),
+    # Client MCP: stdio, HTTP streamable, SSE, risorse, prompt e
+    # riconnessione quando il server muore (server finti in-process).
+    ("mcp", "test_mcp.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),

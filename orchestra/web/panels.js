@@ -4449,6 +4449,8 @@ const mcpTransport = $("mcp-transport");
 const mcpCommand = $("mcp-command");
 const mcpArgs = $("mcp-args");
 const mcpEnv = $("mcp-env");
+const mcpUrl = $("mcp-url");
+const mcpHeaders = $("mcp-headers");
 const mcpStatus = $("mcp-status");
 const mcpList = $("mcp-list");
 const mcpTools = $("mcp-tools");
@@ -4463,7 +4465,10 @@ function mcpRiga(s) {
   riga.appendChild(nome);
   const st = document.createElement("span");
   st.className = "goal-stato stato-" + (s.connected ? "done" : "pending");
-  st.textContent = s.connected ? ("on · " + s.tools + " tool") : "off";
+  st.textContent = s.connected
+    ? ("on · " + s.tools + " tool · " + (s.resources || 0) + " risorse · " +
+       (s.prompts || 0) + " prompt")
+    : "off";
   if (s.error) st.title = s.error;
   riga.appendChild(st);
   const azioni = document.createElement("span");
@@ -4496,6 +4501,8 @@ async function caricaMcp() {
   try {
     const rs = await fetch("/api/mcp/servers").then((r) => r.json().catch(() => ({})));
     const ts = await fetch("/api/mcp/tools").then((r) => r.json().catch(() => ({})));
+    const rr = await fetch("/api/mcp/resources").then((r) => r.json().catch(() => ({})));
+    const rp = await fetch("/api/mcp/prompts").then((r) => r.json().catch(() => ({})));
     const servers = rs.servers || [];
     if (mcpList) {
       mcpList.replaceChildren();
@@ -4516,8 +4523,29 @@ async function caricaMcp() {
         h.textContent = "Tool remoti (" + tools.length + "): " + tools.map((t) => t.prefixed).join(", ");
         mcpTools.appendChild(h);
       }
+      const risorse = rr.resources || [];
+      const prompt = rp.prompts || [];
+      if (risorse.length) {
+        const h = document.createElement("div");
+        h.className = "goal-meta";
+        h.textContent = "Risorse (" + risorse.length + "): " +
+          risorse.map((r) => r.uri).join(", ");
+        mcpTools.appendChild(h);
+      }
+      if (prompt.length) {
+        const h = document.createElement("div");
+        h.className = "goal-meta";
+        h.textContent = "Prompt (" + prompt.length + "): " +
+          prompt.map((p) => p.name).join(", ");
+        mcpTools.appendChild(h);
+      }
     }
-    if (mcpStatus) mcpStatus.textContent = servers.length + " server, " + (ts.tools || []).length + " tool";
+    if (mcpStatus) {
+      mcpStatus.textContent = servers.length + " server, " +
+        (ts.tools || []).length + " tool, " +
+        (rr.resources || []).length + " risorse, " +
+        (rp.prompts || []).length + " prompt";
+    }
   } catch (e) {
     if (mcpStatus) mcpStatus.textContent = "mcp non raggiungibili: " + e;
   }
@@ -4544,8 +4572,23 @@ on("mcp-add", "click", async () => {
       if (idx > 0) env[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
     }
   }
-  const cfg = { name: nome, transport: (mcpTransport && mcpTransport.value) || "stdio",
-                command: command, args: args, env: env, enabled: true };
+  const headers = {};
+  const headStr = (mcpHeaders && mcpHeaders.value || "").trim();
+  if (headStr) {
+    for (const part of headStr.split(";")) {
+      const idx = part.indexOf("=");
+      if (idx > 0) headers[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+    }
+  }
+  const transport = (mcpTransport && mcpTransport.value) || "stdio";
+  const url = (mcpUrl && mcpUrl.value || "").trim();
+  if (transport !== "stdio" && !url) {
+    if (mcpStatus) mcpStatus.textContent = "url richiesto per " + transport;
+    return;
+  }
+  const cfg = { name: nome, transport: transport,
+                command: command, args: args, env: env,
+                url: url, headers: headers, enabled: true };
   if (mcpStatus) mcpStatus.textContent = "aggiunta...";
   try {
     const r = await fetch("/api/mcp/add", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(cfg) });
@@ -4557,6 +4600,8 @@ on("mcp-add", "click", async () => {
     if (mcpCommand) mcpCommand.value = "";
     if (mcpArgs) mcpArgs.value = "";
     if (mcpEnv) mcpEnv.value = "";
+    if (mcpUrl) mcpUrl.value = "";
+    if (mcpHeaders) mcpHeaders.value = "";
     caricaMcp();
     if (mcpStatus) mcpStatus.textContent = "aggiunto e connesso";
   } catch (e) { if (mcpStatus) mcpStatus.textContent = "errore: " + e; }

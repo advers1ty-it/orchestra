@@ -1058,15 +1058,21 @@
     <input id="mcp-nome" type="text" placeholder="Nome server (es. supabase)" />
     <select id="mcp-transport" title="Transport">
       <option value="stdio">stdio</option>
+      <option value="http">http</option>
+      <option value="sse">sse</option>
     </select>
     <input id="mcp-command" type="text" placeholder="Comando (es. npx -y @supabase/mcp-server...)" />
     <input id="mcp-args" type="text" placeholder="Argomenti (separati da spazio)" />
+    <!-- Per http/sse il comando non serve: serve l'URL. Sono due campi
+         diversi perche' i due trasporti sono diversi. -->
+    <input id="mcp-url" type="text" placeholder="URL (http/sse: https://host/mcp)" />
     <button id="mcp-add" class="primary">Aggiungi</button>
     <button id="mcp-refresh" class="ghost">Aggiorna</button>
     <span id="mcp-status" class="small dim"></span>
   </div>
   <div class="goal-bar-inner">
     <input id="mcp-env" type="text" placeholder="Env (KEY=val, separati da ;)" />
+    <input id="mcp-headers" type="text" placeholder="Headers HTTP (Authorization=Bearer ..., separati da ;)" />
     <span class="grow"></span>
     <button id="mcp-connect-all" class="ghost">Connetti tutti</button>
   </div>

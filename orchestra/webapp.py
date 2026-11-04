@@ -4985,6 +4985,16 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             from . import mcp as mcp_mod
             self._json(mcp_mod.stato())
             return
+        elif path == "/api/mcp/resources":
+            # Risorse e prompt sono parte del protocollo, non solo i tool:
+            # la UI li mostra accanto ai tool dello stesso server.
+            from . import mcp as mcp_mod
+            self._json({"resources": mcp_mod.list_resources()})
+            return
+        elif path == "/api/mcp/prompts":
+            from . import mcp as mcp_mod
+            self._json({"prompts": mcp_mod.list_prompts()})
+            return
         elif path == "/api/mcp/add":
             from . import mcp as mcp_mod
             cfg = body if isinstance(body, dict) else {}

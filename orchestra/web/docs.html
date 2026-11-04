@@ -328,7 +328,8 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
 
 <section id="mcp">
 <h2>Client MCP</h2>
-<p>Orchestra può connettersi a server MCP esterni (Supabase, Unreal, Godot, filesystem, ecc.) e usare i loro tool come strumenti nativi. Pannello “MCP” in toolbar per aggiungere/configurare server stdio; i tool scoperti diventano disponibili con prefisso <code>mcp_&lt;server&gt;__&lt;tool&gt;</code>. Gestione anche via tool <code>mcp</code>.</p>
+<p>Orchestra può connettersi a server MCP esterni (Supabase, Unreal, Godot, filesystem, ecc.) e usare i loro tool come strumenti nativi. Pannello “MCP” in toolbar per aggiungere/configurare server; i tool scoperti diventano disponibili con prefisso <code>mcp_&lt;server&gt;__&lt;tool&gt;</code>. Gestione anche via tool <code>mcp</code>.</p>
+<p>Tre trasporti: <b>stdio</b> (un processo locale), <b>HTTP streamable</b> e <b>SSE</b> (un URL, con headers per l'autenticazione). Il protocollo è lo stesso; cambia solo come viaggiano i messaggi. Di un server si leggono anche le <b>risorse</b> (<code>resources/list</code> e <code>resources/read</code>, con il tool <code>mcp</code> azione <code>risorsa</code>) e i <b>prompt</b> (<code>prompts/list</code> e <code>prompts/get</code>, azione <code>prompt</code>). Se il server muore, il client si riconnette e rifà l'handshake una volta, poi riprova la chiamata: un errore del protocollo, invece, non fa riconnettere.</p>
 <ul>
   <li>Configurazione persistente in <code>ORCHESTRA_HOME/mcp_servers.json</code>.</li>
   <li>Connessione automatica dei server abilitati all'avvio.</li>
