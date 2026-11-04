@@ -23,6 +23,7 @@ copia hanno. Nessun eval: il sorgente finisce in un file e gira come
 codice, che e' la via normale.
 """
 
+import glob
 import json
 import os
 import re
@@ -184,11 +185,13 @@ if ris:
               ris[nome][0])
 
 print("\n[6] Il server espone quanto e' fermo")
-# Le rotte vivono in webapp_rotte.py dal passaggio alla tabella: il
-# contatore e' nel gestore della rotta, il reset all'avvio in webapp.py.
+# Le rotte vivono in rotte_*.py, divise per dominio: il contatore e' nel
+# gestore della rotta, il reset all'avvio in webapp.py. Si leggono tutti i
+# file del server, altrimenti il test direbbe "manca" per codice spostato.
 webapp = "\n".join(
-    open(os.path.join(ROOT, "orchestra", nome), encoding="utf-8").read()
-    for nome in ("webapp.py", "webapp_rotte.py"))
+    open(percorso, encoding="utf-8").read()
+    for percorso in sorted(glob.glob(os.path.join(ROOT, "orchestra", "rotte*.py")))) \
+    + open(os.path.join(ROOT, "orchestra", "webapp.py"), encoding="utf-8").read()
 check("lo calcola e lo manda", '"fermo_da"' in webapp)
 check("misura dall'ultimo passo, non dall'avvio", "last_progress" in webapp)
 check("e last_progress esiste nello stato iniziale",
