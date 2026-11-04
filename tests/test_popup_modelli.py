@@ -266,8 +266,12 @@ def main():
         path = fh.name
 
     try:
-        out = subprocess.run(["node", path], capture_output=True, text=True,
-                             timeout=60)
+        # encoding: node scrive UTF-8; su Windows text=True decodifica in
+        # cp1252, e il trattino "—" del badge arrivava come "â€”". Un
+        # confronto che fallisce per la decodifica dell'output fa
+        # sembrare rotto il codice che funziona.
+        out = subprocess.run(["node", path], capture_output=True,
+                             encoding="utf-8", timeout=60)
         raw = [l for l in out.stdout.split("\n") if l.strip().startswith("{")]
         if not raw:
             print("  nessun risultato dal nodo")

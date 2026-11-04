@@ -230,12 +230,20 @@ async function cambiaServizio(p) {
     const d = await r.json();
     if (!r.ok) {
       const testo = d.error || ("errore " + r.status);
+      // Lo stato VERO si rilegge dal server, non si indovina. Prima qui
+      // si ridisegnava con `{ chiavi: [], provider: "" }` quando la
+      // risposta non aveva `stato` — e il server non lo manda mai:
+      // quel ramo era codice morto. Il risultato era due menu fermi su
+      // valori vecchi e diversi fra loro (uno sul servizio fallito,
+      // l'altro su quello di prima), piu' il messaggio d'errore
+      // sovrascritto da "nessuna chiave API configurata" — che faceva
+      // sembrare le chiavi sparite.
+      await caricaOpzioni();
+      // Dopo caricaOpzioni, che riscrive anche il messaggio: l'errore
+      // va detto per ultimo, o non si vede.
       optMsg.textContent = testo;
       optMsg.className = "small rosso";
       if (nota) { nota.textContent = testo; nota.className = "small rosso"; }
-      // il selettore torna indietro: mostrare un servizio che non e'
-      // quello in uso e' peggio che non mostrarlo
-      disegnaProvider(d.stato ? d : { chiavi: [], provider: "", motori: [] });
       return;
     }
     const nome = NOME_PROVIDER[p] || p;

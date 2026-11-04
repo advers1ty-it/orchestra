@@ -52,41 +52,85 @@ check("servizio non piu' disponibile",
 check("nessuna chiave API", "nessuna chiave API" in js)
 
 print("\n[4] Il menu torna indietro quando il cambio fallisce")
-# Il punto vero: senza, il menu mente sul servizio attivo e la
-# divergenza si scopre alla prima risposta.
+# Il punto vero: senza, il menu mente sul modello o servizio attivo e
+# la divergenza si scopre alla prima risposta.
 #
-# Si guarda DENTRO la funzione giusta. Cercando in tutto il file si
-# trova la prima "if (!r.ok) {" e la prima "} catch (e) {", che sono
-# in altre funzioni: il test guardava il codice sbagliato e segnalava
-# un difetto che non c'era. Un test che sbaglia il bersaglio e' peggio
-# di nessun test, perche' blocca la correzione di un codice giusto.
-def dentro(funzione: str, fine: int = 4000) -> str:
-    i = js.find(funzione)
-    return js[i:i + fine] if i > 0 else ""
+# Non si legge il sorgente: si esegue il bundle con un DOM finto, si
+# tenta davvero il cambio e il server risponde con un errore. Una
+# finestra di N caratteri dopo `on(optModel` era la versione
+# precedente, e si era staccata dal codice: cercava `caricaModelli`,
+# che nel frattempo e' diventato `caricaOpzioni` — la funzione che
+# rimette il modello VERO, e quindi la cosa giusta. Il test era rosso
+# su un codice corretto.
+import json  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
 
-modello = dentro("on(optModel, \"change\"")
-check("il cambio modello ripristina il menu dopo un errore",
-      "caricaModelli" in modello and "if (!r.ok)" in modello,
-      modello[:150].replace("\n", " ") if modello else "funzione non trovata")
+from _ordine import ORDER  # noqa: E402
 
-servizio = dentro("async function cambiaServizio")
-check("il cambio servizio ripristina il menu dopo un errore",
-      "caricaOpzioni()" in servizio and "cambio fallito" in servizio,
-      servizio[:150].replace("\n", " ") if servizio else "funzione non trovata")
+RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WEB = os.path.join(RADICE, "orchestra", "web")
+dom = open(os.path.join(RADICE, "tests", "_dom_provider.js"), encoding="utf-8").read()
+bundle = "\n;\n".join(open(os.path.join(WEB, f), encoding="utf-8").read()
+                      for f in ORDER)
+probe = open(os.path.join(RADICE, "tests", "_probe_menu_errore.js"),
+             encoding="utf-8").read()
+with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                 encoding="utf-8") as fh:
+    fh.write(dom + "\n" + bundle + "\n" + probe)
+    script = fh.name
+try:
+    # encoding: node scrive UTF-8, e su Windows text=True decodifica in
+    # cp1252 — i caratteri accentati arriverebbero corrotti e i
+    # confronti fallirebbero per un motivo che non e' del codice.
+    r = subprocess.run(["node", script], capture_output=True,
+                       encoding="utf-8", timeout=90)
+finally:
+    try:
+        os.unlink(script)
+    except OSError:
+        pass
+righe = [l for l in r.stdout.split("\n") if l.strip().startswith("{")]
+if not righe:
+    print(r.stdout[-500:])
+    print(r.stderr[-500:])
+    check("il probe gira", False, "nessun risultato dal nodo")
+    d = {"passi": {}}
+else:
+    check("il probe gira", True)
+    d = json.loads(righe[-1])
+p = d.get("passi", {})
 
-print("\n[5] L'errore viene scritto DOPO il ripristino")
-# Se il testo dell'errore fosse scritto prima, il ripristino lo
-# cancellerebbe: si chiamerebbe caricaOpzioni() che ricarica le
-# opzioni e azzera i messaggi, e l'utente vedrebbe solo il menu
+check("il cambio modello arriva al server",
+      p.get("modelloChiesto") == "openrouter/x2", str(p.get("modelloChiesto")))
+check("e il menu torna al modello vero, non resta su quello nuovo",
+      p.get("modelloDopo") == "openrouter/x1" == p.get("modelloIniziale"),
+      f"iniziale={p.get('modelloIniziale')} dopo={p.get('modelloDopo')}")
+# L'errore viene scritto DOPO il ripristino: se fosse prima,
+# caricaOpzioni() lo cancellerebbe e l'utente vedrebbe solo il menu
 # tornato indietro senza sapere perche'.
-for nome, fine in (("cambio servizio", js.find("cambio fallito: \" + e")),
-                   ("cambio modello", js.find('optMsg.textContent = d.error'))):
-    ok = True
-    if fine > 0:
-        torno = js.rfind("caricaOpzioni()", 0, fine)
-        ok = torno > 0
-    check(f"{nome}: l'errore resta visibile dopo il ripristino", ok,
-          "il ripristino potrebbe azzerare il testo")
+check("l'errore del server resta visibile",
+      "modello non disponibile" in (p.get("modelloMsg") or ""),
+      str(p.get("modelloMsg")))
+check("ed e' scritto in rosso",
+      "rosso" in (p.get("modelloClasse") or ""), str(p.get("modelloClasse")))
+
+print("\n[5] Anche il servizio")
+check("il cambio servizio arriva al server",
+      p.get("servizioChiesto") == "groq", str(p.get("servizioChiesto")))
+check("i due menu tornano al servizio vero",
+      p.get("servizioDopo") == ["openrouter", "openrouter"],
+      str(p.get("servizioDopo")))
+check("lo stato vero lo dice il server, non il menu",
+      p.get("servizioPrima") == ["openrouter", "openrouter"],
+      str(p.get("servizioPrima")))
+check("l'errore del servizio resta visibile",
+      "agente occupato" in (p.get("servizioMsg") or ""),
+      str(p.get("servizioMsg")))
+check("e il colore e' quello dell'errore",
+      "rosso" in (p.get("servizioClasse") or ""), str(p.get("servizioClasse")))
+check("nessun errore durante l'esecuzione",
+      d.get("errori") == [], str(d.get("errori")))
 
 print("\n[6] Il colore verde distingue ancora 'cambiato' da 'nessuna notizia'")
 check("verde sul cambio riuscito",

@@ -95,8 +95,15 @@ print("\n[5] Un cambio rifiutato non lascia il selettore bugiardo")
 inizio_sc = panels.index("async function cambiaServizio")
 ramo = panels[inizio_sc:]
 ramo = ramo.split("if (!r.ok)")[1].split("\n  }")[0]
-check("in caso di errore riallinea il selettore",
-      "disegnaProvider(" in ramo, ramo[-140:])
+# Il riallineamento e' caricaOpzioni(): rilegge dal server quale servizio
+# e' davvero attivo e ridisegna ENTRAMBI i menu. Prima qui si ridisegnava
+# con uno stato vuoto che il server non manda mai, e i due menu restavano
+# su valori vecchi e diversi — la verifica del comportamento vero e' in
+# test_nessun_ora, che esegue il bundle e guarda cosa resta nel DOM.
+check("in caso di errore rilegge lo stato vero",
+      "caricaOpzioni()" in ramo, ramo[-140:])
+check("e scrive l'errore dopo il riallineamento, o lo cancella",
+      0 < ramo.find("caricaOpzioni()") < ramo.find("optMsg.textContent = testo"))
 
 print("\n[6] Nessun selettore usa $() con il prefisso #")
 # $() e' getElementById: con il # restituisce null in silenzio. E' gia'
