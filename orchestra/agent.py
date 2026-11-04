@@ -92,6 +92,11 @@ class AgentState:
     messages: list[Message] = field(default_factory=list)
     iterations: int = 0
     total_tokens: int = 0
+    # Il costo stimato del turno, in dollari. Si accumula a ogni risposta
+    # col tariffario, non solo quando c'e' un budget da controllare: il
+    # riepilogo di fine turno lo mostra, e senza questo resterebbe zero
+    # per chi non ha budget configurati.
+    total_cost_usd: float = 0.0
     tool_calls_made: int = 0
     tool_errors: int = 0
     # quali strumenti hanno fallito, non solo quanti: 'con errore: 1'
@@ -848,6 +853,23 @@ class Agent:
             self.state.usage_by_model[resp.model] = (
                 self.state.usage_by_model.get(resp.model, 0) + resp.total_tokens
             )
+            # Costo stimato: dal tariffario quando il modello c'e', con una
+            # stima dichiarata ($1/M) quando non c'e'. Mai zero per un
+            # modello a pagamento solo perche' non lo conosciamo.
+            try:
+                from .prezzi import costo as _costo_turno
+
+                _pt = getattr(resp, "prompt_tokens", 0) or 0
+                _ct = getattr(resp, "completion_tokens", 0) or 0
+                if _pt == 0 and _ct == 0:
+                    _pt = resp.total_tokens // 2
+                    _ct = resp.total_tokens - _pt
+                _c = _costo_turno(resp.model, _pt, _ct)
+            except Exception:  # noqa: BLE001
+                _c = None
+            if _c is None:
+                _c = resp.total_tokens / 1_000_000
+            self.state.total_cost_usd += float(_c or 0.0)
 
             self.state.messages.append(
                 Message(

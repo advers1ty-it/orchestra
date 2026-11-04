@@ -2969,6 +2969,11 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 limite = 50
             self._json({"tracce": ultime(limite=limite, esito=esito,
                                           solo_errori=solo_errori)})
+        elif path == "/api/riepilogo":
+            # L'ultimo riepilogo di turno: esito, file, token, costo.
+            from . import riepilogo
+
+            self._json({"riepilogo": riepilogo.ultimo()})
         elif path == "/api/diff":
             # Le modifiche del turno in corso, con le righe cambiate.
             # Il confine lo segna l'Agent a inizio turno; qui si legge e

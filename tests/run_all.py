@@ -133,6 +133,11 @@ SUITES = [
     # Client MCP: stdio, HTTP streamable, SSE, risorse, prompt e
     # riconnessione quando il server muore (server finti in-process).
     ("mcp", "test_mcp.py", True),
+    # Canale CDP: WebSocket provato sempre con un server d'eco locale;
+    # click/digitazione/console/rete con un browser vero quando c'e'.
+    ("cdp", "test_cdp.py", True),
+    # Il riepilogo di fine turno: esito leggibile, file accorpati, costo.
+    ("riepilogo", "test_riepilogo.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),

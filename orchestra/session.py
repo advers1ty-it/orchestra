@@ -1220,7 +1220,30 @@ class Session:
             # Solo la traccia: `_salva_su_disco` lo fa già il `finally`
             # interno di `_esegui_turno`, in ogni caso (successo, annulla,
             # eccezione). Duplicarlo qui sarebbe lavoro speso due volte.
-            reg.salva()
+            traccia_id = reg.salva()
+            # Riepilogo di fine turno: esito, file toccati, token, costo.
+            # Si emette DOPO la traccia, così porta il suo id e si può
+            # aprire il dettaglio da lì. Un errore nel riepilogo non deve
+            # far cadere un turno che è già finito: è un extra.
+            try:
+                from . import checkpoint as checkpoint_mod
+                from . import riepilogo as riepilogo_mod
+
+                durata = time.time() - getattr(reg, "ts_inizio", time.time())
+                try:
+                    modifiche = checkpoint_mod.modifiche_turno()
+                except Exception:  # noqa: BLE001
+                    modifiche = []
+                r = riepilogo_mod.costruisci(
+                    stato=st,
+                    modifiche=modifiche,
+                    durata_s=durata,
+                    modello=self.modello_in_uso(),
+                    traccia_id=traccia_id,
+                )
+                self.bridge.emit("riepilogo", r)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _esegui_turno(self, user_input: str, allegati: list,
                       reg: Any) -> None:

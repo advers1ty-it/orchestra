@@ -559,7 +559,7 @@ if (btnMic) {
 on(input, "keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
-btnSend.onclick = send;
+btnSend.onclick = () => { chiediPermessoNotifiche(); send(); };
 if (btnAllega) btnAllega.disabled = !ready;
 // Verifica: stesso gate dell'allegato. Prima restava disabilitato per
 // sempre (nessuna riga lo abilitava), quindi il ✓ non si accendeva mai,

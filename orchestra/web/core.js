@@ -1097,6 +1097,13 @@ function handle(kind, d) {
       // dove si trova, ma non insegue più il fondo ad ogni nuovo messaggio.
       ragionamentoCorrente = null;
       break;
+    case "riepilogo":
+      // La riga di fine turno: esito, durata, file, token, costo. Un
+      // turno lungo finisce spesso fuori dallo schermo, e questa e' la
+      // sola cosa che dice "e' finito, ed ecco il conto".
+      addNote("fine turno · " + (d.riga || d.esito_testo || "fatto"));
+      notificaTurno(d);
+      break;
     case "error":
       addText("error", d.message);
       break;
@@ -1127,6 +1134,34 @@ function handle(kind, d) {
       ragionamentoCorrente = null;
       break;
   }
+}
+
+function notificaTurno(d) {
+  // Solo se la scheda non e' visibile: una notifica di sistema mentre
+  // l'utente sta guardando la risposta e' un doppione fastidioso, e il
+  // browser la mostra sopra la finestra che sta gia' mostrando la stessa
+  // cosa.
+  try {
+    if (!document.hidden) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const n = new Notification("Orchestra — " + (d.esito_testo || "turno finito"), {
+      body: d.riga || "",
+      tag: "orchestra-turno",
+      silent: false,
+    });
+    n.onclick = () => { try { window.focus(); n.close(); } catch (e) {} };
+    setTimeout(() => { try { n.close(); } catch (e) {} }, 10000);
+  } catch (e) { /* le notifiche sono un extra */ }
+}
+
+// Il permesso si chiede su un gesto dell'utente (l'invio), non a fine
+// turno: un prompt di permesso che compare da solo dopo dieci minuti di
+// lavoro viene negato per riflesso, e poi non si puo' piu' chiedere.
+function chiediPermessoNotifiche() {
+  try {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "default") Notification.requestPermission();
+  } catch (e) { /* niente notifiche, il resto funziona */ }
 }
 
 function showBanner(msg) {

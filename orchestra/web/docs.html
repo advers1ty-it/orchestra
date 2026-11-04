@@ -345,7 +345,9 @@ python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
   <li><code>browser_screenshot</code>: PNG nel workdir.</li>
   <li><code>screenshot_view</code>: legge quel PNG e lo mostra al modello come immagine — senza, il modello riceve un percorso e non vede nulla.</li>
   <li>Automazione click/type/open gated da permesso o env <code>ORCHESTRA_COMPUTER_USE</code>.</li>
+  <li><b>Canale CDP</b> (Chrome DevTools Protocol, senza dipendenze): <code>browser_click</code>, <code>browser_digita</code> (digitazione vera, i listener <code>input</code> scattano), <code>browser_attendi</code> (selettore o testo), <code>browser_console</code> (log ed eccezioni JS) e <code>browser_rete</code> (metodo, stato, URL). Un Chrome headless per processo, su una porta libera; i tre tool sopra restano e funzionano anche se il canale di debug non parte.</li>
 </ul>
+<p>A fine turno arriva un <b>riepilogo</b>: esito in parole, durata, file toccati con righe aggiunte e tolte, token e costo stimato. Compare come riga in chat, e se la scheda non è visibile diventa una notifica di sistema (il permesso si chiede al primo invio, su un gesto dell'utente). L'ultimo riepilogo è disponibile anche su <code>/api/riepilogo</code>.</p>
 <p>Per i tester: l’automazione da tastiera/click richiede conferma esplicita; di default bloccata finché non si abilita.</p>
 </section>
 

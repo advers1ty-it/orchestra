@@ -70,7 +70,12 @@ from .skill import (
 from .browser import (
     tool_browser_apri,
     tool_browser_render,
-    tool_browser_screenshot,  # noqa: E402
+    tool_browser_screenshot,
+    tool_browser_click,
+    tool_browser_digita,
+    tool_browser_attendi,
+    tool_browser_console,
+    tool_browser_rete,  # noqa: E402
 )
 from .screenshot import tool_screenshot_view  # noqa: E402
 from .image_gen import tool_image_gen  # noqa: E402
@@ -275,6 +280,8 @@ _PROFILI: dict[str, set[str]] = {
         "memoria", "web_cerca", "web_leggi", "storico_cerca",
         "skill_cerca", "skill_leggi", "skill_genera", "skill_importa",
         "browser_apri", "browser_render", "browser_screenshot",
+        "browser_click", "browser_digita", "browser_attendi",
+        "browser_console", "browser_rete",
         "screenshot_view", "image_gen",
         "computer_screenshot", "computer_click", "computer_open", "computer_type",
     },
@@ -382,7 +389,10 @@ def default_registry() -> ToolRegistry:
                  tool_skill_cerca(), tool_skill_leggi(),
                  tool_skill_genera(), tool_skill_importa(),
                  tool_browser_apri(), tool_browser_render(),
-                 tool_browser_screenshot(), tool_screenshot_view(),
+                 tool_browser_screenshot(), tool_browser_click(),
+                 tool_browser_digita(), tool_browser_attendi(),
+                 tool_browser_console(), tool_browser_rete(),
+                 tool_screenshot_view(),
                  tool_image_gen(),
                  tool_computer_screenshot(), tool_computer_click(),
                  tool_computer_open(), tool_computer_type(),
