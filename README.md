@@ -88,7 +88,7 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 
 **A cosa non serve.** Non è uno strumento per decidere sulle persone: non usarlo per selezione o valutazione del personale, ammissioni scolastiche, credito, assicurazioni, diagnosi o terapia, giustizia. Non è un prodotto certificato né una garanzia di risultato: è software gratuito, scritto da una persona, e il codice che genera va letto prima di usarlo in produzione.
 
-La valutazione completa, con quello che è in vigore e quello che manca, è in [`AI-ACT.md`](AI-ACT.md).
+Il dettaglio — cosa esce dalla macchina, come si annulla, a cosa non serve — è in [`AI-ACT.md`](AI-ACT.md).
 
 ## Sicurezza e limiti onesti
 

@@ -85,3 +85,6 @@ Python/
 tests/_dati_test/lavori.db*
 tests/_dati_test/bots.db*
 tests/_dati_test/checkpoint/
+
+# Valutazioni interne (AI Act e simili): sono per noi, non per chi scarica.
+_interno/
