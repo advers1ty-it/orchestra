@@ -88,13 +88,20 @@ check("un solo script esterno", len(scripts) == 1 and scripts[0] == "/app.js",
 # L'HTML dichiara un solo script (/app.js, assemblato dal server), ma
 # i sorgenti restano tre file su disco. Li leggiamo nell'ordine con cui il
 # server li concatena: e' l'ordine in cui il browser li esegue.
-BUNDLE_ORDER = ("core.js", "panels.js", "modelpick.js", "main.js")
+# L'ordine e' quello che il server concatena, letto da li' invece di
+# ricopiato: i pannelli sono nove file, e una lista scritta a mano qui
+# diventerebbe un falso "elemento assente" alla prima aggiunta.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _ordine import ORDER  # noqa: E402
+
+BUNDLE_ORDER = ORDER
 
 sources = {}
 for name in BUNDLE_ORDER:
     with open(os.path.join(WEB, name), encoding="utf-8") as fh:
         sources[name] = fh.read()
-check("i sorgenti esistono", len(sources) == 4, str(list(sources)))
+check("i sorgenti esistono", len(sources) == len(BUNDLE_ORDER),
+      str(list(sources)))
 check("ogni sorgente si annuncia", all(
     "__diagFiles" in src for src in sources.values()),
     "un file non ha il marcatore: non si puo' sapere se e' partito")
@@ -449,10 +456,15 @@ if out.get("crash"):
 # e il test lo dice: meglio un rosso che un verde che non guarda.
 print("\n[2b] La trappola: se ne accorge davvero?")
 _mutato = dict(sources)
-_prima = _mutato["panels.js"]
+# Il difetto da reintrodurre sta in uno dei file dei pannelli: si cerca
+# quello che contiene la riga, invece di assumere che sia panels.js.
+_bersaglio = next((n for n in BUNDLE_ORDER if n.startswith("panels")
+                   and 'const progElenco = $("side-progetti");' in _mutato[n]),
+                  None)
+_prima = _mutato.get(_bersaglio, "") if _bersaglio else ""
 # La chiamata PRIMA della dichiarazione di `progElenco`: e' il difetto
 # che c'era, ridotto al minimo.
-_mutato["panels.js"] = _prima.replace(
+_mutato[_bersaglio] = _prima.replace(
     'const progElenco = $("side-progetti");',
     # Una funzione ASINCRONA che legge la `const` prima della sua
     # dichiarazione: e' il difetto reale. Non un errore sincrono a
@@ -468,7 +480,7 @@ _mutato["panels.js"] = _prima.replace(
     'async function _tdz() { return progElenco; }\n'
     'if (sidebar) { _tdz(); }\n'
     'const progElenco = $("side-progetti");')
-if _mutato["panels.js"] == _prima:
+if _bersaglio is None or _mutato[_bersaglio] == _prima:
     print("  SKIP — il marcatore del difetto non e' piu' nel sorgente")
 else:
     _o2, _rej2, _err2, _f2 = _esegui(_mutato)

@@ -24,8 +24,9 @@ def check(nome, cond, dettaglio=""):
     print(f"  {'OK  ' if cond else 'FAIL'} {nome}" + (f" — {dettaglio}" if dettaglio and not cond else ""))
 
 
-js = io.open(os.path.join(ROOT, "orchestra", "web", "panels.js"),
-             encoding="utf-8").read()
+from _web import pannelli  # noqa: E402
+
+js = pannelli()
 
 print("[1] Nessun 'ora:' che ripete il menu")
 check("non c'e' piu' nessun 'ora: '", '"ora: "' not in js,

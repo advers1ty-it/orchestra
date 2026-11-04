@@ -52,7 +52,11 @@ assert _scripts, "index.html non dichiara nessuno script: lo split e' rotto?"
 # altrimenti il test misurerebbe il bundle e non il codice.
 WEB_DIR = os.path.dirname(UI)
 js_parts = []
-for _s in ("core.js", "panels.js", "modelpick.js", "main.js"):
+# L'ordine viene dal server (BUNDLE_ORDER): i pannelli sono piu' file e
+# una lista ricopiata qui invecchierebbe alla prima aggiunta.
+from _ordine import ORDER as _ORDER  # noqa: E402
+
+for _s in _ORDER:
     _p = os.path.join(WEB_DIR, _s)
     assert os.path.exists(_p), f"sorgente mancante: {_s}"
     with open(_p, encoding="utf-8") as _f:

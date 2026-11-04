@@ -2316,7 +2316,17 @@ class Handler(Rotte, BaseHTTPRequestHandler):
     # resta testabile da solo. Al browser arrivano in uno, perche' piu'
     # richieste significa piu' modi in cui la pagina resta a meta' — e con
     # un solo script inline (la versione monolitica) funzionava.
-    BUNDLE_ORDER = ("core.js", "panels.js", "modelpick.js", "main.js")
+    # `panels.js` era un file da 5.320 righe: ora ogni area della UI ha il
+    # suo. L'ordine conta (le funzioni si chiamano fra loro a livello di
+    # file), e per questo sta qui e non in un test: e' il server a
+    # concatenarli, e `tests/_ordine.py` legge questa lista.
+    BUNDLE_ORDER = (
+        "core.js",
+        "panels-bench.js", "panels-opzioni.js", "panels-lavoro.js",
+        "panels-skill.js", "panels-storia.js", "panels-shell.js",
+        "panels-progetto.js", "panels-automazioni.js", "panels-bot.js",
+        "modelpick.js", "main.js",
+    )
 
     def _bundle(self) -> None:
         parts = []

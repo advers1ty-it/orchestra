@@ -33,7 +33,12 @@ def js(path):
 
 
 html = js("index.html")
-panels = js("panels.js")
+# I pannelli sono piu' file: cambiaServizio e i due menu possono stare in
+# file diversi, e contare le occorrenze in uno solo darebbe un numero
+# falso in entrambe le direzioni.
+from _web import pannelli as _pannelli  # noqa: E402
+
+panels = _pannelli()
 core = js("core.js")
 
 print("[1] I due selettori esistono e sono nello stesso punto della UI")
@@ -96,7 +101,7 @@ check("in caso di errore riallinea il selettore",
 print("\n[6] Nessun selettore usa $() con il prefisso #")
 # $() e' getElementById: con il # restituisce null in silenzio. E' gia'
 # successo una volta, ed e' il tipo di difetto che non si vede.
-for nome, sorgente in (("panels.js", panels), ("core.js", core)):
+for nome, sorgente in (("pannelli", panels), ("core.js", core)):
     catturati = re.findall(r'\$\("#([^"]+)"\)', sorgente)
     check(f"{nome}: nessun id con #", not catturati, str(catturati[:4]))
 

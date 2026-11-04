@@ -60,7 +60,9 @@ check("il modale ha un'altezza limitata",
 
 # ------------------------------------------------------- il JS c'e'
 js_parts = []
-for _s in ("core.js", "panels.js", "modelpick.js", "main.js"):
+from _ordine import ORDER as _ORDER  # noqa: E402
+
+for _s in _ORDER:
     with open(os.path.join(WEB, _s), encoding="utf-8") as _f:
         js_parts.append(_f.read())
 js = "\n;\n".join(js_parts)

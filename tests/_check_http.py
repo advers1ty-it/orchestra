@@ -57,7 +57,7 @@ print("=== 1) una connessione, quattro richieste in sequenza ===")
 s = socket.create_connection((HOST, PORT), timeout=15)
 s.settimeout(15)
 try:
-    for path in ["/", "/app.css", "/core.js", "/panels.js", "/main.js"]:
+    for path in ["/", "/app.css", "/core.js", "/panels-bench.js", "/main.js"]:
         t0 = time.time()
         status, hdrs, body = raw_get(s, path)
         dt = (time.time() - t0) * 1000
@@ -75,7 +75,7 @@ finally:
 print("\n=== 2) connessioni separate, come se il browser le usasse in parallelo ===")
 socks = []
 try:
-    for path in ["/app.css", "/core.js", "/panels.js", "/main.js"]:
+    for path in ["/app.css", "/core.js", "/panels-bench.js", "/main.js"]:
         try:
             sk = socket.create_connection((HOST, PORT), timeout=15)
             sk.settimeout(15)

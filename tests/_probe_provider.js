@@ -6,7 +6,12 @@ const fs = require("fs");
 const path = require("path");
 
 const WEB = path.join(__dirname, "..", "orchestra", "web");
-const ORDER = ["core.js", "panels.js", "main.js"];
+const ORDER = [
+  "core.js", "panels-bench.js", "panels-opzioni.js", "panels-lavoro.js",
+  "panels-skill.js", "panels-storia.js", "panels-shell.js",
+  "panels-progetto.js", "panels-automazioni.js", "panels-bot.js",
+  "main.js",
+];
 void fs; void ORDER; void WEB;
 const src = ORDER.map((f) => fs.readFileSync(path.join(WEB, f), "utf8")).join("\n;\n");
 

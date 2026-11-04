@@ -132,8 +132,9 @@ html = io.open(os.path.join(ROOT, "orchestra", "web", "index.html"),
                encoding="utf-8").read()
 css = io.open(os.path.join(ROOT, "orchestra", "web", "app.css"),
               encoding="utf-8").read()
-js = io.open(os.path.join(ROOT, "orchestra", "web", "panels.js"),
-             encoding="utf-8").read()
+from _web import pannelli as _pannelli  # noqa: E402
+
+js = _pannelli()
 check("le liste sono griglie", 'class="skill-griglia"' in html,
       "manca la griglia")
 check("non c'e' piu' skill-lista nell'HTML", "skill-lista" not in html)

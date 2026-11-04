@@ -229,7 +229,10 @@ print(JSON.stringify({ok: R_OK, r: R_OUT,
 
 
 def main():
-    files = ["core.js", "panels.js", "modelpick.js"]
+    # I pannelli sono piu' file: eseguirne uno solo darebbe un bundle
+    # incompleto, e il test misurerebbe un crash che non esiste.
+    import _web
+    files = ["core.js", *_web.PANNELLI, "modelpick.js"]
     src = []
     for n in files:
         with open(os.path.join(WEB, n), encoding="utf-8") as fh:

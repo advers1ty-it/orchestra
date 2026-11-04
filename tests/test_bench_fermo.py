@@ -32,7 +32,9 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PANELS = os.path.join(ROOT, "orchestra", "web", "panels.js")
+# I pannelli sono piu' file: il testo cercato puo' stare in uno qualsiasi,
+# e leggerne uno solo darebbe un falso "manca".
+from _web import pannelli  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -126,7 +128,7 @@ console.log(JSON.stringify(uscita));
 
 
 def esegui():
-    src = open(PANELS, encoding="utf-8").read()
+    src = pannelli()
     try:
         corpo = estrai(src, "testoAvanzamento")
     except AssertionError as e:
@@ -207,7 +209,7 @@ check("almeno tre punti", webapp.count("last_progress") >= 4,
       "inizializzazione, avvio modello e ogni risultato")
 
 print("\n[8] E il frontend non puo' stampare undefined")
-panels = open(PANELS, encoding="utf-8").read()
+panels = pannelli()
 check("contaAvanzamento non viene usata come valore",
       not re.search(r"\+ *contaAvanzamento\(", panels),
       "contaAvanzamento scrive dentro e non torna niente: usarla in una "

@@ -31,7 +31,9 @@ def check(nome, cond, dettaglio=""):
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-panels = open(os.path.join(ROOT, "orchestra", "web", "panels.js"), encoding="utf-8").read()
+from _web import pannelli as _pannelli  # noqa: E402
+
+panels = _pannelli()
 html = open(os.path.join(ROOT, "orchestra", "web", "index.html"), encoding="utf-8").read()
 
 from orchestra.catalog import CATEGORIES, CATEGORY_LABEL  # noqa: E402

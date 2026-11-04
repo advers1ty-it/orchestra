@@ -20,7 +20,8 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PANELS = os.path.join(ROOT, "orchestra", "web", "panels.js")
+# Il polling vive in uno dei file dei pannelli: si legge l'insieme.
+from _web import pannelli  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -30,7 +31,7 @@ def check(nome, cond, dettaglio=""):
     print(f"  {'OK  ' if cond else 'FAIL'} {nome}" + (f" — {dettaglio}" if dettaglio and not cond else ""))
 
 
-src = io.open(PANELS, encoding="utf-8").read()
+src = pannelli()
 i = src.index("function pollBench()")
 j = src.index("\nfunction ", i + 10)
 corpo = src[i:j]

@@ -379,8 +379,9 @@ for el in ("skill-riepilogo", "skill-cartella", "skill-importa", "skill-ricarica
 # e i listener ci sono, senza i quali i pulsanti sono inerti: e' il
 # difetto dei selettori, che erano disabilitati perche' nessuno li
 # guardava
-js_src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                           "orchestra", "web", "panels.js"), encoding="utf-8").read()
+from _web import pannelli as _pannelli  # noqa: E402
+
+js_src = _pannelli()
 # Non si guarda la sorgente perche' "la stringa c'e'" non vuol dire
 # "l'handler e' agganciato": il difetto era esattamente quello —
 # on("skill-ricarica", ...) invece di on($("skill-ricarica"), ...).

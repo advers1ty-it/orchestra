@@ -48,8 +48,9 @@ for cat in ("code", "reasoning", "instruction", "tool_use"):
           "una categoria scritta qui non esiste se il backend ne aggiunge una")
 
 print("\n[2] Il menu si riempie col server")
-js = io.open(os.path.join(ROOT, "orchestra", "web", "panels.js"),
-             encoding="utf-8").read()
+from _web import pannelli as _pannelli  # noqa: E402
+
+js = _pannelli()
 check("qualcuno riempie benchCat", "benchCat" in js and "replaceChildren" in js)
 k = js.find("benchCat.replaceChildren")
 check("e lo fa dentro la routine delle categorie", k > 0)
