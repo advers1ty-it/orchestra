@@ -93,6 +93,9 @@ SUITES = [
     # creare un bot. Il test copre anche il caso che il prompt non venga
     # duplicato a ogni salvataggio.
     ("identita", "test_identita.py", True),
+    # La tabella delle rotte e il suo inventario: una rotta persa non si
+    # vede finche' un pulsante non smette di funzionare.
+    ("rotte", "test_rotte.py", True),
     ("webapp", "test_webapp.py", True),
     # CSRF e forza bruta: una pagina di un altro sito non deve comandare
     # l'agente via 127.0.0.1, e il token remoto non si prova a indovinare.

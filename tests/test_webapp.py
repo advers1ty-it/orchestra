@@ -277,6 +277,27 @@ try:
     except Exception:
         check("POST su / non crasha", True)
 
+    # Un metodo sbagliato su una rotta che esiste non e' "non trovato":
+    # e' 405, con `Allow` che dice cosa si puo' fare. Prima erano 404
+    # entrambe, e un client che sbagliava metodo non aveva modo di
+    # distinguere un refuso da un errore suo.
+    try:
+        urllib.request.urlopen(BASE + "/api/send", timeout=10)
+        check("405 su GET di una rotta POST", False, "ha risposto 200")
+    except urllib.error.HTTPError as e:
+        allow = (e.headers.get("Allow") or "") if e.headers else ""
+        check("405 su GET di una rotta POST", e.code == 405, str(e.code))
+        check("405 dichiara Allow: POST", "POST" in allow, allow)
+    req = urllib.request.Request(BASE + "/api/state", data=b"{}",
+                                 method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        check("405 su POST di una rotta GET", False, "ha risposto 200")
+    except urllib.error.HTTPError as e:
+        allow = (e.headers.get("Allow") or "") if e.headers else ""
+        check("405 su POST di una rotta GET", e.code == 405, str(e.code))
+        check("405 dichiara Allow: GET", "GET" in allow, allow)
+
 finally:
     httpd.shutdown()
     httpd.server_close()

@@ -184,8 +184,11 @@ if ris:
               ris[nome][0])
 
 print("\n[6] Il server espone quanto e' fermo")
-webapp = open(os.path.join(ROOT, "orchestra", "webapp.py"),
-              encoding="utf-8").read()
+# Le rotte vivono in webapp_rotte.py dal passaggio alla tabella: il
+# contatore e' nel gestore della rotta, il reset all'avvio in webapp.py.
+webapp = "\n".join(
+    open(os.path.join(ROOT, "orchestra", nome), encoding="utf-8").read()
+    for nome in ("webapp.py", "webapp_rotte.py"))
 check("lo calcola e lo manda", '"fermo_da"' in webapp)
 check("misura dall'ultimo passo, non dall'avvio", "last_progress" in webapp)
 check("e last_progress esiste nello stato iniziale",

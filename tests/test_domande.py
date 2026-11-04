@@ -116,7 +116,13 @@ check("annullare toglie dall'attesa", domande.in_attesa() == [])
 print("\n[6] Il filo e' collegato in tutti e tre i pezzi")
 web = pathlib.Path(RADICE) / "orchestra" / "web"
 tool_src = (pathlib.Path(RADICE) / "orchestra" / "tools" / "__init__.py").read_text(encoding="utf-8")
-webapp_src = (pathlib.Path(RADICE) / "orchestra" / "webapp.py").read_text(encoding="utf-8")
+# Il server e le rotte sono due moduli: i gestori stanno in
+# webapp_rotte.py, il dispatch e gli helper in webapp.py. Il filo da
+# verificare attraversa entrambi, e leggere solo uno dei due direbbe
+# "manca la rotta" per una rotta che c'e'.
+webapp_src = "\n".join(
+    (pathlib.Path(RADICE) / "orchestra" / nome).read_text(encoding="utf-8")
+    for nome in ("webapp.py", "webapp_rotte.py"))
 core_src = (web / "core.js").read_text(encoding="utf-8")
 html_src = (web / "index.html").read_text(encoding="utf-8")
 check("il tool e' nel registro", "tool_ask_user()" in tool_src)
