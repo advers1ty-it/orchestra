@@ -31,6 +31,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import marcatura
 from .providers import load_env
 
 # Lo stesso .env che legge il resto dell'applicazione.
@@ -138,6 +139,9 @@ class Immagine:
     percorso: Path
     provider: str
     modello: str
+    # Il sidecar `.ai.json`, quando e' stato scritto. None se il disco non
+    # lo ha permesso: l'immagine c'e' lo stesso.
+    metadati: Path | None = None
 
     @property
     def kb(self) -> int:
@@ -717,8 +721,22 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
     if nome_file and nome_file.strip():
         nome = _slug(Path(nome_file.strip()).stem)
     img.percorso = _nome_libero(destinazione, nome, estensione)
+    # Marcatura del contenuto sintetico (Reg. UE 2024/1689, art. 50(2)).
+    # Il PNG la porta dentro il file; qualunque formato porta il sidecar,
+    # che e' la parte leggibile senza decodificare i pixel.
+    img.dati = marcatura.marca_png(
+        img.dati, marcatura.testo(provider=img.provider, modello=img.modello))
     try:
         img.percorso.write_bytes(img.dati)
     except OSError as e:
         raise ImageGenError(f"non riesco a scrivere {img.percorso}: {e}") from e
+    try:
+        img.metadati = marcatura.scrivi_metadati(
+            img.percorso, prompt=testo, provider=img.provider,
+            modello=img.modello, mime=img.mime,
+            nel_file=img.dati.startswith(b"\x89PNG"))
+    except OSError:
+        # Un metadato che non si scrive non deve buttare via l'immagine:
+        # il tool lo dice nel risultato, e il file resta.
+        img.metadati = None
     return img

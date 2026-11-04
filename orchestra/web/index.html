@@ -80,6 +80,12 @@
 <header>
   <div class="logo">Orches<span>tra</span></div>
   <span class="ver" id="ver" title="versione della interfaccia">·</span>
+  <!-- Dichiarazione di trasparenza: si sta parlando con un sistema di IA
+       (Reg. UE 2024/1689, art. 50). Il testo esteso sta nel title, cosi'
+       resta leggibile senza rubare spazio alla barra. -->
+  <span class="ia-avviso" id="ia-avviso"
+        title="Orchestra e' un assistente di intelligenza artificiale: le risposte e i file che scrive sono generati da un modello, possono sbagliare. Ogni turno mostra le modifiche (il pulsante diff) e si annulla con la freccia indietro."
+        aria-label="Assistente di intelligenza artificiale">assistente IA</span>
   <!-- stamp rimosso -->
   <button id="btn-side" class="ghost" title="Cronologia e skill (Ctrl+B)"
           aria-label="Apri il pannello laterale">&#9776;</button>
@@ -945,6 +951,7 @@
   <div class="onboard">
     <h2>Per cosa stai usando Orchestra oggi?</h2>
     <p class="sotto">Scegli l’obiettivo: Orchestra imposta il modello, i tool e il modo di lavoro più adatto. Puoi sempre cambiarlo sopra.</p>
+    <p class="small dim">Orchestra è un assistente di intelligenza artificiale: legge i tuoi file, scrive codice e testo con un modello, e può sbagliare. Le modifiche di ogni turno si vedono con il pulsante Δ e si annullano con la freccia ↶ in alto.</p>
     <div id="onboard-cards" class="onboard-grid"></div>
     <div class="onboard-foot">
       <span class="small dim">Mostrato solo alla prima apertura. Premi “Salta” per nasconderlo sempre.</span>

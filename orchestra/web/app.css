@@ -34,6 +34,14 @@
   .logo { font-weight: 650; letter-spacing: .2px; }
   .logo span { color: var(--accent); }
   .ver { font: 10px var(--mono); color: var(--muted); margin-left: 6px; }
+  /* La dichiarazione che si sta parlando con un'IA (Reg. UE 2024/1689,
+     art. 50). Visibile sempre, non solo al primo avvio: un avviso che
+     sparisce non e' una dichiarazione, e' un messaggio di benvenuto. */
+  .ia-avviso {
+    font: 10px var(--mono); color: var(--muted); margin-left: 8px;
+    padding: 1px 6px; border: 1px solid var(--border); border-radius: 8px;
+    cursor: help;
+  }
   /* Timbro statico scritto nell'HTML, non da JS: se nella pagina compare
      "UI-4"... */
   .stamp {

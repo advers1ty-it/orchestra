@@ -157,10 +157,16 @@ def tool_image_gen() -> Tool:
         except ValueError:
             pass
         verbo = "modificata" if rif else "generata"
+        # Il contenuto e' sintetico e va detto: e' l'art. 50(2) dell'AI
+        # Act, e vale anche quando il file e' marcato, perche' la
+        # marcatura dentro il PNG non la vede chi guarda la chat.
+        meta = (f" Marcata come sintetica in {img.metadati.name}."
+                if img.metadati else "")
         return ToolResult(
             text=(f"Immagine {verbo}: {percorso} ({img.kb} KB, "
-                  f"{img.provider}/{img.modello}). Mostrala all'utente "
-                  f"citando quel percorso."),
+                  f"{img.provider}/{img.modello}).{meta} Mostrala "
+                  f"all'utente citando quel percorso, e scrivi che e' "
+                  f"generata da un'IA."),
             anteprime=[img.data_url()],
         )
 

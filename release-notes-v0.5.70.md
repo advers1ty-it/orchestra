@@ -27,10 +27,17 @@
 - Se il cambio servizio veniva rifiutato (409 «agente occupato», 400 chiave mancante), il ramo d'errore ridisegnava i selettori con uno stato vuoto che il server non manda mai: restavano su valori vecchi e **diversi tra loro** — uno sul servizio fallito, l'altro su quello di prima — e «nessuna chiave API configurata» sovrascriveva l'errore del server. Sembrava che le chiavi fossero sparite.
 - Ora si rilegge lo stato vero con `caricaOpzioni()` e l'errore si scrive dopo il riallineamento, come già faceva il cambio modello.
 
+### Trasparenza: l'AI Act, preso sul serio
+- **La barra dice cosa sei**: «assistente IA» accanto alla versione, con la spiegazione completa nel tooltip; e al primo avvio una riga nel pannello degli obiettivi dice che risposte e file sono generati da un modello, che può sbagliare, e come si annulla (Δ per vedere, ↶ per tornare indietro). È l'art. 50(1) del Reg. UE 2024/1689, in vigore dal 2 agosto 2026.
+- **Le immagini generate si dichiarano**: `image_gen` inserisce un chunk `tEXt` nei PNG e scrive sempre un `<nome>.ai.json` accanto al file, con generatore, provider, modello, prompt e data. Un PNG marcato resta un PNG valido (IHDR primo, IEND ultimo, CRC ricalcolati); un formato che non si può marcare dentro il file ha comunque il sidecar.
+- **Il README dice cosa esce dalla macchina**: prompt, file letti, screenshot e immagini di riferimento vanno al provider configurato e a nessun altro; chiavi nel `.env` locale, storico in `storico.db` locale. E dice a cosa non serve: nessuna decisione su persone.
+- **`AI-ACT.md`**: classificazione (rischio limitato; provider del sistema, non del modello), obblighi in vigore con le date verificate sul Service Desk della Commissione, catena del valore (chi risponde di cosa fra provider del modello, noi e chi usa l'agente), e la posizione sul codice generato — che resta da chiudere leggendo le linee guida del 20 luglio 2026.
+
 ### Test
 - Nuove suite: `rotte` (inventario delle 125 rotte congelato, 405 con `Allow`), `cdp` (WebSocket con server d'eco locale sempre, click/digitazione/attesa/console/rete con Chrome vero quando c'è), `riepilogo`.
 - `test_nessun_ora` non legge più una finestra di caratteri: esegue il bundle con il DOM finto (`_probe_menu_errore.js`), tenta i due cambi, il server risponde 400 e 409, e si guarda cosa resta nei menu. È così che è saltato fuori il difetto qui sopra.
 - `test_popup_modelli` falliva per la decodifica dell'output di node (UTF-8 letto come cp1252), non per il badge.
+- Nuova suite `marcatura`: PNG minimo valido, chunk aggiunto con CRC ricalcolati, pixel identici a quelli di partenza, non-PNG lasciati intatti, sidecar corretto e nessun `gatto.json` sovrascritto.
 - Suite completa verde su Windows e Ubuntu.
 
 Per aggiornare: riavvia Orchestra (`Avvia-Orchestra.bat` → opzione 2).

@@ -1,6 +1,9 @@
 # Orchestra
 
 Orchestratore agentico in Python puro (solo stdlib, zero dipendenze a runtime).
+Gratuito e aperto, sviluppato da una persona e non da un'azienda: nessun
+account da creare, nessun servizio da pagare oltre alle chiavi dei modelli
+che scegli.
 Gli dai un obiettivo in linguaggio naturale: lui pianifica, usa strumenti
 (file, shell, web, browser), verifica il risultato e — se serve — delega
 sotto-compiti ad altri agenti. Con interfaccia web in italiano.
@@ -74,6 +77,18 @@ Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 | `webapp.py` | Server HTTP stdlib + SSE |
 | `web/` | Interfaccia HTML/CSS/JS puro, zero dipendenze |
 | `cli.py` | Tutti i comandi |
+
+## Trasparenza (Reg. UE 2024/1689, AI Act)
+
+**Stai parlando con un'IA.** Orchestra è un assistente di intelligenza artificiale: le risposte e i file che scrive sono generati da un modello di terzi, e possono essere sbagliati. L'avviso è nella barra in alto e al primo avvio; le modifiche di ogni turno si vedono con il pulsante `Δ` e si annullano con `↶`.
+
+**Cosa esce dalla macchina.** Il prompt, il contenuto dei file che l'agente legge, gli screenshot del browser e le immagini di riferimento vengono inviati al provider che hai configurato (OpenRouter, OpenAI, Google, Groq, NVIDIA o un endpoint locale) e sono soggetti alla sua informativa. Non vengono inviati ad altri. Le chiavi restano nel tuo `orchestra/.env`; lo storico dei turni resta in `storico.db` sulla tua macchina.
+
+**Immagini generate.** Ogni immagine prodotta da `image_gen` è marcata come contenuto sintetico: un chunk nei PNG e, per qualunque formato, un file `<nome>.ai.json` accanto all'immagine.
+
+**A cosa non serve.** Non è uno strumento per decidere sulle persone: non usarlo per selezione o valutazione del personale, ammissioni scolastiche, credito, assicurazioni, diagnosi o terapia, giustizia. Non è un prodotto certificato né una garanzia di risultato: è software gratuito, scritto da una persona, e il codice che genera va letto prima di usarlo in produzione.
+
+La valutazione completa, con quello che è in vigore e quello che manca, è in [`AI-ACT.md`](AI-ACT.md).
 
 ## Sicurezza e limiti onesti
 

@@ -141,6 +141,9 @@ SUITES = [
     ("cdp", "test_cdp.py", True),
     # Il riepilogo di fine turno: esito leggibile, file accorpati, costo.
     ("riepilogo", "test_riepilogo.py", True),
+    # Marcatura dei contenuti sintetici (AI Act, art. 50): il PNG porta
+    # il chunk, ogni formato porta il sidecar, e il file non si rompe.
+    ("marcatura", "test_marcatura.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),

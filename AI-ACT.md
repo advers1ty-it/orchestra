@@ -104,6 +104,56 @@ Groq, NVIDIA…), dove stanno i dati, e che il provider dichiari le proprie
 obbligazioni GPAI. Orchestra già mostra e salva provider e modello per
 ogni turno, che è la parte tecnica di questa due diligence.
 
+## 3.6 La catena del valore: chi risponde di cosa
+
+È la domanda che torna sempre — «ma il modello non è nostro?». La
+risposta è che l'AI Act regola il **sistema** che metti a disposizione
+delle persone, non chi ha addestrato il modello: il provider (art. 3(3))
+è chi sviluppa un sistema di IA, *o lo fa sviluppare*, e lo immette sotto
+il proprio nome, a pagamento o gratis.
+
+| Soggetto | Risponde di |
+|---|---|
+| Provider del modello (OpenRouter, Groq, OpenAI, Google, Anthropic…) | obblighi GPAI (art. 53-55): documentazione del modello, riepilogo dei dati di addestramento, policy copyright, rischio sistemico |
+| Noi, che sviluppiamo Orchestra | art. 50 (trasparenza e marcatura), art. 4 (literacy), divieti art. 5, classificazione e limiti d'uso, privacy di ciò che inviamo fuori |
+| Azienda o persona che usa Orchestra per decidere su persone | diventa *deployer* ad alto rischio: valutazione d'impatto, sorveglianza umana, log |
+
+Quello che **non** ci trasferiamo è la documentazione del modello:
+resta di chi lo addestra. Verso di loro siamo *deployer*, e il nostro
+dovere è la due diligence — sapere quale modello c'è dietro, dove
+vanno i dati, e che il fornitore dichiari le proprie obbligazioni.
+Quello che nessun fornitore può fare al posto nostro sono le tre cose
+sopra: la disclosure, la marcatura dei nostri output, la literacy dei
+nostri utenti.
+
+L'ultima riga è il motivo per cui i limiti d'uso non sono burocrazia:
+se un'azienda usa l'agente per valutare o selezionare persone, l'alto
+rischio è suo, ma noi dobbiamo aver detto chiaramente che non è l'uso
+previsto.
+
+## 3.7 La nostra posizione: gratuito, da un privato, su GitHub
+
+Orchestra è distribuito gratuitamente su GitHub, sviluppato da una
+persona e non da un'azienda, e non è venduto. Che cosa cambia:
+
+- **Art. 2(12)**: l'esenzione per i sistemi rilasciati con licenza
+  libera e open source **non copre** i sistemi che ricadono sotto gli
+  articoli 5 o 50. Quindi la licenza libera non ci esime dalla
+  trasparenza: la applichiamo lo stesso, e questa è la scelta
+  prudente.
+- **Art. 2(10)**: chi usa un sistema di IA per attività personale e non
+  professionale non ha obblighi da deployer. Se Orchestra resta sulla
+  macchina di chi la scarica per uso proprio, gli obblighi verso
+  l'utente finale non nascono.
+- **Nessuna attività commerciale**: non c'è vendita, non c'è prezzo,
+  non c'è un rapporto contrattuale. Restano comunque — e questo è il
+  punto — la correttezza verso chi usa il software e la possibilità che
+  un giorno la distribuzione diventi commerciale: adeguarsi adesso
+  costa una pagina, adeguarsi dopo costa un risarcimento.
+- **Sviluppato con l'IA**: non cambia la classificazione (l'AI Act
+  guarda il sistema distribuito, non gli strumenti di chi lo scrive),
+  ma è una ragione in più per essere espliciti su cosa il software è.
+
 ## 4. Altri obblighi, che non sono AI Act ma arrivano dalla stessa parte
 
 - **GDPR**: i prompt, il codice e gli screenshot vanno a provider terzi.
@@ -120,12 +170,12 @@ ogni turno, che è la parte tecnica di questa due diligence.
 | Requisito | Stato | Dove |
 |---|---|---|
 | Classificazione del rischio scritta e datata (art. 6) | **fatto**: questo documento | `AI-ACT.md` |
-| Disclosure "stai interagendo con un'IA" (art. 50(1)) | **manca** | da aggiungere in onboarding + README |
-| Marcatura delle immagini generate (art. 50(2)) | **manca** | `orchestra/tools/image_gen.py`, `orchestra/image_gen.py` |
-| Posizione documentata sul codice generato (art. 50(2)) | **manca** | sezione 3.2 di questo documento: da completare dopo lettura delle linee guida |
-| AI literacy: pagina su limiti e uso corretto (art. 4) | **manca** | README |
-| Limiti d'uso / casi esclusi (Art. 25, Annex III) | **manca** | README, termini |
-| Informativa privacy sui dati inviati ai provider (GDPR) | **manca** | README, Opzioni |
+| Disclosure "stai interagendo con un'IA" (art. 50(1)) | **fatto**: badge permanente nella barra e riga al primo avvio | `web/index.html`, `web/app.css`, `README.md` |
+| Marcatura delle immagini generate (art. 50(2)) | **fatto**: chunk `tEXt` nei PNG + sidecar `<nome>.ai.json` per ogni formato | `orchestra/marcatura.py`, `orchestra/image_gen.py` |
+| Posizione documentata sul codice generato (art. 50(2)) | **parziale**: sezione 3.2; l'esclusione nominata del codice non è confermata sul documento ufficiale | `AI-ACT.md` |
+| AI literacy: pagina su limiti e uso corretto (art. 4) | **fatto**: paragrafo «Trasparenza» e riga nell'onboarding | `README.md` |
+| Limiti d'uso / casi esclusi (Art. 25, Annex III) | **fatto**: «A cosa non serve» | `README.md` |
+| Informativa privacy sui dati inviati ai provider (GDPR) | **fatto**: «Cosa esce dalla macchina» | `README.md` |
 | Log di provider/modello/costo per turno (buona pratica, art. 12 non dovuto) | **fatto** | `storico`, `riepilogo` |
 | Due diligence sui modelli GPAI di terzi | **parziale** | provider e modello sono tracciati; manca la scheda per provider |
 | Procedura e canale per gli incidenti | **manca** | `SECURITY.md` |
@@ -144,10 +194,19 @@ parlando con un'IA o che le sue immagini erano generate.
 
 ## 7. Cosa fare, in ordine di costo/beneficio
 
-1. Una riga di disclosure in apertura e nel README (art. 50(1)) — dieci minuti.
-2. Marcatura delle immagini generate: metadato nel file e nota accanto all'anteprima (art. 50(2)) — mezza giornata.
-3. Informativa privacy: quali dati escono, verso quali provider, per quanto (GDPR) — mezza giornata.
-4. Limiti d'uso nei termini e nel README (classificazione) — un'ora.
+1. ~~Una riga di disclosure in apertura e nel README (art. 50(1))~~ — **fatto**.
+2. ~~Marcatura delle immagini generate: metadato nel file e nota accanto all'anteprima (art. 50(2))~~ — **fatto** (`orchestra/marcatura.py`).
+3. ~~Informativa privacy: quali dati escono, verso quali provider, per quanto (GDPR)~~ — **fatto**, nel README.
+4. ~~Limiti d'uso nei termini e nel README (classificazione)~~ — **fatto**.
 5. `SECURITY.md` con il canale di segnalazione — un'ora.
-6. Pagina di AI literacy: cosa fa l'agente, cosa può sbagliare, come si annulla (art. 4) — mezza giornata.
+6. ~~Pagina di AI literacy: cosa fa l'agente, cosa può sbagliare, come si annulla (art. 4)~~ — **fatto**.
 7. Scheda per ogni provider GPAI usato, con modello, dove girano i dati, riferimenti alle loro policy — una giornata, e va aggiornata quando cambia il catalogo.
+8. Leggere il PDF delle linee guida del 20 luglio 2026 e chiudere la posizione sul codice generato (sezione 3.2).
+
+## 8. Come si mantiene
+
+Questo documento va riletto quando cambia qualcosa di sostanziale: un
+nuovo tipo di output (immagini, audio, video), un nuovo provider, un uso
+che si avvicina alle aree Annex III, o una nuova scadenza. La data in
+testa è quella dell'ultima verifica: se è vecchia, non è una valutazione,
+è un ricordo.
