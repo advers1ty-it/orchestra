@@ -59,6 +59,7 @@ WRITABLE: dict[str, str] = {
     "ORCHESTRA_REASONING": "Livello reasoning",
     "ORCHESTRA_BUDGET": "Budget (JSON)",
     "ORCHESTRA_MAX_ITERS": "Max iterazioni loop",
+    "ORCHESTRA_MAX_SECONDI_TURNO": "Tempo massimo per turno (secondi, 0 = nessun limite)",
     "ORCHESTRA_CONTEXT_LIMIT": "Limite contesto (token)",
     "ORCHESTRA_OLLAMA_URL": "Indirizzo Ollama",
     "ORCHESTRA_LMSTUDIO_URL": "Indirizzo LM Studio",

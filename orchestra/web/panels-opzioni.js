@@ -39,6 +39,7 @@ const optModel = $("opt-model");
 const optReasoning = $("opt-reasoning");
 const optToolProfile = $("opt-tool-profile");
 const optMaxIters = $("opt-max-iters");
+const optMaxMinuti = $("opt-max-minuti");
 const optContextNote = $("opt-context-note");
 const optBudgetTaskTokens = $("budget-task-tokens");
 const optBudgetTaskCost = $("budget-task-cost");
@@ -144,6 +145,14 @@ function disegnaProvider(d) {
       if (optMaxIters) {
         optMaxIters.value = d.max_iterations || "";
         optMaxIters.disabled = false;
+      }
+      // Il server tiene i secondi (e' quello che conta il loop), il
+      // pannello ragiona in minuti: quindici minuti si leggono, 900
+      // secondi si calcolano. Zero resta zero: "nessun limite".
+      if (optMaxMinuti && typeof d.max_secondi_turno === "number") {
+        const m = Math.round(d.max_secondi_turno / 60);
+        optMaxMinuti.value = d.max_secondi_turno > 0 ? (m || 1) : 0;
+        optMaxMinuti.disabled = false;
       }
       if (optContextNote && typeof d.context_limit === "number") {
         const k = Math.round(d.context_limit / 1000);
@@ -352,6 +361,37 @@ on(optMaxIters, "change", async () => {
       return;
     }
     optMsg.textContent = "";
+    optMsg.className = "small verde";
+  } catch (e) {
+    optMsg.textContent = "cambio fallito: " + e;
+    optMsg.className = "small rosso";
+    await caricaOpzioni();
+  }
+});
+
+on(optMaxMinuti, "change", async () => {
+  const m = parseInt(optMaxMinuti.value, 10);
+  if (!Number.isFinite(m) || m < 0) {
+    await caricaOpzioni();
+    return;
+  }
+  optMsg.textContent = "cambio tempo massimo…";
+  try {
+    const resp = await fetch("/api/tempo-turno", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ max_secondi_turno: m * 60 }),
+    });
+    const d = await resp.json();
+    if (!resp.ok) {
+      optMsg.textContent = d.error || ("errore " + resp.status);
+      optMsg.className = "small rosso";
+      await caricaOpzioni();
+      return;
+    }
+    optMsg.textContent = m > 0
+      ? `turno fermato dopo ${m} min`
+      : "nessun limite di tempo";
     optMsg.className = "small verde";
   } catch (e) {
     optMsg.textContent = "cambio fallito: " + e;

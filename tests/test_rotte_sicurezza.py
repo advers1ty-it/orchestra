@@ -33,6 +33,7 @@ os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from orchestra import rotte_chat  # noqa: E402
 from orchestra import webapp  # noqa: E402
 from orchestra.tools import default_registry  # noqa: E402
 
@@ -45,7 +46,19 @@ def check(nome, cond, dettaglio=""):
           + (f" — {dettaglio}" if dettaglio and not cond else ""))
 
 
+# Le rotte che salvano un'impostazione scrivono in `ENV_PATH`, che e'
+# un percorso FISSO dentro il repo (`orchestra/.env`): senza questo, il
+# test avrebbe riscritto la configurazione vera dell'utente. Il file
+# temporaneo e' anche la prova che il salvataggio funziona davvero,
+# invece di fidarsi della risposta 200.
+ENV_DI_TEST = os.path.join(_ROOT_TEST, "env-test")
+
+# Prima si crea l'app (che LEGGE il .env vero per sapere provider e
+# modello), poi si sposta solo la destinazione delle SCRITTURE: se si
+# sposta prima, l'app nasce senza configurazione e ogni rotta risponde
+# 503 — un test che descrive un'app rotta invece del codice.
 app = webapp.OrchestraApp.create(remoto_attivo=False)
+rotte_chat.ENV_PATH = ENV_DI_TEST
 webapp.Handler.app = app
 server = webapp.OrchestraServer(("127.0.0.1", 0), webapp.Handler)
 PORT = server.server_address[1]
@@ -159,6 +172,37 @@ try:
         check(f"GET {percorso}: niente 500", stato != 500, f"{stato}")
         check(f"GET {percorso}: 200 con JSON", stato == 200 and bool(corpo),
               f"{stato} {corpo_testo(corpo)[:80]}")
+
+    print("\n[5c] Il tetto di tempo si imposta dall'UI e si legge indietro")
+    stato, corpo, _ = chiama("/api/tempo-turno", metodo="POST",
+                             dati={"max_secondi_turno": 300},
+                             intestazioni={"Origin": BASE})
+    check("POST valido: 200", stato == 200, str(stato))
+    stato, corpo, _ = chiama("/api/state")
+    stato_d = json.loads(corpo_testo(corpo))
+    check("lo stato riporta 300 secondi",
+          stato_d.get("max_secondi_turno") == 300.0,
+          str(stato_d.get("max_secondi_turno")))
+    # Salvato, non solo applicato: se non finisce nel file, al riavvio il
+    # tetto sparisce e nessuno se ne accorge.
+    salvato = ""
+    if os.path.exists(ENV_DI_TEST):
+        with open(ENV_DI_TEST, encoding="utf-8") as fh:
+            salvato = fh.read()
+    check("il valore e' scritto nel file di configurazione",
+          "ORCHESTRA_MAX_SECONDI_TURNO=300" in salvato, salvato[-120:])
+    stato, corpo, _ = chiama("/api/tempo-turno", metodo="POST",
+                             dati={"max_secondi_turno": 0},
+                             intestazioni={"Origin": BASE})
+    check("zero e' accettato (nessun limite)", stato == 200, str(stato))
+    stato, corpo, _ = chiama("/api/state")
+    check("lo stato riporta zero",
+          json.loads(corpo_testo(corpo)).get("max_secondi_turno") == 0.0, "")
+    for storto in ("tanto", -5):
+        stato, _, _ = chiama("/api/tempo-turno", metodo="POST",
+                             dati={"max_secondi_turno": storto},
+                             intestazioni={"Origin": BASE})
+        check(f"{storto!r}: 400", stato == 400, str(stato))
 
     # `/api/iterazioni` e' di sola scrittura: la GET deve dire 405 con
     # l'elenco dei metodi, non 200 con un corpo vuoto ne' 500.

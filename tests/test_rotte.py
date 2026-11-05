@@ -1,6 +1,6 @@
 """La tabella delle rotte: il motore da solo, e l'inventario del server.
 
-La seconda parte e' quella che conta davvero: l'elenco congelato delle 125
+La seconda parte e' quella che conta davvero: l'elenco congelato delle 126
 rotte che il server aveva prima di passare alla tabella. Senza, un ramo
 perso durante uno spostamento non lo vedrebbe nessuno fino a quando un
 pulsante della UI smette di funzionare — ed e' esattamente il difetto che
@@ -155,6 +155,7 @@ ATTESE = frozenset({
     "GET /api/stt/status",
     "POST /api/system",
     "GET /api/tools/profile",
+    "POST /api/tempo-turno",
     "POST /api/tools/profile",
     "GET /api/tracce",
     "GET /api/tracce/{id}",
@@ -253,7 +254,7 @@ def main() -> int:
     from orchestra import webapp
     tabella = webapp.ROTTE
     presenti = {f"{r.metodo} {r.percorso}" for r in tabella.tutte()}
-    check("125 rotte", len(presenti) == 125, str(len(presenti)))
+    check("126 rotte", len(presenti) == 126, str(len(presenti)))
     check("nessuna rotta persa", not (ATTESE - presenti),
           str(sorted(ATTESE - presenti)))
     check("nessuna rotta in piu' non dichiarata", not (presenti - ATTESE),

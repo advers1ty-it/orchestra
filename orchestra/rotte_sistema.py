@@ -195,6 +195,12 @@ class RotteSistema:
                          if self.app.session is not None else ""),
             "max_iterations": (self.app.session.agent.config.max_iterations
                                if self.app.session is not None else 12),
+            # Tetto di orologio del turno, in secondi: e' lo stesso numero
+            # che ferma il loop. Il pannello lo mostra in minuti, perche'
+            # "15" si legge e "900" si calcola. Zero = nessun limite.
+            "max_secondi_turno": (float(getattr(
+                self.app.session.agent.config, "max_secondi_turno", 0) or 0)
+                if self.app.session is not None else 0.0),
             "context_limit": (self.app.session.agent.config.context_limit
                               if self.app.session is not None else 120000),
             })

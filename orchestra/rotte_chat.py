@@ -56,6 +56,11 @@ class RotteChat:
                         "model": self.app.env.get("ORCHESTRA_MODEL", ""),
                         "provider": self.app.env.get("ORCHESTRA_PROVIDER", ""),
                         "busy": False,
+                        # Anche senza sessione il pannello deve mostrare
+                        # il limite configurato: altrimenti, prima di
+                        # mettere una chiave, il campo sembra spento e
+                        # l'utente "scopre" il limite solo dopo.
+                        "max_secondi_turno": self._secondi_turno_config(),
                         "remote": self._info_remoto()})
             return
         s = self._need_session()
@@ -75,6 +80,26 @@ class RotteChat:
         snap["bot"] = self.app.bot_attivo()
         snap["remote"] = self._info_remoto()
         self._json(snap)
+
+    def _secondi_turno_config(self) -> float:
+        """Il tetto di orologio configurato, letto dove e' vero.
+
+        Prima la sessione (che puo' averlo cambiato a caldo), poi il
+        `.env` (che e' quello che vale al prossimo avvio). Un valore
+        storto non deve far cadere `/api/state`: si risponde zero, che
+        significa "nessun limite", e il campo dell'UI lo dice.
+        """
+        try:
+            cfg = getattr(getattr(self.app.session, "agent", None),
+                          "config", None)
+            if cfg is not None:
+                return float(getattr(cfg, "max_secondi_turno", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+        try:
+            return float(self.app.env.get("ORCHESTRA_MAX_SECONDI_TURNO", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
 
     @rotta("GET", "/api/stt/status")
     def _r_get_stt_status(self, path: str, body: dict[str, Any],
@@ -487,6 +512,48 @@ class RotteChat:
         self.app.env["ORCHESTRA_MAX_ITERS"] = str(n)
         self.app.session.agent.config.max_iterations = n
         self._json({"ok": True, "max_iterations": n})
+
+    @rotta("POST", "/api/tempo-turno")
+    def _r_post_tempo_turno(self, path: str, body: dict[str, Any],
+                            s: Any) -> None:
+        # Tetto di orologio del turno, dall'UI. Stesso schema di
+        # /api/iterazioni: valida, persiste, applica live.
+        #
+        # Zero e' un valore legittimo e vuol dire "nessun limite": e'
+        # una scelta, non un campo vuoto, e va salvata come le altre.
+        # Il massimo (24 ore) non e' un tetto tecnico ma un errore di
+        # battitura: chi scrive 900 al posto di 15 minuti pensa di aver
+        # messo un quarto d'ora e ha messo mezza giornata.
+        try:
+            sec = float(body.get("max_secondi_turno"))
+        except (TypeError, ValueError):
+            self._json({"error": "numero non valido"}, 400)
+            return
+        if sec < 0:
+            self._json({"error": "il tempo non puo' essere negativo"}, 400)
+            return
+        sec = min(sec, 86_400.0)
+        if self.app.session.busy:
+            self._json({"error": "l'agente sta lavorando: "
+                                 "attendi o annulla prima"}, 409)
+            return
+        from . import keys as keys_mod
+        # Il .env vuole un intero leggibile: "900", non "900.0". Un
+        # float qui funziona ma rende illeggibile il file che l'utente
+        # apre a mano quando vuole capire perche' i turni si fermano.
+        testo = str(int(sec)) if float(sec).is_integer() else f"{sec:g}"
+        # `scrivi` dice no quando la chiave non e' nella lista delle
+        # scrivibili: ignorarlo voleva dire rispondere "salvato" a un
+        # valore che al riavvio non c'era piu' — il limite spariva in
+        # silenzio, che per un tetto di sicurezza e' il difetto peggiore.
+        ok, messaggio = keys_mod.scrivi(
+            ENV_PATH, "ORCHESTRA_MAX_SECONDI_TURNO", testo)
+        if not ok:
+            self._json({"error": messaggio or "salvataggio non riuscito"}, 500)
+            return
+        self.app.env["ORCHESTRA_MAX_SECONDI_TURNO"] = testo
+        self.app.session.agent.config.max_secondi_turno = sec
+        self._json({"ok": True, "max_secondi_turno": sec})
 
     @rotta("POST", "/api/budget")
     def _r_post_budget(self, path: str, body: dict[str, Any],

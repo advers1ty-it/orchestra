@@ -425,6 +425,13 @@ class Session:
                 "piano": bool(getattr(self.agent, "modalita_piano", False)),
                 "context_limit": getattr(getattr(self.agent, "config", None),
                                          "context_limit", 0) or 0,
+                # Tetto di orologio del turno: la UI lo mostra in minuti
+                # accanto alle iterazioni. Senza, il pannello si apriva
+                # con il campo vuoto e sembrava che il limite non ci
+                # fosse — o peggio, che fosse spento.
+                "max_secondi_turno": float(getattr(
+                    getattr(self.agent, "config", None),
+                    "max_secondi_turno", 0) or 0),
                 # La barra misura la FINESTRA, non la storia: il cumulato
                 # (total_tokens) cresce per sempre e la barra resterebbe
                 # rossa e piena anche a contesto vuoto. Qui va la
