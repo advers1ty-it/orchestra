@@ -45,7 +45,14 @@ def tool_write_file() -> Tool:
             registra(p, _root(), "scrittura")
         except Exception:  # noqa: BLE001
             pass
-        p.write_text(content, encoding="utf-8")
+        # Scrittura atomica: un crash a meta' lascerebbe un file troncato,
+        # e il backup del checkpoint e' la versione di PRIMA.
+        from ..scrittura import scrivi_testo
+
+        try:
+            scrivi_testo(p, content)
+        except OSError as e:
+            return f"SCRITTURA FALLITA: {path}: {e}"
         verb = "aggiornato" if existed else "creato"
         _registra(p, verb)
         return f"File {verb}: {path} ({len(content)} caratteri, {content.count(chr(10))+1} righe)"

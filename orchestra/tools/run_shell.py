@@ -113,6 +113,38 @@ def tool_run_shell() -> Tool:
                     f"Il root consentito è {ROOT}. Usa path relativi dentro il progetto."
                 )
 
+        # La root e' un confine, ma non e' una cassaforte: `rm -rf src/`
+        # sta dentro, non esce da nessuna parte, e cancella il lavoro.
+        # Finora passava senza domanda, e il checkpoint non aiuta — copre
+        # i file modificati, non quelli cancellati.
+        #
+        # Non si blocca: e' un comando di lavoro, e un agente che non puo'
+        # ripulire una cartella di build si arrende. Si chiede, con una
+        # azione diversa da "eseguire": cosi' un "per sessione" dato per
+        # un comando innocuo non autorizza anche le cancellazioni.
+        rischio = policy_mod.rischio_operativo(command)
+        if rischio:
+            if gate is not None:
+                if not gate.chiedi_all_utente(
+                        _root(), "distruggere",
+                        f"{rischio}. Comando: {command[:200]}"):
+                    return (
+                        "NON ESEGUITO: comando che cancella o riporta indietro "
+                        f"file dentro la cartella di lavoro ({rischio}), "
+                        "permesso non concesso.\n"
+                        f"Comando: {command[:200]}"
+                    )
+            elif os.environ.get("ORCHESTRA_CONSENTI_DISTRUTTIVI") != "1":
+                return (
+                    "NON ESEGUITO: comando distruttivo dentro la cartella di "
+                    f"lavoro ({rischio}) e nessuno a cui chiedere il "
+                    "permesso in questa modalita'.\n"
+                    "Se e' quello che vuoi, rilancia Orchestra con "
+                    "ORCHESTRA_CONSENTI_DISTRUTTIVI=1, oppure esegui il "
+                    "comando a mano.\n"
+                    f"Comando: {command[:200]}"
+                )
+
         shell_cmd = command
         if posix:
             # via esplicita: niente quoting da cmd, e `;` torna a essere un

@@ -383,6 +383,46 @@ def _distruttivo(testo: str) -> str | None:
     return None
 
 
+# Comandi che dentro il progetto fanno danni veri ma recuperabili. Non si
+# bloccano come quelli sopra: `rm -rf build/` e' normale, e un agente che
+# non puo' pulire una cartella di lavoro e' un agente che si arrende. Si
+# CHIEDONO, perche' quello che manca non e' il permesso di cancellare: e'
+# il momento in cui qualcuno guarda cosa sta per sparire. Il checkpoint
+# copre i file modificati, non quelli cancellati.
+_RISCHIOSI: tuple[tuple[str, str], ...] = (
+    (r"\brm\s+(?:-{1,2}[\w-]+\s+)*-?[\w]*[rf][\w]*\b",
+     "cancellazione con rm (-r o -f)"),
+    (r"\b(rd|rmdir)\s+/s\b", "cancellazione ricorsiva di una cartella (rd /s)"),
+    (r"\b(del|erase)\s+[^|;&]*/s\b", "cancellazione ricorsiva (del /s)"),
+    (r"\bremove-item\b[^|;&]*-recurse\b",
+     "cancellazione ricorsiva (Remove-Item -Recurse)"),
+    (r"\bgit\s+reset\s+--hard\b",
+     "git reset --hard: butta le modifiche non committate"),
+    (r"\bgit\s+clean\s+-[a-z]*f",
+     "git clean -f: cancella i file non tracciati"),
+    (r"\bgit\s+(?:checkout|restore)\s+(?:--\s+)?\.",
+     "git checkout/restore sui file: riporta indietro il lavoro"),
+    (r"\bgit\s+stash\s+(?:drop|clear)\b",
+     "git stash drop/clear: butta le modifiche messe da parte"),
+    (r"\btruncate\s+-s\s*0\b", "svuotamento di un file (truncate -s 0)"),
+)
+
+
+def rischio_operativo(command: str) -> str | None:
+    """Il motivo per cui il comando va confermato, o None.
+
+    Diverso da `_distruttivo`: quelli non si eseguono mai, questi si
+    eseguono se l'utente dice di si'. La distinzione e' il punto — un
+    `rm -rf` dentro il progetto e' un comando di lavoro, un `rm -rf /`
+    non lo e'.
+    """
+    low = re.sub(r"\s+", " ", str(command or "").lower()).strip()
+    for schema, motivo in _RISCHIOSI:
+        if re.search(schema, low):
+            return motivo
+    return None
+
+
 def motivo_blocco(command: str) -> str | None:
     """Perche' questo comando non si puo' eseguire, o None.
 

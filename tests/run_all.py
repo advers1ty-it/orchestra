@@ -144,6 +144,9 @@ SUITES = [
     # Marcatura dei contenuti sintetici (AI Act, art. 50): il PNG porta
     # il chunk, ogni formato porta il sidecar, e il file non si rompe.
     ("marcatura", "test_marcatura.py", True),
+    # Scritture atomiche (niente file a meta' se il processo muore) e
+    # conferma per i comandi che cancellano dentro la root.
+    ("scrittura-sicura", "test_scrittura_sicura.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),

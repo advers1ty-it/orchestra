@@ -58,7 +58,7 @@ def _config(env: dict[str, str]) -> LoopConfig:
             return default
 
     return LoopConfig(
-        max_iterations=num("ORCHESTRA_MAX_ITERATIONS", 12),
+        max_iterations=num("ORCHESTRA_MAX_ITERATIONS", 20),
         context_limit=num("ORCHESTRA_CONTEXT_LIMIT", 120_000),
         keep_recent=num("ORCHESTRA_KEEP_RECENT", 8),
         temperature=flt("ORCHESTRA_TEMPERATURE", 0.7),

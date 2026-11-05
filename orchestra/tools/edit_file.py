@@ -94,7 +94,14 @@ def tool_edit_file() -> Tool:
             registra(p, _root(), "modifica")
         except Exception:  # noqa: BLE001
             pass
-        p.write_text(nuovo, encoding="utf-8")
+        # Atomica anche qui: questa riscrive il file intero, quindi vale
+        # lo stesso rischio di write_file.
+        from ..scrittura import scrivi_testo
+
+        try:
+            scrivi_testo(p, nuovo)
+        except OSError as e:
+            return f"MODIFICA FALLITA: {path}: {e} (il file non e' stato toccato)"
         resto = occorrenze - fatte
         msg = f"Sostituite {fatte} occorrenze in {path}"
         if resto:

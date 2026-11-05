@@ -88,3 +88,6 @@ tests/_dati_test/checkpoint/
 
 # Valutazioni interne (AI Act e simili): sono per noi, non per chi scarica.
 _interno/
+
+# Stato dei test che si ricrea a ogni run: non e verita da versionare.
+tests/_dati_test/*.db
