@@ -27,6 +27,8 @@ import json
 import sqlite3
 import threading
 import time
+
+from . import redazione
 from typing import Any
 
 # La traccia condivide il DB dello storico: un posto solo per "cos'è
@@ -97,10 +99,14 @@ class RegistratoreTurno:
         if tipo in ("ragionamento", "contenuto"):
             self._contatore_stream = getattr(self, "_contatore_stream", 0) + 1
             return
+        # Gli eventi finiscono su disco e, quando si apre una traccia,
+        # sullo schermo: `tool_start` porta gli argomenti, che per un
+        # `run_shell` possono contenere una chiave. Si redige qui, una
+        # volta, invece di fidarsi di ogni chiamante.
         self.eventi.append({
             "ts": time.time(),
             "tipo": tipo,
-            "dati": dati or {},
+            "dati": redazione.redigi_dati(dati or {}),
         })
 
     def imposta_riepilogo(self, **campi: Any) -> None:

@@ -146,8 +146,15 @@ class BudgetState:
             self.task_cost_usd = 0.0
             self.task_iterations = 0
 
-    def check_limits(self, giorno: float = 0.0, mese: float = 0.0) -> list[str]:
+    def check_limits(self, giorno: float = 0.0, mese: float = 0.0, *,
+                     extra_tokens: int = 0,
+                     extra_cost: float = 0.0) -> list[str]:
         """Controlla tutti i limiti. Ritorna le violazioni (vuota se ok).
+
+        `extra_tokens` e `extra_cost` sono quello che una chiamata sta per
+        spendere e non e' ancora contabilizzato: servono al controllo
+        PREVENTIVO. Senza, il limite si scopre superato dopo aver pagato
+        la chiamata che lo supera — che di solito e' la piu' cara.
 
         `giorno` e `mese` sono il consumo gia' accumulati oggi e questo mese.
         Stanno fuori da questo oggetto perche' sopravvivono al processo, e
@@ -158,13 +165,17 @@ class BudgetState:
         violations: list[str] = []
         with self._lock:
             # Limiti sessione
-            if self.limits.max_tokens_per_session and self.session_total_tokens > self.limits.max_tokens_per_session:
+            tokens_sessione = self.session_total_tokens + extra_tokens
+            costo_sessione = self.session_cost_usd + extra_cost
+            tokens_task = self.task_total_tokens + extra_tokens
+            costo_task = self.task_cost_usd + extra_cost
+            if self.limits.max_tokens_per_session and tokens_sessione > self.limits.max_tokens_per_session:
                 violations.append(
-                    f"Token sessione: {self.session_total_tokens:,} > "
+                    f"Token sessione: {tokens_sessione:,} > "
                     f"{self.limits.max_tokens_per_session:,}")
-            if self.limits.max_cost_usd_per_session and self.session_cost_usd > self.limits.max_cost_usd_per_session:
+            if self.limits.max_cost_usd_per_session and costo_sessione > self.limits.max_cost_usd_per_session:
                 violations.append(
-                    f"Costo sessione: ${self.session_cost_usd:.2f} > "
+                    f"Costo sessione: ${costo_sessione:.2f} > "
                     f"${self.limits.max_cost_usd_per_session:.2f}")
             if self.limits.max_requests_per_session and self.session_requests > self.limits.max_requests_per_session:
                 violations.append(
@@ -172,13 +183,13 @@ class BudgetState:
                     f"{self.limits.max_requests_per_session}")
 
             # Limiti task
-            if self.limits.max_tokens_per_task and self.task_total_tokens > self.limits.max_tokens_per_task:
+            if self.limits.max_tokens_per_task and tokens_task > self.limits.max_tokens_per_task:
                 violations.append(
-                    f"Token task: {self.task_total_tokens:,} > "
+                    f"Token task: {tokens_task:,} > "
                     f"{self.limits.max_tokens_per_task:,}")
-            if self.limits.max_cost_usd_per_task and self.task_cost_usd > self.limits.max_cost_usd_per_task:
+            if self.limits.max_cost_usd_per_task and costo_task > self.limits.max_cost_usd_per_task:
                 violations.append(
-                    f"Costo task: ${self.task_cost_usd:.2f} > "
+                    f"Costo task: ${costo_task:.2f} > "
                     f"${self.limits.max_cost_usd_per_task:.2f}")
             if self.limits.max_iterations_per_task and self.task_iterations > self.limits.max_iterations_per_task:
                 violations.append(
@@ -373,6 +384,35 @@ class BudgetGuard:
 
         return stato.check_limits(
             giorno=self.global_daily_cost, mese=self.global_monthly_cost)
+
+    def verifica_preventiva(self, *, modello: str, prompt_tokens: int,
+                            max_tokens: int) -> list[str]:
+        """Violazioni che la chiamata STA PER produrre. Vuota = si puo' partire.
+
+        Il controllo dopo la chiamata e' necessario ma non basta: scopre lo
+        sforamento quando i soldi sono gia' usciti e il turno si ferma con
+        una chiamata pagata in piu'. Qui si stima il costo peggiore (prompt
+        attuale + tutto il tetto di output) col tariffario, e lo si somma
+        prima di decidere. Se il modello non e' nel tariffario si usa la
+        stima dichiarata da un dollaro per milione, come nel consuntivo.
+        """
+        self._reset_if_new_period()
+        tokens = max(0, int(prompt_tokens)) + max(0, int(max_tokens))
+        try:
+            from .prezzi import costo as _costo
+
+            stima = _costo(modello or "", int(prompt_tokens),
+                           int(max_tokens))
+        except Exception:  # noqa: BLE001 - la stima non deve fermare il turno
+            stima = None
+        if stima is None:
+            stima = tokens / 1_000_000
+        return self.stato.check_limits(
+            giorno=self.global_daily_cost + stima,
+            mese=self.global_monthly_cost + stima,
+            extra_tokens=tokens,
+            extra_cost=stima,
+        )
 
     def limits_da_env(self) -> BudgetLimits:
         """Legge i limiti da `ORCHESTRA_BUDGET` (.env, JSON).

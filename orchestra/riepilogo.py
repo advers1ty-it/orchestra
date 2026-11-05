@@ -34,6 +34,10 @@ _ESITI = {
     "troppi_errori_consecutivi": ("fermato: troppi errori di fila", "errore"),
     "gira_a_vuoto": ("fermato: stava ripetendo la stessa chiamata", "errore"),
     "budget_exceeded": ("fermato: budget esaurito", "errore"),
+    # Non e' un errore: e' il turno che ha toccato il suo tetto di tempo.
+    # Gravita' "avviso" perche' il lavoro fatto e' valido, ma il resto va
+    # ripreso — ed e' l'unica cosa che l'utente deve sapere.
+    "tempo_scaduto": ("fermato: tempo massimo del turno raggiunto", "avviso"),
     "canceled_da_should_continue": ("annullato dall'utente", "annullato"),
     "canceled": ("annullato dall'utente", "annullato"),
     "solo_parole": ("fermato: aveva annunciato senza fare", "errore"),

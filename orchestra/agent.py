@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import traceback
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -35,6 +36,7 @@ from .fallback import (
 from .budget import budget_guard, BudgetLimits
 from . import piano as piano_mod
 from . import parallelo as parallelo_mod
+from . import redazione
 from .types import (
     LLMResponse, Message, ToolCall, ToolRegistry, ToolResult, new_id,
 )
@@ -82,6 +84,15 @@ class LoopConfig:
     # (vedi orchestra/parallelo.py). Spegnibile perche' e' un'ottimizzazione
     # di tempo, non una funzione: chi vuole la sequenza esatta la chiede.
     parallelo: bool = True
+    # Tetto di OROLOGIO al turno, in secondi. 0 o negativo = nessun tetto.
+    #
+    # Le iterazioni erano limitate, il tempo no: venti giri con dentro
+    # `esegui_test` da due minuti, un browser da quaranta secondi e un MCP
+    # da trenta fanno un turno da mezz'ora. Il sintomo per l'utente e' "si
+    # e' impallato", e l'unica uscita era premere stop. Il tetto serve a
+    # questo, non a risparmiare token: a contare le chiamate c'e' gia'
+    # `max_iterations`.
+    max_secondi_turno: float = 900.0
 
 
 @dataclass
@@ -268,14 +279,39 @@ class Agent:
             # Lo stato e' uno solo, trasversale a tutti i modelli: il tetto
             # risponde a "quanto ho speso", e la bolletta non distingue.
             # `session_id` non serve piu' a niente, resta per la firma.
+            # `limits=` per nome, non posizionale: il primo parametro e'
+            # `session_id` (ora ignorato ma ancora nella firma), quindi
+            # passare i limiti come primo argomento li buttava via e
+            # lasciava leggere il .env. Un limite scritto nella config e
+            # mai applicato e' peggio di nessun limite, perche' sembra
+            # esserci.
             self._budget_state = budget_guard().get_or_create_session(
-                self.config.budget_limits)
+                limits=self.config.budget_limits)
 
             # -- utility interne ---------------------------------------------------
 
     def _cancel_requested(self) -> bool:
         """Verifica se è stata richiesta la cancellazione."""
         return self._cancel_flag
+
+    def _tempo_scaduto(self) -> bool:
+        """True se il turno ha superato il suo tetto di orologio.
+
+        Il valore si legge a ogni chiamata, non si cattura all'init: una
+        config cambiata a caldo (o un test) deve valere subito, e con il
+        valore catturato un `max_secondi_turno=0` deciso dopo l'avvio
+        continuerebbe a fermare i turni.
+        """
+        try:
+            limite = float(self.config.max_secondi_turno or 0)
+        except (TypeError, ValueError):
+            return False
+        if limite <= 0:
+            return False
+        inizio = getattr(self, "_inizio_turno", None)
+        if inizio is None:
+            return False
+        return (time.monotonic() - inizio) > limite
 
     def _emit(self, kind: str, **data: Any) -> None:
         self.on_event(kind, data)
@@ -786,6 +822,10 @@ class Agent:
         # l'agent puo' essere usato anche senza sessione (CLI, benchmark,
         # delega), e il flag deve stare a posto ovunque.
         self._cancel_flag = False
+        # L'orologio del turno parte qui, insieme al flag di cancel: il
+        # tempo si conta dall'inizio del lavoro, non dall'istanza
+        # dell'agent, che sopravvive a molti turni.
+        self._inizio_turno = time.monotonic()
         # L'approvazione di un piano vale per il turno in cui e' stata
         # data. Al turno dopo si torna a proporre: e' il senso della
         # modalita', e un'approvazione che resta accesa trasforma la
@@ -815,6 +855,23 @@ class Agent:
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):
                 self.state.stopped_because = "canceled_da_should_continue"
+                return self.state
+
+            # Tetto di orologio. Si controlla all'inizio del giro, dove
+            # costa niente e dove il turno e' in un punto coerente: fra
+            # una richiesta al modello e il batch di tool. Il messaggio
+            # resta nel contesto, cosi' il turno dopo sa perche' il
+            # lavoro si e' fermato invece di ritrovarsi un buco.
+            if self._tempo_scaduto():
+                secondi = int(self.config.max_secondi_turno)
+                self._nota_sistema(
+                    f"[TEMPO MASSIMO DEL TURNO] Sono passati {secondi} "
+                    f"secondi: il turno si ferma qui. Il lavoro fatto resta, "
+                    f"ma quello che mancava va chiesto di nuovo — scegli un "
+                    f"passo piu' piccolo, o alza ORCHESTRA_MAX_SECONDI_TURNO.",
+                    "__sistema__",
+                )
+                self.state.stopped_because = "tempo_scaduto"
                 return self.state
 
             self._maybe_compact()
@@ -847,6 +904,41 @@ class Agent:
             # Il messaggio dice cosa sta per succedere, non cosa è
             # successo: e' l'unica informazione utile durante
             # un'attesa.
+            # Budget, PRIMA di spendere. Il controllo dopo la chiamata
+            # registra il costo e poi si accorge dello sforamento: a quel
+            # punto i soldi sono usciti, e la chiamata che sfora e' quasi
+            # sempre la piu' cara del turno (contesto pieno + output
+            # lungo). Qui si stima il caso peggiore col tariffario e si
+            # decide se partire.
+            if self._budget_state:
+                limite_output = int(getattr(self.config, "max_tokens", 4096) or 0)
+                # Il prompt si stima, non si conta: sotto di un fattore
+                # costante va bene, e la stima e' gia' quella che usa la
+                # compaction, quindi i due numeri non si contraddicono.
+                token_prompt = count_tokens(self.state.messages)
+                modello_now = getattr(self.provider, "model", "") or ""
+                try:
+                    previste = budget_guard().verifica_preventiva(
+                        modello=modello_now,
+                        prompt_tokens=token_prompt,
+                        max_tokens=limite_output,
+                    )
+                except Exception:  # noqa: BLE001 - il budget non rompe il turno
+                    previste = []
+                if previste:
+                    self._emit("budget_violation", violations=previste,
+                               preventivo=True)
+                    self.state.stopped_because = "budget_exceeded"
+                    self._nota_sistema(
+                        "[BUDGET] Il turno non parte: questa chiamata "
+                        "supererebbe il tetto di spesa.\n"
+                        + "\n".join(f"- {v}" for v in previste)
+                        + "\nAlza il limite con ORCHESTRA_BUDGET, oppure "
+                        "chiedi meno in un colpo solo.",
+                        "__sistema__",
+                    )
+                    return self.state
+
             self._emit("thinking", iteration=self.state.iterations)
             resp = self._call_model_with_retry()
             self.state.total_tokens += resp.total_tokens
@@ -1011,6 +1103,38 @@ class Agent:
                 chiamate = list(resp.tool_calls)
                 esiti, avviate = self._prepara_parallelo(chiamate)
                 for i, tc in enumerate(chiamate):
+                    # Il tempo si controlla come il cancel, e per lo
+                    # stesso motivo: ogni tool_call deve avere il suo
+                    # risultato, anche quelle mai partite.
+                    if self._tempo_scaduto():
+                        for pendente in chiamate[i:]:
+                            self.state.messages.append(
+                                Message(
+                                    role="tool",
+                                    content=("Tempo massimo del turno raggiunto "
+                                             "prima dell'esecuzione."),
+                                    tool_call_id=pendente.id,
+                                    name=pendente.name,
+                                )
+                            )
+                            self._emit(
+                                "tool_end",
+                                name=pendente.name,
+                                result="tempo_scaduto",
+                                ok=False,
+                                id=pendente.id,
+                                consecutive_errors=self.state.consecutive_errors,
+                            )
+                        self._nota_sistema(
+                            f"[TEMPO MASSIMO DEL TURNO] Sono passati "
+                            f"{int(self.config.max_secondi_turno)} secondi "
+                            f"durante un'esecuzione: il turno si ferma qui "
+                            f"e i comandi non ancora partiti NON sono stati "
+                            f"eseguiti.",
+                            "__sistema__",
+                        )
+                        self.state.stopped_because = "tempo_scaduto"
+                        return self.state
                     if self._cancel_requested():
                         # Ogni tool_call deve avere il suo risultato,
                         # anche quelle mai eseguite: un cancel non puo'
@@ -1072,6 +1196,14 @@ class Agent:
                     else:
                         result, ok, immagini, anteprime = self._execute_tool(
                             tc.name, args)
+
+                    # Redazione PRIMA che il risultato diventi un fatto:
+                    # da qui va al modello, alla UI in streaming, allo
+                    # storico su disco e alla traccia. `echo $API_KEY` e'
+                    # un comando legittimo, e senza questo la chiave
+                    # restava scritta nello storico per sempre.
+                    if isinstance(result, str):
+                        result = redazione.redigi(result)
 
                     # il conteggio errori si azzera SOLO su un tool riuscito.
                     # Azzerarlo sempre — come faceva prima — rendeva il

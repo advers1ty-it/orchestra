@@ -22,6 +22,7 @@ import threading
 import time
 from typing import Any
 
+from . import redazione
 from .dati import percorso
 
 SCHEMA = """
@@ -249,9 +250,16 @@ class Storico:
         """Salva un messaggio. Chiamato a fine turno, non a ogni token:
         un turno interrotto non deve lasciare metà risposta che al
         ricaricamento sembra una risposta completa."""
+        # Il contenuto arriva dal modello, dai tool e (nel caso peggiore)
+        # dall'utente che incolla una chiave per farsela controllare.
+        # Lo storico e' su disco, indicizzato full-text e finisce nei
+        # backup: si redige alla porta, non solo a monte.
+        contenuto = redazione.redigi(contenuto)
+        if nome:
+            nome = redazione.redigi(nome)
         dati = None
         if tool_json is not None:
-            dati = json.dumps(tool_json, ensure_ascii=False)
+            dati = json.dumps(redazione.redigi_dati(tool_json), ensure_ascii=False)
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO messaggi"
@@ -384,14 +392,17 @@ class Storico:
                                (sessione_id,))
             for m in messaggi:
                 tool_json = m.get("tool")
-                dati = (json.dumps(tool_json, ensure_ascii=False)
+                dati = (json.dumps(redazione.redigi_dati(tool_json),
+                                   ensure_ascii=False)
                         if tool_json is not None else None)
                 self._conn.execute(
                     "INSERT INTO messaggi"
                     " (sessione_id, ruolo, contenuto, ragionamento, nome, tool_json, token, creata)"
                     " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (sessione_id, m.get("ruolo", ""), m.get("contenuto", ""),
-                     m.get("ragionamento", "") or "", m.get("nome"), dati,
+                    (sessione_id, m.get("ruolo", ""),
+                     redazione.redigi(m.get("contenuto", "") or ""),
+                     redazione.redigi(m.get("ragionamento", "") or ""),
+                     m.get("nome"), dati,
                      m.get("token", 0), time.time()))
             self.tocca(sessione_id, modello, provider)
 

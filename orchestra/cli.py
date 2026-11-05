@@ -63,6 +63,10 @@ def _config(env: dict[str, str]) -> LoopConfig:
         keep_recent=num("ORCHESTRA_KEEP_RECENT", 8),
         temperature=flt("ORCHESTRA_TEMPERATURE", 0.7),
         max_tokens=num("ORCHESTRA_MAX_TOKENS", 4096),
+        # Tetto di orologio al turno: le iterazioni limitavano le chiamate,
+        # non il tempo. 0 lo spegne (per chi lancia lavori lunghi di
+        # proposito), 900 secondi e' il default prudente.
+        max_secondi_turno=flt("ORCHESTRA_MAX_SECONDI_TURNO", 900.0),
         reasoning_level=env.get("ORCHESTRA_REASONING", None),
         tool_profile=env.get("ORCHESTRA_TOOL_PROFILE") or None,
     )

@@ -1198,6 +1198,13 @@ class OrchestraApp:
                     config=LoopConfig(max_iterations=num("ORCHESTRA_MAX_ITERS", 20),
                                                           context_limit=num("ORCHESTRA_CONTEXT_LIMIT", 120_000),
                                                           keep_recent=8,
+                                                          # Senza questo, un turno web poteva
+                                                          # restare appeso finche' il browser
+                                                          # era aperto: il tetto vale anche
+                                                          # qui, e non e' un dettaglio della CLI.
+                                                          max_secondi_turno=num(
+                                                              "ORCHESTRA_MAX_SECONDI_TURNO",
+                                                              900),
                                                           reasoning_level=_env.get("ORCHESTRA_REASONING") or None,
                                                           tool_profile=_env.get("ORCHESTRA_TOOL_PROFILE") or None),
                     summarize=summarizer_llm(_provider),

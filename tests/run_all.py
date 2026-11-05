@@ -147,6 +147,12 @@ SUITES = [
     # Scritture atomiche (niente file a meta' se il processo muore) e
     # conferma per i comandi che cancellano dentro la root.
     ("scrittura-sicura", "test_scrittura_sicura.py", True),
+    # Tetto di orologio al turno e budget controllato PRIMA di spendere.
+    ("limiti-turno", "test_limiti_turno.py", True),
+    # Segreti che non devono finire nello storico, nella traccia o nella UI.
+    ("redazione", "test_redazione.py", True),
+    # Il bordo HTTP: Origin, path traversal, rate limit, input storto.
+    ("rotte-sicurezza", "test_rotte_sicurezza.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),
