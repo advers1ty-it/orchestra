@@ -32,8 +32,15 @@ def _skill_elenco(indice) -> dict[str, Any]:
     non sapresti quale sia quale.
     """
     tutte = indice.tutte()
-    scaricate = [s for s in tutte if s.origine != "generata"]
-    generate = [s for s in tutte if s.origine == "generata"]
+    # Le proposte sono generata ma non ancora accettate: non stanno con
+    # le altre, o sembrerebbero gia' in uso. E non stanno nemmeno fuori
+    # dalla risposta: senza una lista loro, il pannello non avrebbe modo
+    # di mostrare il pulsante che le rende vere.
+    proposte = [s for s in tutte if s.proposta]
+    generate = [s for s in tutte
+                if s.origine == "generata" and not s.proposta]
+    scaricate = [s for s in tutte
+                 if s.origine != "generata" and not s.proposta]
 
     def voce(s) -> dict[str, Any]:
         return {
@@ -64,6 +71,8 @@ def _skill_elenco(indice) -> dict[str, Any]:
         "totale": len(tutte),
         "scaricate": len(scaricate),
         "generate": len(generate),
+        "proposte": len(proposte),
+        "lista_proposte": [voce(s) for s in proposte],
         "categorie": [{"nome": k, "skill": v}
                       for k, v in sorted(categorie.items())],
         "lista_scaricate": [voce(s) for s in scaricate],
@@ -327,6 +336,46 @@ class RotteSkill:
             # i primi dodici e dire "altre 91" costringerebbe a
             # riaprire il pannello per contarle.
             self._json({"ok": True, "importate": n, "nomi": nomi,
+                        "elenco": _skill_elenco(indice),
+                        "cestino": _cestino_elenco(indice.radice)})
+            return
+
+        if azione == "conferma":
+            nome = str(body.get("nome") or "").strip()
+            ok, perche = sk.conferma(indice, nome)
+            if not ok:
+                self._json({"error": perche}, 400)
+                return
+            s = indice.get(nome)
+            try:
+                from . import apprendimento
+                apprendimento.segna_conclusa(
+                    getattr(s, "firma", "") if s else "",
+                    nome=nome, accettata=True)
+            except Exception:  # noqa: BLE001
+                pass
+            self._json({"ok": True, "accettata": nome,
+                        "elenco": _skill_elenco(indice),
+                        "cestino": _cestino_elenco(indice.radice)})
+            return
+
+        if azione == "scarta":
+            nome = str(body.get("nome") or "").strip()
+            s = indice.get(nome)
+            if not s or not s.proposta:
+                self._json({"error": f"{nome!r} non e' una proposta"}, 400)
+                return
+            if not _skill_cancella(indice, nome):
+                self._json({"error": f"non riesco a spostare {nome!r} "
+                                     f"nel cestino"}, 500)
+                return
+            try:
+                from . import apprendimento
+                apprendimento.segna_conclusa(
+                    getattr(s, "firma", ""), nome=nome, accettata=False)
+            except Exception:  # noqa: BLE001
+                pass
+            self._json({"ok": True, "scartata": nome,
                         "elenco": _skill_elenco(indice),
                         "cestino": _cestino_elenco(indice.radice)})
             return

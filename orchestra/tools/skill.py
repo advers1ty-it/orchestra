@@ -136,6 +136,13 @@ def tool_skill_leggi() -> Tool:
             aiuto = (" Nelle vicine: " + ", ".join(vicine)) if vicine else ""
             return (f"Nessuna skill chiamata {nome!r}."
                     f"Cerca con skill_cerca, parola per parola.{aiuto}")
+        if s.proposta:
+            # Una proposta non e' ancora una procedura: leggerla qui la
+            # farebbe sembrare approvata, e l'agente la seguirebbe senza
+            # che nessuno abbia deciso. Si dice cosa manca e chi decide.
+            return (f"{nome} e' una proposta: non e' ancora stata accettata, "
+                    f"quindi non fa parte delle procedure disponibili. "
+                    f"Si accetta dal pannello Opzioni \u2192 Skill.")
         i.segna_usata(nome)
         return _testo(s.per_uso())
 

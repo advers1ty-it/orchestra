@@ -208,6 +208,7 @@ SUITES = [
     ("decisions-schema", "test_decisions_schema.py", False),
     ("curva5", "test_curva5.py", True),
     ("skills", "test_skills.py", True),
+    ("apprendimento", "test_apprendimento.py", True),
     ("skill-tools", "test_skill_tools.py", True),
     # Era scritto e non girava: nel runner non c'era, e senza un
     # test che passa sembra che copra quello che copre.

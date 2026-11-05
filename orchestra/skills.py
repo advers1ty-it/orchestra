@@ -35,14 +35,22 @@ vale cid' che sta leggendo. Una skill scaricata dice "questa e' la
 metodo di qualcun altro". Una generata dice "questo e' l'ho appena
 fatto, e guarda".
 
-SOGLIA
+SOGLIA E PROPOSTE
 
 Una skill generata nasce solo se la procedura e' riuscita piu' volte
-(SOGLIA_RIPETIZIONI) e non e' banale. Il motivo e' che l'agente puo'
-ripetere un comando identico cento volte senza che ne debba uscire una
-skill: e' rumore, e rumore nel prompt costa token e influenza la
-risposta. Su richiesta esplicita non c'e' soglia: se chiedi, si
-scrive.
+(SOGLIA_RIPETIZIONI, applicata da `apprendimento.osserva`) e non e'
+banale. Il motivo e' che l'agente puo' ripetere un comando identico
+cento volte senza che ne debba uscire una skill: e' rumore, e rumore
+nel prompt costa token e influenza la risposta.
+
+Questa soglia per molto tempo e' stata solo dichiarata: il controllo a
+tre (`Candidato.vale`) non lo chiamava nessuno, e il tool generava con
+soglia 1 su richiesta esplicita. Nessuno contava le ripetizioni, quindi
+nessuna skill nasceva dal lavoro. Ora il conto esiste in
+`apprendimento.py`, e alla soglia non si scrive una skill: si scrive
+una skill con `stato: proposta`, che NON entra nel prompt finche'
+qualcuno non la accetta dal pannello. Su richiesta esplicita ("salva
+questa procedura") resta la soglia 1: se l'utente lo chiede, si scrive.
 """
 
 from __future__ import annotations
@@ -63,6 +71,12 @@ RADICE = os.environ.get("ORCHESTRA_SKILLS") or os.path.join(
     os.path.dirname(HERE), "skills")
 CARTELLA_SCARICATE = "scaricate"
 CARTELLA_GENERATE = "generate"
+
+# Una skill appena generata dal lavoro non entra nel prompt: prima la
+# vede chi usa Orchestra e decide. Il modello scrive procedure plausibili
+# anche quando ha sbagliato, e una procedura sbagliata nel prompt non e'
+# un errore visibile: e' un'istruzione che viene seguita.
+STATO_PROPOSTA = "proposta"
 
 # Quante volte una procedura deve riuscire prima di meritare una skill.
 # Una volta e' un caso: puo' essere stato un colpo di fortuna, o un
@@ -106,6 +120,11 @@ class Skill:
     prove: list[dict[str, Any]] = field(default_factory=list)
     usata_il: float = 0.0
     volte_usata: int = 0
+    # "proposta": generata dal lavoro e non ancora accettata. Non va nel
+    # prompt, non si legge con skill_leggi e non si cerca: esiste solo
+    # nella lista da approvare.
+    proposta: bool = False
+    firma: str = ""
 
     @property
     def con_prove(self) -> bool:
@@ -272,6 +291,9 @@ class Indice:
             origine=campi.get("origine") or origine_default,
             prove=prove,
             volte_usata=int(campi.get("volte_usata", 0) or 0),
+            proposta=(campi.get("stato", "").strip().lower()
+                      == STATO_PROPOSTA),
+            firma=campi.get("firma", "").strip(),
         )
 
     def _scorri(self) -> None:
@@ -326,6 +348,15 @@ class Indice:
 
     # -- interrogazioni --------------------------------------------------
 
+    def attive(self) -> list[Skill]:
+        """Le skill che l'agente puo' davvero usare.
+
+        Le proposte sono escluse: sono scritte, ma nessuno le ha ancora
+        accettate. Tenerle fuori da qui e' l'unico modo perche' una
+        proposta non finisca nel prompt per il solo fatto di esistere.
+        """
+        return [s for s in self.tutte() if not s.proposta]
+
     def tutte(self) -> list[Skill]:
         self._scorri()
         return sorted(self._cache.values(), key=lambda s: s.nome)
@@ -352,7 +383,7 @@ class Indice:
         if not parole:
             return []
         punteggi: list[tuple[int, Skill]] = []
-        for s in self.tutte():
+        for s in self.attive():
             testo = (s.nome + " " + s.descrizione).lower()
             p = 0
             for w in parole:
@@ -375,7 +406,8 @@ class Indice:
         le istruzioni dell'agente passano in secondo ordine. Per
         questo il limite e' uno e non si alza.
         """
-        if not self.tutte():
+        attive = self.attive()
+        if not attive:
             return ""
         scelte = self.cerca(contesto.split(), limite=limite) if contesto else []
         if len(scelte) < limite and not contesto:
@@ -388,7 +420,7 @@ class Indice:
             # perche' gli serve un estrattore PDF e gli viene
             # risposto "compila apk".
             gia = {s.nome for s in scelte}
-            for s in self.tutte():
+            for s in attive:
                 if s.nome not in gia:
                     scelte.append(s)
                     gia.add(s.nome)
@@ -396,7 +428,7 @@ class Indice:
                     break
         righe = [s.per_prompt() for s in scelte[:limite]]
         return (
-            f"\n## Skill disponibili ({len(self.tutte())} in tutto, "
+            f"\n## Skill disponibili ({len(attive)} in tutto, "
             f"quelle sotto sono le piu' vicine a cio' che ti hanno chiesto)\n"
             "Una skill e' una procedura gia' scritta. Se il tuo compito e' "
             "vicino a una, leggila PRIMA di improvvisare:\n"
@@ -570,6 +602,12 @@ def valuta_candidato(c: Candidato, soglia: int = SOGLIA_RIPETIZIONI) -> tuple[bo
     pensa che il meccanismo sia rotto invece che severo.
     """
     if len(c.prove) < soglia:
+        if soglia <= 1:
+            # Con la soglia a uno il vecchio messaggio ("0/1 prove: si
+            # aspetta che riunisca prima") non voleva dire niente: non
+            # c'e' niente da riunire, manca la prova.
+            return False, "nessuna prova: servono i comandi eseguiti e " \
+                          "il loro esito"
         return False, (f"{len(c.prove)}/{soglia} prove: si aspetta che "
                        f"riunisca prima")
     if len(c.corpo) < LUNGHEZZA_MINIMA:
@@ -581,26 +619,60 @@ def valuta_candidato(c: Candidato, soglia: int = SOGLIA_RIPETIZIONI) -> tuple[bo
     return True, f"{len(c.prove)} prove"
 
 
-def salva_generata(indice: Indice, c: Candidato) -> str:
+def salva_generata(indice: Indice, c: Candidato, *,
+                   stato: str = "", firma: str = "") -> str:
     """Scrive la skill generata e il suo file di prove.
 
     Il nome viene ripulito: un nome di file che siamo noi a scrivere
     e' una porta che siamo noi ad aprire. Una skill il cui nome e'
     "../avvia" potrebbe uscire dalla cartella al primo shutil.
+
+    `stato` esiste per una ragione sola: una procedura generata dal
+    lavoro non deve entrare nel prompt prima che qualcuno l'abbia
+    guardata. Con `stato=proposta` la skill e' scritta, ha le sue prove,
+    e resta invisibile all'agente finche' non viene accettata.
     """
     nome = _nome_sicuro(c.nome)
     p = os.path.join(indice.radice, CARTELLA_GENERATE, nome, "SKILL.md")
-    _scrivi(p, {
+    campi = {
         "name": nome,
         "description": c.descrizione.strip() or "Procedura appresa.",
         "categoria": "generata",
         "origine": "generata",
         "generata_il": time.strftime("%Y-%m-%d %H:%M"),
         "prove": str(len(c.prove)),
-    }, c.corpo)
+    }
+    if stato:
+        campi["stato"] = stato
+    if firma:
+        # La firma lega la skill alla sequenza di comandi che l'ha
+        # prodotta: serve a non riproporre la stessa procedura ogni
+        # tre turni, e a sapere dopo quante ripetizioni e' nata.
+        campi["firma"] = firma
+    _scrivi(p, campi, c.corpo)
     _prove_scrivi(p, c.prove)
     indice._invalida()
     return p
+
+
+def conferma(indice: Indice, nome: str) -> tuple[bool, str]:
+    """Accetta una proposta: da qui in poi entra nel prompt.
+
+    Il frontmatter si riscrive senza `stato` — la skill diventa una
+    skill come le altre — e si annota quando e' stata accettata. Non si
+    tocca il corpo: quello che hai letto e' quello che entra nel prompt.
+    """
+    s = indice.get(nome)
+    if not s:
+        return False, f"nessuna skill chiamata {nome!r}"
+    if not s.proposta:
+        return False, f"{nome} non e' una proposta"
+    campi, corpo = _leggi(s.percorso)
+    campi.pop("stato", None)
+    campi["accettata_il"] = time.strftime("%Y-%m-%d %H:%M")
+    _scrivi(s.percorso, campi, corpo)
+    indice._invalida()
+    return True, f"{nome} accettata"
 
 
 _NOME_SPORCO = re.compile(r"[^A-Za-z0-9._-]+")

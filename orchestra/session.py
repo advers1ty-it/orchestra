@@ -1434,6 +1434,7 @@ class Session:
             # andata, e resta nel DB accanto ai messaggi.
             self._salva_su_disco()
             self._ricorda_turno()
+            self._impara_dal_turno(user_input, reg)
             # `busy` va azzerato PRIMA di emettere `idle`, non dopo: la UI
             # usa `idle` come segnale per riabilitare l'input, e se arrivasse
             # prima dello stato reale accetterebbe un messaggio che il server
@@ -1679,6 +1680,50 @@ class Session:
         except Exception:  # noqa: BLE001
             return attuale
         return nome
+
+    def _impara_dal_turno(self, obiettivo: str, reg: Any) -> None:
+        """Conta la procedura di questo turno, e alla terza volta la propone.
+
+        Non scrive una skill: scrive una proposta con le sue prove, che
+        compare in Opzioni -> Skill con due pulsanti. Il modello non
+        decide cosa entra nel suo prompt — una procedura sbagliata nel
+        prompt non e' un errore visibile, e' un'istruzione seguita.
+
+        Solo i turni finiti bene: un turno annullato, fermato dal budget
+        o dal tempo, o bocciato dalla verifica, ha comandi eseguiti ma
+        non una procedura che ha funzionato. Imparare da un turno a meta'
+        sarebbe imparare il pezzo che non c'e'.
+
+        Non costa un token: si legge la traccia gia' registrata, non si
+        chiama il provider. E non solleva mai — un turno riuscito non
+        deve cadere perche' il contatore di quello che ha imparato non
+        si e' potuto aggiornare.
+        """
+        st = getattr(self.agent, "state", None)
+        esito = (getattr(st, "stopped_because", "") or "").strip()
+        if esito not in ("", "complete"):
+            return
+        try:
+            from . import apprendimento
+            proposta = apprendimento.osserva(
+                getattr(reg, "eventi", []) or [], obiettivo)
+            if proposta is None:
+                return
+            from . import skills as sk
+            apprendimento.proponi(sk.Indice(), proposta)
+        except Exception:  # noqa: BLE001
+            return
+        # La proposta si annuncia dove guarda l'utente: una riga in chat,
+        # con il posto dove accettarla. Scriverla solo su disco sarebbe
+        # scrivere in una stanza vuota.
+        try:
+            self.bridge.emit("log", {"text": (
+                f"Questa procedura ha funzionato {proposta.volte} volte: "
+                f"te la propongo come skill in Opzioni \u2192 Skill. "
+                f"Accettala e la usero' per i compiti simili, oppure "
+                f"scartala e non te la ripropongo.")})
+        except Exception:  # noqa: BLE001
+            pass
 
     def _testo_per_estrazione(self) -> str:
         """La conversazione da rileggere per tirare fuori i fatti.

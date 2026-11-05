@@ -16,9 +16,9 @@
 // browser: l'agente genera una skill mentre tu stai guardando la pagina,
 // e senza un ricaricamento la lista mente per trenta secondi.
 
-let skillDati = { scaricate: [], generate: [], categorie: [], totale: 0,
-                  scaricate_n: 0, generate_n: 0, nel_prompt_max: 0,
-                  cestino: [] };
+let skillDati = { scaricate: [], generate: [], proposte: [], categorie: [],
+                  totale: 0, scaricate_n: 0, generate_n: 0, proposte_n: 0,
+                  nel_prompt_max: 0, cestino: [] };
 
 function skillPost(body) {
   return fetch("/api/skill", {
@@ -35,10 +35,12 @@ async function caricaSkill() {
       skillDati = {
         scaricate: d.lista_scaricate || [],
         generate: d.lista_generate || [],
+        proposte: d.lista_proposte || [],
         categorie: d.categorie || [],
         totale: d.totale || 0,
         scaricate_n: d.scaricate || 0,
         generate_n: d.generate || 0,
+        proposte_n: d.proposte || 0,
         nel_prompt_max: d.nel_prompt_max || 0,
         cestino: d.cestino || [],
       };
@@ -122,6 +124,55 @@ function skillCarta(s, generata) {
   return carta;
 }
 
+function skillCartaProposta(s) {
+  // Una proposta ha due pulsanti e non uno: "Apri" da solo lascerebbe
+  // il dubbio se accettarla o no, e "Cestino" e' una parola ambigua per
+  // una cosa che non esiste ancora. Tieni / Scarta dicono cosa succede.
+  const carta = el("div", "skill-carta skill-carta-proposta");
+  const capo = el("div", "skill-carta-capo");
+  const segno = el("span", "skill-segno");
+  segno.textContent = "?";
+  segno.title = "proposta: non e' ancora nel prompt";
+  capo.appendChild(segno);
+  const titolo = el("span", "skill-carta-nome");
+  titolo.textContent = s.nome;
+  capo.appendChild(titolo);
+  carta.appendChild(capo);
+
+  const desc = el("div", "skill-carta-desc");
+  desc.textContent = s.descrizione || "(senza descrizione)";
+  desc.title = s.descrizione || "";
+  carta.appendChild(desc);
+
+  const meta = el("div", "skill-carta-meta");
+  meta.textContent = s.con_prove
+    ? (s.prove + (s.prove === 1 ? " prova" : " prove") + " · non ancora nel prompt")
+    : "senza prove · non ancora nel prompt";
+  carta.appendChild(meta);
+
+  const pie = el("div", "skill-carta-pie");
+  const apri = el("button", "ghost skill-pulsante");
+  apri.textContent = "Apri";
+  apri.title = "Leggi la procedura e le prove prima di decidere";
+  apri.onclick = () => skillApri(s);
+  pie.appendChild(apri);
+
+  const tieni = el("button", "primary skill-pulsante");
+  tieni.textContent = "Tieni";
+  tieni.title = "Accetta: entra nel prompt quando il compito le somiglia";
+  tieni.onclick = () => skillConferma(s.nome);
+  pie.appendChild(tieni);
+
+  const scarta = el("button", "ghost skill-pulsante skill-bottone-cancella");
+  scarta.textContent = "Scarta";
+  scarta.title = "Non serve: va nel cestino e non te la ripropongo";
+  scarta.onclick = () => skillScarta(s.nome);
+  pie.appendChild(scarta);
+  carta.appendChild(pie);
+
+  return carta;
+}
+
 function skillCartaCestino(v) {
   const carta = el("div", "skill-carta skill-carta-cestino");
   const capo = el("div", "skill-carta-capo");
@@ -157,10 +208,12 @@ function skillCestinoNota(t) {
 function aggiornaDa(elenco, cestino) {
   skillDati.scaricate = elenco.lista_scaricate || [];
   skillDati.generate = elenco.lista_generate || [];
+  skillDati.proposte = elenco.lista_proposte || [];
   skillDati.categorie = elenco.categorie || [];
   skillDati.totale = elenco.totale || 0;
   skillDati.scaricate_n = elenco.scaricate || 0;
   skillDati.generate_n = elenco.generate || 0;
+  skillDati.proposte_n = elenco.proposte || 0;
   skillDati.nel_prompt_max = elenco.nel_prompt_max || 0;
   skillDati.cestino = cestino || [];
   disegnaSkill();
@@ -265,6 +318,36 @@ function skillMossa(testo) {
   if (n) n.textContent = testo;
 }
 
+// Accettare e scartare. Sono le due azioni che rendono una proposta una
+// decisione invece di un file scritto da qualcuno che non sei tu.
+async function skillConferma(nome) {
+  try {
+    const d = await skillPost({ azione: "conferma", nome });
+    if (d && d.ok) {
+      aggiornaDa(d.elenco, d.cestino);
+      skillMossa(nome + " accettata: da ora entra nel prompt quando serve");
+    } else {
+      skillMossa((d && d.error) || "accettazione rifiutata");
+    }
+  } catch (e) {
+    skillMossa("errore: " + (e.message || e));
+  }
+}
+
+async function skillScarta(nome) {
+  try {
+    const d = await skillPost({ azione: "scarta", nome });
+    if (d && d.ok) {
+      aggiornaDa(d.elenco, d.cestino);
+      skillMossa(nome + " scartata: resta nel cestino, non te la ripropongo");
+    } else {
+      skillMossa((d && d.error) || "scarto rifiutato");
+    }
+  } catch (e) {
+    skillMossa("errore: " + (e.message || e));
+  }
+}
+
 async function skillCancella(nome) {
   try {
     const d = await skillPost({ azione: "cancella", nome });
@@ -288,7 +371,10 @@ function disegnaSkill() {
     const n = skillDati.totale;
     somma.textContent = n
       ? (n + " procedure · " + skillDati.scaricate_n + " scaricate, "
-         + skillDati.generate_n + " imparate dall'agente · nel prompt: fino a "
+         + skillDati.generate_n + " imparate dall'agente"
+         + (skillDati.proposte_n
+            ? ", " + skillDati.proposte_n + " da accettare" : "")
+         + " · nel prompt: fino a "
          + skillDati.nel_prompt_max + " alla volta")
       : "nessuna. Importane da una cartella.";
   }
@@ -311,14 +397,34 @@ function disegnaSkill() {
   const gen = $("skill-generate");
   if (gen) {
     gen.replaceChildren();
-    if (!skillDati.generate.length) {
-      // Il vuoto e' un messaggio, non uno spazio. "L'agente non ha
-      // ancora imparato niente" e' una cosa che ti dice dove guardare.
+    const proposte = skillDati.proposte || [];
+    if (proposte.length) {
+      // Le proposte stanno in cima e da sole: mescolate alle accettate,
+      // una procedura che non e' ancora nel prompt sembrerebbe in uso.
+      const tit = el("div", "skill-sottotitolo");
+      const s1 = el("span");
+      s1.textContent = "Da accettare (" + proposte.length + ")";
+      tit.appendChild(s1);
+      gen.appendChild(tit);
+      for (const s of proposte) gen.appendChild(skillCartaProposta(s));
+    }
+    if (!skillDati.generate.length && !proposte.length) {
+      // Il vuoto e' un messaggio, non uno spazio — e deve dire il vero:
+      // prima diceva "lavora con lui e guarda qui dopo", che era falso,
+      // perche' nessuno generava niente se non chiamato apposta.
       gen.appendChild(el("div", "skill-vuota",
-        "Nessuna ancora. L'agente ne scrive una quando un metodo gli " +
-        "funziona: glielo chiedi, o semplicemente lavora con lui e " +
-        "guarda qui dopo."));
-    } else {
+        "Nessuna ancora. Quando una sequenza di comandi ti funziona " +
+        "tre volte, Orchestra te la propone qui: la leggi, la tieni o " +
+        "la scarti. Puoi anche chiedergliela: \"salva questa procedura " +
+        "come skill\"."));
+    } else if (skillDati.generate.length) {
+      if (proposte.length) {
+        const tit2 = el("div", "skill-sottotitolo");
+        const s2 = el("span");
+        s2.textContent = "Accettate";
+        tit2.appendChild(s2);
+        gen.appendChild(tit2);
+      }
       for (const s of skillDati.generate) gen.appendChild(skillCarta(s, true));
     }
   }

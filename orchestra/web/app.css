@@ -735,6 +735,9 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 .skill-carta-cestino { opacity: .82; border-style: dashed; }
+/* Una proposta non e' ancora nel prompt: il bordo tratteggiato lo dice
+   prima che si legga la riga di testo. */
+.skill-carta-proposta { border-style: dashed; border-left-color: var(--accent); }
 
 .skill-carta-capo { display: flex; align-items: baseline; gap: 5px;
                     min-width: 0; }
