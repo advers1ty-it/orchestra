@@ -8,6 +8,7 @@ vedono (Content-Length sbagliato, connessione che non tiene, SSE malformato).
 
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -22,7 +23,7 @@ os.environ["ORCHESTRA_HOME"] = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "_dati_test")
 os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 
-from orchestra import LLMResponse  # noqa: E402
+from orchestra import LLMResponse, __version__  # noqa: E402
 from orchestra.session import Session  # noqa: E402
 from orchestra.types import ToolCall  # noqa: E402
 from orchestra import webapp  # noqa: E402
@@ -297,6 +298,31 @@ try:
         allow = (e.headers.get("Allow") or "") if e.headers else ""
         check("405 su POST di una rotta GET", e.code == 405, str(e.code))
         check("405 dichiara Allow: GET", "GET" in allow, allow)
+
+    # La guida e' l'unica pagina che chi usa Orchestra legge per orientarsi, e
+    # si era rotta in silenzio: due sezioni nel corpo senza voce nell'indice
+    # (il clic non le raggiungeva) e la versione ferma a 0.5.45 mentre il
+    # pacchetto era alla 0.5.70. Nessuno se ne accorge finche' non la apre, e
+    # chi la apre la apre proprio perche' non sa dove guardare. Qui si
+    # controllano le tre cose che si rompono quando si aggiunge un capitolo
+    # di fretta: la versione giusta, i link che portano a una sezione vera e
+    # le sezioni che l'indice raggiunge.
+    with urllib.request.urlopen(BASE + "/docs", timeout=10) as r:
+        guida = r.read().decode("utf-8")
+        check("guida: risponde 200", r.status == 200, str(r.status))
+    check("guida: niente segnaposto", "{{versione}}" not in guida,
+          "il segnaposto e' arrivato al browser")
+    check("guida: versione del pacchetto", __version__ in guida,
+          "manca " + __version__)
+    ids = set(re.findall(r'id="([^"]+)"', guida))
+    voci = re.findall(r'href="#([^"]+)"', guida)
+    check("guida: indice popolato", len(voci) >= 15, str(len(voci)))
+    rotti = [v for v in voci if v not in ids]
+    check("guida: ogni voce porta a una sezione", not rotti, str(rotti))
+    sezioni = set(re.findall(r'<section id="([^"]+)"', guida))
+    orfane = sorted(sezioni - set(voci))
+    check("guida: nessuna sezione fuori dall'indice", not orfane,
+          str(orfane))
 
 finally:
     httpd.shutdown()

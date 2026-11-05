@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orchestra — Documentazione 0.5.45</title>
+<title>Orchestra — Guida {{versione}}</title>
 <style>
   :root {
     --bg: #0c1018;
@@ -23,7 +23,9 @@
   header h1 { margin:0; font-size:26px; color: var(--accent); letter-spacing:.5px; }
   header .sub { color: var(--muted); margin-top:4px; }
   .layout { display:grid; grid-template-columns:280px 1fr; min-height: calc(100vh - 80px); }
-  nav { border-right:1px solid var(--bd); padding:20px 18px; position: sticky; top:82px; height: calc(100vh - 82px); overflow:auto; }
+  /* L'intestazione e' sticky e alta circa 142px: l'indice si ferma sotto,
+     non a 82px, o scorrendo si infila dietro il titolo. */
+  nav { border-right:1px solid var(--bd); padding:20px 18px; position: sticky; top:142px; height: calc(100vh - 142px); overflow:auto; }
   nav ul { list-style:none; padding:0; margin:0; }
   nav li { margin:0; }
   nav a { display:block; text-decoration:none; color: var(--muted); padding:7px 9px; border-radius:8px; border:1px solid transparent; font-size:13.5px; }
@@ -32,7 +34,7 @@
   main { padding:28px 34px 56px; max-width: 1080px; }
   section { margin-bottom:40px; scroll-margin-top:100px; }
   h2 { color: var(--accent); border-bottom:1px solid var(--bd); padding-bottom:6px; margin-top:28px; }
-  h3 { color:#e8d09b; margin-top:18px; }
+  h3 { color:#e8d09b; margin-top:22px; }
   p, li { line-height:1.6; }
   code, pre { font-family: var(--mono); }
   code { background: var(--blue); border:1px solid var(--bd); padding:1px 6px; border-radius:6px; font-size:13px; }
@@ -42,438 +44,434 @@
   .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
   .kbd { background:#11151d; border:1px solid var(--bd); border-radius:6px; padding:1px 7px; font-family:var(--mono); }
   .badge { display:inline-block; background:transparent; border:1px solid var(--accent); color:var(--accent); padding:2px 8px; border-radius:999px; font-size:12px; }
+  .dim { color: var(--muted); }
+  .nota { background: rgba(200,169,94,.07); border-left:3px solid var(--accent); border-radius:0 10px 10px 0; padding:10px 14px; margin:14px 0; }
+  .nota b { color: var(--accent); }
   footer { color: var(--muted); font-size:12px; padding:18px 34px; border-top:1px solid var(--bd); }
   a.btn { display:inline-block; background: var(--accent); color:#101218; text-decoration:none; padding:6px 12px; border-radius:8px; font-weight:700; margin-right:8px; }
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 1fr; }
+    nav { position: static; height:auto; border-right:0; border-bottom:1px solid var(--bd); }
+    main { padding:20px 18px 40px; }
+    header { padding:16px 18px 10px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Orchestra — Documentazione</h1>
-  <div class="sub">Versione 0.5.45 · Orchestratore agentico autonomo, interfaccia web + CLI · core in stdlib Python</div>
-  <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica docs</a></div>
+  <h1>Orchestra — Guida</h1>
+  <div class="sub">Versione {{versione}} · un assistente che lavora sui tuoi file, dal tuo computer</div>
+  <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica guida</a></div>
 </header>
 <div class="layout">
   <nav>
     <div class="toc-title">Contenuti</div>
     <ul>
-      <li><a href="#avvio">Avvio rapido</a></li>
-      <li><a href="#config">Configurazione</a></li>
-      <li><a href="#modelli">Modelli & provider</a></li>
-      <li><a href="#onboarding">Onboarding web</a></li>
+      <li><a href="#prima">Prima di tutto</a></li>
+      <li><a href="#avvio">Aprire Orchestra</a></li>
+      <li><a href="#primi-passi">I primi minuti</a></li>
+      <li><a href="#schermata">Cosa c'è sullo schermo</a></li>
+      <li><a href="#opzioni">Il pannello Opzioni</a></li>
+      <li><a href="#conversazione">Parlare con l'agente</a></li>
+      <li><a href="#file">Modifiche ai file e undo</a></li>
       <li><a href="#progetti">Progetti</a></li>
-      <li><a href="#ui">Interfaccia web</a></li>
-      <li><a href="#steer">Steer e Stop</a></li>
-      <li><a href="#tooling">Tool & profili</a></li>
+      <li><a href="#tool">Cosa può fare l'agente</a></li>
+      <li><a href="#obiettivi">Obiettivi autonomi</a></li>
+      <li><a href="#cron">Cron (lavori programmati)</a></li>
+      <li><a href="#consiglio">Consiglio di advisor</a></li>
       <li><a href="#bot">Bot</a></li>
-      <li><a href="#lavori">Lavori durevoli</a></li>
-      <li><a href="#identita">Identità dell'agente principale</a></li>
-      <li><a href="#delega">Multi-agent & delega</a></li>
-      <li><a href="#goal">Goal autonomi</a></li>
-      <li><a href="#cron">Cron (job programmati)</a></li>
-      <li><a href="#consiglio">Consiglio (Roast Room)</a></li>
-      <li><a href="#mcp">Client MCP</a></li>
-      <li><a href="#browser">Browser e computer</a></li>
-      <li><a href="#permessi">Permessi</a></li>
-      <li><a href="#memoria">Memoria & storia</a></li>
-      <li><a href="#budget">Budget</a></li>
-      <li><a href="#remoto">Accesso remoto</a></li>
-      <li><a href="#bugfix">Se qualcosa non va</a></li>
-      <li><a href="#tester">Installazione senza GitHub</a></li>
+      <li><a href="#lavori">Lavori in background</a></li>
+      <li><a href="#tracce">Tracce dei turni</a></li>
+      <li><a href="#memoria">Memoria e cronologia</a></li>
+      <li><a href="#limiti">Limiti, tempo e costi</a></li>
+      <li><a href="#remoto">Dal telefono</a></li>
+      <li><a href="#problemi">Se qualcosa non va</a></li>
+      <li><a href="#installazione">Installazione</a></li>
       <li><a href="#dev">Appendice (sviluppatori)</a></li>
     </ul>
   </nav>
   <main>
 
+<section id="prima">
+<h2>Prima di tutto</h2>
+<p>Orchestra è un assistente che gira <b>sul tuo computer</b>. Gli scrivi cosa vuoi ottenere, e lui legge i file del progetto, li modifica, esegue comandi e ti racconta cosa ha fatto. Non è un sito: i tuoi file e le tue chiavi restano sul tuo disco.</p>
+<p>Tre cose da sapere subito, prima di qualsiasi altra istruzione:</p>
+<ul>
+  <li><b>È un'intelligenza artificiale e può sbagliare.</b> Le risposte e i file che scrive sono generati da un modello. Prima di fidarti di una modifica, guardala: il pulsante <span class="kbd">Δ</span> mostra riga per riga cosa è cambiato nel turno, e la freccia <span class="kbd">↶</span> torna indietro.</li>
+  <li><b>Ogni turno si paga al provider che hai scelto</b> (salvo i modelli marcati «gratis»). In Opzioni → Budget puoi mettere un tetto di spesa, e in Opzioni → Modello un tetto di tempo e di passi: serve a non ritrovarti un conto che non volevi.</li>
+  <li><b>Non è una gabbia di sicurezza.</b> Orchestra chiede il permesso per uscire dalla cartella di lavoro e per l'automazione di mouse e tastiera, ma un programma che le consenti di eseguire può fare quello che quel programma sa fare. Le regole sono in <a href="#tool">Cosa può fare l'agente</a>.</li>
+</ul>
+<p>Serve una chiave di almeno un servizio di modelli (OpenRouter, Groq, NVIDIA, Google, oppure un modello che gira in locale): la incolli in <b>Opzioni → Servizi</b>.</p>
+</section>
+
 <section id="avvio">
-<h2>Avvio rapido</h2>
-<p>Orchestra è un orchestratore agentico locale, senza dipendenze esterne per il core (stdlib Python). Oltre alla CLI, ha una <strong>web UI</strong> con chat, tool stream, benchmark, onboarding, goal persistente.</p>
-<div class="box">
-<pre><code>cp orchestra/.env.example orchestra/.env
-# imposta provider (OPENROUTER_API_KEY, ORCHESTRA_MODEL, …)
-python3 -m orchestra.cli doctor
-python3 -m orchestra.cli web                # http://127.0.0.1:8737
-python3 -m orchestra.cli chat               # sessione CLI
-python3 -m orchestra.cli web --no-browser   # senza aprire browser</code></pre>
+<h2>Aprire Orchestra</h2>
+<p>Se hai usato l'installer, sul Desktop c'è la scorciatoia <b>Avvia Orchestra</b>: doppio clic, e il browser si apre da solo. Non serve il terminale.</p>
+<ul>
+  <li>Se la apri quando il server è <b>già acceso</b>, ti chiede cosa vuoi fare: <b>Apri</b> la finestra esistente, <b>Riavvia</b>, oppure <b>Ferma</b> il server.</li>
+  <li>L'indirizzo è <code>http://127.0.0.1:8737</code>. Se il browser dice che la pagina non è raggiungibile, il server è spento: riapri <b>Avvia Orchestra</b>.</li>
+  <li>Per chiuderlo del tutto usa <b>Ferma</b> dalla stessa scorciatoia. Due copie accese insieme danno un comportamento strano (risposte che vanno e vengono): tienine una sola.</li>
+</ul>
+<div class="nota"><b>Per riconoscere un server vivo:</b> apri <code>/docs</code>, cioè questa guida. Se si apre, il server c'è e risponde.</div>
+</section>
+
+<section id="primi-passi">
+<h2>I primi minuti</h2>
+<p>Alla prima apertura compare la domanda <b>«Per cosa stai usando Orchestra oggi?»</b>. Scegli la tessera che somiglia di più al tuo lavoro (scrivere codice, sistemare un errore, un sito, dei dati, una ricerca, un'automazione…) e Orchestra imposta da sola il servizio, il modello e gli strumenti adatti. Non è definitivo: tutto si cambia dai menu in alto.</p>
+<ul>
+  <li>La domanda compare <b>solo la prima volta</b>. «Salta» la nasconde per sempre; il pulsante <b>Cosa fai?</b> in alto la riapre quando vuoi.</li>
+  <li>Poi scrivi il compito nel campo in basso e premi <span class="kbd">Invio</span>. <span class="kbd">Shift+Invio</span> va a capo senza inviare.</li>
+  <li>La prima volta che premi Invio può comparire la richiesta di mostrare le notifiche: serve solo ad avvisarti quando un turno lungo finisce mentre guardi un'altra scheda. Puoi dire no, e non perdi niente.</li>
+</ul>
+<p>Se non hai ancora una chiave, Orchestra te lo dice invece di fallire in silenzio: apri <b>Opzioni → Servizi</b>, incolla la chiave del servizio che hai scelto, salva. Da quel momento il menu del modello in alto si popola.</p>
+</section>
+
+<section id="schermata">
+<h2>Cosa c'è sullo schermo</h2>
+<p>Dall'alto: una barra con le azioni, la conversazione, e in fondo il campo dove scrivi. La barra laterale (pulsante <span class="kbd">☰</span>, oppure <span class="kbd">Ctrl+B</span>) contiene la cronologia, i progetti, la memoria, le skill e le tracce.</p>
+<div class="grid">
+  <div class="box">
+    <h3>In alto a sinistra</h3>
+    <p><b>☰</b> apre la barra laterale. <b>↶</b> annulla l'ultima modifica ai file. <b>Δ</b> mostra le modifiche del turno. <b>Piano</b> è un interruttore: acceso, l'agente legge e propone invece di modificare.</p>
+  </div>
+  <div class="box">
+    <h3>I pannelli</h3>
+    <p><b>Opzioni</b> (chiavi, modello, limiti, bot, remoto), <b>Obiettivo</b> (lavoro autonomo), <b>Cron</b> (lavori programmati), <b>MCP</b> (strumenti esterni), <b>Cosa fai?</b> (la domanda iniziale), <b>Docs</b> (questa guida), <b>Consiglio</b> (più pareri su una decisione).</p>
+  </div>
+  <div class="box">
+    <h3>Chi risponde</h3>
+    <p>Il menu <b>identità</b> sceglie chi sta lavorando: «agente principale» oppure uno dei tuoi bot. Poi <b>scopo</b> (che lavoro stai facendo, e Orchestra sceglie il modello adatto), <b>servizio</b>, <b>modello</b> e <b>reasoning</b> (quanto «pensare» prima di rispondere).</p>
+  </div>
+  <div class="box">
+    <h3>In fondo</h3>
+    <p><b>📎</b> allega un file, <b>✓</b> attiva un controllo automatico sul risultato, il campo di testo, il pallino (verde = pronto, giallo = al lavoro) e <b>→</b> per inviare. Accanto, se disponibile, c'è il microfono per dettare.</p>
+  </div>
 </div>
-<p>Comandi GUI: <code>python3 kill_ports.py 8737</code>, poi <code>python3 -m orchestra.cli web</code>.</p>
 </section>
 
-<section id="config">
-<h2>Configurazione</h2>
-<p>La configurazione vive in <code>orchestra/.env</code> e resta solo sul tuo computer:</p>
+<section id="opzioni">
+<h2>Il pannello Opzioni</h2>
+<p>È la stanza dei comandi. Le sezioni sono elencate dentro il pannello; qui sotto trovi cosa fa ognuna e cosa toccare.</p>
+
+<h3>Modello</h3>
+<p>Servizio e modello in uso (gli stessi menu che hai in alto), il <b>profilo strumenti</b> (quanti e quali strumenti dare all'agente: <i>pieno</i> = tutti, <i>base</i> = file, comandi e calcoli, <i>ricerca</i> = base più web e memoria, <i>skill</i> = anche le procedure salvate, <i>auto</i> = deciso dall'input), il livello di <b>reasoning</b> e due tetti:</p>
 <ul>
-  <li><code>ORCHESTRA_PROVIDER=openrouter|nous|groq|nvidia|anthropic|...</code></li>
-  <li><code>ORCHESTRA_MODEL=...</code></li>
-  <li>chiavi provider (<code>OPENROUTER_API_KEY</code>, <code>NOUS_API_KEY</code>, …)</li>
-  <li><code>ORCHESTRA_ROOT</code> / <code>ORCHESTRA_HOME</code> (root task e dati)</li>
+  <li><b>Max iterazioni</b>: quanti passi può fare un turno prima di fermarsi (1–200). Un passo è «chiamo il modello, eseguo quello che chiede»: un compito semplice ne consuma due o tre, uno che legge, modifica e verifica può arrivare a venti.</li>
+  <li><b>Tempo massimo per turno (min)</b>: oltre quel tempo il turno si chiude, e i comandi non ancora eseguiti vengono annullati invece di partire a metà. <b>0 significa nessun limite</b>. Il valore è espresso in minuti, quindi «15» e non «900»: è lo stesso limite, scritto come lo pensi.</li>
 </ul>
-<p>Nous può connettersi via OAuth device-code (<code>python3 -m orchestra.cli auth nous</code>), senza incollare chiavi.</p>
+<p class="dim">Entrambi i tetti si applicano subito, senza riavviare, e restano salvati per la volta dopo. Vanno di pari passo con il Budget: le iterazioni limitano i passi, il tempo limita l'attesa, il budget limita la spesa.</p>
+
+<h3>Identità</h3>
+<p>Nome e istruzioni personali dell'<b>agente principale</b> (quello che risponde quando non è attivo un bot). La persona è testo libero — ruolo, tono, cosa tenere presente — e viene aggiunta <b>dopo</b> le regole di sistema, quindi non può disattivare divieti o permessi. Il nome sostituisce «agente principale» nel menu in alto. Svuotare i campi e salvare riporta tutto come prima.</p>
+
+<h3>Budget</h3>
+<p>Tetti di spesa per <b>task</b> (token, costo in dollari, iterazioni) e per <b>sessione</b> (token, costo, numero di richieste). Sotto «Budget globali (giorno/mese)» ci sono i tetti complessivi di costo: quando sono raggiunti Orchestra si ferma e te lo dice, invece di continuare a spendere. Zero in un campo significa «nessun limite».</p>
+
+<h3>Skill</h3>
+<p>Le procedure che l'agente può seguire quando il compito lo richiede. Ce ne sono di due tipi: <b>imparate dall'agente</b> (scritte durante un lavoro, con le prove allegate perché tu possa controllarle) e <b>scaricate</b> (importate da una cartella di store: scrivi il percorso e premi <b>Importa</b>). Un filtro cerca per nome, categoria o descrizione; aprendo una skill la leggi per intero prima di fidartene.</p>
+
+<h3>Cestino</h3>
+<p>Le skill cancellate finiscono qui: le vedi, le rimetti, oppure le elimini davvero con <b>Cancella tutto</b>. Nessuna cancellazione è definitiva senza questo secondo passaggio.</p>
+
+<h3>Servizi</h3>
+<p>Le chiavi dei servizi: OpenRouter, Groq, NVIDIA, Google e i modelli che girano sul tuo computer. Una chiave salvata non viene mai rimostrata: vedi solo se c'è e le ultime quattro cifre. Restano in <code>orchestra/.env</code>, sul tuo disco, e non vengono mai stampate nei messaggi né nei log.</p>
+
+<h3>Permessi</h3>
+<p>Cosa è stato concesso all'agente e cosa no. Il pulsante <b>Prova il canale</b> fa comparire una domanda di prova: così scopri qui, senza spendere un token, se la finestra dei permessi funziona. Le cartelle di sistema non sono autorizzabili.</p>
+
+<h3>Gratis</h3>
+<p>Dove si trovano i modelli gratuiti e come usarne uno che gira in locale. Un modello locale non costa nulla, ma richiede un programma che lo faccia girare sulla tua macchina: Orchestra ti dice cosa manca.</p>
+
+<h3>Diagnosi</h3>
+<p>Quattro controlli che girano dal server, con l'output sotto: <b>doctor</b> (configurazione e connessione), <b>model-list</b> (modelli supportati), <b>bench-show</b> (task del benchmark), <b>dipendenze</b> (cosa manca tra i componenti opzionali). È il primo posto dove guardare quando «non funziona niente».</p>
+
+<h3>Remoto</h3>
+<p>Per usare Orchestra dal telefono: token, indirizzo e un codice QR da inquadrare, con i pulsanti per avviare il server remoto in LAN o il tunnel pubblico. Il dettaglio è in <a href="#remoto">Dal telefono</a>.</p>
+
+<h3>Avvio automatico</h3>
+<p>Un interruttore che fa partire il server al login di Windows, senza privilegi di amministratore. Comodo se vuoi rispondere dal telefono senza accendere il computer a mano. Spegnilo se preferisci decidere tu quando parte.</p>
+
+<h3>Bot</h3>
+<p>Le identità alternative: nome, servizio, modello, persona, progetto e conversazione propri, più i limiti di cosa possono fare. Vedi <a href="#bot">Bot</a>.</p>
+
+<h3>Benchmark</h3>
+<p>Apre un pannello che misura cosa sa fare ogni modello, per categoria, su task veri. <b>Costa token reali</b> (i modelli marcati <code>:free</code> no). I risultati servono anche al menu «Automatica a ogni messaggio»: acceso, Orchestra sceglie il modello in base a cosa ha misurato. Sceglierne uno a mano dal menu in alto spegne quell'automatismo.</p>
 </section>
 
-<section id="modelli">
-<h2>Modelli & provider</h2>
-<p>Il selettore modello in UI aggiorna il modello senza riavviare il server. Un provider/scambio a metà turno è respinto (409) per coerenza della conversazione.</p>
-<ul>
-  <li>Elenco filtrabile per provider/free/categoria.</li>
-  <li>Switch provider aggiorna anche fallback chain (non solo provider attivo).</li>
-  <li>Verifica versione servita e se il backend la supporta (pricing, tool calling).</li>
-</ul>
+<section id="conversazione">
+<h2>Parlare con l'agente</h2>
+
+<h3>Guidare un lavoro già in corso</h3>
+<p>Mentre il modello lavora, sopra il campo di scrittura compare la barra <b>Steer</b>. Quello che scrivi non ferma il turno: viene consegnato al modello alla prima occasione utile, cioè subito dopo lo strumento in corso, prima della chiamata successiva. Serve a correggere la direzione («no, usa la cartella vecchia», «prima fai i test») senza ricominciare da capo. Massimo cinque messaggi per turno, 2000 caratteri ciascuno. Fuori da un turno viene rifiutato, per non finire sulla domanda successiva.</p>
+
+<h3>Fermare un turno</h3>
+<p>Il pulsante <b>■</b> accanto a Invia ferma il turno. Il controllo avviene prima di ogni comando: se il modello ne aveva chiesti dieci e ne sono partiti tre, i sette rimanenti ricevono «annullato» e la sequenza resta pulita. Il turno si chiude come annullato, e lo vedi nelle Tracce.</p>
+
+<h3>Allegare file</h3>
+<p>Con <b>📎</b> puoi passare immagini, PDF, testo e documenti Office (<code>.docx</code>, <code>.xlsx</code>, <code>.pptx</code>). Di un foglio Excel si legge il valore calcolato e il nome del foglio; di una presentazione, le diapositive in ordine. Il limite per file è 12 MB, e prima dell'invio Orchestra ti dice quanto costerà in token: un allegato grande si paga.</p>
+
+<h3>Dettatura vocale</h3>
+<p>Il microfono compare accanto al campo quando il tuo browser lo permette. Parla, e il testo finisce nel campo; puoi correggerlo prima di inviare. Nei browser senza riconoscimento vocale l'audio viene trascritto dal server, se è installato il componente apposito (Opzioni → Diagnosi → dipendenze te lo dice).</p>
+
+<h3>Chiedere una verifica oggettiva</h3>
+<p>Il pulsante <b>✓</b> si accende e chiede: che tipo di controllo, su quale file. I controlli sono verificabili senza interpretazione — il file esiste e non è vuoto, ha una lunghezza minima, contiene certi pezzi, il JSON ha certi campi, la somma di un campo torna. Se il controllo non passa, Orchestra rimanda il modello al lavoro con il motivo esatto, fino a tre volte. Si accende e si spegne: da spento il turno gira normale.</p>
+
+<h3>Fine turno</h3>
+<p>Quando il turno finisce arriva un riepilogo: esito in parole, durata, file toccati con righe aggiunte e tolte, token e costo stimato. Compare come riga in chat; se stai guardando un'altra scheda diventa una notifica di sistema. Lo stesso riepilogo resta disponibile all'indirizzo <code>/api/riepilogo</code>.</p>
 </section>
 
-<section id="onboarding">
-<h2>Onboarding web</h2>
-<p>Modal “Cosa fai con Orchestra?” compare solo alla prima apertura. Sceglie ambito, profilo strumenti e prompt iniziale (repository, sito web, dati, app, docs, automazione, debug, ricerca, pianificazione, design, ecc.).</p>
+<section id="file">
+<h2>Modifiche ai file e undo</h2>
+<p>Ogni scrittura lascia un punto di ripristino nella cartella dati di Orchestra, non nel progetto: così non sporca i diff e le ricerche del tuo repository.</p>
 <ul>
-  <li>Pulsante header “Cosa fai?” riapre sempre (anche dopo “Salta”).</li>
-  <li>Applicazione: profilo → scope → prompt draft → invio.</li>
-  <li>Scegliere una categoria e compilare i dettagli crea un vero goal (thread in background) e apre il pannello Obiettivo per seguire il progresso.</li>
-  <li>Persistenza del flag salta via <code>localStorage</code>.</li>
+  <li><b>Δ</b> mostra le modifiche del turno: un blocco per file, con righe aggiunte e tolte, e lo stato (nuovo, modificato, cancellato). Si guarda prima, si decide dopo.</li>
+  <li><b>↶</b> annulla l'ultima modifica. Un clic torna alla versione precedente, due clic indietro di due scritture; un file creato da zero viene rimosso. Il registro tiene le ultime 30 scritture.</li>
+  <li>I file sopra 5 MB non vengono copiati: l'undo te lo dice, invece di saltare in silenzio a una modifica più vecchia e lasciarti credere di essere tornato dove volevi.</li>
 </ul>
+<div class="nota"><b>Se hai fretta:</b> l'undo è la rete di sicurezza, non un backup. Per i lavori importanti, committa prima di far toccare i file all'agente.</div>
 </section>
 
 <section id="progetti">
 <h2>Progetti</h2>
-<p>La sidebar ha un selettore “Progetto” che filtra memoria e cronologia per progetto. All'avvio Orchestra rileva il progetto attivo dalla directory di lavoro; il selettore si aggiorna automaticamente (refresh non azzera più il progetto attivo).</p>
+<p>Un progetto non è un'etichetta: è la <b>cartella in cui l'agente scrive</b>, e quindi il confine di sicurezza. Il selettore «Attivo» nella barra laterale cambia subito la cartella; il pulsante <b>Gestione</b> serve ad aggiungerne altri (nome e percorso) o a toglierli.</p>
 <ul>
-  <li>Aggiungi/gestisci progetti dal modal (pulsante nella sidebar): nome + directory.</li>
-  <li>Il progetto attivo determina quali fatti di memoria e conversazioni vengono considerati.</li>
-  <li>Persistenza in <code>ORCHESTRA_HOME/progetti.json</code>.</li>
+  <li>All'avvio Orchestra riconosce il progetto dalla cartella da cui è partita.</li>
+  <li>Scegliere un progetto cambia anche quali conversazioni e quali fatti di memoria vedi: ogni progetto ha i suoi.</li>
+  <li>Se l'agente riconosce il nome di un altro progetto in una frase, lo propone: il menu si aggiorna, non viene sovrascritto di nascosto.</li>
+</ul>
+
+<h3>Istruzioni del progetto</h3>
+<p>Prima di lavorare, Orchestra legge le convenzioni del repository: <code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>.cursorrules</code> e <code>.github/copilot-instructions.md</code> nella radice del progetto attivo. Il testo entra nel prompt <b>dopo</b> le regole di sicurezza, che restano prioritarie; oltre 8000 caratteri viene troncato e te lo dichiara.</p>
+</section>
+
+<section id="tool">
+<h2>Cosa può fare l'agente</h2>
+<p>Legge e scrive file, cerca nel progetto, esegue comandi, naviga il web, genera immagini, apre un browser, ragiona su dati. Gli strumenti disponibili dipendono dal <b>profilo</b> scelto in Opzioni → Modello: <b>pieno</b> li dà tutti, <b>base</b> solo file, comandi e calcoli, <b>ricerca</b> aggiunge web e memoria, <b>skill</b> aggiunge le procedure salvate, <b>auto</b> decide in base a cosa scrivi.</p>
+
+<h3>La cartella di lavoro è un confine</h3>
+<p>Dentro il progetto l'agente lavora liberamente. Fuori, no: compare una domanda con quattro scelte — <b>Solo questa volta</b>, <b>Per questa sessione</b> (due ore), <b>Sempre</b>, <b>Mai</b>. Le cartelle di sistema non sono autorizzabili e vengono negate senza domanda. «Mai» resta ricordato e si revoca da Opzioni → Permessi.</p>
+<p>I file di credenziali (<code>.env</code>, <code>.ssh</code>, <code>id_rsa</code>, <code>.git/config</code>) sono negati agli strumenti <b>anche dentro</b> la cartella di lavoro. I modelli di esempio (<code>.env.example</code>) restano leggibili.</p>
+
+<h3>Modalità piano</h3>
+<p>Il pulsante <b>Piano</b> in alto inverte il comportamento: gli strumenti che modificano qualcosa — scritture, comandi, test, cron, MCP — restano fermi, e l'agente deve prima leggere, poi proporre i passi. Il piano arriva in una finestra con <b>Approva il piano</b> e <b>Rifiuta</b>; l'approvazione vale per quel turno e non per quelli dopo, e un rifiuto con una nota torna al modello come indicazione. Serve quando vuoi vedere l'idea prima che diventi file.</p>
+
+<h3>Automazione di browser e computer</h3>
+<p>L'agente può aprire una pagina e leggerne il contenuto, fare uno screenshot e guardarlo davvero, cliccare e scrivere in un browser. Usa solo componenti già presenti nel sistema (Chrome o Edge). L'automazione di mouse e tastiera sul computer richiede un permesso esplicito ed è spenta finché non la abiliti.</p>
+
+<h3>Quando una pagina web mente</h3>
+<p>Il testo che arriva dal web è racchiuso tra marcatori «contenuto non fidato», con l'avviso di trattarlo come dato e non come istruzione. Se una pagina ti dice di eseguire comandi, l'agente deve segnalartelo, non obbedire. Non è una difesa perfetta, ma distingue «me l'hai chiesto tu» da «l'ha scritto un sito».</p>
+
+<h3>Se serve un chiarimento</h3>
+<p>L'agente può fermarsi a chiederti: compare una finestra con la domanda e un campo libero, e il turno aspetta. La domanda scade dopo cinque minuti. Se non c'è nessuno collegato (per esempio in un lavoro in background), lo strumento lo dice subito e il modello deve dichiarare l'ipotesi che ha scelto.</p>
+</section>
+
+<section id="obiettivi">
+<h2>Obiettivi autonomi</h2>
+<p>Un <b>obiettivo</b> è un compito che gira da solo, con il suo stato, e che puoi seguire mentre fai altro. Pulsante <b>Obiettivo</b> in alto: scrivi la frase, premi <b>Avvia</b>. Il pannello mostra stato, esito e ultimo output; cliccando una riga vedi i dettagli.</p>
+<ul>
+  <li><b>Prossimo</b> esegue a mano il prossimo obiettivo pronto. <b>Coda: off/on</b> accende lo scheduler, che li prende da solo uno alla volta. È spenta di default perché spende token veri senza che tu prema niente.</li>
+  <li>Nelle opzioni avanzate (collassate) puoi dare priorità, dipendenze (parte solo quando gli altri sono finiti), numero di tentativi, un tetto di iterazioni e <b>criteri di accettazione</b>: regole verificabili sul risultato, per esempio «il file report.md contiene la parola totale».</li>
+  <li>Un <b>piano</b> è un contenitore: non esegue nulla, si chiude quando i figli hanno finito.</li>
+  <li>Senza criteri, un obiettivo è <b>done</b> solo se c'è una risposta finale non vuota. Un'esecuzione che si ferma a metà non viene spacciata per riuscita.</li>
+  <li>Un obiettivo che dipende da altri non parte nemmeno se lo avvii a mano; le dipendenze circolari vengono rifiutate.</li>
 </ul>
 </section>
 
-<section id="istruzioni-progetto">
-<h2>Istruzioni del progetto e undo</h2>
-<p>Prima di lavorare, Orchestra legge le convenzioni del repository: <code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>.cursorrules</code> e <code>.github/copilot-instructions.md</code> nella radice del progetto attivo. Il testo entra nel prompt dopo le regole di sicurezza, che restano prioritarie; oltre 8000 caratteri viene troncato e lo dichiara.</p>
-<p>Ogni scrittura di <code>write_file</code> e <code>edit_file</code> lascia un checkpoint nella cartella dati (non nel progetto, per non sporcare diff e ricerche). Il pulsante <strong>&#8630;</strong> in alto annulla l'ultima modifica: un clic torna alla versione precedente, due clic tornano indietro di due scritture, e un file creato da zero viene rimosso. Il registro tiene le ultime 30 scritture; i file sopra 5 MB non vengono copiati e l'undo lo dice invece di saltare a una modifica piu' vecchia.</p>
-</section>
-
-<section id="ui">
-<h2>Interfaccia web</h2>
-<div class="grid">
-  <div class="box">
-    <h3>Chat streaming</h3>
-    <p>Eventi real-time, tool richiudibili, contatori token, annulla, nuova conversazione, ragionamento separato.</p>
-  </div>
-  <div class="box">
-    <h3>Opzioni</h3>
-    <p>Servizio/modello, chiavi, budget, skill, permessi, servizi gratuiti, dipendenze.</p>
-  </div>
-  <div class="box">
-    <h3>Goal bar</h3>
-    <p>Input obiettivo + Avvia/Prossimo/Stop. Le opzioni avanzate (profilo, kind, priorità, dipendenze, max iterazioni, criteri, recovery) sono collassate. All'avvio il pannello si apre da solo e fa polling ogni 2s; cliccando una riga si vede l'ultimo output e il gate (ok/bocciato/parziale/in attesa).</p>
-  </div>
-  <div class="box">
-    <h3>Steer</h3>
-    <p>Mentre il modello lavora, la barra Steer compare sopra il campo di scrittura: il messaggio che invii viene consegnato al modello <b>subito dopo</b> il tool o il ragionamento in corso, senza fermare il turno. Utile per correggere la rotta senza ricominciare.</p>
-  </div>
-  <div class="box">
-    <h3>Stop</h3>
-    <p>Il pulsante <b>■</b> accanto a Invia ferma il turno. Il cancel viene controllato a ogni iterazione e prima di ogni tool: i tool non ancora eseguiti ricevono un risultato "cancellato" e il turno si chiude pulito, senza lasciare buchi nella sequenza.</p>
-  </div>
-  <div class="box">
-    <h3>Docs</h3>
-    <p>Pulsante Docs apre questa guida in nuova tab.</p>
-  </div>
-  <div class="box">
-    <h3>Tracce</h3>
-    <p>La sidebar (pulsante 📼) elenca gli ultimi turni con l’esito in parole — «completato», «fermato al limite», «annullato», «budget finito», «girava a vuoto», «troppi errori», «verifica fallita», «solo parole, niente fatti», «fermato su un annuncio». Cliccando una riga si apre un modale con la sequenza esatta degli eventi: serve per capire <em>perché</em> un turno è andato com’è andato, senza ripeterlo.</p>
-  </div>
-</div>
-</section>
-
-<section id="steer">
-<h2>Steer e Stop</h2>
-<p>Due modi per intervenire su un turno <b>mentre</b> il modello lavora, senza aspettare che finisca.</p>
-
-<h3>Steer — correggere la rotta a metà lavoro</h3>
-<p>La barra Steer compare sopra il campo di scrittura solo durante un turno attivo. Quello che scrivi viene messo in coda e consegnato al modello <b>alla prima occasione utile</b>: subito dopo il tool o il ragionamento in corso, prima della chiamata successiva al modello.</p>
+<section id="cron">
+<h2>Cron (lavori programmati)</h2>
+<p>Pulsante <b>Cron</b>: programmi un lavoro perché parta da solo, ogni tanto o a un'ora precisa. La frequenza si sceglie da un menu in parole — ogni 5, 10 o 30 minuti, ogni ora, due volte al giorno, una volta al giorno, a un orario, oppure un'espressione cron scritta a mano.</p>
 <ul>
-  <li>Il turno <b>non</b> viene interrotto: lo steer si innesta nel flusso esistente.</li>
-  <li>Limite di 5 messaggi steer per turno, 2000 caratteri ciascuno.</li>
-  <li>Se il modello stava per concludere, lo steer lo fa riprendere.</li>
+  <li>Il lavoro può essere un <b>obiettivo</b> oppure un <b>comando</b> da eseguire.</li>
+  <li>Lo scheduler parte con il server e riprende dopo un riavvio: i lavori sono salvati su disco.</li>
+  <li>Puoi accenderlo e spegnerlo dal pannello, ed eseguire un lavoro subito per provarlo.</li>
 </ul>
-
-<h3>Stop — fermare il turno</h3>
-<p>Il pulsante <b>■</b> accanto a Invia ferma il turno in corso. Il controllo di cancellazione avviene a ogni iterazione e <b>prima di ogni tool</b>: se il modello aveva chiesto dieci tool e ne hai eseguiti tre, i sette rimanenti ricevono un risultato "cancellato" e la sequenza resta valida.</p>
-<p>Il turno si chiude come annullato, senza lasciare tool_call senza risultato.</p>
 </section>
 
-<section id="tooling">
-<h2>Tool & profili</h2>
-<p>I tool sono separati da profili per evitare token sprecati. `pieno` riattiva tutto. Profili: <code>base</code>, <code>ricerca</code>, <code>skill</code>, <code>pieno</code> o <code>auto</code>.</p>
-<pre><code>PROFILI = {
-  "base": read/write/list/run_shell/calc + memoria,
-  "ricerca": base + web_cerca/web_leggi + storico,
-  "skill": skill tools,
-  "pieno": tutti i tool registrati
-}</code></pre>
-<p>Tool aggiunti: browser (<code>browser_apri</code>, <code>browser_render</code>, <code>browser_screenshot</code>), computer (<code>computer_screenshot</code>, <code>computer_click/type/open</code>), web, shell, memoria, skill, storico, goal via API/UI non tool. <code>read_file</code> supporta <code>start_line</code>/<code>end_line</code> per intervalli precisi; <code>web_leggi</code> tronca alle prime N righe.</p>
-<p>Il testo che arriva da <code>web_cerca</code>, <code>web_leggi</code> e <code>browser_render</code> è racchiuso tra <code>&lt;&lt;&lt;INIZIO CONTENUTO NON FIDATO&gt;&gt;&gt;</code> e <code>&lt;&lt;&lt;FINE CONTENUTO NON FIDATO&gt;&gt;&gt;</code>, con un avviso che lo dichiara materiale esterno: se dentro c'è scritto di eseguire comandi o ignorare le regole, il modello deve trattarlo come dato e segnalarlo. Non è una difesa completa — nessun delimitatore lo è — ma toglie l'ambiguità tra «l'utente ha chiesto questo» e «una pagina ha scritto questo».</p>
-<p><code>ask_user</code> fa una domanda di chiarimento e aspetta la risposta dentro lo stesso turno: la modale blocca come quella dei permessi, ma il campo e' libero e le opzioni suggerite sono scorciatoie. Se non c'e' nessuno collegato (CLI, benchmark) il tool lo dice subito e il modello deve dichiarare l'ipotesi scelta. La domanda scade dopo cinque minuti.</p>
-<p>Per orientarsi nel progetto ci sono <code>search_text</code> (contenuto, restituisce <code>file:riga: testo</code>) e <code>find_files</code> (nomi e percorsi con glob). Sono in ogni profilo: cercare non è una capacità da sbloccare, è il modo normale di non indovinare. Entrambi saltano <code>.git</code>, le dipendenze (<code>node_modules</code>, <code>.venv</code>) e i file di credenziali, e si fermano a un tetto di file dicendolo, invece di bloccare il turno.</p>
-<p>La <b>modalità piano</b> (bottone <code>Piano</code> in testa) inverte il default: i tool che modificano — scritture, shell, test, cron, MCP — sono bloccati, e l'agente deve prima leggere e poi proporre i passi con <code>proponi_piano</code>. Il piano arriva in una modale con «Approva il piano» e «Rifiuta»; l'approvazione vale per il turno in corso e non per quelli dopo, e un rifiuto con una nota torna al modello come indicazione da seguire. Senza nessuno collegato (CLI, benchmark) il piano non si può approvare: resta un piano scritto e il turno si chiude lì.</p>
-<p>Quando in un giro il modello chiede più tool di <b>sola lettura</b> (leggere file, cercare, elencare, analizzare) partono insieme, e la risposta arriva prima. Basta una scrittura perché tutto torni in fila: l'ordine delle chiamate è informazione, e due scritture sullo stesso file in parallelo sarebbero una corsa. L'elenco dei tool è esplicito, non dedotto dal nome.</p>
-<p>Il bottone <code>Δ</code> mostra le <b>modifiche del turno</b>: un blocco per file, con le righe aggiunte e tolte, e lo stato (nuovo, modificato, cancellato). È il complemento dell'undo: prima si guarda cosa è cambiato, poi si decide se tornare indietro.</p>
-<p>Gli allegati leggono anche <b>.docx</b>, <b>.xlsx</b> e <b>.pptx</b>: sono zip di XML, quindi si estraggono senza dipendenze. Di un foglio Excel si legge il valore calcolato e il nome del foglio; di una presentazione, le diapositive in ordine.</p>
-<p><code>analisi_python</code> legge la struttura di un file Python senza il corpo: <code>simboli</code> (funzioni e classi con firma e riga, annidate comprese), <code>import</code>, <code>chiamate</code> (con la funzione che le contiene, filtrabili con <code>nome</code>), <code>usi</code> di un nome, e <code>sintassi</code>. Serve a orientarsi in un file grande senza riempire il contesto di righe che non servono; non è un linter e riguarda solo Python.</p>
-<p><code>run_tests</code> esegue la suite col comando che il progetto dichiara — <code>tests/run_all.py</code>, pytest, <code>npm/pnpm/yarn/bun test</code>, <code>cargo test</code>, <code>go test</code>, <code>make test</code> — invece di indovinarlo, e riporta comando, exit code e output (accorciato al centro, non riscritto). Passa dagli stessi permessi di <code>run_shell</code>. Se non riconosce una suite lo dice e non inventa un comando.</p>
-<p>I file di credenziali (<code>.env</code>, <code>.ssh</code>, <code>id_rsa</code>, <code>.git/config</code>) sono negati agli strumenti <strong>anche dentro la cartella di lavoro</strong>, non solo fuori. I template (<code>.env.example</code>) restano leggibili.</p>
-<p><code>image_gen</code> genera un'immagine da un prompt con OpenAI Images, Google Gemini o OpenRouter usando la chiave già configurata, la salva in <code>immagini/</code> e ne mostra l'anteprima nel riquadro del tool. Con <code>provider="openrouter"</code> si sceglie uno qualsiasi dei modelli immagine del catalogo tramite <code>modello</code>; <code>elenco_modelli=true</code> elenca gli slug disponibili senza generare. Con <code>riferimento</code> modifica un'immagine esistente (percorso, data URL, oppure <code>ultimo</code> per l'allegato appena inviato). La generazione è a pagamento sul provider: per generare senza costo per immagine serve un modello locale (skill <code>invokeai</code>).</p>
+<section id="consiglio">
+<h2>Consiglio di advisor</h2>
+<p>Pulsante <b>Consiglio</b>: sottopone una decisione a più «advisor» che ne discutono in round successivi, e alla fine un presidente tira le somme con un verdetto. Scegli la decisione, il numero di round (due o tre) e quali advisor far parlare. La trascrizione e il verdetto si salvano nella cartella <code>sessions/</code> e si scaricano in PDF.</p>
+<p class="dim">La forma del tavolo e dei round è ispirata al progetto open source «Roast Room»: citazione dovuta agli autori.</p>
 </section>
 
 <section id="bot">
 <h2>Bot</h2>
-<p>Un bot è un'identità salvata: nome, servizio, modello, persona, progetto e conversazione propri. Si crea da <b>Opzioni → Bot</b> o dal menu identità in testa. Servizio e modello vuoti significano "come l'app"; il progetto è un default modificabile per bot.</p>
+<p>Un bot è un'<b>identità salvata</b>: nome, servizio, modello, persona, progetto e conversazione propri. Si crea da <b>Opzioni → Bot</b> o dal menu identità in testa. Servizio e modello vuoti significano «come l'app»: il bot segue la configurazione principale finché non gliene dai una sua.</p>
 <ul>
-  <li>Ogni bot ha una sessione separata e una cronologia etichettata col suo nome: aprire la conversazione di un altro bot richiede di attivarlo.</li>
-  <li>Da <b>Opzioni → Bot</b> si avvia un compito in background: il bot lavora senza cambiare l'identità attiva. Bot diversi avanzano in parallelo, ognuno nella propria cartella; lo stesso bot esegue un compito alla volta e accoda gli altri (max 20). Puoi cambiare bot mentre uno lavora: il turno continua nella sua sessione e lo ritrovi quando torni. La coda vive in <code>lavori.db</code>: un riavvio non la perde, e i lavori in attesa ripartono (vedi <b>Lavori durevoli</b>). La conversazione già svolta resta.</li>
-  <li><code>bot_chiedi</code> permette a un bot di chiedere a un altro, con risposta sincrona. Profondità massima 1 e allowlist <code>parla_con</code>: vuota significa che il bot non può parlare con nessuno.</li>
-  <li><b>Policy del bot.</b> In <b>Opzioni → Bot</b>: <i>Tool consentiti</i> (vuota = quelli del profilo), <i>Tool vietati</i>, <i>Shell consentita</i> (nomi di programma) e <i>Shell vietata</i> (sottostringhe). Si applica <b>dopo</b> il profilo: restringe, non allarga; il divieto vince sull'allowlist. Anche i tool runtime (<code>bot_chiedi</code>, <code>proponi_merge</code>) seguono la stessa lista: per far chiedere un bot ad altri, aggiungi <code>bot_chiedi</code>.</li>
-  <li>La shell consentita confronta il primo programma di ogni sezione (<code>;</code>, <code>&amp;&amp;</code>, <code>|</code>, newline). Con l'allowlist attiva le sostituzioni <code>$(...)</code>, i backtick e <code>&lt;(...)</code> sono rifiutati anche dentro le virgolette doppie; le virgolette singole le rendono testo. Un figlio nato da <code>delega</code> eredita la policy del padre.</li>
-  <li>La policy è <b>in-process</b>, non una sandbox del sistema operativo: un programma consentito (per esempio <code>python</code>) può fare tutto quello che sa fare. <code>run_shell</code> risponde <code>NON ESEGUITO</code> con la regola violata.</li>
-  <li>Non sono processi separati: condividono chiavi, permessi e processo, quindi non sono una sandbox. Non si svegliano da soli: un lavoro parte quando l'utente lo avvia (o quando un altro bot lo chiama).</li>
+  <li>Ogni bot ha una sessione e una cronologia separate, etichettate col suo nome: passare da un bot all'altro non perde la conversazione.</li>
+  <li>Puoi affidargli un <b>compito in background</b> senza cambiare identità: vedi <a href="#lavori">Lavori in background</a>.</li>
+  <li><b>Parla con</b> decide a chi un bot può chiedere aiuto: vuoto significa nessuno. Un bot che chiede a un altro aspetta la risposta dentro il proprio turno; la profondità è limitata a un livello, quindi il destinatario non può richiamare.</li>
 </ul>
+
+<h3>Cosa può fare un bot</h3>
+<p>Quattro liste in Opzioni → Bot: <b>Tool consentiti</b> (vuota = quelli del profilo), <b>Tool vietati</b>, <b>Shell consentita</b> (nomi di programma, vuota = tutti) e <b>Shell vietata</b> (sottostringhe). La regola si applica <b>dopo</b> il profilo: restringe, non allarga, e il divieto vince sul permesso. Con una shell consentita un comando composto viene controllato programma per programma, e le sostituzioni di comando vengono rifiutate.</p>
+<div class="nota"><b>Da sapere:</b> questi limiti sono regole interne, non una gabbia del sistema operativo. Un bot non è un processo separato: condivide le chiavi e i permessi di Orchestra, e un programma che gli consenti può fare quello che quel programma sa fare. Un bot non si sveglia da solo: riceve un turno quando glielo mandi tu o quando un altro bot lo chiama.</div>
 </section>
 
 <section id="lavori">
-<h2>Lavori durevoli</h2>
-<p>I compiti in background dei bot sono salvati in <code>lavori.db</code> nella cartella dati, non in memoria: un riavvio non svuota la coda.</p>
+<h2>Lavori in background</h2>
+<p>Da <b>Opzioni → Bot</b> scrivi un compito e premi <b>Avvia in background</b>. Il lavoro parte, il bot lavora nella sua sessione, e tu continui altrove. Bot diversi avanzano davvero in parallelo, ciascuno nella propria cartella; lo stesso bot fa un lavoro alla volta e accoda gli altri (massimo 20).</p>
 <ul>
-  <li>All'avvio i lavori <code>in_attesa</code> ripartono da soli, nello stesso ordine per bot.</li>
-  <li>Un lavoro trovato <code>in_corso</code> viene marcato <code>interrotto</code>, non rieseguito alla cieca: un turno a metà può aver già scritto file o speso token. Dal pannello Bot puoi riprovarlo o annullare quello in corso.</li>
-  <li>L'unità atomica è il turno intero: non si riprende a metà di una tool call. Il campo <code>checkpoint</code> è pronto per i consumatori che sanno ripartire da un passo.</li>
-  <li>Se il progetto del bot è un repository git con almeno un commit, ogni lavoro scrive in un <b>worktree isolato</b>: un checkout separato in <code>worktrees/</code> nella cartella dati, sul ramo <code>orchestra/lavoro-&lt;id&gt;</code>. La cartella aperta non viene toccata e due lavori sullo stesso progetto non si sovrappongono. Il checkout parte da HEAD: le modifiche non committate non vengono copiate.</li>
-  <li>Il pannello Bot mostra ramo e percorso; <b>Scarta checkout</b> elimina il checkout e le modifiche non committate del bot. I progetti non git lavorano nella cartella normale. Un repository git senza commit (o senza git disponibile) fa fallire il lavoro invece di ripiegare sulla cartella dell'utente: non c'è una base da cui partire. Il checkout è un vero albero di lavoro, quindi su repository grandi occupa spazio e tempo. <code>ORCHESTRA_WORKTREE=0</code> spegne l'isolamento; se il progetto è git e il checkout non si crea, il lavoro fallisce invece di ripiegare sulla cartella dell'utente. Eliminare un bot scarta i suoi checkout non ancora scartati.</li>
-  <li>Se le verifiche sono passate, il bot può chiamare <code>proponi_merge</code>: committa sul ramo isolato tutto ciò che ha lasciato nel checkout (i file ignorati restano fuori) e registra una proposta con riepilogo e verifica. Il pannello mostra <b>pronto per il merge</b> e il pulsante <b>Unisci</b>. Il merge resta una decisione dell'utente, non del bot.</li>
-  <li><b>Unisci</b> rifiuta un progetto con modifiche non committate e annulla il merge in caso di conflitto: il repository resta com'era. La verifica mostrata è quella dichiarata dal bot, non viene rieseguita automaticamente. Senza proposta resta il <code>git merge</code> manuale.</li>
-  <li>API: <code>GET /api/lavori</code>, <code>POST /api/lavori/riprova</code>, <code>POST /api/lavori/annulla</code>, <code>POST /api/lavori/scarta</code>, <code>POST /api/lavori/unisci</code>.</li>
+  <li>La coda vive in <code>lavori.db</code>, non in memoria: un riavvio non la perde, e all'avvio i lavori in attesa ripartono.</li>
+  <li>Un lavoro trovato a metà dopo un riavvio viene marcato <b>interrotto</b>, non rieseguito alla cieca: potrebbe aver già scritto file o speso token. Dal pannello lo riprovi o lo annulli.</li>
+  <li>L'unità è il turno intero: non si riprende a metà di un'operazione.</li>
+</ul>
+
+<h3>Dove scrive il bot</h3>
+<p>Se il progetto è un repository git con almeno un commit, ogni lavoro scrive in un <b>checkout isolato</b> (un albero di lavoro separato, su un ramo <code>orchestra/lavoro-…</code>): la cartella che hai aperta non viene toccata, e due lavori sullo stesso progetto non si pestano i piedi. Il pannello mostra ramo e percorso; <b>Scarta checkout</b> lo elimina insieme alle modifiche non committate del bot.</p>
+<ul>
+  <li>Il checkout parte dall'ultimo commit: le tue modifiche non committate non vengono copiate. Se il repository non ha commit, il lavoro fallisce invece di scrivere nella cartella aperta.</li>
+  <li>Se le verifiche sono passate, il bot può proporre di unire il suo lavoro: il pannello mostra <b>pronto per il merge</b> e il pulsante <b>Unisci</b>. Il merge è sempre una tua decisione, e in caso di conflitto il repository resta com'era.</li>
+  <li>La verifica mostrata è quella dichiarata dal bot: non viene rieseguita da sola. Se ti serve una certezza, guarda il diff prima di unire.</li>
+  <li>I progetti non git lavorano nella cartella normale. Su repository grandi il checkout occupa spazio e tempo.</li>
 </ul>
 </section>
 
 <section id="tracce">
 <h2>Tracce dei turni</h2>
-<p>Ogni turno lascia una traccia in <code>storico.db</code>: esito, modello, iterazioni, tool, token, durata e la sequenza degli eventi strutturali. Serve a rispondere a "perché quel task è andato così" senza rieseguirlo.</p>
+<p>Ogni turno lascia una traccia: esito, modello, iterazioni, strumenti usati, token, durata e la sequenza degli eventi. Serve a rispondere a «perché quel lavoro è andato così» senza rifarlo.</p>
 <ul>
-  <li>Nella sidebar <b>Tracce</b> ci sono le ultime 50. Il filtro per esito e <b>solo errori</b> viene applicato dal database, non dopo il taglio della lista: un turno fallito di ieri non sparisce dietro cinquanta turni riusciti di oggi.</li>
-  <li>Al click si apre il modale con la sequenza e l'offset di ogni evento; ogni riga si espande nel payload grezzo — argomenti dei tool, risultati, motivo della verifica.</li>
-  <li>I chunk di streaming non vengono salvati uno a uno: centinaia di eventi per turno renderebbero la sequenza illeggibile.</li>
-  <li>API: <code>GET /api/tracce?esito=&lt;codice&gt;&amp;errori=1&amp;limite=N</code>, <code>GET /api/tracce/&lt;id&gt;</code>.</li>
+  <li>Nella barra laterale, sezione <b>Tracce</b> (📼), ci sono le ultime 50, con l'esito in parole: «completato», «fermato al limite», «annullato», «budget finito», «girava a vuoto», «troppi errori», «verifica fallita», «solo parole, niente fatti», «fermato su un annuncio», «tempo scaduto».</li>
+  <li>Puoi filtrare per esito o mostrare <b>solo gli errori</b>: il filtro lo applica il database, quindi un turno fallito di ieri non sparisce dietro cinquanta turni riusciti di oggi.</li>
+  <li>Cliccando una riga si apre la sequenza esatta, e ogni evento si espande nel contenuto grezzo: argomenti degli strumenti, risultati, motivo della verifica.</li>
 </ul>
-</section>
-
-<section id="identita">
-<h2>Identità dell'agente principale</h2>
-<p>Anche l'agente principale ha un'identità, e non serve creare un bot per personalizzarlo: <b>Opzioni → Identità</b> offre nome e persona/istruzioni. Valgono quando non è attivo un bot; con un bot attivo vale la persona del bot.</p>
-<ul>
-  <li>La persona è testo libero — ruolo, tono, cosa tenere presente — e viene aggiunta <b>dopo</b> le regole di sistema: non può disattivare divieti o permessi.</li>
-  <li>Il nome compare nel menu in testa al posto di "agente principale"; se lo lasci vuoto il menu resta com'è.</li>
-  <li>L'identità è salvata nella cartella dati dell'installazione: vale per le conversazioni dell'agente principale anche dopo un riavvio.</li>
-  <li>Mentre usi un bot, l'identità principale resta da parte e la ritrovi tornando all'agente principale. Salvare dal pannello non tocca il bot attivo.</li>
-  <li>Per azzerarla svuota i due campi e salva: nessuna identità in più, prompt di Orchestra come prima.</li>
-</ul>
-</section>
-
-<section id="delega">
-<h2>Multi-agent & delega</h2>
-<p>Il padre può delegare subtask a figli on-demand se il tool <code>delega</code> è registrato (aggiunto in `default_registry` solo con profilo/condizioni appropriate). Delega best-effort: fall-back se catalog o modello non disponibile.</p>
-<p><strong>Più figli insieme:</strong> <code>delega_multi</code> prende una lista di obiettivi, li esegue in thread con un tetto di concorrenza (default 3, tetto totale dei figli invariato), aspetta al massimo <code>timeout_s</code> secondi per <em>tutto</em> il gruppo (30–900, default 240) e torna un resoconto per figlio, nello stesso ordine della lista.</p>
-<ul>
-  <li>Un figlio che non finisce entro la scadenza ha esito <code>scaduto</code>, non <code>errore</code>: non si sa se ha sbagliato, si sa che non ha finito. Gli si chiede di fermarsi al passo successivo; un figlio già in corso non si può uccidere, e il motivo lo dice.</li>
-  <li>I risultati restano <strong>separati</strong>: unire il lavoro di due figli è una decisione del padre, non un automatismo — come per i worktree.</li>
-  <li>I figli lavorano nella stessa cartella: usarli per compiti indipendenti (letture, verifiche, ricerche), non per scrivere gli stessi file.</li>
-  <li>Profondità max, # figli limitato.</li>
-  <li>Costo per figlio aggiunto al resoconto (se catalogo); con più figli il prezzo è quello del modello di ciascuno, non l'ultimo scelto.</li>
-  <li>Il figlio non può delegare a sua volta (tetto profondità).</li>
-  <li>Recovery opzionale nei goal: <code>recovery={max_retry, modelli_alternativi, accorcia_contesto}</code>. Di default nessun retry; i tetti strutturali non si ritentano mai.</li>
-  <li>Nei goal c'è anche <code>delega_multi</code>, ma il recovery resta sulla delega singola: il retry forza un modello alternativo con uno stato condiviso, e in parallelo i figli si vedrebbero il modello l'uno dell'altro. Per riprovare un figlio, lo si delega di nuovo con <code>delega</code>.</li>
-</ul>
-</section>
-
-<section id="goal">
-<h2>Goal autonomi</h2>
-<p>Layer persistente <code>JSON</code> in <code>ORCHESTRA_HOME</code>. Stati: pending, running, done, failed, cancelled. I piani <code>kind=piano</code> sono contenitori: non eseguono agenti e si chiudono da soli quando i figli finiscono.</p>
-<p><strong>Come si usa (interfaccia web):</strong> pulsante “Obiettivo” apre il pannello. Scrivi l’obiettivo, premi Avvia. Il goal parte in background e il pannello mostra stato, gate e ultimo output; clicca una riga per i dettagli. “Prossimo” esegue a mano il prossimo goal pronto; “Coda on/off” attiva lo scheduler automatico. Opzioni avanzate (profilo, kind, priorità, dipendenze, max iterazioni, criteri, recovery) sono collassate.</p>
-<p class="dim">Comandi CLI ed endpoint REST per questa funzione sono nell’appendice per sviluppatori.</p>
-<ul>
-  <li>Thread daemon, massimo iterazioni (default 60), timeout pre-process massimo.</li>
-  <li>Stop condition: risposta finale, fallimento provider/tool, max iterazioni, timeout.</li>
-  <li>Gate di accettazione: solo <code>risposta_finale</code> non vuota diventa <code>done</code>, salvo <code>--consenti-parziale</code> o criteri dichiarativi superati. Nel pannello il badge gate mostra <code>ok / bocciato / parziale / in attesa</code>.</li>
-  <li>Retry limitato con backoff fino a <code>max_attempts</code>; dipendenze circolari rifiutate; un goal non pronto non parte nemmeno se avviato direttamente.</li>
-  <li>Pannello Obiettivo: creazione con piano/retry/criteri, lista con gate visivo, pulsante Prossimo e coda automatica on/off.</li>
-  <li>Coda automatica spenta di default (spende token veri): un solo consumatore alla volta.</li>
-  <li>UI poll 2s solo se esiste goal running.</li>
-</ul>
-</section>
-
-<section id="cron">
-<h2>Cron — job programmati</h2>
-<p>Pannello “Cron” (toolbar) per schedulare obiettivi o comandi shell. Frequenze tramite menu amichevole (ogni 5/10/30 min, ogni ora, due volte al giorno, una volta al giorno, orario preciso, personalizzato cron). Lo scheduler parte in automatico all'avvio del server (intervallo 30s) e riprende dopo riavvio (job salvati su disco). Avvio automatico di Orchestra su Windows (al login) attivabile dal pannello.</p>
-<ul>
-  <li>Tipi azione: <code>goal</code> (avvia un obiettivo) o <code>shell</code> (comando).</li>
-  <li>CRUD completo da UI e via tool <code>cron</code> (anche per l'agente).</li>
-  <li>Shortcut: <code>@hourly</code>, <code>@daily</code>, <code>@weekly</code>, <code>@monthly</code>, <code>@yearly</code>, <code>@reboot</code>.</li>
-</ul>
-</section>
-
-<section id="consiglio">
-<h2>Consiglio — Roast Room</h2>
-<p>Pannello “Consiglio” (toolbar) per far dibattere una decisione tra più advisor (mentor) in round successivi; al termine il chair produce un verdict. I risultati (round e verdict) vengono salvati su disco e scaricabili in PDF. L’interfaccia grafica del tavolo e il formato dei round si ispirano al progetto open source “Roast Room” (citazione dovuta agli autori originali).</p>
-<ul>
-  <li>Input: decisione testuale, numero di round (2 o 3), selezione degli advisor.</li>
-  <li>Output: trascrizione dei round + verdict del chair, salvato in <code>sessions/</code>.</li>
-  <li>Export: <code>/api/council/pdf</code> genera un PDF con verdict + trascrizioni.</li>
-  <li>Portraits degli advisor caricati da <code>/web/portraits/</code>.</li>
-</ul>
-</section>
-
-<section id="mcp">
-<h2>Client MCP</h2>
-<p>Orchestra può connettersi a server MCP esterni (Supabase, Unreal, Godot, filesystem, ecc.) e usare i loro tool come strumenti nativi. Pannello “MCP” in toolbar per aggiungere/configurare server; i tool scoperti diventano disponibili con prefisso <code>mcp_&lt;server&gt;__&lt;tool&gt;</code>. Gestione anche via tool <code>mcp</code>.</p>
-<p>Tre trasporti: <b>stdio</b> (un processo locale), <b>HTTP streamable</b> e <b>SSE</b> (un URL, con headers per l'autenticazione). Il protocollo è lo stesso; cambia solo come viaggiano i messaggi. Di un server si leggono anche le <b>risorse</b> (<code>resources/list</code> e <code>resources/read</code>, con il tool <code>mcp</code> azione <code>risorsa</code>) e i <b>prompt</b> (<code>prompts/list</code> e <code>prompts/get</code>, azione <code>prompt</code>). Se il server muore, il client si riconnette e rifà l'handshake una volta, poi riprova la chiamata: un errore del protocollo, invece, non fa riconnettere.</p>
-<ul>
-  <li>Configurazione persistente in <code>ORCHESTRA_HOME/mcp_servers.json</code>.</li>
-  <li>Connessione automatica dei server abilitati all'avvio.</li>
-  <li>Supporto transport stdio (subprocess); SSE/HTTP in roadmap.</li>
-</ul>
-</section>
-
-<section id="browser">
-<h2>Browser & computer use</h2>
-<p>Sfruttano SOLO componenti OS già presenti (Chrome/Edge, PowerShell, .NET). Non richiedono pacchetti esterni.</p>
-<ul>
-  <li><code>browser_render</code>: headless Chrome/Edge (JS eseguito), fallback fetch leggero.</li>
-  <li><code>browser_screenshot</code>: PNG nel workdir.</li>
-  <li><code>screenshot_view</code>: legge quel PNG e lo mostra al modello come immagine — senza, il modello riceve un percorso e non vede nulla.</li>
-  <li>Automazione click/type/open gated da permesso o env <code>ORCHESTRA_COMPUTER_USE</code>.</li>
-  <li><b>Canale CDP</b> (Chrome DevTools Protocol, senza dipendenze): <code>browser_click</code>, <code>browser_digita</code> (digitazione vera, i listener <code>input</code> scattano), <code>browser_attendi</code> (selettore o testo), <code>browser_console</code> (log ed eccezioni JS) e <code>browser_rete</code> (metodo, stato, URL). Un Chrome headless per processo, su una porta libera; i tre tool sopra restano e funzionano anche se il canale di debug non parte.</li>
-</ul>
-<p>A fine turno arriva un <b>riepilogo</b>: esito in parole, durata, file toccati con righe aggiunte e tolte, token e costo stimato. Compare come riga in chat, e se la scheda non è visibile diventa una notifica di sistema (il permesso si chiede al primo invio, su un gesto dell'utente). L'ultimo riepilogo è disponibile anche su <code>/api/riepilogo</code>.</p>
-<p>Per i tester: l’automazione da tastiera/click richiede conferma esplicita; di default bloccata finché non si abilita.</p>
-</section>
-
-<section id="permessi">
-<h2>Permessi</h2>
-<p>I file fuori dalla cartella di lavoro richiedono conferma. In web, un modal chiede “una volta/sessione/sempre/mai”. In assenza di canale (CLI/benchmark) il default è negare.</p>
-<p>Creazione nuove chiavi API: esse non devono arrivare ai subprocessi (scrub env).</p>
 </section>
 
 <section id="memoria">
-<h2>Memoria & storia</h2>
+<h2>Memoria e cronologia</h2>
 <ul>
-  <li>memoria ricercabile via tool (<code>memoria</code>), sezioni Importanti/Fatti, anti-duplicati.</li>
-  <li>storico conversazioni persistente, search via tool (<code>storico_cerca</code>).</li>
-  <li>non iniettata nel prompt: l’agente la cerca su richiesta.</li>
-  <li>Ottimizzatore: potatura dei fatti mai usati (dopo grace period), dedup case-insensitive, unione opzionale (richiede provider). Si avvia automaticamente ogni 20 turni e via tool/azione <code>ottimizza</code> (anche <code>dry_run</code>).</li>
-  <li>Indice FTS5 su SQLite: la ricerca non dipende dalla dimensione del file.</li>
+  <li><b>Cronologia</b>: tutte le conversazioni, con la ricerca. Si aprono e si riprendono, e con un bot attivo vedi quelle di quel bot.</li>
+  <li><b>Memoria</b>: i fatti che aggiungi tu (barra laterale, campo «Fatto da ricordare») o che l'agente salva. Non vengono ficcati nel prompt: l'agente li cerca quando servono, così non occupano spazio a ogni messaggio.</li>
+  <li><b>Tutti i fatti</b> apre l'elenco completo: si cercano, si correggono, si tolgono.</li>
+  <li>Una manutenzione automatica evita i doppioni e potatura i fatti mai usati; non tocca quelli che usi.</li>
 </ul>
 </section>
 
-<section id="budget">
-<h2>Budget & limiti</h2>
-<p>Budget trasversale (costo per turno/complessivo) applicato a tutte le chiamate. Il consumo ha una sola porta; contatori su disco per giorno/mese; limite 0 ammesso (distingue “scritto 0” da “non scritto”). Verifica l’identità del contatore condiviso (<code>a is b</code>) e il limite applicato, non solo quello salvato.</p>
-<p>Con Anthropic il prompt caching e' esplicito: il prefisso stabile (regole, persona, memoria) viaggia in un blocco marcato, mentre skill e progetto stanno in un secondo blocco non marcato che cambia con l'ultimo messaggio — così cambiarlo non invalida il prefisso. Le definizioni dei tool e la coda della conversazione sono marcate anche loro. I provider OpenAI-compatibili non ricevono campi estranei (la cache la fanno da soli). Il risparmio dipende dal riuso entro cinque minuti: va misurato con una chiave vera, non dedotto.</p>
+<section id="limiti">
+<h2>Limiti, tempo e costi</h2>
+<p>Orchestra può fermarsi per quattro motivi diversi, e distinguerli serve perché la cura è diversa:</p>
+<div class="grid">
+  <div class="box">
+    <h3>Max iterazioni</h3>
+    <p>Il turno ha fatto troppi passi. Sintomo tipico: l'agente continua a riprovare lo stesso comando. Alza il numero in Opzioni → Modello, oppure scrivi un compito più stretto.</p>
+  </div>
+  <div class="box">
+    <h3>Tempo massimo per turno</h3>
+    <p>Il turno ha superato i minuti concessi. I comandi non ancora eseguiti vengono annullati. In Opzioni → Modello, <b>0</b> toglie il limite.</p>
+  </div>
+  <div class="box">
+    <h3>Budget</h3>
+    <p>Token o dollari del task o della sessione sono finiti, oppure è stato raggiunto il tetto del giorno o del mese. Si alza in Opzioni → Budget.</p>
+  </div>
+  <div class="box">
+    <h3>Annullato da te</h3>
+    <p>Hai premuto ■. Il turno si chiude pulito e non riparte da solo.</p>
+  </div>
+</div>
+<p>Tutti questi limiti si applicano <b>subito</b> e restano salvati. Sono tetti, non suggerimenti: se un lavoro importante deve finire, alzali prima di avviarlo, non dopo.</p>
 </section>
 
 <section id="remoto">
-<h2>Accesso remoto (telefono, fuori casa)</h2>
-<p>Orchestra gira sul tuo PC. Per usarlo dal telefono anche fuori casa serve esporlo in sicurezza: il server ha un <b>accesso remoto con token</b> e, se vuoi, un <b>tunnel automatico</b>.</p>
+<h2>Dal telefono</h2>
+<p>Orchestra gira sul tuo PC; per usarlo dal telefono, anche fuori casa, si espone in modo protetto con un <b>token</b>. La via più semplice non richiede il terminale: <b>Opzioni → Remoto</b>, poi <b>Avvia remoto (LAN)</b> o <b>Avvia tunnel (pubblico)</b>. Il pannello mostra token, indirizzo e un codice QR da inquadrare; <b>Ferma</b> spegne il server remoto.</p>
 <ul>
-  <li>Avvia con <code>orchestra web --remote</code>: il server ascolta su tutte le interfacce, genera un token e lo stampa a console. Lo stesso token viene salvato in <code>orchestra/.env</code> (<code>ORCHESTRA_REMOTE_TOKEN</code>).</li>
-  <li>Per un URL pubblico (senza VPN): <code>orchestra web --tunnel</code>. Se <code>cloudflared</code> e' installato, Orchestra apre il tunnel da sola e stampa l'URL <code>https://…trycloudflare.com</code>. Su Windows, se manca, Orchestra propone di installarlo automaticamente con winget; in caso contrario stampa le istruzioni e ripiega sull'IP della LAN.</li>
-  <li><b>Durata dell'URL tunnel:</b> l'indirizzo <code>…trycloudflare.com</code> e' <i>effimero</i>: viene generato da cloudflared a ogni avvio e <b>cambia a ogni riavvio</b> (del PC o del server). L'avvio automatico di Windows riavvia cloudflared, quindi l'URL cambia. Per un indirizzo stabile serve un tunnel con nome e dominio proprio (cloudflared tunnel create + route dns) oppure una VPN (Tailscale).</li>
-  <li>Sul telefono apri l'URL e inserisci il token nella pagina di login. La sessione resta valida (cookie).</li>
-  <li>In alternativa, senza tunnel: una VPN privata (es. Tailscale) tra PC e telefono, poi <code>orchestra web --remote</code> e apri <code>http://&lt;ip-tailscale-del-pc&gt;:8737</code>.</li>
-  <li>Sicurezza: il token protegge tutte le rotte. In locale (127.0.0.1) l'accesso resta libero come prima. Le chiavi API non lasciano il PC.</li>
-  <li>Puoi anche avviare il server remoto direttamente dall'interfaccia: scheda Opzioni → Remoto → "Avvia remoto (LAN)" oppure "Avvia tunnel (pubblico)". Non serve aprire il terminale: il pulsante lancia un secondo server in background e mostra URL + QR code. "Ferma" lo spegne.</li>
-  <li>Nella scheda Opzioni → Remoto vedi token, URL e un QR code da scansionare.</li>
-  <li>Sul telefono l’interfaccia si adatta da sola (sidebar richiudibile, chat a tutta larghezza). Orchestra è installabile: dal browser del telefono «Aggiungi a schermata Home», e si apre a schermo intero come un’app nativa (manifest + service worker, con cache offline della shell).</li>
+  <li>Sul telefono apri l'indirizzo e inserisci il token nella pagina di login. La sessione resta valida con un cookie.</li>
+  <li>In locale (<code>127.0.0.1</code>) l'accesso resta libero come prima; il token protegge tutto ciò che arriva da fuori. Le chiavi API non lasciano il PC.</li>
+  <li><b>Il tunnel è effimero:</b> l'indirizzo <code>…trycloudflare.com</code> cambia a ogni riavvio del server o del PC. Se lo usi spesso, o accetti di ricontrollare l'indirizzo, oppure serve un tunnel con un dominio tuo (o una VPN come Tailscale).</li>
+  <li>L'interfaccia si adatta al telefono: barra laterale richiudibile, chat a tutta larghezza. Puoi anche installarla: dal browser «Aggiungi a schermata Home» e si apre a schermo intero come un'app.</li>
 </ul>
 </section>
 
-<section id="bugfix">
+<section id="problemi">
 <h2>Se qualcosa non va</h2>
 <ul>
-  <li>Orchestra risponde su <code>127.0.0.1:8737</code>. Se il browser dice che il sito non è raggiungibile, il server è spento: riapri “Avvia Orchestra”.</li>
-  <li>Se hai avviato il server più volte, chiudi le altre finestre: due processi sulla stessa porta danno comportamento intermittente.</li>
-  <li>Pagina bianca o pulsanti che non rispondono: ricarica con Ctrl+F5.</li>
-  <li>Per capire se il server è vivo, apri <code>http://127.0.0.1:8737/docs</code>: se questa guida si apre, il server c’è.</li>
+  <li><b>Pagina non raggiungibile.</b> Il server è spento: riapri «Avvia Orchestra».</li>
+  <li><b>Risposte che vanno e vengono, pulsanti che non rispondono.</b> Hai due copie accese: chiudile e lascia una sola.</li>
+  <li><b>Pagina bianca.</b> Ricarica con <span class="kbd">Ctrl+F5</span> (forza il ricaricamento senza cache).</li>
+  <li><b>«Manca la chiave».</b> Opzioni → Servizi: controlla che ci sia la chiave del servizio selezionato, e che il servizio sia quello giusto.</li>
+  <li><b>Un modello non risponde o risponde male.</b> Prova un altro modello dal menu in alto: se va, era il servizio. Opzioni → Diagnosi → <b>doctor</b> dice cosa vede il server.</li>
+  <li><b>L'agente non vede un file.</b> Controlla il progetto attivo: è la cartella in cui scrive. I file di credenziali sono negati per scelta.</li>
+  <li><b>Un comando è stato bloccato.</b> È un permesso o una regola del bot: Opzioni → Permessi mostra lo stato, e le Tracce dicono la regola violata.</li>
+  <li><b>Una modifica non ti piace.</b> <b>Δ</b> per vederla, <b>↶</b> per annullarla.</li>
 </ul>
 </section>
 
-<section id="tester">
-<h2>Installazione senza GitHub</h2>
-<p>Pacchetto da passare ai tester: <code>installer/Installa-Orchestra.bat</code> + <code>installer/LEGGIMI.txt</code> (il bat è autonomo — vedi <code>installer/LEGGIMI.txt</code>).</p>
+<section id="installazione">
+<h2>Installazione</h2>
+<p>Per installare Orchestra su un altro PC Windows: doppio clic su <code>installer/Installa-Orchestra.bat</code>. Il file è autonomo, non serve Git né un account.</p>
 <ul>
-  <li>L’installer controlla Python, scarica l’ultima release, crea <code>.env</code> da esempio e mette “Avvia Orchestra” sul Desktop. Niente Git, niente account.</li>
-  <li><code>Avvia-Orchestra.bat</code> aggiorna, avvia il server in background e apre il browser; se riaperto a server acceso chiede Apri / Riavvia / Ferma.</li>
-  <li><code>orchestra update --check</code> controlla soltanto; chiavi e dati locali non vengono mai sovrascritti.</li>
+  <li>Controlla che Python ci sia (e se manca te lo dice), scarica l'ultima versione, crea il file di configurazione da un modello e mette «Avvia Orchestra» sul Desktop.</li>
+  <li>Le chiavi, i budget, la cronologia, la memoria e gli obiettivi <b>non vengono mai sovrascritti</b> da un aggiornamento. <code>orchestra update --check</code> controlla soltanto se c'è una versione nuova.</li>
+  <li>Le istruzioni passo per passo per chi installa stanno in <code>installer/LEGGIMI.txt</code>.</li>
 </ul>
 </section>
 
 <section id="dev">
-<h2>Appendice — per sviluppatori</h2>
-<p>Questa sezione raccoglie CLI ed endpoint REST. Serve a chi vuole usare Orchestra da terminale o integrarla; l’utente finale non ne ha bisogno.</p>
+<h2>Appendice (sviluppatori)</h2>
+<p>Questa parte serve a chi vuole usare Orchestra da terminale o integrarla: comandi, indirizzi delle API, avvio da sorgente. L'utente finale non ne ha bisogno.</p>
 
-<h3>CLI — goal</h3>
-<pre><code>orchestra goal "obiettivo" [--profile ...] [--max-iterations N] [--depends-on A,B] [--priority N] [--max-attempts N] [--criteri JSON] [--recovery JSON]
+<h3>Avvio da sorgente</h3>
+<pre><code>cp orchestra/.env.example orchestra/.env
+# imposta provider e chiavi: OPENROUTER_API_KEY, ORCHESTRA_MODEL, ...
+python3 -m orchestra.cli doctor               # verifica config e connessione
+python3 -m orchestra.cli web                  # http://127.0.0.1:8737
+python3 -m orchestra.cli web --no-browser     # senza aprire il browser
+python3 -m orchestra.cli chat                 # sessione da terminale
+python3 -m orchestra.cli auth nous            # login OAuth, senza incollare chiavi
+python3 kill_ports.py 8737                    # libera la porta</code></pre>
+
+<h3>Variabili utili</h3>
+<pre><code>ORCHESTRA_PROVIDER / ORCHESTRA_MODEL     servizio e modello
+ORCHESTRA_ROOT / ORCHESTRA_HOME          cartella di lavoro e cartella dati
+ORCHESTRA_MAX_SECONDI_TURNO              tetto di tempo del turno (0 = spento)
+ORCHESTRA_WORKTREE=0                     spegne i checkout isolati dei bot
+ORCHESTRA_REMOTE_TOKEN                   token dell'accesso remoto</code></pre>
+
+<h3>Obiettivi da terminale</h3>
+<pre><code>orchestra goal "obiettivo" [--profile ...] [--max-iterations N] [--depends-on A,B]
+                           [--priority N] [--max-attempts N] [--criteri JSON] [--recovery JSON]
 orchestra goals [--pronti]
 orchestra goal-next
 orchestra scheduler [--una-volta] [--interval N]</code></pre>
 
-<h3>Endpoint REST — goal</h3>
-<pre><code>POST /api/goal/start
-POST /api/goal/stop
-POST /api/goal/run-next
-GET  /api/goal/status
-GET  /api/goal/ready
-GET  /api/scheduler/status
-POST /api/scheduler/start
-POST /api/scheduler/stop</code></pre>
+<h3>API principali</h3>
+<pre><code>POST /api/send            { "text": "..." }
+POST /api/allega          { "files": [...] }
+POST /api/steer           { "testo": "..." }
+POST /api/cancel
+GET  /api/state            snapshot dello stato
+GET  /api/stream           eventi SSE del turno
+GET  /api/chiavi           stato di chiavi e limiti
+POST /api/tempo-turno      { "max_secondi_turno": 900 }
+GET  /api/riepilogo        riepilogo dell'ultimo turno
+GET  /api/tracce?esito=...&amp;errori=1&amp;limite=N
+GET  /api/tracce/&lt;id&gt;
 
-<h3>Endpoint REST — steer & cancel</h3>
-<pre><code>POST /api/steer   { "testo": "..." }
-POST /api/cancel</code></pre>
+POST /api/goal/start | /api/goal/stop | /api/goal/run-next
+GET  /api/goal/status | /api/goal/ready
+GET  /api/scheduler/status | POST /api/scheduler/start | /api/scheduler/stop
 
-<h3>Endpoint REST — cron</h3>
-<pre><code>GET  /api/cron/jobs
-POST /api/cron/create
-POST /api/cron/update
-POST /api/cron/delete
-POST /api/cron/run
-GET  /api/cron/scheduler/status
-POST /api/cron/scheduler/start
-POST /api/cron/scheduler/stop</code></pre>
+GET  /api/cron/jobs | POST /api/cron/create | /api/cron/update
+POST /api/cron/delete | /api/cron/run
 
-<h3>Endpoint REST — mcp</h3>
-<pre><code>GET  /api/mcp/servers
-GET  /api/mcp/tools
-GET  /api/mcp/status
-POST /api/mcp/add
-POST /api/mcp/delete
-POST /api/mcp/connect
-POST /api/mcp/disconnect
-POST /api/mcp/connect_all</code></pre>
+GET  /api/mcp/servers | /api/mcp/tools | /api/mcp/status
+POST /api/mcp/add | /api/mcp/delete | /api/mcp/connect
+POST /api/mcp/disconnect | /api/mcp/connect_all
 
-<h3>Avvio & configurazione CLI</h3>
-<pre><code>python3 -m orchestra.cli doctor
-python3 -m orchestra.cli web [--no-browser] [--port 8737]
-python3 -m orchestra.cli chat
-python3 -m orchestra.cli auth nous
-python3 kill_ports.py 8737</code></pre>
+GET  /api/lavori | POST /api/lavori/riprova | /api/lavori/annulla
+POST /api/lavori/scarta | /api/lavori/unisci</code></pre>
 
-<h3>Debug & stato</h3>
-<ul>
-  <li>Serve su 127.0.0.1:8737 di default.</li>
-  <li>HTTP 000 → worker morto.</li>
-  <li>Piu' processi sulla stessa porta → comportamento intermittente.</li>
-  <li>HC: <code>/docs</code>, <code>/api/dipendenze/stato</code>.</li>
-</ul>
+<h3>Prima di pubblicare una versione</h3>
+<pre><code>python tests/run_all.py        # con il server spento; alcune suite richiedono chiavi vere
+# alza __version__ in orchestra/__init__.py
+# committa, poi:
+git tag vX.Y.Z &amp;&amp; git push --tags
+gh release create vX.Y.Z --generate-notes</code></pre>
 </section>
 
   </main>
 </div>
 <footer>
-  Orchestra — versione 0.5.45 · guida servita da <code>/docs</code>.
+  Orchestra — versione {{versione}} · guida servita da <code>/docs</code>.
 </footer>
 </body>
 </html>

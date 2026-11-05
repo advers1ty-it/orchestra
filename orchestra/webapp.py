@@ -2384,6 +2384,31 @@ class Handler(Rotte, BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _guida(self) -> None:
+        """La guida utente, con la versione del pacchetto al posto del segnaposto.
+
+        Il file dice `{{versione}}` e non un numero scritto a mano: la guida
+        era rimasta a 0.5.45 per venticinque versioni, e un utente che la
+        leggeva per capire quale versione aveva veniva informato male. Qui la
+        versione e' una sola, quella di `__version__`, e nessuno deve
+        ricordarsene a ogni release.
+        """
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "web", "docs.html")
+        try:
+            with open(path, "rb") as f:
+                html = f.read().decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            self._json({"error": "guida non trovata"}, 404)
+            return
+        corpo = html.replace("{{versione}}", __version__).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(corpo)))
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        self.end_headers()
+        self.wfile.write(corpo)
+
     def _portrait(self, name: str) -> None:
         if not name or not all(c.isalnum() or c in "._-" for c in name):
             self._json({"error": "nome file non valido"}, 400)
@@ -2900,7 +2925,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         elif path == "/login":
             self._login_page()
         elif path == "/docs":
-            self._static("docs.html", "text/html; charset=utf-8")
+            self._guida()
             return
         elif path == "/manifest.webmanifest":
             self._static("manifest.webmanifest", "application/manifest+json")
