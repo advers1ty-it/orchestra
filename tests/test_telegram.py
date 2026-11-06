@@ -43,6 +43,15 @@ def check(nome, cond, dettaglio=""):
           + (f" -- {dettaglio}" if dettaglio and not cond else ""))
 
 
+def cp(testo):
+    """Un testo stampabile: la console di Windows non e' UTF-8.
+
+    Un menu contiene il segno di spunta, che in cp1252 non esiste: un
+    test che fallisce non deve morire mentre scrive perche' ha fallito.
+    """
+    return str(testo).encode("cp1252", "replace").decode("cp1252")
+
+
 class FintoTelegram:
     """Un Telegram che risponde come l'API, senza uscire dalla macchina."""
 
@@ -56,6 +65,10 @@ class FintoTelegram:
         self.offset = []
         self.ultimo_id = 1000
         self.contenuto = b"contenuto del file"
+        # I pulsanti viaggiano in `reply_markup`: senza guardarli, un
+        # modulo che non arriva sembrerebbe identico a uno che arriva.
+        self.markup = []
+        self.callback_risposti = []
 
     def messaggio(self, chat_id, testo, nome="prova"):
         self.ultimo_id += 1
@@ -79,6 +92,21 @@ class FintoTelegram:
                                "message": messaggio})
         return self.ultimo_id
 
+    def tocco(self, chat_id, dati, message_id=42, nome="prova"):
+        """Un pulsante premuto, come lo consegna Telegram."""
+        self.ultimo_id += 1
+        self.in_attesa.append({
+            "update_id": self.ultimo_id,
+            "callback_query": {
+                "id": f"cb{self.ultimo_id}",
+                "from": {"id": chat_id, "username": nome},
+                "data": dati,
+                "message": {"message_id": message_id,
+                            "chat": {"id": chat_id, "username": nome}},
+            },
+        })
+        return self.ultimo_id
+
     def ultimo_inviato(self):
         return self.inviati[-1][1] if self.inviati else ""
 
@@ -100,10 +128,16 @@ class FintoTelegram:
             return {"ok": True, "result": True}
         if metodo == "sendMessage":
             self.inviati.append((str(dati.get("chat_id")), dati.get("text")))
+            self.markup.append(dati.get("reply_markup") or "")
             return {"ok": True, "result": {"message_id": len(self.inviati)}}
         if metodo == "editMessageText":
             self.modifiche.append((int(dati.get("message_id") or 0),
                                    dati.get("text")))
+            self.markup.append(dati.get("reply_markup") or "")
+            return {"ok": True, "result": True}
+        if metodo == "answerCallbackQuery":
+            self.callback_risposti.append((dati.get("callback_query_id"),
+                                           dati.get("text") or ""))
             return {"ok": True, "result": True}
         if metodo == "deleteMessage":
             self.cancellati.append(int(dati.get("message_id") or 0))
@@ -567,7 +601,81 @@ check("il turno finisce quando lo lasci andare", p.occupato is False)
 check("la sua risposta arriva in chat",
       "finito" in finto.testi(), str(finto.testi()))
 
-print("\n[20] i collegamenti dei bot eliminati si tolgono")
+print("\n[20] il modulo a bottoni: si manda, si tocca, si riscrive")
+finto = FintoTelegram()
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+menu_servizi = {"testo": "Modello: gpt-4o-mini (openrouter)\n"
+                         "Scegli il servizio:",
+                "tastiera": [[{"testo": "OpenRouter",
+                                "dati": "s:openrouter"}],
+                             [{"testo": "Groq", "dati": "s:groq"}]]}
+menu_modelli = {"testo": "Groq · 2 modelli",
+                "tastiera": [[{"testo": "llama-3.3-70b",
+                                "dati": "m:groq:0"}]]}
+visti_menu = []
+
+
+def comandi_menu(nome, argomento=""):
+    visti_menu.append((nome, argomento))
+    if argomento == "cb:s:groq":
+        return menu_modelli
+    if argomento == "cb:m:groq:0":
+        return "Modello cambiato in llama-3.3-70b."
+    return menu_servizi
+
+
+p, _chiamate = ponte(finto, comandi=comandi_menu)
+p.passo()
+finto.messaggio(555, "/modello")
+p.passo()
+markup = finto.markup[-1]
+check("il menu arriva con dei pulsanti", "inline_keyboard" in markup, cp(markup))
+check("i servizi sono i pulsanti",
+      "s:openrouter" in markup and "s:groq" in markup, cp(markup))
+check("e il testo dice cosa scegliere",
+      "Scegli il servizio" in finto.testi()[-1], finto.testi()[-1])
+
+prima = len(finto.modifiche)
+finto.tocco(555, "s:groq", message_id=42)
+p.passo()
+check("il tocco riceve risposta: la rotellina si chiude",
+      bool(finto.callback_risposti), str(finto.callback_risposti))
+check("e il messaggio si riscrive invece di mandarne un altro",
+      len(finto.modifiche) == prima + 1
+      and finto.modifiche[-1][0] == 42, str(finto.modifiche[-1:]))
+check("con dentro i modelli del servizio scelto",
+      "m:groq:0" in finto.markup[-1], cp(finto.markup[-1]))
+check("il tocco arriva al comando giusto",
+      ("modello", "cb:s:groq") in visti_menu, str(visti_menu))
+
+finto.tocco(555, "m:groq:0", message_id=42)
+p.passo()
+check("toccare un modello lo applica",
+      ("modello", "cb:m:groq:0") in visti_menu, str(visti_menu))
+check("la conferma arriva nello stesso messaggio",
+      "Modello cambiato" in finto.modifiche[-1][1], str(finto.modifiche[-1]))
+check("e i bottoni spariscono, cosi' non si tocca due volte",
+      '"inline_keyboard": []' in finto.markup[-1], cp(finto.markup[-1]))
+
+prima = len(finto.modifiche)
+finto.tocco(999, "s:groq")
+p.passo()
+check("un tocco da una chat non collegata non cambia niente",
+      len(finto.modifiche) == prima, str(finto.modifiche[prima:]))
+check("ma lo dice a chi ha toccato",
+      "non e' collegata" in finto.callback_risposti[-1][1],
+      str(finto.callback_risposti[-1]))
+
+p2, _ = ponte(finto)
+p2.passo()
+finto.tocco(555, "s:groq")
+p2.passo()
+check("un ponte senza comandi non esplode su un tocco",
+      "Modulo non disponibile" in finto.callback_risposti[-1][1],
+      str(finto.callback_risposti[-1]))
+
+print("\n[21] i collegamenti dei bot eliminati si tolgono")
 tg.salva_token(99, TOKEN)
 quanti = tg.pulisci(bot_validi=[])
 check("un collegamento senza bot viene tolto", quanti >= 1, str(quanti))

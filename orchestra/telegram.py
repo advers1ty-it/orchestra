@@ -107,7 +107,9 @@ GUIDA = (
     "messaggio normale fa lo stesso)\n"
     "/stop - ferma il turno in corso\n"
     "/nuova - nuova conversazione\n"
-    "/modello - il modello in uso; /modello <nome> lo cambia\n"
+    "/modello - il modello in uso, e il menu per cambiarlo (prima il "
+    "servizio, poi il modello: un tocco)\n"
+    "/modello <nome> - cambia il modello scrivendone il nome\n"
     "/scollega - stacca questa chat\n"
     "/aiuto (o /guida) - questa lista\n\n"
     "Foto e documenti li leggo, i vocali li trascrivo se il motore "
@@ -524,17 +526,27 @@ class Api:
         return self._scarica(percorso, int(massimo))
 
     def edit_message(self, chat_id: str | int, message_id: int,
-                     testo: str, secondi: float = 15) -> bool:
+                     testo: str, secondi: float = 15,
+                     markup: str | None = None) -> bool:
         """Riscrive un messaggio gia' mandato. False se non e' cambiato.
 
         "message is not modified" non e' un errore: arriva quando due
         aggiornamenti di stato si somigliano, ed e' esattamente il caso
         che il limite di frequenza produce.
+
+        `markup` e' il JSON di `tastiera()`: passarlo cambia i pulsanti
+        insieme al testo, e passarne uno vuoto li toglie. E' l'unico
+        modo di fare un menu che non lascia dietro di se' messaggi
+        vecchi con dentro bottoni che non funzionano piu'.
         """
+        campi: dict[str, Any] = {
+            "chat_id": str(chat_id), "message_id": int(message_id),
+            "text": testo, "disable_web_page_preview": "true",
+        }
+        if markup is not None:
+            campi["reply_markup"] = markup
         try:
-            self.chiama("editMessageText", secondi=secondi,
-                        chat_id=str(chat_id), message_id=int(message_id),
-                        text=testo, disable_web_page_preview="true")
+            self.chiama("editMessageText", secondi=secondi, **campi)
         except ErroreTelegram as e:
             if "not modified" in str(e).lower():
                 return False
@@ -566,7 +578,10 @@ class Api:
                     secondi: int = ATTESA_POLLING) -> list[dict[str, Any]]:
         campi: dict[str, Any] = {
             "timeout": max(0, int(secondi)),
-            "allowed_updates": json.dumps(["message"]),
+            # `callback_query` sono i tocchi sui pulsanti dei moduli:
+            # senza dichiararlo Telegram non li consegna mai, e i bottoni
+            # restano decorativi.
+            "allowed_updates": json.dumps(["message", "callback_query"]),
         }
         if offset is not None:
             campi["offset"] = int(offset)
@@ -578,10 +593,34 @@ class Api:
         return [a for a in aggiornamenti if isinstance(a, dict)]
 
     def send_message(self, chat_id: str | int, testo: str,
-                     secondi: float = 20) -> dict[str, Any]:
-        return self.chiama("sendMessage", secondi=secondi,
-                           chat_id=str(chat_id), text=testo,
-                           disable_web_page_preview="true")
+                     secondi: float = 20,
+                     markup: str | None = None) -> dict[str, Any]:
+        campi: dict[str, Any] = {
+            "chat_id": str(chat_id), "text": testo,
+            "disable_web_page_preview": "true",
+        }
+        if markup is not None:
+            campi["reply_markup"] = markup
+        return self.chiama("sendMessage", secondi=secondi, **campi)
+
+    def answer_callback(self, callback_id: str, testo: str = "") -> bool:
+        """Chiude la rotellina di un pulsante premuto.
+
+        Telegram la fa girare finche' il bot non risponde, e un pulsante
+        che gira per sempre sembra rotto. Quindi si risponde sempre,
+        anche quando non c'e' niente da dire; e se la risposta non parte
+        non e' un guasto — il modulo sotto e' gia' cambiato.
+        """
+        if not (callback_id or "").strip():
+            return False
+        campi: dict[str, Any] = {"callback_query_id": callback_id.strip()}
+        if testo:
+            campi["text"] = testo[:200]
+        try:
+            self.chiama("answerCallbackQuery", secondi=10, **campi)
+        except ErroreTelegram:
+            return False
+        return True
 
     def scrive(self, chat_id: str | int) -> None:
         """L'indicatore "sta scrivendo". Non deve mai far fallire niente."""
@@ -603,6 +642,35 @@ class Api:
                         drop_pending_updates="false")
         except ErroreTelegram:
             pass
+
+
+def tastiera(righe: list[list[dict[str, Any]]] | None) -> str:
+    """Il JSON di una tastiera a pulsanti, o una vuota per toglierla.
+
+    I pulsanti portano `callback_data`, non un link: un tocco torna al
+    ponte come aggiornamento, e il ponte decide cosa fare. E' l'unica
+    forma che non fa uscire dalla chat e non chiede all'utente di
+    ricordarsi un nome di modello a memoria.
+
+    Il limite di Telegram e' 64 byte per `callback_data`: qui passano
+    un identificativo di servizio e un numero, mai un nome di modello.
+    """
+    if not righe:
+        return json.dumps({"inline_keyboard": []})
+    costruite = []
+    for riga in righe:
+        voci = []
+        for voce in riga or []:
+            dati = str(voce.get("dati", ""))
+            if not dati:
+                continue
+            voci.append({"text": str(voce.get("testo", ""))[:64],
+                         "callback_data": dati[:64]})
+        if voci:
+            costruite.append(voci)
+    if not costruite:
+        return json.dumps({"inline_keyboard": []})
+    return json.dumps({"inline_keyboard": costruite})
 
 
 def dividi(testo: str, limite: int = MAX_TESTO) -> list[str]:
@@ -661,7 +729,8 @@ class Ponte:
     """
 
     def __init__(self, bot_id: int, nome: str, api: Api, turno: Callable[..., str],
-                 *, comandi: Callable[[str, str], str] | None = None,
+                 *, comandi: Callable[[str, str], str | dict[str, Any]]
+                 | None = None,
                  attesa: int = ATTESA_POLLING,
                  log: Callable[[str], None] | None = None) -> None:
         self.bot_id = int(bot_id)
@@ -765,6 +834,12 @@ class Ponte:
                 self._offset = int(aggiornamento.get("update_id", 0)) + 1
             except (TypeError, ValueError):
                 continue
+            tocco = aggiornamento.get("callback_query")
+            if isinstance(tocco, dict):
+                self._pulsante(tocco)
+                gestiti += 1
+                self.fatti += 1
+                continue
             messaggio = aggiornamento.get("message")
             if not isinstance(messaggio, dict):
                 continue
@@ -781,6 +856,67 @@ class Ponte:
             except ErroreTelegram as e:
                 self._log(f"telegram {self.nome}: risposta non inviata: {e}")
                 return
+
+    def _manda_modulo(self, chat_id: str, modulo: dict[str, Any]) -> None:
+        """Un messaggio con i pulsanti: e' un modulo, non una risposta."""
+        testo = str(modulo.get("testo") or "")
+        righe = modulo.get("tastiera")
+        pezzi = dividi(testo) or [""]
+        for i, pezzo in enumerate(pezzi):
+            ultimo = i == len(pezzi) - 1
+            try:
+                self.api.send_message(chat_id, pezzo,
+                                      markup=tastiera(righe) if ultimo else None)
+            except ErroreTelegram as e:
+                self._log(f"telegram {self.nome}: modulo non inviato: {e}")
+                return
+
+    def _pulsante(self, tocco: dict[str, Any]) -> None:
+        """Un pulsante premuto: si riscrive quel messaggio, non se ne manda un altro.
+
+        Il modulo vive in un messaggio solo. Rispondere con un messaggio
+        nuovo a ogni tocco lascerebbe una pila di menu vecchi con dentro
+        bottoni ormai scollegati dalla realta'.
+        """
+        dati = (tocco.get("data") or "").strip()
+        messaggio = tocco.get("message") or {}
+        chat = messaggio.get("chat") or {}
+        chat_id = str(chat.get("id", "") or "")
+        cb_id = str(tocco.get("id") or "")
+        try:
+            message_id = int(messaggio.get("message_id"))
+        except (TypeError, ValueError):
+            message_id = 0
+        if not chat_id:
+            return
+        legata, _nome_chat = chat_di(self.bot_id)
+        if not legata or legata != chat_id:
+            self.api.answer_callback(cb_id,
+                                     "Questa chat non e' collegata a Orchestra.")
+            return
+        if self.comandi is None:
+            self.api.answer_callback(cb_id, "Modulo non disponibile.")
+            return
+        try:
+            risposta = self.comandi("modello", f"cb:{dati}")
+        except Exception as e:  # noqa: BLE001
+            risposta = (f"Errore nel modulo: {type(e).__name__}: {e}")
+        self.api.answer_callback(cb_id)
+        if isinstance(risposta, dict):
+            testo = str(risposta.get("testo") or "")
+            righe = risposta.get("tastiera")
+        else:
+            testo = str(risposta or "Fatto.")
+            righe = None
+        if not message_id:
+            self._manda_modulo(chat_id, {"testo": testo, "tastiera": righe})
+            return
+        try:
+            self.api.edit_message(chat_id, message_id,
+                                  (testo or "Fatto.")[:MAX_TESTO],
+                                  markup=tastiera(righe))
+        except ErroreTelegram as e:
+            self._log(f"telegram {self.nome}: modulo non aggiornato: {e}")
 
     def _gestisci(self, messaggio: dict[str, Any]) -> None:
         chat = messaggio.get("chat") or {}
@@ -872,6 +1008,9 @@ class Ponte:
             risposta = self.comandi(nome, argomento)
         except Exception as e:  # noqa: BLE001
             risposta = f"Errore nel comando /{nome}: {type(e).__name__}: {e}"
+        if isinstance(risposta, dict):
+            self._manda_modulo(chat_id, risposta)
+            return
         self._rispondi(chat_id, risposta or "Fatto.")
 
     def _start(self, chat_id: str, chi: str, argomento: str,

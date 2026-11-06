@@ -129,6 +129,19 @@ def _coda(testo: str, quanti: int) -> str:
     return "..." + tagliato.lstrip()
 
 
+# Quanti modelli in una pagina del modulo a bottoni. Otto stanno in
+# uno schermo di telefono senza scorrere, e ogni pagina in piu' e' un
+# tocco: con cinquanta modelli per pagina il "cerca" non si userebbe
+# mai e la lista sarebbe illeggibile.
+MODELLI_PER_PAGINA = 8
+
+# Quanti modelli entrano nel menu. Un catalogo come quello di Nous ne ha
+# 354: a otto per pagina sono quarantacinque pagine, cioe' un menu che
+# nessuno scorre fino in fondo. Il menu mostra i piu' utili e per il
+# resto c'e' la ricerca per nome, che e' l'unica cosa che scala.
+MENU_MASSIMO = 40
+
+
 def _scegli_modello(scelta: str, modelli: list[str]) -> tuple[str, str]:
     """Trova il modello che l'utente ha nominato, o spiega perche' no.
 
@@ -2018,7 +2031,7 @@ class OrchestraApp:
             return 900.0
 
     def telegram_comando(self, bot_id: int, nome: str,
-                         argomento: str = "") -> str:
+                         argomento: str = "") -> str | dict[str, Any]:
         """I comandi che si possono dare al bot dal telefono.
 
         Un comando non e' un turno: non costa token e non entra nella
@@ -2081,26 +2094,30 @@ class OrchestraApp:
             righe.append("Modalita' piano: attiva.")
         return "\n".join(righe)
 
-    def _telegram_modello(self, b: dict[str, Any], argomento: str) -> str:
+    def _telegram_modello(self, b: dict[str, Any],
+                          argomento: str) -> str | dict[str, Any]:
+        argomento = (argomento or "").strip()
+        # Un tocco su un pulsante non e' un nome scritto: la scelta e'
+        # gia' stata fatta, va solo applicata o mostrata.
+        if argomento.startswith("cb:"):
+            return self._telegram_modulo(b, argomento[3:])
         provider, configurato = self._bot_provider_modello(b)
         attuale = (b.get("modello") or "").strip() or configurato
+        if not argomento:
+            # Senza nome si apre il modulo: prima il servizio, poi i
+            # modelli, un tocco per attivare. Chiedere di scrivere
+            # `provider/modello` funziona per chi li sa a memoria; gli
+            # altri non hanno modo di indovinare un nome che esiste.
+            modulo = self._telegram_modulo(b, "")
+            return modulo
         modelli = self.telegram_modelli(provider)
-        if not argomento.strip():
-            righe = [f"Modello: {attuale or '?'} ({provider})"]
-            if modelli:
-                righe.append("Disponibili: " + ", ".join(modelli[:15])
-                             + ("..." if len(modelli) > 15 else ""))
-                righe.append("Cambia con /modello <nome>.")
-            else:
-                righe.append("Non riesco a leggere l'elenco dei modelli di "
-                             f"{provider}: si puo' cambiare lo stesso, ma "
-                             "senza controllo del nome.")
-                righe.append("Cambia con /modello <nome>.")
-            return "\n".join(righe)
-
         scelto, errore = _scegli_modello(argomento, modelli)
         if errore:
             return errore
+        return self._telegram_salva_modello(b, scelto, bool(modelli))
+
+    def _telegram_salva_modello(self, b: dict[str, Any], scelto: str,
+                                verificato: bool) -> str:
         sess = self._sessione_bot(b)
         if sess.busy:
             return "C'e' un turno in corso: /stop, poi /modello."
@@ -2113,9 +2130,171 @@ class OrchestraApp:
         # si perde, si ricarica dallo storico.
         runtime = getattr(self, "_bots_runtime", None) or {}
         runtime.pop(int(b["id"]), None)
-        avviso = "" if modelli else " (non ho potuto verificare il nome)"
+        avviso = "" if verificato else " (non ho potuto verificare il nome)"
         return (f"Modello cambiato in {scelto}{avviso}. Da adesso questo "
                 "bot usa un modello suo, e vale dal prossimo messaggio.")
+
+    def _telegram_servizi(self, attuale: str) -> list[tuple[str, str]]:
+        """(id, nome) dei servizi con una credenziale, il corrente per primo.
+
+        Un servizio senza chiave non compare: proporre un modello che non
+        si puo' chiamare e' peggio che non proporlo, perche' lo si scopre
+        solo dopo averlo scelto. Il servizio gia' in uso c'e' sempre,
+        anche se la sua credenziale vive in un posto che questo menu non
+        guarda (Nous la tiene in un token suo).
+        """
+        from . import keys as keys_mod
+        from .providers import KNOWN_PROVIDERS
+
+        try:
+            presenti = {c["chiave"] for c in keys_mod.stato(ENV_PATH, self.env)
+                        if c.get("presente")}
+        except Exception:  # noqa: BLE001
+            presenti = set()
+        etichette = {s.get("id"): s.get("nome") for s in keys_mod.FREE_SERVICES}
+        fuori: list[tuple[str, str]] = []
+        for pid, (_url, chiave_env, _modello) in KNOWN_PROVIDERS.items():
+            if chiave_env:
+                if chiave_env not in presenti:
+                    continue
+            elif pid != attuale:
+                # i motori locali non chiedono chiave: compaiono solo se
+                # sono gia' quelli in uso, altrimenti sarebbero due
+                # bottoni che rispondono "non raggiungibile".
+                continue
+            fuori.append((pid, str(etichette.get(pid) or pid)))
+        if attuale and all(pid != attuale for pid, _n in fuori):
+            fuori.append((attuale, str(etichette.get(attuale) or attuale)))
+        fuori.sort(key=lambda v: (v[0] != attuale, v[1].lower()))
+        return fuori
+
+    def _telegram_nome_servizio(self, provider: str) -> str:
+        from . import keys as keys_mod
+
+        for s in keys_mod.FREE_SERVICES:
+            if s.get("id") == provider:
+                return str(s.get("nome") or provider)
+        return provider
+
+    def _telegram_ordina_modelli(self, provider: str, elenco: list[str],
+                                 attuale: str) -> list[str]:
+        """I modelli nell'ordine in cui qualcuno li sceglierebbe col pollice.
+
+        In ordine alfabetico la prima pagina di OpenRouter e' "ai21/...":
+        il modello buono sta a pagina nove e nessuno ci arriva. Prima
+        quello in uso, poi i gratuiti che sanno usare i tool, poi gli
+        altri con i tool, poi il resto — lo stesso criterio con cui l'app
+        sceglie da sola quando deve.
+        """
+        cat = (getattr(self, "_catalog_per_provider", None) or {}).get(provider)
+        profili = getattr(cat, "models", None) or {}
+
+        def rango(mid: str) -> tuple:
+            info = getattr(profili.get(mid), "info", None)
+            gratis = bool(getattr(info, "is_free", False))
+            tool = getattr(info, "supports_tools", None) is True
+            return (mid != attuale, not gratis, not tool, mid.lower())
+
+        return sorted(elenco, key=rango)
+
+    def _telegram_modulo(self, b: dict[str, Any],
+                         dati: str) -> dict[str, Any] | str:
+        """Il modulo a bottoni di `/modello`, con lo stato dentro i pulsanti.
+
+        Nessuna memoria lato server: `callback_data` dice da solo cosa
+        fare (servizio, pagina, indice del modello), quindi anche un
+        modulo rimasto nella chat per un giorno funziona se il catalogo
+        non e' cambiato — e se e' cambiato lo dice invece di applicare il
+        modello sbagliato.
+        """
+        provider, configurato = self._bot_provider_modello(b)
+        attuale = (b.get("modello") or "").strip() or configurato
+        dati = (dati or "").strip()
+
+        if dati == "x":
+            return {"testo": "Va bene: non ho cambiato niente."}
+        if dati.startswith("s:") and len(dati) > 2:
+            return self._telegram_modulo_modelli(dati[2:].strip(), attuale, 0)
+        if dati.startswith("p:"):
+            parti = dati[2:].split(":")
+            if len(parti) != 2 or not parti[0]:
+                return "Modulo scaduto: riscrivi /modello."
+            try:
+                pagina = int(parti[1])
+            except ValueError:
+                pagina = 0
+            return self._telegram_modulo_modelli(parti[0], attuale, pagina)
+        if dati.startswith("m:"):
+            parti = dati[2:].split(":")
+            if len(parti) != 2 or not parti[0]:
+                return "Modulo scaduto: riscrivi /modello."
+            elenco = self.telegram_modelli(parti[0])
+            try:
+                scelto = elenco[int(parti[1])]
+            except (ValueError, IndexError):
+                return ("Quel modello non e' piu' nell'elenco: riscrivi "
+                        "/modello.")
+            return self._telegram_salva_modello(b, scelto, True)
+
+        servizi = self._telegram_servizi(provider)
+        if len(servizi) == 1:
+            # Un solo servizio collegato: chiedere "quale servizio?" per
+            # poi aprire una lista con dentro solo quello e' un tocco in
+            # piu' per niente.
+            return self._telegram_modulo_modelli(servizi[0][0], attuale, 0)
+        righe = [[{"testo": ("✓ " if pid == provider else "") + nome,
+                   "dati": f"s:{pid}"}] for pid, nome in servizi]
+        return {"testo": (f"Modello: {attuale or '?'} ({provider})\n"
+                           "Scegli il servizio:"),
+                "tastiera": righe}
+
+    def _telegram_modulo_modelli(self, provider: str, attuale: str,
+                                 pagina: int) -> dict[str, Any] | str:
+        elenco = self.telegram_modelli(provider)
+        nome = self._telegram_nome_servizio(provider)
+        if not elenco:
+            return (f"Non riesco a leggere l'elenco dei modelli di {nome}: "
+                    "la rete non ha risposto. Puoi cambiarlo lo stesso con "
+                    "/modello <nome>, senza che il nome venga controllato.")
+        ordinati = self._telegram_ordina_modelli(provider, elenco, attuale)
+        visibili = ordinati[:MENU_MASSIMO]
+        per_pagina = MODELLI_PER_PAGINA
+        pagine = max(1, (len(visibili) + per_pagina - 1) // per_pagina)
+        pagina = max(0, min(int(pagina or 0), pagine - 1))
+        fetta = visibili[pagina * per_pagina:(pagina + 1) * per_pagina]
+        righe: list[list[dict[str, str]]] = []
+        for mid in fetta:
+            try:
+                # L'indice e' quello alfabetico, non quello mostrato:
+                # cambiando il modello in uso l'ordine si sposta, e un
+                # pulsante vecchio applicherebbe il modello sbagliato.
+                posizione = elenco.index(mid)
+            except ValueError:
+                continue
+            righe.append([{"testo": ("✓ " if mid == attuale else "") + mid,
+                           "dati": f"m:{provider}:{posizione}"}])
+        if pagine > 1:
+            naviga: list[dict[str, str]] = []
+            if pagina > 0:
+                naviga.append({"testo": "«",
+                               "dati": f"p:{provider}:{pagina - 1}"})
+            if pagina < pagine - 1:
+                naviga.append({"testo": "»",
+                               "dati": f"p:{provider}:{pagina + 1}"})
+            righe.append(naviga)
+        if len(self._telegram_servizi(provider)) > 1:
+            righe.append([{"testo": "Cambia servizio", "dati": "S"}])
+        testo = [f"{nome} · {len(ordinati)} modelli · pagina "
+                 f"{pagina + 1}/{pagine}",
+                 f"Modello attuale: {attuale or 'nessuno'}",
+                 "Tocca un modello per attivarlo."]
+        altri = len(ordinati) - len(visibili)
+        if altri:
+            testo.append(f"Qui i {len(visibili)} piu' utili; gli altri "
+                         f"{altri} si trovano con /modello <parte del nome>.")
+        elif pagine > 1:
+            testo.append("Sono tanti: /modello <parte del nome> li cerca.")
+        return {"testo": "\n".join(testo), "tastiera": righe}
 
     def telegram_modelli(self, provider: str) -> list[str]:
         """I modelli di un provider, dal catalogo.
