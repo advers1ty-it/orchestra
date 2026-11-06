@@ -182,6 +182,51 @@ def nomi() -> list[str]:
     return [b["nome"] for b in tutti()]
 
 
+# L'agente principale, quello configurato in Opzioni, non e' nella
+# tabella: esiste da prima dei bot e non ha una riga sua. Per collegarlo
+# a Telegram serve pero' un identificativo, e 0 e' quello che nessun
+# AUTOINCREMENT usera' mai. Due mondi che parlano dello stesso agente
+# con due id diversi sono la premessa di un collegamento che finisce
+# sulla chat sbagliata.
+BASE_ID = 0
+
+
+def agente_base() -> dict[str, Any]:
+    """L'agente principale nella forma di un bot.
+
+    Stessi campi, vuoti dove non si applicano: chi legge una
+    configurazione di bot non deve avere rami speciali per il caso
+    "principale". Nome e persona sono quelli di Opzioni -> Identita'.
+    """
+    from . import identita
+
+    try:
+        dati = identita.carica()
+    except Exception:  # noqa: BLE001
+        dati = {"nome": "", "persona": ""}
+    return {
+        "id": BASE_ID,
+        "nome": (dati.get("nome") or "").strip() or "agente principale",
+        "provider": "",
+        "modello": "",
+        "persona": "",
+        "progetto": "",
+        "profilo": "",
+        "parla_con": [],
+        "policy": {},
+    }
+
+
+def per_id_agente(bot_id: int | str) -> dict[str, Any] | None:
+    """Come `per_id`, ma conosce anche l'agente principale (id 0)."""
+    try:
+        if int(bot_id) == BASE_ID:
+            return agente_base()
+    except (TypeError, ValueError):
+        return None
+    return per_id(bot_id)
+
+
 def per_id(bot_id: int | str) -> dict[str, Any] | None:
     try:
         ident = int(bot_id)

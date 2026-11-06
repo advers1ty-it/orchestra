@@ -46,6 +46,7 @@ mentre qui i bot sono tanti) e non nei log.
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 import sqlite3
@@ -98,6 +99,30 @@ MASSIMO_FILE = 20 * 1024 * 1024
 # cosa e' un errore di battitura.
 COMANDI_AGENTE = ("stato", "steer", "stop", "nuova", "modello")
 
+# Il tetto del Bot API per un file in INVIO: oltre, Telegram risponde
+# 413 e il file non arriva. E' piu' alto di quello del download perche'
+# sono due limiti diversi, e confonderli farebbe rifiutare file che ci
+# stanno benissimo.
+MASSIMO_INVIO = 50 * 1024 * 1024
+# Un turno che scrive venti file non deve trasformare la chat in un
+# archivio: si mandano i primi, e si dice che ci sono gli altri.
+MASSIMO_FILE_PER_TURNO = 5
+# Le sole immagini che sendPhoto accetta. Un gif o un webp come "foto"
+# vengono rifiutati da Telegram, quindi passano come documento.
+FOTO = (".jpg", ".jpeg", ".png")
+MIME = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".webp": "image/webp", ".gif": "image/gif", ".pdf": "application/pdf",
+    ".zip": "application/zip", ".mp3": "audio/mpeg", ".mp4": "video/mp4",
+    ".csv": "text/csv", ".md": "text/markdown", ".txt": "text/plain",
+}
+
+
+def _tipo_mime(nome: str) -> str:
+    """Il tipo del file, dalla sua estensione. Generico va bene."""
+    return MIME.get(os.path.splitext(nome or "")[1].lower(),
+                    "application/octet-stream")
+
 GUIDA = (
     "Quello che scrivi qui e' una richiesta all'agente: stesso bot, "
     "stessi tool, stessa policy della finestra.\n\n"
@@ -113,7 +138,13 @@ GUIDA = (
     "/scollega - stacca questa chat\n"
     "/aiuto (o /guida) - questa lista\n\n"
     "Foto e documenti li leggo, i vocali li trascrivo se il motore "
-    "vocale e' installato (Opzioni)."
+    "vocale e' installato: il pulsante Dipendenze in Opzioni, il "
+    "componente si chiama faster-whisper.\n\n"
+    "Se un tool chiede un permesso, se l'agente ha una domanda o se "
+    "propone un piano, il messaggio arriva qui con i pulsanti: si "
+    "risponde toccando, o scrivendo la risposta.\n"
+    "Se il turno produce un file (un PDF, un'immagine, un foglio) te lo "
+    "allego alla risposta."
 )
 
 
@@ -354,7 +385,11 @@ def pulisci(bot_validi: list[int] | None = None) -> int:
     if bot_validi is None:
         from . import bots as bots_mod
 
+        # L'agente principale (id 0) non e' nella tabella dei bot, ma il
+        # suo token e' un collegamento vivo come gli altri: senza questa
+        # riga, la prima pulizia dopo il riavvio lo cancellerebbe.
         bot_validi = [int(b["id"]) for b in bots_mod.tutti()]
+        bot_validi.append(int(bots_mod.BASE_ID))
     with _LOCK, _db() as conn:
         righe = [int(r["bot_id"]) for r in conn.execute(
             "SELECT bot_id FROM telegram")]
@@ -438,25 +473,148 @@ def link(username: str, codice: str = "") -> str:
 
 
 # ===================================================================
+#  Le domande in sospeso
+# ===================================================================
+# I permessi e le domande dell'agente hanno un canale in chat: qui si
+# tiene traccia di quella aperta per ogni bot, cosi' il tocco su un
+# pulsante (o il testo scritto subito dopo) sa a cosa rispondere.
+#
+# Perche' un token e non solo l'id della domanda: un modulo puo' restare
+# nella chat per giorni, e un "Una volta" premuto sulla richiesta di ieri
+# non deve concedere il percorso di oggi. Il token e' la prova che quel
+# pulsante appartiene a questa domanda e a nessun'altra.
+SOSPESI: dict[int, dict[str, Any]] = {}
+# La stessa scadenza dei permessi e delle domande: dopo, chi aspetta ha
+# gia' deciso da solo (nega, o va avanti), e un pulsante vivo mentirebbe.
+SCADENZA_SOSPESO = 300.0
+
+
+def _token() -> str:
+    return "".join(secrets.choice(ALFABETO) for _ in range(4))
+
+
+def sospendi(bot_id: int | str, voce: dict[str, Any]) -> dict[str, Any]:
+    """Registra la domanda aperta di un bot (una sola per bot).
+
+    L'ultima vince: una domanda nuova vuol dire che quella di prima non
+    aspetta piu' nessuno (chi la faceva ha gia' ricevuto il "mai" per
+    scadenza), e tenerle tutte vorrebbe dire rispondere a quella
+    sbagliata con il tocco giusto.
+    """
+    voce = dict(voce or {})
+    voce.setdefault("token", _token())
+    voce["scade"] = time.time() + SCADENZA_SOSPESO
+    with _LOCK:
+        SOSPESI[int(bot_id)] = voce
+    return voce
+
+
+def sospeso(bot_id: int | str) -> dict[str, Any] | None:
+    """La domanda aperta adesso, o None. Una scaduta non e' aperta."""
+    with _LOCK:
+        voce = SOSPESI.get(int(bot_id))
+        if voce is None:
+            return None
+        if time.time() > float(voce.get("scade") or 0):
+            SOSPESI.pop(int(bot_id), None)
+            return None
+        return dict(voce)
+
+
+def chiudi(bot_id: int | str, token: str = "") -> dict[str, Any] | None:
+    """Chiude la domanda aperta, se il token e' quello giusto.
+
+    Con `token` vuoto chiude comunque: e' il caso della risposta scritta,
+    che arriva nella stessa chat e nello stesso momento, senza un
+    pulsante da cui copiare il token.
+    """
+    with _LOCK:
+        voce = SOSPESI.get(int(bot_id))
+        if voce is None:
+            return None
+        if time.time() > float(voce.get("scade") or 0):
+            SOSPESI.pop(int(bot_id), None)
+            return None
+        if token and not secrets.compare_digest(str(voce.get("token") or ""),
+                                                token):
+            return None
+        SOSPESI.pop(int(bot_id), None)
+        return dict(voce)
+
+
+def pulisci_sospesi(bot_id: int | str) -> None:
+    """Dimentica la domanda aperta di un bot.
+
+    Si chiama a fine turno: una domanda che nessuno ha raccolto non deve
+    restare in piedi, o il primo messaggio del turno dopo verrebbe letto
+    come la risposta a una domanda di ieri.
+    """
+    with _LOCK:
+        SOSPESI.pop(int(bot_id), None)
+
+
+SCELTE_PERMESSO = {
+    "u": ("una_volta", "concesso una volta"),
+    "s": ("sessione", "concesso per questa sessione"),
+    "w": ("sempre", "concesso per sempre"),
+    "m": ("mai", "negato"),
+}
+
+
+def modulo_permesso(dati: dict[str, Any], token: str) -> tuple[str, list]:
+    """Il testo e i pulsanti di una richiesta di permesso.
+
+    Quattro scelte, le stesse della finestra: qui pero' non c'e' spazio
+    per spiegare la differenza, quindi le etichette la dicono da sole.
+    """
+    percorso = str(dati.get("percorso") or "?")
+    azione = str(dati.get("azione") or "toccare")
+    righe = ["Serve un permesso: " + azione, percorso]
+    dettaglio = str(dati.get("dettaglio") or "").strip()
+    if dettaglio:
+        righe.append(dettaglio[:300])
+    motivo = str(dati.get("motivo") or "").strip()
+    if motivo:
+        righe.append("(" + motivo + ")")
+    righe.append("Senza risposta la richiesta scade dopo cinque minuti, "
+                 "e vale come un no.")
+    tastiera = [
+        [{"testo": "Una volta", "dati": f"d:u:{token}"},
+         {"testo": "Per la sessione", "dati": f"d:s:{token}"}],
+        [{"testo": "Sempre", "dati": f"d:w:{token}"},
+         {"testo": "Mai", "dati": f"d:m:{token}"}],
+    ]
+    return "\n".join(righe), tastiera
+
+
+def modulo_domanda(dati: dict[str, Any], token: str) -> tuple[str, list]:
+    """Il testo e i pulsanti di una domanda (o di un piano da approvare).
+
+    Le opzioni sono suggerimenti, non un elenco chiuso: la risposta si
+    puo' sempre scrivere, e per un piano il feedback libero e' spesso la
+    cosa che conta di piu'.
+    """
+    testo = str(dati.get("testo") or "").strip()
+    opzioni = [str(o) for o in (dati.get("opzioni") or []) if str(o).strip()]
+    tastiera = [[{"testo": o[:64], "dati": f"r:{i}:{token}"}]
+                for i, o in enumerate(opzioni[:6])]
+    coda = ("Tocca una risposta, oppure scrivila qui."
+            if opzioni else "Rispondi scrivendo qui.")
+    return testo + "\n\n" + coda, tastiera
+
+
+# ===================================================================
 #  L'API
 # ===================================================================
 Trasporto = Callable[[str, dict[str, Any], float], dict[str, Any]]
+# Il caricamento di un file e' multipart: non e' un'altra chiamata JSON,
+# quindi ha un trasporto suo (i test lo sostituiscono senza aprire socket).
+Carica = Callable[[str, dict[str, Any], str, tuple[str, bytes, str], float],
+                  dict[str, Any]]
 
 
-def _urllib(url: str, dati: dict[str, Any], secondi: float) -> dict[str, Any]:
-    corpo = urllib.parse.urlencode(dati).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=corpo,
-        headers={"Content-Type": "application/x-www-form-urlencoded"})
-    try:
-        with urllib.request.urlopen(req, timeout=secondi) as risposta:
-            grezzo = risposta.read()
-    except urllib.error.HTTPError as e:
-        # Telegram sbaglia con un JSON che spiega l'errore: buttarlo
-        # via lascerebbe solo "400 Bad Request", che non dice niente.
-        grezzo = e.read() or b"{}"
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise ErroreTelegram(f"rete non raggiungibile: {e}") from e
+def _risposta(grezzo: bytes) -> dict[str, Any]:
+    """Il JSON di Telegram, o l'errore che Telegram ha spiegato."""
     try:
         dati_risposta = json.loads(grezzo.decode("utf-8", "replace"))
     except ValueError as e:
@@ -471,6 +629,53 @@ def _urllib(url: str, dati: dict[str, Any], secondi: float) -> dict[str, Any]:
     return dati_risposta
 
 
+def _apri(req: urllib.request.Request, secondi: float) -> bytes:
+    try:
+        with urllib.request.urlopen(req, timeout=secondi) as risposta:
+            return risposta.read()
+    except urllib.error.HTTPError as e:
+        # Telegram sbaglia con un JSON che spiega l'errore: buttarlo
+        # via lascerebbe solo "400 Bad Request", che non dice niente.
+        return e.read() or b"{}"
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise ErroreTelegram(f"rete non raggiungibile: {e}") from e
+
+
+def _urllib(url: str, dati: dict[str, Any], secondi: float) -> dict[str, Any]:
+    corpo = urllib.parse.urlencode(dati).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=corpo,
+        headers={"Content-Type": "application/x-www-form-urlencoded"})
+    return _risposta(_apri(req, secondi))
+
+
+def _multipart(url: str, campi: dict[str, Any], campo_file: str,
+               allegato: tuple[str, bytes, str],
+               secondi: float) -> dict[str, Any]:
+    """Una richiesta multipart/form-data, scritta a mano.
+
+    Non c'e' una libreria per questo e non serve: il confine, le parti,
+    il file. `requests` sarebbe una dipendenza in piu' per dieci righe.
+    """
+    nome, dati, tipo = allegato
+    confine = "----orchestra" + secrets.token_hex(12)
+    pezzi: list[bytes] = []
+    for chiave, valore in campi.items():
+        pezzi.append((f"--{confine}\r\n"
+                      f"Content-Disposition: form-data; name=\"{chiave}\"\r\n\r\n"
+                      f"{valore}\r\n").encode("utf-8"))
+    pezzi.append((f"--{confine}\r\n"
+                  f"Content-Disposition: form-data; name=\"{campo_file}\"; "
+                  f"filename=\"{nome}\"\r\n"
+                  f"Content-Type: {tipo}\r\n\r\n").encode("utf-8"))
+    pezzi.append(dati)
+    pezzi.append(f"\r\n--{confine}--\r\n".encode("utf-8"))
+    req = urllib.request.Request(
+        url, data=b"".join(pezzi),
+        headers={"Content-Type": f"multipart/form-data; boundary={confine}"})
+    return _risposta(_apri(req, max(secondi, 120)))
+
+
 class Api:
     """Le quattro chiamate che servono, e nient'altro.
 
@@ -481,7 +686,8 @@ class Api:
 
     def __init__(self, token: str, *, trasporto: Trasporto | None = None,
                  base: str = BASE,
-                 scarica: Callable[[str, int], bytes] | None = None) -> None:
+                 scarica: Callable[[str, int], bytes] | None = None,
+                 carica: Carica | None = None) -> None:
         self.token = (token or "").strip()
         self.base = base.rstrip("/")
         self._trasporto = trasporto or _urllib
@@ -489,6 +695,8 @@ class Api:
         # token dentro e dei byte come risposta. Trasporto a parte, per
         # la stessa ragione dell'altro: i test non escono dalla macchina.
         self._scarica = scarica or self._scarica_urllib
+        # L'invio di un file e' multipart, quindi un terzo trasporto.
+        self._carica = carica or _multipart
 
     def chiama(self, metodo: str, secondi: float = 30,
                **campi: Any) -> dict[str, Any]:
@@ -603,6 +811,29 @@ class Api:
             campi["reply_markup"] = markup
         return self.chiama("sendMessage", secondi=secondi, **campi)
 
+    def send_file(self, chat_id: str | int, nome: str, dati: bytes,
+                  *, didascalia: str = "", foto: bool = False,
+                  secondi: float = 180) -> dict[str, Any]:
+        """Allega un file alla chat.
+
+        `foto=True` usa sendPhoto, che mostra l'immagine dentro la chat;
+        per tutto il resto sendDocument, che e' l'unico modo di mandare un
+        PDF, un foglio o un'immagine che Telegram non accetta come foto
+        (un gif, un webp, un svg).
+        """
+        if not (nome or "").strip():
+            nome = "file"
+        metodo = "sendPhoto" if foto else "sendDocument"
+        campo = "photo" if foto else "document"
+        campi: dict[str, Any] = {"chat_id": str(chat_id)}
+        if didascalia:
+            # Il tetto di Telegram per una didascalia: oltre, rifiuta il
+            # file intero, e perdere l'allegato per una frase e' assurdo.
+            campi["caption"] = didascalia.strip()[:1024]
+        url = f"{self.base}/bot{self.token}/{metodo}"
+        return self._carica(url, campi, campo,
+                            (nome, dati, _tipo_mime(nome)), secondi)
+
     def answer_callback(self, callback_id: str, testo: str = "") -> bool:
         """Chiude la rotellina di un pulsante premuto.
 
@@ -673,6 +904,71 @@ def tastiera(righe: list[list[dict[str, Any]]] | None) -> str:
     return json.dumps({"inline_keyboard": costruite})
 
 
+# Le estensioni che vale la pena allegare a un messaggio: documenti,
+# immagini e qualche archivio. Il codice no: un turno che scrive venti
+# file .py non deve riempire la chat di allegati che dal telefono nessuno
+# apre, e che sono gia' nella cartella che l'utente vede.
+ALLEGABILI = (
+    ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".odt", ".ods",
+    ".csv", ".md", ".txt", ".rtf", ".png", ".jpg", ".jpeg", ".webp",
+    ".gif", ".svg", ".mp3", ".ogg", ".wav", ".mp4", ".zip",
+)
+# Cartelle in cui non si guarda: sono lo stato dell'app o le dipendenze,
+# non il lavoro del turno.
+ESCLUSE = {
+    ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
+    "env", ".idea", ".vscode", "sessions", "tmp", "temp", "dist", "build",
+    ".pytest_cache", ".mypy_cache",
+}
+
+
+def file_del_turno(root: str, inizio: float,
+                   massimo: int = MASSIMO_FILE_PER_TURNO) -> list[dict[str, Any]]:
+    """I file prodotti dal turno che vale la pena allegare.
+
+    Non si sa per certo cosa abbia "prodotto": un PDF puo' nascere da uno
+    script lanciato con la shell, e nessun tool dice "ho creato questo".
+    La cosa onesta e' guardare cosa e' stato scritto nella cartella di
+    lavoro da quando il turno e' partito, e filtrare per estensione — un
+    file toccato ma non nostro costa un allegato di troppo, un PDF mai
+    mandato costa una risposta che sembra incompleta.
+
+    Il tetto sul numero di file visitati evita che un progetto enorme
+    faccia pagare a ogni turno una scansione intera.
+    """
+    base = (root or "").strip()
+    if not base or not os.path.isdir(base):
+        return []
+    soglia = float(inizio or 0) - 2.0
+    trovati: list[tuple[float, str]] = []
+    visitati = 0
+    for cartella, sottocartelle, nomi in os.walk(base):
+        sottocartelle[:] = [d for d in sottocartelle
+                           if d.lower() not in ESCLUSE
+                           and not d.startswith(".")]
+        for nome in nomi:
+            visitati += 1
+            if visitati > 20000:
+                break
+            if os.path.splitext(nome)[1].lower() not in ALLEGABILI:
+                continue
+            percorso = os.path.join(cartella, nome)
+            try:
+                stato = os.stat(percorso)
+            except OSError:
+                continue
+            if stato.st_size <= 0 or stato.st_size > MASSIMO_INVIO:
+                continue
+            if stato.st_mtime < soglia:
+                continue
+            trovati.append((stato.st_mtime, percorso))
+        if visitati > 20000:
+            break
+    trovati.sort(reverse=True)
+    return [{"percorso": p, "nome": os.path.basename(p)}
+            for _m, p in trovati[:max(0, int(massimo))]]
+
+
 def dividi(testo: str, limite: int = MAX_TESTO) -> list[str]:
     """Spezza un testo lungo nei pezzi che Telegram accetta.
 
@@ -728,9 +1024,11 @@ class Ponte:
     guide e gli stop — resterebbero su Telegram fino alla fine.
     """
 
-    def __init__(self, bot_id: int, nome: str, api: Api, turno: Callable[..., str],
+    def __init__(self, bot_id: int, nome: str, api: Api, turno: Callable[..., Any],
                  *, comandi: Callable[[str, str], str | dict[str, Any]]
                  | None = None,
+                 tocco: Callable[[str], str | dict[str, Any] | None] | None = None,
+                 risposta: Callable[[str], str | None] | None = None,
                  attesa: int = ATTESA_POLLING,
                  log: Callable[[str], None] | None = None) -> None:
         self.bot_id = int(bot_id)
@@ -738,6 +1036,12 @@ class Ponte:
         self.api = api
         self.turno = turno
         self.comandi = comandi
+        # Un pulsante premuto, e una risposta scritta mentre una domanda
+        # e' aperta. Stanno fuori perche' chi risponde deve sapere cosa
+        # c'e' in attesa (permessi, domande): il ponte sa solo che
+        # qualcosa aspetta e che la risposta arriva dall'altra parte.
+        self.tocco = tocco
+        self.risposta = risposta
         self.attesa = max(0, int(attesa))
         self._log = log or (lambda _m: None)
         self._fermo = threading.Event()
@@ -857,19 +1161,68 @@ class Ponte:
                 self._log(f"telegram {self.nome}: risposta non inviata: {e}")
                 return
 
-    def _manda_modulo(self, chat_id: str, modulo: dict[str, Any]) -> None:
-        """Un messaggio con i pulsanti: e' un modulo, non una risposta."""
-        testo = str(modulo.get("testo") or "")
-        righe = modulo.get("tastiera")
+    def _invia_modulo(self, chat_id: str, testo: str,
+                      righe: list | None) -> int:
+        """Manda un testo con i pulsanti attaccati all'ultimo pezzo.
+
+        Torna l'id del messaggio coi pulsanti, 0 se non e' partito: e' il
+        messaggio che poi si riscrive per dire com'e' finita.
+        """
         pezzi = dividi(testo) or [""]
+        ultimo_id = 0
         for i, pezzo in enumerate(pezzi):
             ultimo = i == len(pezzi) - 1
             try:
-                self.api.send_message(chat_id, pezzo,
-                                      markup=tastiera(righe) if ultimo else None)
+                inviato = self.api.send_message(
+                    chat_id, pezzo, markup=tastiera(righe) if ultimo else None)
             except ErroreTelegram as e:
                 self._log(f"telegram {self.nome}: modulo non inviato: {e}")
-                return
+                return 0
+            if ultimo:
+                ultimo_id = int((inviato.get("result") or {}).get(
+                    "message_id") or 0)
+        return ultimo_id
+
+    def _manda_modulo(self, chat_id: str, modulo: dict[str, Any]) -> None:
+        """Un messaggio con i pulsanti: e' un modulo, non una risposta."""
+        self._invia_modulo(chat_id, str(modulo.get("testo") or ""),
+                           modulo.get("tastiera"))
+
+    def chiedi_in_chat(self, tipo: str, dati: dict[str, Any]) -> bool:
+        """Porta in chat un permesso o una domanda, con i suoi pulsanti.
+
+        La chiama chi emette l'evento (la webapp), non il ciclo dei
+        messaggi: cosi' la domanda arriva anche quando il turno e' stato
+        avviato dalla finestra e non da qui — che e' proprio il caso in
+        cui si e' lontani dal computer.
+
+        False se non c'e' una chat a cui chiedere: in quel caso la
+        domanda resta nella finestra, come prima.
+        """
+        chat, _nome = chat_di(self.bot_id)
+        if not chat:
+            return False
+        token = _token()
+        if tipo == "permission_request":
+            testo, righe = modulo_permesso(dati, token)
+            voce: dict[str, Any] = {"tipo": "permesso"}
+        elif tipo == "domanda_utente":
+            testo, righe = modulo_domanda(dati, token)
+            voce = {"tipo": "domanda",
+                    "opzioni": [str(o) for o in (dati.get("opzioni") or [])]}
+        else:
+            return False
+        voce["id"] = str(dati.get("id") or "")
+        if not voce["id"]:
+            return False
+        voce["token"] = token
+        voce["chat"] = chat
+        messaggio = self._invia_modulo(chat, testo, righe)
+        if not messaggio:
+            return False
+        voce["message_id"] = messaggio
+        sospendi(self.bot_id, voce)
+        return True
 
     def _pulsante(self, tocco: dict[str, Any]) -> None:
         """Un pulsante premuto: si riscrive quel messaggio, non se ne manda un altro.
@@ -894,11 +1247,14 @@ class Ponte:
             self.api.answer_callback(cb_id,
                                      "Questa chat non e' collegata a Orchestra.")
             return
-        if self.comandi is None:
+        if self.tocco is None and self.comandi is None:
             self.api.answer_callback(cb_id, "Modulo non disponibile.")
             return
         try:
-            risposta = self.comandi("modello", f"cb:{dati}")
+            if self.tocco is not None:
+                risposta = self.tocco(dati)
+            else:
+                risposta = self.comandi("modello", f"cb:{dati}")
         except Exception as e:  # noqa: BLE001
             risposta = (f"Errore nel modulo: {type(e).__name__}: {e}")
         self.api.answer_callback(cb_id)
@@ -968,6 +1324,22 @@ class Ponte:
             self._rispondi(chat_id, "Non c'e' niente da leggere in questo "
                                     "messaggio. Leggo testo, foto, "
                                     "documenti e vocali.")
+            return
+
+        # Prima di tutto il resto: c'e' una domanda aperta in questa chat?
+        # Allora quello che si scrive e' la risposta, non un nuovo turno e
+        # non una guida. Senza questo controllo il testo finirebbe nella
+        # coda degli steer, l'agente continuerebbe ad aspettare, e dopo
+        # cinque minuti la domanda scadrebbe avendo gia' la risposta in
+        # mano — la peggiore delle combinazioni.
+        atteso = sospeso(self.bot_id)
+        if atteso:
+            if testo:
+                self._risposta_scritta(chat_id, testo, atteso)
+                return
+            self._rispondi(chat_id, "C'e' una domanda aperta qui sopra: "
+                                    "rispondi a quella (un pulsante o una "
+                                    "riga di testo) prima di mandarmi file.")
             return
 
         if self.occupato:
@@ -1068,19 +1440,115 @@ class Ponte:
         self.api.scrive(chat_id)
         aggiorna = self._avanzatore(chat_id)
         try:
-            risposta = (self.turno(richiesta, allegati, aggiorna) or "").strip()
+            esito = self.turno(richiesta, allegati, aggiorna)
         except Exception as e:  # noqa: BLE001
             self._fine_progresso()
             self._rispondi(chat_id, f"Errore durante il turno: "
                                     f"{type(e).__name__}: {e}")
             return
+        finally:
+            # Una domanda che nasce e muore dentro il turno non deve
+            # sopravvivergli: il messaggio dopo sarebbe letto come la sua
+            # risposta.
+            pulisci_sospesi(self.bot_id)
         self._fine_progresso()
         self.ultimo_turno = time.time()
+        # Il turno puo' tornare anche i file che ha prodotto: `{testo,
+        # file}`. Una stringa resta valida — e' quello che torna un
+        # chiamante che i file non li sa elencare.
+        risposta = ""
+        prodotti: list[dict[str, Any]] = []
+        if isinstance(esito, dict):
+            risposta = str(esito.get("testo") or "").strip()
+            prodotti = [f for f in (esito.get("file") or [])
+                       if isinstance(f, dict)]
+        else:
+            risposta = str(esito or "").strip()
         if not risposta:
             risposta = ("Il turno e' finito senza una risposta testuale. "
                         "Il lavoro puo' essere comunque stato fatto: "
                         "controlla nella finestra di Orchestra.")
         self._rispondi(chat_id, risposta)
+        if prodotti:
+            self._manda_file(chat_id, prodotti)
+
+    def _risposta_scritta(self, chat_id: str, testo: str,
+                          atteso: dict[str, Any]) -> None:
+        """Una riga di testo mentre una domanda e' aperta: e' la risposta.
+
+        Per un permesso non c'e' niente da fare: le quattro scelte hanno
+        bisogno di sapere quale, e "si'" non dice se vale una volta o per
+        sempre. Lo si dice, invece di indovinare.
+        """
+        esito = ""
+        if self.risposta is not None:
+            try:
+                esito = self.risposta(testo) or ""
+            except Exception as e:  # noqa: BLE001
+                esito = f"Non sono riuscito a consegnare la risposta: {e}"
+        if sospeso(self.bot_id) is None:
+            # Consumata: il modulo resta nella chat come promemoria, ma
+            # senza pulsanti che non portano piu' da nessuna parte.
+            self._chiudi_modulo(
+                atteso, "Risposta: " + (testo[:600] or "(vuota)"))
+        self._rispondi(chat_id, esito or "Risposta inviata.")
+
+    def _chiudi_modulo(self, atteso: dict[str, Any], testo: str) -> None:
+        """Riscrive il messaggio della domanda togliendo i pulsanti."""
+        chat = str(atteso.get("chat") or "")
+        try:
+            messaggio = int(atteso.get("message_id") or 0)
+        except (TypeError, ValueError):
+            messaggio = 0
+        if not chat or not messaggio:
+            return
+        try:
+            self.api.edit_message(chat, messaggio, (testo or "Fatto.")[:MAX_TESTO],
+                                  markup=tastiera(None))
+        except ErroreTelegram as e:
+            self._log(f"telegram {self.nome}: modulo non chiuso: {e}")
+
+    def _manda_file(self, chat_id: str, file: list[dict[str, Any]]) -> None:
+        """Allega alla chat i file che il turno ha prodotto.
+
+        Il tetto e' quello del Bot API (50 MB) e non quello del download:
+        sono due limiti diversi. Un file troppo grande non si manda, ma si
+        dice dove sta, perche' "non e' arrivato niente" senza motivo e' un
+        guasto che l'utente non sa come chiudere.
+        """
+        mandati = 0
+        for voce in file[:MASSIMO_FILE_PER_TURNO]:
+            percorso = str(voce.get("percorso") or "")
+            nome = str(voce.get("nome") or os.path.basename(percorso) or "file")
+            try:
+                with open(percorso, "rb") as f:
+                    dati = f.read(MASSIMO_INVIO + 1)
+            except OSError as e:
+                self._log(f"telegram {self.nome}: {nome} non leggibile: {e}")
+                continue
+            if not dati:
+                continue
+            if len(dati) > MASSIMO_INVIO:
+                self._rispondi(chat_id,
+                               f"{nome} supera i"
+                               f" {MASSIMO_INVIO // (1024 * 1024)} MB che "
+                               "Telegram accetta: sta in " + percorso)
+                continue
+            foto = os.path.splitext(nome)[1].lower() in FOTO
+            try:
+                self.api.send_file(chat_id, nome, dati,
+                                   didascalia=str(voce.get("didascalia") or ""),
+                                   foto=foto)
+                mandati += 1
+            except ErroreTelegram as e:
+                self._log(f"telegram {self.nome}: {nome} non inviato: {e}")
+                self._rispondi(chat_id, f"Non sono riuscito ad allegare "
+                                        f"{nome}: {e}. Il file e' in {percorso}")
+        resto = len(file) - MASSIMO_FILE_PER_TURNO
+        if resto > 0:
+            self._rispondi(chat_id, f"Altri {resto} file li ha prodotti il "
+                                    "turno, ma qui ne allego cinque: sono "
+                                    "nella cartella del progetto.")
 
     def _prepara_allegato(self, rif: dict[str, Any]) -> tuple[str, list[Any]]:
         """Scarica il file e lo prepara per il turno.
@@ -1131,8 +1599,9 @@ class Ponte:
         if not stt.disponibile():
             raise ErroreAllegato(
                 "Il vocale lo so trascrivere, ma il motore vocale non e' "
-                "installato. Si installa da Orchestra: Opzioni, sezione "
-                "Voce. Oppure scrivimi quello che dicevi.")
+                "installato. In Orchestra: Opzioni, pulsante Dipendenze, "
+                "e installa faster-whisper. Oppure scrivimi quello che "
+                "dicevi.")
         try:
             testo = (stt.trascrivi(dati, nome) or "").strip()
         except Exception as e:  # noqa: BLE001

@@ -25,11 +25,17 @@ class RotteTelegram:
 
         attivi = self.app.telegram_attivi()
         righe = []
-        for b in bots_mod.tutti():
+        # L'agente principale e' il primo della lista: e' quello che esiste
+        # anche senza aver mai creato un bot, ed e' il caso di chi vuole
+        # scrivere all'Orchestra di sempre dal telefono.
+        voci = [dict(bots_mod.agente_base(), principale=True)]
+        voci += [dict(b, principale=False) for b in bots_mod.tutti()]
+        for b in voci:
             voce = tg.stato(b["id"])
             voce["nome"] = b["nome"]
             voce["attivo"] = int(b["id"]) in attivi
             voce["in_corso"] = bool(tg.codice_in_corso(b["id"]))
+            voce["principale"] = bool(b.get("principale"))
             righe.append(voce)
         self._json({"ok": True, "bots": righe})
 
@@ -45,7 +51,7 @@ class RotteTelegram:
         from . import bots as bots_mod
         from . import telegram as tg
 
-        bot = bots_mod.per_id(body.get("id"))
+        bot = bots_mod.per_id_agente(body.get("id"))
         if not bot:
             self._json({"error": "bot sconosciuto"}, 404)
             return
@@ -83,7 +89,7 @@ class RotteTelegram:
         from . import qr as qr_mod
         from . import telegram as tg
 
-        bot = bots_mod.per_id(body.get("id"))
+        bot = bots_mod.per_id_agente(body.get("id"))
         if not bot:
             self._json({"error": "bot sconosciuto"}, 404)
             return
@@ -120,7 +126,7 @@ class RotteTelegram:
         from . import bots as bots_mod
         from . import telegram as tg
 
-        bot = bots_mod.per_id(body.get("id"))
+        bot = bots_mod.per_id_agente(body.get("id"))
         if not bot:
             self._json({"error": "bot sconosciuto"}, 404)
             return

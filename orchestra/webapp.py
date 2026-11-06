@@ -329,8 +329,7 @@ class OrchestraApp:
             # compariva e il tool veniva negato subito, senza che nulla
             # lo dicesse. Stavolta si chiama quello giusto, e se
             # fallisce lo si vede.
-            bridge = self.session.bridge
-            bridge.emit("permission_request", {
+            self._canale_agente("permission_request", {
                 "id": r.id, "percorso": r.percorso, "azione": r.azione,
                 "dettaglio": r.dettaglio, "motivo": r.motivo,
                 "root": str(self.gate_root()),
@@ -362,8 +361,49 @@ class OrchestraApp:
         from . import domande
 
         domande.imposta_canale(
-            lambda d: self.session.bridge.emit("domanda_utente", d))
+            lambda d: self._canale_agente("domanda_utente", d))
         return gate
+
+    def _canale_agente(self, kind: str, dati: dict[str, Any]) -> None:
+        """Porta un permesso o una domanda a chi sta lavorando, e al telefono.
+
+        Due destinazioni, e sono due perche' sono due le cose che possono
+        mancare. La finestra e' quella della sessione che ha emesso: con i
+        bot, `self.session` e' sempre l'agente principale, e mandare la'
+        la domanda di un bot la mostrava nel posto sbagliato (e non la
+        mostrava nel suo). La chat Telegram e' quella del bot che possiede
+        la sessione: senza, chi e' lontano dal computer non ha modo di
+        rispondere, e il turno aspetta cinque minuti per niente.
+        """
+        from .session import sessione_corrente
+
+        sess = sessione_corrente() or self.session
+        if sess is not None:
+            try:
+                sess.bridge.emit(kind, dati)
+            except Exception:  # noqa: BLE001 - un canale rotto non ferma il tool
+                pass
+        try:
+            bot_id = int(getattr(sess, "bot_id", 0) or 0)
+        except (TypeError, ValueError):
+            bot_id = 0
+        self._avvisa_telegram(bot_id, kind, dati)
+
+    def _avvisa_telegram(self, bot_id: int, kind: str,
+                         dati: dict[str, Any]) -> bool:
+        """Manda la domanda alla chat del bot, se ce n'e' una.
+
+        False (o un'eccezione) non e' un guasto: significa che quella
+        domanda si risponde dalla finestra, come prima che esistesse il
+        ponte.
+        """
+        ponte = (getattr(self, "_telegram_ponti", None) or {}).get(int(bot_id))
+        if ponte is None or not ponte.attivo:
+            return False
+        try:
+            return bool(ponte.chiedi_in_chat(kind, dati))
+        except Exception:  # noqa: BLE001
+            return False
 
     def gate_root(self) -> Any:
         from .tools import _root
@@ -1855,7 +1895,17 @@ class OrchestraApp:
         lo storico e perdere le tool call non ancora salvate. Quando la
         configurazione cambia, il chiamante la butta esplicitamente.
         """
+        from . import bots as bots_mod
+
         ident = int(bot["id"])
+        if ident == bots_mod.BASE_ID:
+            # L'agente principale e' la sessione della finestra: ce n'e'
+            # una sola, e collegarla a Telegram vuol dire scrivere nella
+            # stessa conversazione che si vede sul monitor.
+            sess = self.session
+            if sess is not None:
+                sess.bot_id = bots_mod.BASE_ID
+            return sess
         runtime = getattr(self, "_bots_runtime", None)
         if runtime is None:
             runtime = self._bots_runtime = {}
@@ -1867,6 +1917,7 @@ class OrchestraApp:
                                   persona=bot.get("persona", ""),
                                   nome_bot=bot.get("nome", ""))
         sess.bot = bot["nome"]
+        sess.bot_id = ident
         sess.attiva_bot(self._risolutore_bot, nome=bot["nome"],
                         parla_con=list(bot.get("parla_con") or []))
         if bot.get("profilo"):
@@ -1912,11 +1963,15 @@ class OrchestraApp:
         """
         from . import bots as bots_mod
 
-        b = bots_mod.per_id(bot_id)
+        inizio = time.time()
+        b = bots_mod.per_id_agente(bot_id)
         if b is None:
             return ("Questo bot non esiste piu' in Orchestra: manda "
                     "/scollega qui e ricollega quello giusto dal pannello.")
         sess = self._sessione_bot(b)
+        if sess is None:
+            return ("Orchestra non ha una sessione aperta: apri la "
+                    "finestra sul computer, poi riprova.")
         if sess.busy:
             return "Sto ancora lavorando al messaggio precedente."
         # La sottoscrizione avviene prima di `send`: iscriversi dopo
@@ -1938,7 +1993,31 @@ class OrchestraApp:
             return ("Sto ancora lavorando: il turno e' lungo e non e' "
                     "finito. La risposta completa la trovi nella finestra "
                     "di Orchestra.")
-        return self._telegram_ultima_risposta(sess)
+        # Anche i file: se il turno ha prodotto un PDF o un'immagine, dal
+        # telefono non c'e' modo di aprirla, e "fatto, sta nella cartella"
+        # e' una risposta che costringe a tornare al computer per vedere
+        # se e' venuta bene.
+        return {"testo": self._telegram_ultima_risposta(sess),
+                "file": self._telegram_file_del_turno(inizio)}
+
+    def _telegram_file_del_turno(self, inizio: float) -> list[dict[str, Any]]:
+        """I file allegabili scritti durante il turno.
+
+        La cartella e' quella del progetto attivo, che e' anche la root
+        dei tool: il turno scrive li'. Se la root non e' leggibile si
+        torna una lista vuota — un allegato mancato non deve far fallire
+        una risposta che c'e' gia'.
+        """
+        from . import telegram as tg
+
+        try:
+            root = str(self.gate_root())
+        except Exception:  # noqa: BLE001
+            return []
+        try:
+            return tg.file_del_turno(root, inizio)
+        except Exception:  # noqa: BLE001
+            return []
 
     def _telegram_ultima_risposta(self, sess: Any) -> str:
         for m in reversed(getattr(sess.agent.state, "messages", [])):
@@ -2041,11 +2120,14 @@ class OrchestraApp:
         """
         from . import bots as bots_mod
 
-        b = bots_mod.per_id(bot_id)
+        b = bots_mod.per_id_agente(bot_id)
         if b is None:
             return "Questo bot non esiste piu' in Orchestra."
         nome = (nome or "").strip().lower()
         sess = self._sessione_bot(b)
+        if sess is None:
+            return ("Orchestra non ha una sessione aperta: apri la "
+                    "finestra, poi riprova.")
         if nome == "stato":
             return self._telegram_stato_bot(b, sess)
         if nome == "steer":
@@ -2074,6 +2156,101 @@ class OrchestraApp:
         if nome == "modello":
             return self._telegram_modello(b, argomento)
         return f"Comando /{nome} non riconosciuto. /aiuto per la lista."
+
+    def telegram_tocco(self, bot_id: int, dati: str) -> str | dict[str, Any]:
+        """Un pulsante premuto in chat.
+
+        `callback_data` e' l'unico stato che sopravvive a un messaggio
+        rimasto in chat per giorni, quindi ogni pulsante dice da solo cosa
+        e': una scelta di permesso (`d:`), una risposta a una domanda
+        (`r:`) o un pezzo del menu dei modelli (`s:`, `p:`, `m:`).
+        """
+        dati = (dati or "").strip()
+        if dati.startswith("d:"):
+            return self._telegram_decisione(bot_id, dati)
+        if dati.startswith("r:"):
+            return self._telegram_risposta_pulsante(bot_id, dati)
+        return self.telegram_comando(bot_id, "modello", "cb:" + dati)
+
+    def _telegram_decisione(self, bot_id: int, dati: str) -> str:
+        """Una delle quattro scelte di un permesso."""
+        from . import telegram as tg
+
+        parti = dati.split(":")
+        if len(parti) != 3:
+            return "Pulsante non riconosciuto: riscrivi /stato."
+        scelta, token = parti[1], parti[2]
+        voce = tg.chiudi(bot_id, token)
+        if voce is None or voce.get("tipo") != "permesso":
+            # Il token non torna: o e' la richiesta di prima, o e' scaduta
+            # mentre il messaggio restava in chat. In entrambi i casi
+            # rispondere "si'" concederebbe il permesso sbagliato.
+            return ("Questa richiesta non e' piu' aperta: e' scaduta, o "
+                    "l'ha gia' decisa qualcun altro.")
+        nome, descrizione = tg.SCELTE_PERMESSO.get(scelta,
+                                                   ("", ""))
+        if not nome:
+            return "Pulsante non riconosciuto: riscrivi /stato."
+        gate = getattr(self, "gate", None)
+        if gate is None or not gate.rispondi(str(voce.get("id") or ""), nome):
+            return ("Troppo tardi: il turno ha gia' rinunciato a questo "
+                    "permesso (cinque minuti senza risposta).")
+        return "Permesso " + descrizione + "."
+
+    def _telegram_risposta_pulsante(self, bot_id: int, dati: str) -> str:
+        """Un'opzione toccata: la sua risposta e' il testo dell'opzione."""
+        from . import domande, telegram as tg
+
+        parti = dati.split(":")
+        if len(parti) != 3:
+            return "Pulsante non riconosciuto."
+        try:
+            indice = int(parti[1])
+        except ValueError:
+            return "Pulsante non riconosciuto."
+        voce = tg.sospeso(bot_id)
+        if voce is None or voce.get("tipo") != "domanda":
+            return ("Questa domanda non e' piu' aperta: e' scaduta, o "
+                    "qualcun altro ha gia' risposto.")
+        if str(voce.get("token") or "") != parti[2]:
+            # La domanda aperta e' un'altra, anche se il pulsante sembra
+            # lo stesso: e' il caso del modulo di ieri rimasto in chat.
+            return ("Questa domanda non e' piu' aperta: rispondi a quella "
+                    "piu' recente.")
+        opzioni = [str(o) for o in (voce.get("opzioni") or [])]
+        if not 0 <= indice < len(opzioni):
+            return "Quella risposta non e' piu' nell'elenco: riscrivi /stato."
+        scelta = opzioni[indice]
+        tg.chiudi(bot_id, parti[2])
+        if not domande.rispondi(str(voce.get("id") or ""), scelta):
+            return "Troppo tardi: la domanda e' scaduta."
+        return "Risposta inviata: " + scelta
+
+    def telegram_risposta_testo(self, bot_id: int, testo: str) -> str:
+        """Una risposta scritta a una domanda aperta.
+
+        Per un permesso non vale: le quattro scelte dicono anche QUANTO a
+        lungo vale, e "si'" non lo dice. Per una domanda e' il caso piu'
+        naturale — un piano si accetta, ma spesso si corregge a parole.
+        """
+        from . import domande, telegram as tg
+
+        voce = tg.sospeso(bot_id)
+        if voce is None:
+            return ("Non c'e' nessuna domanda aperta. Se l'agente sta "
+                    "lavorando, quello che scrivi diventa una guida per il "
+                    "turno in corso.")
+        if voce.get("tipo") == "permesso":
+            return ("Questa e' una richiesta di permesso: tocca uno dei "
+                    "pulsanti qui sopra (una volta, sessione, sempre, "
+                    "mai). Il testo non dice per quanto vale.")
+        risposta = (testo or "").strip()
+        if not risposta:
+            return "Risposta vuota: dimmi qualcosa."
+        tg.chiudi(bot_id)
+        if not domande.rispondi(str(voce.get("id") or ""), risposta):
+            return "Troppo tardi: la domanda e' scaduta."
+        return "Risposta inviata."
 
     def _telegram_stato_bot(self, b: dict[str, Any], sess: Any) -> str:
         provider, _configurato = self._bot_provider_modello(b)
@@ -2119,10 +2296,22 @@ class OrchestraApp:
     def _telegram_salva_modello(self, b: dict[str, Any], scelto: str,
                                 verificato: bool) -> str:
         sess = self._sessione_bot(b)
+        if sess is None:
+            return "Orchestra non ha una sessione aperta: apri la finestra."
         if sess.busy:
             return "C'e' un turno in corso: /stop, poi /modello."
         from . import bots as bots_mod
 
+        avviso = "" if verificato else " (non ho potuto verificare il nome)"
+        if int(b["id"]) == bots_mod.BASE_ID:
+            # L'agente principale non ha una riga nella tabella dei bot: il
+            # modello si cambia dove si cambia sempre, cioe' sulla sessione.
+            try:
+                self.switch_model(scelto)
+            except Exception as e:  # noqa: BLE001
+                return f"Non ho cambiato il modello: {e}"
+            return (f"Modello cambiato in {scelto}{avviso}. Vale dalla "
+                    "prossima richiesta, anche da qui.")
         if not bots_mod.aggiorna(b["id"], modello=scelto):
             return "Non sono riuscito a salvare il modello."
         # La sessione in memoria e' nata col modello vecchio: si butta, e
@@ -2130,7 +2319,6 @@ class OrchestraApp:
         # si perde, si ricarica dallo storico.
         runtime = getattr(self, "_bots_runtime", None) or {}
         runtime.pop(int(b["id"]), None)
-        avviso = "" if verificato else " (non ho potuto verificare il nome)"
         return (f"Modello cambiato in {scelto}{avviso}. Da adesso questo "
                 "bot usa un modello suo, e vale dal prossimo messaggio.")
 
@@ -2359,7 +2547,10 @@ class OrchestraApp:
         for riga in tg.tutti():
             if not riga["token"]:
                 continue
-            b = bots_mod.per_id(riga["bot_id"])
+            # `per_id_agente` e non `per_id`: l'agente principale (id 0)
+            # non e' nella tabella dei bot, ma ha una chat Telegram come
+            # gli altri — ed e' il caso di chi non ha mai creato un bot.
+            b = bots_mod.per_id_agente(riga["bot_id"])
             if b is None:
                 continue
             voluti[int(riga["bot_id"])] = (riga["token"], b["nome"])
@@ -2377,6 +2568,12 @@ class OrchestraApp:
                  self.telegram_turno(b, testo, allegati, avanzamento)),
                 comandi=(lambda cmd, arg="", b=bid:
                          self.telegram_comando(b, cmd, arg)),
+                # I pulsanti non sono tutti del menu dei modelli: qui si
+                # smista (permesso, risposta, menu), e la risposta scritta
+                # quando una domanda e' aperta arriva nella stessa chat.
+                tocco=(lambda dati, b=bid: self.telegram_tocco(b, dati)),
+                risposta=(lambda testo, b=bid:
+                          self.telegram_risposta_testo(b, testo)),
                 log=_log_telegram)
             ponti[bid] = ponte
             ponte.avvia()

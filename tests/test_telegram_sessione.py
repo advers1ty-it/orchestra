@@ -24,8 +24,11 @@ sys.path.insert(0, os.path.dirname(HERE))
 os.environ["ORCHESTRA_HOME"] = tempfile.mkdtemp(prefix="orch_tgc_")
 
 import orchestra.bots as bots_mod  # noqa: E402
+import orchestra.domande as domande  # noqa: E402
 import orchestra.nous_auth as nous_auth  # noqa: E402
+import orchestra.telegram as tg  # noqa: E402
 import orchestra.webapp as webapp  # noqa: E402
+from orchestra import session as session_mod  # noqa: E402
 
 
 # Sul computer di chi sviluppa puo' esserci un collegamento Nous vero (il
@@ -299,8 +302,11 @@ def send_con_eventi(testo, allegati=None):
 
 sess.send = send_con_eventi
 risposta = app.telegram_turno(bot["id"], "leggi i test", None, testi.append)
+# Il turno adesso torna anche i file prodotti (`{testo, file}`): il testo
+# resta l'ultima frase dell'assistente, e i file si controllano a parte.
 check("la risposta finale e' l'ultima dell'assistente",
-      risposta == "Ho letto i test.", risposta)
+      (risposta or {}).get("testo") == "Ho letto i test.", risposta)
+check("e dice quali file ha prodotto", "file" in (risposta or {}), risposta)
 check("il turno ha visto il testo giusto", sess.testo == "leggi i test",
       sess.testo)
 check("lo stato e' stato aggiornato mentre girava", bool(testi), str(len(testi)))
@@ -364,7 +370,8 @@ sess.send = send_muto
 inizio = time.monotonic()
 risposta = app.telegram_turno(bot["id"], "lavora", None, None)
 passati = time.monotonic() - inizio
-check("il turno si chiude da solo", risposta == "fatto comunque", risposta)
+check("il turno si chiude da solo",
+      (risposta or {}).get("testo") == "fatto comunque", risposta)
 check("e non aspetta la scadenza", passati < 10, f"{passati:.1f}s")
 
 print("\n[12] gli allegati arrivano al turno")
@@ -490,6 +497,163 @@ app2.telegram_modelli = lambda _p: []
 risposta = app2.telegram_comando(b2["id"], "modello", "cb:s:openrouter")
 check("se il catalogo non risponde lo dice, e non finge zero modelli",
       "Non riesco a leggere" in risposta, cp(risposta))
+
+
+print("\n[15] il canale: la domanda va a chi sta lavorando, e al suo telefono")
+
+
+class BridgeFinto:
+    def __init__(self):
+        self.eventi = []
+
+    def emit(self, kind, data):
+        self.eventi.append((kind, data))
+
+
+class SessCanale:
+    def __init__(self, bot_id):
+        self.bot_id = bot_id
+        self.bridge = BridgeFinto()
+
+
+class PonteCanale:
+    attivo = True
+
+    def __init__(self, visti):
+        self.visti = visti
+
+    def chiedi_in_chat(self, tipo, dati):
+        self.visti.append((tipo, dati))
+        return True
+
+
+app1 = webapp.OrchestraApp.__new__(webapp.OrchestraApp)
+app1.session = SessCanale(0)
+visti = []
+app1._telegram_ponti = {3: PonteCanale(visti)}
+sess3 = SessCanale(3)
+session_mod._CORRENTE.sess = sess3
+app1._canale_agente("permission_request", {"id": "p9"})
+session_mod._CORRENTE.sess = None
+check("la domanda va nel bridge della sessione al lavoro, non in quello principale",
+      [e[0] for e in sess3.bridge.eventi] == ["permission_request"]
+      and app1.session.bridge.eventi == [],
+      str((sess3.bridge.eventi, app1.session.bridge.eventi)))
+check("e alla chat Telegram di quella sessione, non di un'altra",
+      visti == [("permission_request", {"id": "p9"})], str(visti))
+
+# Senza una sessione al lavoro si torna al comportamento di prima.
+visti.clear()
+app1._canale_agente("domanda_utente", {"id": "d9"})
+check("fuori da un turno la domanda va all'agente principale",
+      [e[0] for e in app1.session.bridge.eventi] == ["domanda_utente"],
+      str(app1.session.bridge.eventi))
+check("e non a un bot che non c'entra", visti == [], str(visti))
+
+print("\n[16] toccare un permesso in chat: decide quello giusto, una volta sola")
+
+
+class GateFinto:
+    def __init__(self):
+        self.risposte = []
+        self.in_attesa = True
+
+    def rispondi(self, rid, scelta):
+        if not self.in_attesa:
+            return False
+        self.risposte.append((rid, scelta))
+        self.in_attesa = False
+        return True
+
+
+app2b, _sess2 = app_finta()
+gate = GateFinto()
+app2b.gate = gate
+voce = tg.sospendi(bot["id"], {"tipo": "permesso", "id": "p1"})
+esito = app2b.telegram_tocco(bot["id"], "d:s:" + voce["token"])
+check("toccare 'sessione' risponde 'sessione'",
+      gate.risposte == [("p1", "sessione")], str(gate.risposte))
+check("e lo dice in chat", "sessione" in esito, cp(esito))
+
+# Il pulsante di una richiesta vecchia: stesso disegno, token diverso.
+voce = tg.sospendi(bot["id"], {"tipo": "permesso", "id": "p2"})
+prima = len(gate.risposte)
+esito = app2b.telegram_tocco(bot["id"], "d:w:aaaa")
+check("un pulsante vecchio non decide la richiesta nuova",
+      len(gate.risposte) == prima, str(gate.risposte))
+check("e lo dice invece di applicarlo", "non e' piu' aperta" in esito, cp(esito))
+
+# Chi ha risposto dal computer: qui non c'e' piu' nessuno che aspetta.
+tg.chiudi(bot["id"])
+gate.in_attesa = False
+voce = tg.sospendi(bot["id"], {"tipo": "permesso", "id": "p3"})
+esito = app2b.telegram_tocco(bot["id"], "d:u:" + voce["token"])
+check("se il turno ha gia' rinunciato lo dice, invece di fingere",
+      "Troppo tardi" in esito, cp(esito))
+tg.pulisci_sospesi(bot["id"])
+
+print("\n[17] toccare un'opzione, o scrivere la risposta")
+domanda = domande.crea("nome o name?", ["nome", "name"])
+voce = tg.sospendi(bot["id"], {"tipo": "domanda", "id": domanda["id"],
+                               "opzioni": domanda["opzioni"]})
+esito = app2b.telegram_tocco(bot["id"], "r:1:" + voce["token"])
+check("toccare un'opzione consegna il testo di quell'opzione",
+      domande.attendi(domanda["id"], timeout=0.5) == "name", cp(esito))
+check("e la domanda non e' piu' aperta", tg.sospeso(bot["id"]) is None)
+
+# Il piano: si approva toccando, ma spesso si corregge a parole.
+piano = domande.crea("Piano: 1) leggo 2) scrivo", ["Approva il piano", "No"],
+                     tipo="piano")
+voce = tg.sospendi(bot["id"], {"tipo": "domanda", "id": piano["id"],
+                               "opzioni": piano["opzioni"]})
+esito = app2b.telegram_risposta_testo(bot["id"], "cambia il passo 2 in ordine")
+check("scrivere la risposta la consegna",
+      domande.attendi(piano["id"], timeout=0.5) == "cambia il passo 2 in ordine",
+      cp(esito))
+
+# Un permesso aperto: il testo non dice per quanto vale.
+voce = tg.sospendi(bot["id"], {"tipo": "permesso", "id": "p4"})
+esito = app2b.telegram_risposta_testo(bot["id"], "si'")
+check("una riga di testo non decide un permesso",
+      "pulsanti" in esito, cp(esito))
+check("e la richiesta resta aperta", tg.sospeso(bot["id"]) is not None)
+tg.pulisci_sospesi(bot["id"])
+scaduta = app2b.telegram_risposta_testo(bot["id"], "si'")
+check("senza nessuna domanda aperta lo dice",
+      "nessuna domanda" in scaduta, cp(scaduta))
+
+print("\n[18] l'agente principale si collega anche lui (id 0)")
+base = bots_mod.agente_base()
+check("l'agente principale ha un id che nessun bot usera'",
+      base["id"] == bots_mod.BASE_ID == 0 and bots_mod.per_id(0) is None,
+      str(base))
+check("e per_id_agente lo trova",
+      (bots_mod.per_id_agente(0) or {}).get("id") == 0, str(base))
+check("senza confondere i bot veri",
+      (bots_mod.per_id_agente(bot["id"]) or {}).get("nome") == bot["nome"],
+      str(bots_mod.per_id_agente(bot["id"])))
+
+app0 = webapp.OrchestraApp.__new__(webapp.OrchestraApp)
+app0.env = {"ORCHESTRA_PROVIDER": "openrouter",
+            "ORCHESTRA_MODEL": "gpt-4o-mini"}
+app0._bots_runtime = {}
+app0._catalog_per_provider = {
+    "openrouter": CatalogoFinto(["gpt-4o-mini", "gpt-4o"])}
+sess0 = SessioneFinta()
+app0.session = sess0
+stato0 = app0.telegram_comando(0, "stato")
+check("i comandi funzionano sull'agente principale",
+      isinstance(stato0, str) and "Modello" in stato0, cp(stato0))
+check("e la sessione sa di essere la 0", sess0.bot_id == 0,
+      str(getattr(sess0, "bot_id", None)))
+
+scelti = []
+app0.switch_model = lambda m: scelti.append(m)
+esito = app0.telegram_comando(0, "modello", "gpt-4o")
+check("cambiare modello all'agente principale passa dal cambio vero",
+      scelti == ["gpt-4o"], str(scelti))
+check("e lo dice senza parlare di bot", "bot" not in esito.lower()
+      or "agente principale" in esito.lower(), cp(esito))
 
 print()
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")

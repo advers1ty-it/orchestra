@@ -648,9 +648,17 @@
           <div class="bot-telegram">
             <div class="opzioni-servizi-testa">
               <b>Telegram</b>
-              <span class="dim">un bot Telegram per questo bot: gli scrivi
-                dal telefono e risponde lui, con la sua persona, i suoi
-                tool e i suoi permessi.</span>
+              <span class="dim">scegli quale bot risponde su Telegram —
+                anche l'agente principale: gli scrivi dal telefono e
+                risponde lui, con la sua persona, i suoi tool e i suoi
+                permessi.</span>
+            </div>
+            <div class="opzioni-selezione" style="margin-top:8px">
+              <label>Bot da collegare
+                <select id="tg-bot">
+                  <option value="0">agente principale</option>
+                </select>
+              </label>
             </div>
             <div class="goal-bar-inner" style="margin-top:8px">
               <input id="tg-token" type="password" autocomplete="off"
@@ -676,6 +684,12 @@
               bot puo' usare la shell, puo' usarla anche chi scrive su
               Telegram. Per questo il codice vale dieci minuti e una volta
               sola.</p>
+            <p class="opzioni-nota">Nella chat arrivano anche le domande
+              dell'agente con i pulsanti: le richieste di permesso (una
+              volta, sessione, sempre, mai), le domande di <code>ask_user</code>
+              e le proposte di piano, da approvare o correggere scrivendo.
+              Se il turno produce un PDF, un'immagine o un foglio, te lo
+              allega alla risposta.</p>
           </div>
         </section>
 

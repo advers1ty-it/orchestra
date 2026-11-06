@@ -30,6 +30,26 @@ from .storico import storico
 from .types import Message, ToolRegistry
 
 
+# La sessione che sta eseguendo il turno SU QUESTO THREAD.
+#
+# Serve a chi deve mandare un messaggio a "chi sta lavorando": un
+# permesso, una domanda, una proposta di piano. Prima si indovinava con
+# `app.session`, e con i bot era la sessione sbagliata — la domanda di un
+# bot compariva nella finestra dell'agente principale, e nel ponte
+# Telegram del bot non arrivava niente.
+#
+# E' un threading.local e non un attributo dell'agente perche' chi emette
+# non ha l'agente in mano: il tool e' globale, il gate e' uno. Il thread
+# invece e' esattamente la cosa giusta — una sessione, un turno, un
+# thread.
+_CORRENTE = threading.local()
+
+
+def sessione_corrente() -> "Session | None":
+    """La sessione che sta eseguendo un turno adesso, su questo thread."""
+    return getattr(_CORRENTE, "sess", None)
+
+
 class EventBridge:
     """Diffusione di eventi thread-safe, con seq numerico per riprendere.
 
@@ -318,6 +338,10 @@ class Session:
         self._bot_depth: int = 0
         self._bot_parla_con: list[str] = []
         self._bot_risolutore: Any = None
+        # L'id del bot che possiede questa sessione: 0 e' l'agente
+        # principale. Serve a chi deve decidere quale chat Telegram deve
+        # ricevere una domanda nata qui dentro.
+        self.bot_id: int = 0
         # La policy del bot (tool e shell ammessi). Vuota = nessun
         # limite oltre al profilo: e' il caso dell'agente principale.
         self._policy: dict[str, list[str]] = {}
@@ -1254,6 +1278,10 @@ class Session:
 
     def _esegui_turno(self, user_input: str, allegati: list,
                       reg: Any) -> None:
+        # Da qui in poi "chi sta lavorando" e' questa sessione: chi emette
+        # una domanda la manda a lei (e quindi anche alla sua chat
+        # Telegram, se ne ha una), non all'agente principale.
+        _CORRENTE.sess = self
         allegati = allegati or []
         # Se il testo nomina un progetto, si cambia progetto. E' il
         # meccanismo che fa diventare "oggi lavoriamo al sito
@@ -1418,6 +1446,7 @@ class Session:
             # processo: il thread finisce qui, ma azzerarla esplicitamente
             # evita che un riuso del thread (o un test) porti in giro i
             # limiti di un bot che non sta piu' lavorando.
+            _CORRENTE.sess = None
             try:
                 from . import policy as policy_mod
                 policy_mod.disattiva()

@@ -69,6 +69,9 @@ class FintoTelegram:
         # modulo che non arriva sembrerebbe identico a uno che arriva.
         self.markup = []
         self.callback_risposti = []
+        # I file che il ponte manda passano da un trasporto multipart
+        # separato, quindi si registrano a parte dalle chiamate JSON.
+        self.file_inviati = []
 
     def messaggio(self, chat_id, testo, nome="prova"):
         self.ultimo_id += 1
@@ -115,6 +118,17 @@ class FintoTelegram:
 
     def scarica(self, percorso, massimo):
         return self.contenuto
+
+    def carica(self, url, campi, campo_file, allegato, secondi):
+        nome, dati, tipo = allegato
+        metodo = url.rsplit("/", 1)[-1]
+        self.chiamate.append((metodo, dict(campi)))
+        self.file_inviati.append({"metodo": metodo, "campo": campo_file,
+                                  "nome": nome, "byte": len(dati),
+                                  "tipo": tipo,
+                                  "didascalia": campi.get("caption") or ""})
+        return {"ok": True,
+                "result": {"message_id": 900 + len(self.file_inviati)}}
 
     def __call__(self, url, dati, secondi):
         if isinstance(dati, bytes):
@@ -163,7 +177,8 @@ class FintoTelegram:
         raise AssertionError(f"metodo inatteso: {metodo}")
 
 
-def ponte(finto, risposte=None, bot_id=7, comandi=None, turno=None):
+def ponte(finto, risposte=None, bot_id=7, comandi=None, turno=None,
+          tocco=None, risposta=None):
     chiamate = []
     allegati_visti = []
 
@@ -178,9 +193,10 @@ def ponte(finto, risposte=None, bot_id=7, comandi=None, turno=None):
             avanzamento("sto facendo")
         return f"risposta a: {testo}"
 
-    api = tg.Api(TOKEN, trasporto=finto, scarica=finto.scarica)
+    api = tg.Api(TOKEN, trasporto=finto, scarica=finto.scarica,
+                 carica=finto.carica)
     p = tg.Ponte(bot_id, "Prova", api, finto_turno, comandi=comandi,
-                 attesa=0)
+                 tocco=tocco, risposta=risposta, attesa=0)
     p.allegati_visti = allegati_visti
     return p, chiamate
 
@@ -674,6 +690,209 @@ p2.passo()
 check("un ponte senza comandi non esplode su un tocco",
       "Modulo non disponibile" in finto.callback_risposti[-1][1],
       str(finto.callback_risposti[-1]))
+
+print("\n[22] un permesso arriva in chat, e si risponde con un pulsante")
+finto = FintoTelegram()
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+decisi = []
+
+
+def tocco_finto(dati):
+    decisi.append(dati)
+    return "Permesso concesso per sempre."
+
+
+p, _ = ponte(finto, tocco=tocco_finto)
+p.passo()
+tg.pulisci_sospesi(7)
+arrivato = p.chiedi_in_chat("permission_request", {
+    "id": "p1", "percorso": "D:/Documenti/x.txt", "azione": "leggere",
+    "dettaglio": "", "motivo": "fuori dalla cartella di lavoro"})
+check("il permesso si manda in chat", arrivato is True)
+check("con il percorso scritto per esteso",
+      "D:/Documenti/x.txt" in finto.ultimo_inviato(), finto.ultimo_inviato())
+check("e quattro pulsanti, come nella finestra",
+      all(("d:" + c + ":") in finto.markup[-1] for c in "uswm"),
+      cp(finto.markup[-1]))
+voce = tg.sospeso(7)
+check("la richiesta resta aperta finche' non si risponde",
+      voce is not None, str(voce))
+
+finto.tocco(555, "d:w:" + voce["token"], message_id=901)
+p.passo()
+check("il tocco arriva a chi sa rispondere",
+      decisi == ["d:w:" + voce["token"]], str(decisi))
+check("e il messaggio dice com'e' finita",
+      "concesso per sempre" in finto.modifiche[-1][1],
+      cp(finto.modifiche[-1]))
+check("senza lasciare pulsanti vivi",
+      '"inline_keyboard": []' in finto.markup[-1], cp(finto.markup[-1]))
+# Il ponte non chiude la richiesta: chiude chi sa rispondere, che e' anche
+# l'unico a poter controllare che il token sia quello giusto. Qui il
+# risponditore finto non chiude, quindi la richiesta resta aperta — ed e'
+# esattamente quello che deve succedere.
+check("il ponte non decide e non chiude: lo fa chi risponde",
+      tg.sospeso(7) is not None, str(tg.sospeso(7)))
+tg.pulisci_sospesi(7)
+
+print("\n[23] una domanda: si tocca un'opzione, o si scrive")
+finto = FintoTelegram()
+tg.imposta_chat(7, 555, "adver")
+scelte = []
+risposte_scritte = []
+
+
+def tocco_domanda(dati):
+    scelte.append(dati)
+    return "Risposta inviata: name"
+
+
+def risposta_vera(testo):
+    """Come la webapp: consegna la risposta e chiude la domanda."""
+    risposte_scritte.append(testo)
+    tg.chiudi(7)
+    return "Risposta inviata."
+
+
+p, _ = ponte(finto, tocco=tocco_domanda, risposta=risposta_vera)
+p.passo()
+tg.pulisci_sospesi(7)
+p.chiedi_in_chat("domanda_utente", {
+    "id": "d1", "tipo": "domanda", "testo": "Quale nome preferisci?",
+    "opzioni": ["nome", "name"]})
+check("la domanda si manda in chat",
+      "Quale nome preferisci?" in finto.ultimo_inviato(),
+      cp(finto.ultimo_inviato()))
+voce = tg.sospeso(7)
+check("con un pulsante per opzione, e il token dentro",
+      ("r:1:" + voce["token"]) in finto.markup[-1], cp(finto.markup[-1]))
+check("e dice che si puo' scrivere la risposta",
+      "scriv" in finto.ultimo_inviato(), cp(finto.ultimo_inviato()))
+check("la domanda e' quella che il ponte conosce",
+      voce["tipo"] == "domanda" and voce["opzioni"] == ["nome", "name"], str(voce))
+
+finto.tocco(555, "r:1:" + voce["token"], message_id=903)
+p.passo()
+check("toccare un'opzione la consegna",
+      scelte == ["r:1:" + voce["token"]], str(scelte))
+
+# La risposta scritta: e' la risposta, non una guida al turno.
+tg.sospendi(7, {"tipo": "domanda", "id": "d2", "token": "abcd",
+                "opzioni": ["si'"], "message_id": 904, "chat": "555"})
+finto.messaggio(555, "meglio nome")
+p.passo()
+check("scrivere mentre una domanda e' aperta e' la risposta",
+      risposte_scritte == ["meglio nome"], str(risposte_scritte))
+check("e non un nuovo turno", len(p.allegati_visti) == 0, str(p.allegati_visti))
+check("e il modulo si chiude diventando un promemoria della risposta",
+      finto.modifiche[-1][0] == 904
+      and "Risposta: meglio nome" in finto.modifiche[-1][1],
+      cp(finto.modifiche[-1:]))
+
+# Un permesso aperto: il testo non decide, e lo si dice.
+finto2 = FintoTelegram()
+chiamate_risposta = []
+p2, _ = ponte(finto2, risposta=lambda t: chiamate_risposta.append(t) or "no")
+p2.passo()
+tg.sospendi(7, {"tipo": "permesso", "id": "p3", "token": "efgh",
+                "message_id": 905, "chat": "555"})
+finto2.messaggio(555, "si'")
+p2.passo()
+check("con un permesso aperto il testo arriva a chi risponde",
+      chiamate_risposta == ["si'"], str(chiamate_risposta))
+check("e la richiesta resta aperta, perche' un si' non dice per quanto vale",
+      tg.sospeso(7) is not None, "la richiesta si e' chiusa da sola")
+tg.pulisci_sospesi(7)
+
+print("\n[24] i file del turno tornano in chat")
+finto = FintoTelegram()
+tg.imposta_chat(7, 555, "adver")
+cartella = tempfile.mkdtemp(prefix="orch_file_")
+percorsi = {}
+for nome, contenuto in (("report.pdf", b"%PDF-1.4 finto"),
+                        ("foto.png", b"\x89PNG finto"),
+                        ("script.py", b"print(1)")):
+    percorso = os.path.join(cartella, nome)
+    with open(percorso, "wb") as f:
+        f.write(contenuto)
+    percorsi[nome] = percorso
+
+
+def turno_con_file(testo, allegati, avanzamento):
+    return {"testo": "Fatto: ecco il report.",
+            "file": [{"percorso": percorsi["report.pdf"], "nome": "report.pdf"},
+                     {"percorso": percorsi["foto.png"], "nome": "foto.png"}]}
+
+
+p, _ = ponte(finto, turno=turno_con_file)
+p.passo()
+finto.messaggio(555, "fammi il report")
+p.passo()
+check("il turno e' finito prima di guardare",
+      p.aspetta(5), "il turno non e' finito")
+check("il testo della risposta arriva comunque",
+      "ecco il report" in finto.testi()[-1], cp(finto.testi()[-1:]))
+check("e i file vengono allegati",
+      [f["nome"] for f in finto.file_inviati] == ["report.pdf", "foto.png"],
+      str(finto.file_inviati))
+check("un PDF parte come documento",
+      finto.file_inviati[0]["metodo"] == "sendDocument"
+      and finto.file_inviati[0]["campo"] == "document",
+      str(finto.file_inviati[0]))
+check("un'immagine parte come foto, cosi' si vede dentro la chat",
+      finto.file_inviati[1]["metodo"] == "sendPhoto",
+      str(finto.file_inviati[1]))
+check("con i byte veri del file", finto.file_inviati[0]["byte"] > 0,
+      str(finto.file_inviati[0]))
+check("e il tipo giusto",
+      finto.file_inviati[0]["tipo"] == "application/pdf",
+      finto.file_inviati[0]["tipo"])
+
+# Troppo grande: non si manda, ma si dice dove sta.
+finto.file_inviati = []
+grande = os.path.join(cartella, "enorme.pdf")
+with open(grande, "wb") as f:
+    f.write(b"x" * (tg.MASSIMO_INVIO + 10))
+p._manda_file("555", [{"percorso": grande, "nome": "enorme.pdf"}])
+check("un file oltre il limite non si manda", finto.file_inviati == [],
+      str(finto.file_inviati))
+check("ma si dice dove sta",
+      "enorme.pdf" in finto.testi()[-1] and cartella in finto.testi()[-1],
+      cp(finto.testi()[-1]))
+
+# Un turno che scrive otto file: ne arrivano cinque, e lo dice.
+finto.file_inviati = []
+molti = []
+for i in range(8):
+    percorso = os.path.join(cartella, "doc" + str(i) + ".pdf")
+    with open(percorso, "wb") as f:
+        f.write(b"%PDF")
+    molti.append({"percorso": percorso, "nome": "doc" + str(i) + ".pdf"})
+p._manda_file("555", molti)
+check("al massimo cinque allegati per turno", len(finto.file_inviati) == 5,
+      str(len(finto.file_inviati)))
+check("e dice quanti ne restano fuori", "Altri 3" in finto.testi()[-1],
+      cp(finto.testi()[-1]))
+
+print("\n[25] quali file del turno vale la pena allegare")
+adesso = time.time()
+vecchio = os.path.join(cartella, "vecchio.pdf")
+with open(vecchio, "wb") as f:
+    f.write(b"%PDF vecchio")
+os.utime(vecchio, (adesso - 3600, adesso - 3600))
+dentro_moduli = os.path.join(cartella, "node_modules")
+os.makedirs(dentro_moduli, exist_ok=True)
+with open(os.path.join(dentro_moduli, "dentro.pdf"), "wb") as f:
+    f.write(b"%PDF")
+trovati = tg.file_del_turno(cartella, adesso - 60, massimo=99)
+nomi = [t["nome"] for t in trovati]
+check("i file scritti durante il turno ci sono", "report.pdf" in nomi, str(nomi))
+check("quelli di prima no", "vecchio.pdf" not in nomi, str(nomi))
+check("il codice non e' un allegato", "script.py" not in nomi, str(nomi))
+check("e non si guarda dentro node_modules", "dentro.pdf" not in nomi, str(nomi))
+check("un turno senza file non allega niente",
+      tg.file_del_turno(os.path.join(cartella, "manca"), adesso) == [])
 
 print("\n[21] i collegamenti dei bot eliminati si tolgono")
 tg.salva_token(99, TOKEN)

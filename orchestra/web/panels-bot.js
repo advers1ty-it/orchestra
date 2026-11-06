@@ -75,6 +75,8 @@ function riempiModuloBot(b) {
     if (el) el.value = valore || "";
   }
   if (typeof tgSvuotaQr === "function") tgSvuotaQr();
+  // Cambiando bot si torna a seguire quello che si sta modificando.
+  if (typeof tgScelto !== "undefined") tgScelto = null;
   if (typeof caricaTelegram === "function") caricaTelegram();
   botNota(b ? ("modifica " + b.nome) : "");
 }
@@ -611,17 +613,58 @@ function tgSvuotaQr() {
   if (tgTimer) { clearInterval(tgTimer); tgTimer = null; }
 }
 
-async function caricaTelegram() {
-  if (!$("tg-stato")) return;
-  if (!botScelto) {
-    tgNota("salva il bot, poi collega Telegram");
-    return;
+// A quale bot appartiene il token qui sotto. Non e' per forza `botScelto`:
+// l'agente principale non e' un bot salvato, e deve poter avere la sua
+// chat Telegram come gli altri — e' il caso di chi non ne ha mai creato
+// uno. E si vuole poter collegare un bot diverso da quello che si sta
+// modificando in questa schermata.
+// La scelta fatta a mano nel menu Telegram, se c'e'. E' `null` quando
+// nessuno l'ha toccato: in quel caso il destinatario e' il bot che si sta
+// modificando, o l'agente principale se non ce n'e' nessuno. Serve un
+// vero "nessuna scelta" perche' il menu si ridisegna ogni pochi secondi
+// mentre si aspetta il QR, e non deve riportare la selezione indietro.
+let tgScelto = null;
+
+function tgId() {
+  if (tgScelto !== null && !Number.isNaN(tgScelto)) return tgScelto;
+  return botScelto || 0;
+}
+
+// Il menu dei destinatari. Ogni voce dice anche a che punto e' il
+// collegamento, cosi' si vede a colpo d'occhio quale bot scrive gia' sul
+// telefono: sono tanti bot e un token per uno.
+function tgElenca(voci) {
+  const sel = $("tg-bot");
+  if (!sel) return;
+  const attuale = String(tgId());
+  sel.innerHTML = "";
+  for (const v of voci) {
+    const o = document.createElement("option");
+    o.value = String(v.bot_id);
+    const chi = v.principale ? "agente principale" : ("bot: " + v.nome);
+    const stato = v.token ? (v.collegato ? " — chat collegata" : " — token salvato")
+                          : " — non collegato";
+    o.textContent = chi + stato;
+    sel.appendChild(o);
   }
+  if (voci.some((x) => String(x.bot_id) === attuale)) sel.value = attuale;
+}
+
+async function caricaTelegram() {
+  const el = $("tg-stato");
+  if (!el) return;
   try {
     const r = await fetch("/api/telegram");
     const d = await r.json();
     if (d.error) { tgNota(d.error, true); return; }
-    const v = (d.bots || []).find((x) => String(x.bot_id) === String(botScelto));
+    const voci = d.bots || [];
+    tgElenca(voci);
+    const id = tgId();
+    if (id === null || Number.isNaN(id)) {
+      tgNota("nessun bot da collegare");
+      return;
+    }
+    const v = voci.find((x) => String(x.bot_id) === String(id));
     if (!v) { tgNota("stato Telegram non disponibile", true); return; }
     if (!v.token) {
       tgNota("nessun token: incolla qui sotto quello di @BotFather");
@@ -647,14 +690,15 @@ async function chiamaTelegram(percorso, corpo) {
 }
 
 async function salvaTokenTelegram() {
-  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  const id = tgId();
+  if (id === null || Number.isNaN(id)) { tgNota("scegli un bot", true); return; }
   const campo = $("tg-token");
   const token = (campo && campo.value || "").trim();
   if (!token) { tgNota("incolla il token di @BotFather", true); return; }
   tgNota("verifico il token con Telegram...");
   try {
     const d = await chiamaTelegram("/api/telegram/token",
-                                   { id: botScelto, token: token });
+                                   { id: id, token: token });
     if (d.error) { tgNota(d.error, true); return; }
     if (campo) campo.value = "";
     await caricaTelegram();
@@ -664,12 +708,13 @@ async function salvaTokenTelegram() {
 }
 
 async function togliTokenTelegram() {
-  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  const id = tgId();
+  if (id === null || Number.isNaN(id)) { tgNota("scegli un bot", true); return; }
   if (!confirm("Togliere il token Telegram a questo bot? La chat smette "
                + "di ricevere risposte.")) return;
   try {
     const d = await chiamaTelegram("/api/telegram/token",
-                                   { id: botScelto, token: "" });
+                                   { id: id, token: "" });
     if (d.error) { tgNota(d.error, true); return; }
     tgSvuotaQr();
     await caricaTelegram();
@@ -702,10 +747,11 @@ function tgDisegnaQr(d) {
 }
 
 async function collegaTelegram() {
-  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  const id = tgId();
+  if (id === null || Number.isNaN(id)) { tgNota("scegli un bot", true); return; }
   tgNota("preparo il codice...");
   try {
-    const d = await chiamaTelegram("/api/telegram/collega", { id: botScelto });
+    const d = await chiamaTelegram("/api/telegram/collega", { id: id });
     if (d.error) { tgNota(d.error, true); return; }
     tgDisegnaQr(d);
     tgNota("in attesa che una chat mandi il codice...");
@@ -736,9 +782,10 @@ async function collegaTelegram() {
 }
 
 async function scollegaTelegram() {
-  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  const id = tgId();
+  if (id === null || Number.isNaN(id)) { tgNota("scegli un bot", true); return; }
   try {
-    const d = await chiamaTelegram("/api/telegram/scollega", { id: botScelto });
+    const d = await chiamaTelegram("/api/telegram/scollega", { id: id });
     if (d.error) { tgNota(d.error, true); return; }
     tgSvuotaQr();
     await caricaTelegram();
@@ -771,6 +818,14 @@ async function scollegaTelegram() {
   const btnElimina = $("bot-elimina");
   const btnAvvia = $("bot-avvia");
   const btnStato = $("bot-stato");
+  const selTg = $("tg-bot");
+  if (selTg) selTg.addEventListener("change", () => {
+    // Scelta esplicita: da qui in poi il menu resta su questo bot anche
+    // mentre si ricarica lo stato.
+    tgScelto = parseInt(selTg.value, 10);
+    tgSvuotaQr();
+    caricaTelegram();
+  });
   const btnIdentita = $("identita-salva");
   if (btnIdentita) btnIdentita.addEventListener("click", salvaIdentita);
   if (btnNuovo) btnNuovo.addEventListener("click", svuotaModuloBot);
