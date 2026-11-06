@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 os.environ["ORCHESTRA_HOME"] = tempfile.mkdtemp(prefix="orch_tgc_")
 
 import orchestra.bots as bots_mod  # noqa: E402
-import orchestra.keys as keys_mod  # noqa: E402
+import orchestra.nous_auth as nous_auth  # noqa: E402
 import orchestra.webapp as webapp  # noqa: E402
 
 
@@ -32,13 +32,7 @@ import orchestra.webapp as webapp  # noqa: E402
 # token sta in un file, non nell'env): un test che elenca i servizi
 # cambierebbe risultato da una macchina all'altra. Qui "collegato" vuol
 # dire solo "la chiave e' nel dizionario che il test ha costruito".
-def _stato_chiavi_finto(_path, valori):
-    return [{"chiave": c,
-             "presente": bool(str((valori or {}).get(c) or "").strip())}
-            for c in keys_mod.WRITABLE]
-
-
-keys_mod.stato = _stato_chiavi_finto
+nous_auth.get_nous_credentials = lambda _env=None: ("", "")
 
 PASS, FAIL = [], []
 
@@ -421,6 +415,17 @@ righe_srv = (servizi.get("tastiera") if isinstance(servizi, dict) else None) or 
 dati_srv = [v["dati"] for riga in righe_srv for v in riga]
 check("con piu' servizi si sceglie prima il servizio",
       dati_srv == ["s:openrouter", "s:groq"], str(dati_srv))
+
+# Anthropic non e' fra le chiavi che scrive Opzioni: se il menu leggesse
+# solo quelle, chi ha la sua chiave nel .env non vedrebbe mai il servizio.
+app4 = app_con_servizi(["gpt-4o-mini"])
+app4.env["ANTHROPIC_API_KEY"] = "sk-ant-x"
+b4 = bots_mod.crea(nome="Prova quattro")
+menu4 = app4.telegram_comando(b4["id"], "modello")
+dati4 = [v["dati"] for riga in (menu4.get("tastiera") or [])
+         for v in riga] if isinstance(menu4, dict) else []
+check("un servizio collegato compare anche se Opzioni non sa scriverne la chiave",
+      "s:anthropic" in dati4, str(dati4))
 check("e il servizio in uso e' il primo",
       bool(righe_srv) and righe_srv[0][0]["testo"].endswith("OpenRouter"),
       cp(righe_srv))

@@ -2143,20 +2143,31 @@ class OrchestraApp:
         anche se la sua credenziale vive in un posto che questo menu non
         guarda (Nous la tiene in un token suo).
         """
-        from . import keys as keys_mod
+        from . import keys as keys_mod, nous_auth
         from .providers import KNOWN_PROVIDERS
 
-        try:
-            presenti = {c["chiave"] for c in keys_mod.stato(ENV_PATH, self.env)
-                        if c.get("presente")}
-        except Exception:  # noqa: BLE001
-            presenti = set()
         etichette = {s.get("id"): s.get("nome") for s in keys_mod.FREE_SERVICES}
         fuori: list[tuple[str, str]] = []
         for pid, (_url, chiave_env, _modello) in KNOWN_PROVIDERS.items():
             if chiave_env:
-                if chiave_env not in presenti:
-                    continue
+                # La chiave si guarda nell'env, non nell'elenco delle
+                # chiavi scrivibili da Opzioni: quelle sono le credenziali
+                # che il pannello sa modificare, e non coincidono con
+                # quelle che un provider accetta (Anthropic non e' fra le
+                # scrivibili, ma una chiave messa a mano funziona).
+                if not str((self.env or {}).get(chiave_env) or "").strip():
+                    collegato = False
+                    if pid == "nous":
+                        # Nous si collega con un token suo, non con una
+                        # variabile nel .env.
+                        try:
+                            token, _base = nous_auth.get_nous_credentials(
+                                self.env)
+                            collegato = bool(token)
+                        except Exception:  # noqa: BLE001
+                            collegato = False
+                    if not collegato:
+                        continue
             elif pid != attuale:
                 # i motori locali non chiedono chiave: compaiono solo se
                 # sono gia' quelli in uso, altrimenti sarebbero due
