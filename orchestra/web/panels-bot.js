@@ -9,6 +9,10 @@
 let botElenco = [];
 let botScelto = 0;
 let botAttivoOra = false;
+// Il timer che guarda se la chat Telegram si e' collegata. Sta qui e non
+// accanto alle funzioni che lo usano perche' `riempiModuloBot` gira anche
+// durante il caricamento iniziale, prima che quel blocco sia eseguito.
+let tgTimer = null;
 // Il nome con cui l'agente principale si presenta. Vuoto = etichetta
 // storica "agente principale".
 let nomePrincipale = "agente principale";
@@ -70,6 +74,8 @@ function riempiModuloBot(b) {
     const el = $(id);
     if (el) el.value = valore || "";
   }
+  if (typeof tgSvuotaQr === "function") tgSvuotaQr();
+  if (typeof caricaTelegram === "function") caricaTelegram();
   botNota(b ? ("modifica " + b.nome) : "");
 }
 
@@ -579,6 +585,168 @@ async function eliminaBotScelto() {
   }
 }
 
+// ---- Telegram: lo stesso bot, scritto dal telefono -------------------------
+//
+// Tre passi, nell'ordine in cui vanno fatti: il token di @BotFather, il QR da
+// inquadrare, e la chat che da quel momento riceve le risposte. Il QR lo
+// disegna il server (`orchestra/qr.py`): il codice di collegamento non passa
+// per un servizio esterno, perche' chi lo legge puo' collegarsi al bot.
+//
+// Il token non torna mai indietro dal server: il campo resta vuoto anche
+// dopo averlo salvato, e mostra solo "token salvato". Un token che si puo'
+// rileggere dal browser e' un token che finisce in uno screenshot.
+
+function tgNota(testo, errore) {
+  const el = $("tg-stato");
+  if (!el) return;
+  el.textContent = testo || "";
+  // Come `botNota`: il colore dell'errore e' una variabile del tema, non
+  // una classe che nessun foglio di stile definisce.
+  el.style.color = errore ? "var(--err)" : "var(--muted)";
+}
+
+function tgSvuotaQr() {
+  const box = $("tg-qr");
+  if (box) box.innerHTML = "";
+  if (tgTimer) { clearInterval(tgTimer); tgTimer = null; }
+}
+
+async function caricaTelegram() {
+  if (!$("tg-stato")) return;
+  if (!botScelto) {
+    tgNota("salva il bot, poi collega Telegram");
+    return;
+  }
+  try {
+    const r = await fetch("/api/telegram");
+    const d = await r.json();
+    if (d.error) { tgNota(d.error, true); return; }
+    const v = (d.bots || []).find((x) => String(x.bot_id) === String(botScelto));
+    if (!v) { tgNota("stato Telegram non disponibile", true); return; }
+    if (!v.token) {
+      tgNota("nessun token: incolla qui sotto quello di @BotFather");
+      return;
+    }
+    const pezzi = ["bot @" + (v.username || "?")];
+    pezzi.push(v.collegato ? ("chat collegata: " + v.chat)
+                           : "nessuna chat collegata");
+    pezzi.push(v.attivo ? "in ascolto" : "non in ascolto");
+    tgNota(pezzi.join(" · "));
+  } catch (e) {
+    tgNota("non riesco a leggere lo stato Telegram", true);
+  }
+}
+
+async function chiamaTelegram(percorso, corpo) {
+  const r = await fetch(percorso, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo || {}),
+  });
+  return r.json();
+}
+
+async function salvaTokenTelegram() {
+  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  const campo = $("tg-token");
+  const token = (campo && campo.value || "").trim();
+  if (!token) { tgNota("incolla il token di @BotFather", true); return; }
+  tgNota("verifico il token con Telegram...");
+  try {
+    const d = await chiamaTelegram("/api/telegram/token",
+                                   { id: botScelto, token: token });
+    if (d.error) { tgNota(d.error, true); return; }
+    if (campo) campo.value = "";
+    await caricaTelegram();
+  } catch (e) {
+    tgNota("errore di rete: token non salvato", true);
+  }
+}
+
+async function togliTokenTelegram() {
+  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  if (!confirm("Togliere il token Telegram a questo bot? La chat smette "
+               + "di ricevere risposte.")) return;
+  try {
+    const d = await chiamaTelegram("/api/telegram/token",
+                                   { id: botScelto, token: "" });
+    if (d.error) { tgNota(d.error, true); return; }
+    tgSvuotaQr();
+    await caricaTelegram();
+  } catch (e) {
+    tgNota("errore di rete: token non tolto", true);
+  }
+}
+
+function tgDisegnaQr(d) {
+  const box = $("tg-qr");
+  if (!box) return;
+  box.innerHTML = "";
+  const img = document.createElement("img");
+  img.alt = "codice per collegare questa chat";
+  // SVG dentro un data URI: nessuna richiesta a un servizio esterno, e
+  // nessuna immagine da salvare su disco per mostrarne una.
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(d.svg);
+  img.style.width = "196px";
+  img.style.height = "196px";
+  img.style.background = "#fff";
+  img.style.padding = "8px";
+  img.style.borderRadius = "10px";
+  box.appendChild(img);
+  const p = document.createElement("p");
+  p.className = "small dim";
+  p.style.margin = "6px 0 0";
+  p.textContent = "Inquadra con il telefono, oppure apri " + d.link
+    + ". Il codice vale dieci minuti e una volta sola.";
+  box.appendChild(p);
+}
+
+async function collegaTelegram() {
+  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  tgNota("preparo il codice...");
+  try {
+    const d = await chiamaTelegram("/api/telegram/collega", { id: botScelto });
+    if (d.error) { tgNota(d.error, true); return; }
+    tgDisegnaQr(d);
+    tgNota("in attesa che una chat mandi il codice...");
+    // Il collegamento avviene dall'altra parte (il telefono scrive al
+    // bot), quindi qui si guarda e basta: nessun pulsante da premere
+    // quando arriva.
+    const scadenza = Date.now() + 10 * 60 * 1000;
+    if (tgTimer) clearInterval(tgTimer);
+    tgTimer = setInterval(async () => {
+      if (Date.now() > scadenza) {
+        clearInterval(tgTimer);
+        tgTimer = null;
+        tgNota("il codice e' scaduto: rigeneralo", true);
+        return;
+      }
+      await caricaTelegram();
+      const testo = ($("tg-stato") && $("tg-stato").textContent) || "";
+      if (testo.indexOf("chat collegata:") >= 0) {
+        clearInterval(tgTimer);
+        tgTimer = null;
+        tgSvuotaQr();
+        await caricaTelegram();
+      }
+    }, 3000);
+  } catch (e) {
+    tgNota("errore di rete: codice non generato", true);
+  }
+}
+
+async function scollegaTelegram() {
+  if (!botScelto) { tgNota("scegli un bot dalla lista", true); return; }
+  try {
+    const d = await chiamaTelegram("/api/telegram/scollega", { id: botScelto });
+    if (d.error) { tgNota(d.error, true); return; }
+    tgSvuotaQr();
+    await caricaTelegram();
+  } catch (e) {
+    tgNota("errore di rete: chat non scollegata", true);
+  }
+}
+
 
 (function collegaBot() {
   const pick = $("bot-pick");
@@ -611,6 +779,14 @@ async function eliminaBotScelto() {
   if (btnElimina) btnElimina.addEventListener("click", eliminaBotScelto);
   if (btnAvvia) btnAvvia.addEventListener("click", avviaLavoroBot);
   if (btnStato) btnStato.addEventListener("click", aggiornaStatoBot);
+  const btToken = $("tg-salva");
+  const btTogli = $("tg-togli");
+  const btCollega = $("tg-collega");
+  const btScollega = $("tg-scollega");
+  if (btToken) btToken.addEventListener("click", salvaTokenTelegram);
+  if (btTogli) btTogli.addEventListener("click", togliTokenTelegram);
+  if (btCollega) btCollega.addEventListener("click", collegaTelegram);
+  if (btScollega) btScollega.addEventListener("click", scollegaTelegram);
   // Riempie il menu in testa e la lista del pannello. Se i bot non ci sono
   // ancora, la richiesta torna vuota e non si vede niente: nessun errore.
   caricaBot();

@@ -644,6 +644,35 @@
             volta; gli altri restano in coda. Puoi anche cambiare bot
             mentre lavora: il turno continua e lo ritrovi quando torni.
             Lo stato si vede nella lista qui sopra.</p>
+
+          <div class="bot-telegram">
+            <div class="opzioni-servizi-testa">
+              <b>Telegram</b>
+              <span class="dim">un bot Telegram per questo bot: gli scrivi
+                dal telefono e risponde lui, con la sua persona, i suoi
+                tool e i suoi permessi.</span>
+            </div>
+            <div class="goal-bar-inner" style="margin-top:8px">
+              <input id="tg-token" type="password" autocomplete="off"
+                     placeholder="token di @BotFather (123456789:AAA...)"
+                     style="flex:1;min-width:220px">
+              <button id="tg-salva" class="ghost">Salva token</button>
+              <button id="tg-togli" class="ghost">Togli</button>
+            </div>
+            <div class="goal-bar-inner" style="margin-top:8px">
+              <button id="tg-collega" class="ghost">Mostra il QR per collegare</button>
+              <button id="tg-scollega" class="ghost">Scollega la chat</button>
+              <span id="tg-stato" class="small dim">scegli un bot</span>
+            </div>
+            <div id="tg-qr" style="margin-top:10px;text-align:center"></div>
+            <p class="opzioni-nota">Su Telegram serve un bot tuo, creato con
+              @BotFather: incolla qui il token, poi inquadra il QR col
+              telefono. Risponde solo la chat che ha inquadrato il codice,
+              e da quella chat hai gli stessi poteri che hai qui: se questo
+              bot puo' usare la shell, puo' usarla anche chi scrive su
+              Telegram. Per questo il codice vale dieci minuti e una volta
+              sola.</p>
+          </div>
         </section>
 
         <section id="opz-sez-benchmark" class="opz-sez" data-sez="benchmark" hidden>

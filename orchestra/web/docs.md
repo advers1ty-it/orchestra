@@ -59,6 +59,16 @@
 - La policy è **in-process**, non una sandbox del sistema operativo: un programma consentito (per esempio `python`) può fare tutto quello che sa fare. Un figlio nato da `delega` eredita la policy del padre, così la delega non è una via per aggirarla. `run_shell` risponde `NON ESEGUITO` con la regola violata, invece di lasciare che il comando fallisca da solo.
 - Non sono processi separati: condividono chiavi, permessi e processo. Non sono una sandbox. Non si avviano da soli in background: ricevono un turno quando l'utente o un altro bot glielo manda.
 
+## Telegram
+- Ogni bot può avere **un bot Telegram suo**, per scrivergli dal telefono. Serve un bot creato da te con **@BotFather** su Telegram: alla fine BotFather dà un token, e quello si incolla in **Opzioni → Bot → Telegram → Salva token**. Il token viene verificato subito con Telegram: se è sbagliato te lo dice lì, non fra un'ora.
+- Poi **Mostra il QR per collegare**: inquadri il codice col telefono, Telegram apre la chat del bot e gli manda il codice da solo. La chat è collegata quando il pannello scrive «chat collegata». Il codice vale **dieci minuti e una volta sola**, e si può anche mandare a mano come `/start <codice>`.
+- **Risponde solo la chat collegata.** Un altro utente che trova il bot riceve una spiegazione, non un turno: nessun tool, nessuna spesa. Il motivo è che dietro il bot c'è l'agente con i *tuoi* permessi: la chat di Telegram è una porta su questa macchina, e la apre solo chi ha visto il codice sullo schermo.
+- Il bot su Telegram **è lo stesso bot**: persona, modello, progetto, profilo, policy, cronologia. Cambia solo il filo. Da lì arrivano solo messaggi di **testo** (foto, documenti e vocali non sono gestiti) e le risposte lunghe vengono spezzate in più messaggi; l'avanzamento del lavoro non si vede, solo il risultato.
+- Comandi: `/start <codice>` collega, `/stato` dice se la chat è collegata, `/stop` scollega.
+- Il ponte parte con il server e usa il **polling** di Telegram: nessun indirizzo pubblico, nessun webhook, nessuna porta aperta. Se il PC è spento o Orchestra è ferma, il bot non risponde — e non trattiene i messaggi.
+- Il QR lo disegna Orchestra in casa: il link di collegamento non passa da un servizio esterno, perché chi lo legge può collegarsi al bot. Il token sta in un database nella cartella dati, non nel `.env` e non nei log.
+- **I permessi non arrivano su Telegram.** Se un'azione chiede una conferma (per esempio un file fuori dalla cartella di lavoro), la domanda compare nella finestra di Orchestra: rispondi lì. Senza risposta entro cinque minuti la richiesta viene negata, e il turno prosegue senza quell'azione.
+
 ## Lavori durevoli
 - I compiti in background dei bot vivono in `lavori.db` nella cartella dati, non in memoria: un riavvio non svuota la coda.
 - All'avvio i lavori `in_attesa` ripartono. Quelli trovati `in_corso` diventano `interrotto` e si riprovano dal pannello Bot: un turno a metà può aver già scritto file o speso token, quindi non viene rieseguito alla cieca. Il pannello permette anche di annullare il lavoro in corso.

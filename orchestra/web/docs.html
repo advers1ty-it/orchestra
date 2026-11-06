@@ -80,6 +80,7 @@
       <li><a href="#cron">Cron (lavori programmati)</a></li>
       <li><a href="#consiglio">Consiglio di advisor</a></li>
       <li><a href="#bot">Bot</a></li>
+      <li><a href="#telegram">Telegram</a></li>
       <li><a href="#lavori">Lavori in background</a></li>
       <li><a href="#tracce">Tracce dei turni</a></li>
       <li><a href="#memoria">Memoria e cronologia</a></li>
@@ -308,6 +309,20 @@
 <h3>Cosa può fare un bot</h3>
 <p>Quattro liste in Opzioni → Bot: <b>Tool consentiti</b> (vuota = quelli del profilo), <b>Tool vietati</b>, <b>Shell consentita</b> (nomi di programma, vuota = tutti) e <b>Shell vietata</b> (sottostringhe). La regola si applica <b>dopo</b> il profilo: restringe, non allarga, e il divieto vince sul permesso. Con una shell consentita un comando composto viene controllato programma per programma, e le sostituzioni di comando vengono rifiutate.</p>
 <div class="nota"><b>Da sapere:</b> questi limiti sono regole interne, non una gabbia del sistema operativo. Un bot non è un processo separato: condivide le chiavi e i permessi di Orchestra, e un programma che gli consenti può fare quello che quel programma sa fare. Un bot non si sveglia da solo: riceve un turno quando glielo mandi tu o quando un altro bot lo chiama.</div>
+</section>
+
+<section id="telegram">
+<h2>Telegram: scrivere al bot dal telefono</h2>
+<p>Ogni bot di Orchestra può avere <b>un bot Telegram suo</b>. Serve un bot creato da te con <b>@BotFather</b>: alla fine dà un token, e quello si incolla in <b>Opzioni → Bot → Telegram → Salva token</b>. Il token viene verificato subito con Telegram, quindi un token sbagliato si scopre lì e non dopo.</p>
+<p>Poi <b>Mostra il QR per collegare</b>: inquadri il codice col telefono, Telegram apre la chat e manda il codice al bot da solo. Il pannello passa a «chat collegata» senza che tu debba premere altro. Il codice vale dieci minuti, una volta sola, e si può anche scrivere a mano come <code>/start &lt;codice&gt;</code>.</p>
+<ul>
+  <li><b>Risponde solo la chat collegata.</b> Chiunque altro trovi il bot riceve una spiegazione, non un turno: nessun tool, nessuna spesa.</li>
+  <li>Il bot su Telegram <b>è lo stesso bot</b>: persona, modello, progetto, profilo, policy, cronologia. Da lì arrivano solo messaggi di testo, le risposte lunghe si spezzano in più messaggi, e l'avanzamento del lavoro non si vede — solo il risultato.</li>
+  <li>Comandi: <code>/start &lt;codice&gt;</code> collega, <code>/stato</code> dice com'è messa la chat, <code>/stop</code> scollega.</li>
+  <li>Il ponte parte col server e usa il <b>polling</b>: nessun indirizzo pubblico, nessun webhook, nessuna porta aperta. Con il PC spento il bot non risponde e non trattiene i messaggi.</li>
+  <li><b>I permessi non arrivano su Telegram.</b> Se un'azione chiede una conferma, la domanda compare nella finestra di Orchestra: rispondi lì. Senza risposta entro cinque minuti viene negata.</li>
+</ul>
+<div class="nota"><b>Da sapere:</b> la chat di Telegram è una porta su questa macchina. Da lì hai gli stessi poteri che hai nella finestra — se il bot può usare la shell, può usarla anche chi scrive su Telegram. Per questo il collegamento vuole un codice che si vede solo sul tuo schermo, e per questo il QR lo disegna Orchestra in casa invece di farlo disegnare a un servizio esterno.</div>
 </section>
 
 <section id="lavori">
