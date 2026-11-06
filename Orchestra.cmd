@@ -25,23 +25,12 @@ set "PORTA=8737"
 set "ROOT=%~dp0"
 set "LOGFILE=%~dp0orchestra.log"
 set "LOGERR=%~dp0orchestra.err.log"
-set "PY=python"
-
 rem --- quale python? ----------------------------------------------------
-rem  `py -3` e' il launcher di Windows e sceglie da solo. Si prova
-rem  `python` come seconda scelta.
-rem
-rem  Niente blocchi if/else qui: dentro un blocco, un `echo` contiene
-rem  parentesi che chiudono il blocco, e in cmd quello e' un errore
-rem  che si vede solo a meta' esecuzione. Meglio quattro righe piatte.
-set "PY="
-where py >nul 2>&1
-if not errorlevel 1 set "PY=py -3"
-if "%PY%"=="" (
-    where python >nul 2>&1
-    if not errorlevel 1 set "PY=python"
-)
-if "%PY%"=="" goto :no_python
+rem  Non si crede a `where`: delega a :trova_python, che prova a
+rem  ESEGUIRE i candidati. Un launcher installato e rotto e' peggio di
+rem  un launcher assente, perche' lo si sceglie.
+call :trova_python
+if "%PY1%"=="" goto :no_python
 
 rem --- l'operazione richiesta -----------------------------------------
 rem  Va letta PRIMA del menu: senza questo, `Orchestra.cmd ferma` apre
@@ -144,18 +133,18 @@ rem  e non una sola con dentro "py -3": Start-Process vuole UN nome di
 rem  eseguibile in -FilePath, e il resto va in ArgumentList. Con
 rem  "py -3" dentro -FilePath, il -3 diventava argomento posizionale di
 rem  Start-Process, che si rifiutava di accettarlo.
-set "PY1="
-set "PY2="
-where py >nul 2>&1
-if not errorlevel 1 (
-    set "PY1=py"
-    set "PY2=-3"
-)
-if "%PY1%"=="" (
-    where python >nul 2>&1
-    if not errorlevel 1 set "PY1=python"
-)
+call :trova_python
 if "%PY1%"=="" goto :no_python
+
+rem  Gli argomenti NON contengono un posto vuoto per il launcher. Prima
+rem  c'era sempre un primo elemento, '-3' con `py` e "" con `python`,
+rem  e Start-Process rifiuta un argomento vuoto: "ParameterBindingValidation
+rem  Exception ... ArgumentList". Con `py` non si vedeva mai, perche' il
+rem  launcher c'era e il primo elemento era '-3'; su una macchina dove
+rem  resta solo `python` (o dove `py` e' rotto, come qui) l'avvio moriva
+rem  con un errore di PowerShell invece di partire.
+set "ARGS=@('-m','orchestra.cli','web','--port','%PORTA%','--no-browser')"
+if not "%PY2%"=="" set "ARGS=@('%PY2%','-m','orchestra.cli','web','--port','%PORTA%','--no-browser')"
 
 rem  Il redirect lo mette Start-Process: il log continua a funzionare
 rem  anche con la finestra nascosta, che e' il punto.
@@ -164,7 +153,7 @@ rem  Tutto su UNA riga e senza variabili PowerShell: `$` dentro cmd
 rem  viene passato a PowerShell, ma `%` viene espanso dal cmd, e i due
 rem  linguaggi sulla stessa riga sbagliano. Senza variabili, niente
 rem  da espandere.
-powershell -NoProfile -Command "Start-Process -FilePath '%PY1%' -ArgumentList @('%PY2%','-m','orchestra.cli','web','--port','%PORTA%','--no-browser') -WindowStyle Hidden -RedirectStandardOutput '%LOGFILE%' -RedirectStandardError '%LOGERR%'"
+powershell -NoProfile -Command "Start-Process -FilePath '%PY1%' -ArgumentList %ARGS% -WindowStyle Hidden -RedirectStandardOutput '%LOGFILE%' -RedirectStandardError '%LOGERR%'"
 
 rem  Poi si aspetta che la porta risponda davvero, e si apre il
 rem  browser solo allora. Aprirlo subito mostrerebbe "connessione
@@ -333,16 +322,57 @@ rem ===================================================================
 rem  Funzioni
 rem ===================================================================
 
+rem  Trova un Python che FUNZIONA, non uno che esiste. Lascia in PY1
+rem  l'eseguibile e in PY2 l'eventuale argomento ("-3" per il launcher);
+rem  se non ne trova nessuno, PY1 resta vuoto.
+rem
+rem  `where py` risponde a un'altra domanda: dice che il file c'e', non
+rem  che parta. `py` e' un selettore, e se la versione che ha scelto non
+rem  e' piu' sul disco risponde "Unable to create process using ..." e
+rem  non avvia niente — successo davvero il 6/11/2026, con il sintomo
+rem  "Orchestra non parte" e nessun errore da leggere, perche' la
+rem  finestra del server e' nascosta di proposito.
+rem
+rem  Quindi ogni candidato viene ESEGUITO. La sonda controlla anche la
+rem  versione: sotto la 3.11 il pacchetto non si importa, e sarebbe lo
+rem  stesso un avvio che non parte. La soglia e' scritta senza `>=`
+rem  perche' dentro un comando quotato cmd non tratta `>` come redirect,
+rem  ma e' una cosa che si legge meglio sapendola.
+:trova_python
+set "PY1="
+set "PY2="
+py -3 -c "raise SystemExit(0 if __import__('sys').version_info[:2] > (3, 10) else 1)" >nul 2>&1
+if not errorlevel 1 set "PY1=py"
+if not errorlevel 1 set "PY2=-3"
+if not "%PY1%"=="" exit /b 0
+python -c "raise SystemExit(0 if __import__('sys').version_info[:2] > (3, 10) else 1)" >nul 2>&1
+if not errorlevel 1 set "PY1=python"
+if not "%PY1%"=="" exit /b 0
+python3 -c "raise SystemExit(0 if __import__('sys').version_info[:2] > (3, 10) else 1)" >nul 2>&1
+if not errorlevel 1 set "PY1=python3"
+exit /b 0
+
 rem  Chi c'e' in ascolto sulla porta. Il PID finisce in _PID.
 rem  Errorlevel 1 = nessuno. Il fallback su netstat serve per il caso
 rem  (raro) in cui powershell non si riesca a lanciare: meglio una
 rem  riga grezza che nessuna risposta.
+rem
+rem  Il terzo tentativo guarda i PROCESSI, non i socket: su una macchina
+rem  di sviluppo qui il socket del server risultava "CLOSED" in netstat
+rem  mentre rispondeva (connessioni ESTABLISHED verso lo stesso PID),
+rem  e `Get-NetTCPConnection -State Listen` non restituiva niente. Con
+rem  quelle due fonti mute, "ferma" rispondeva "non e' stato possibile
+rem  fermarlo, aprilo come amministratore" con il server bello vivo.
+rem  La riga di comando invece c'e' sempre, e il progetto la usa gia'
+rem  in Avvia-Orchestra.bat per lo stesso motivo.
 :chi_ha
 set "_PID="
 for /f "tokens=5" %%a in ('powershell -NoProfile -Command ^
-  "Get-NetTCPConnection -LocalPort %PORTA% -State Listen -EA SilentlyContinue ^| Select-Object -First 1 -ExpandProperty OwningProcess" 2^>nul') do set "_PID=%%a"
+  "Get-NetTCPConnection -LocalPort %PORTA% -State Listen -EA SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess" 2^>nul') do set "_PID=%%a"
 if not "%_PID%"=="" exit /b 0
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:"LISTENING" ^| findstr /C:":%PORTA%"') do set "_PID=%%a"
+if not "%_PID%"=="" exit /b 0
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'orchestra\.cli\s+web' -and $_.CommandLine -match '--port[ =]+%PORTA%' } | Select-Object -First 1 -ExpandProperty ProcessId" 2^>nul') do set "_PID=%%a"
 if not "%_PID%"=="" exit /b 0
 exit /b 1
 
@@ -355,8 +385,11 @@ rem  Tutto su una riga perche' un ciclo `for /f` con un `taskkill`
 rem  dentro, in cmd, chiude il blocco e lascia code residue.
 :uccidi
 set "_N="
-for /f "tokens=5" %%a in ('powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %PORTA% -State Listen -EA SilentlyContinue ^| Select -Expand OwningProcess" 2^>nul') do taskkill /F /T /PID %%a >nul 2>&1 & set "_N=1"
+for /f "tokens=5" %%a in ('powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %PORTA% -State Listen -EA SilentlyContinue | Select -Expand OwningProcess" 2^>nul') do taskkill /F /T /PID %%a >nul 2>&1 & set "_N=1"
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr /C:"LISTENING" ^| findstr /C:":%PORTA%"') do taskkill /F /T /PID %%a >nul 2>&1 & set "_N=1"
+rem  Stessa terza strada di :chi_ha, per la stessa ragione: se il socket
+rem  non si vede, il processo si trova dalla riga di comando.
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'orchestra\.cli\s+web' -and $_.CommandLine -match '--port[ =]+%PORTA%' } | Select-Object -ExpandProperty ProcessId" 2^>nul') do taskkill /F /T /PID %%a >nul 2>&1 & set "_N=1"
 if "%_N%"=="" exit /b 1
 exit /b 0
 
