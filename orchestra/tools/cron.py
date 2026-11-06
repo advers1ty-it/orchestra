@@ -48,7 +48,7 @@ def tool_cron() -> Tool:
                 return _j(cron_mod.scheduler_status())
             if azione in ("autostart_stato", "autostart_status", "autostart"):
                 import orchestra.autostart as as_mod
-                return _j({"disponibile": as_mod.disponibile(), "attivo": as_mod.stato()})
+                return _j(as_mod.info())
             if azione in ("autostart_on", "autostart_attiva", "autostart_enable"):
                 import orchestra.autostart as as_mod
                 ok = as_mod.abilita()

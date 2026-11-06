@@ -73,8 +73,7 @@ class RotteAutomazione:
     def _r_get_autostart_status(self, path: str, body: dict[str, Any],
                                 s: Any) -> None:
         from . import autostart as as_mod
-        self._json({"disponibile": as_mod.disponibile(),
-                    "attivo": as_mod.stato()})
+        self._json(as_mod.info())
 
     @rotta("POST", "/api/remote/start")
     def _r_post_remote_start(self, path: str, body: dict[str, Any],
@@ -296,7 +295,9 @@ class RotteAutomazione:
                                  s: Any) -> None:
         from . import autostart as as_mod
         ok = as_mod.abilita()
-        self._json({"ok": ok, "attivo": as_mod.stato()})
+        info = as_mod.info()
+        self._json({"ok": ok, "attivo": info["attivo"],
+                    "problema": info["problema"]})
         return
 
     @rotta("POST", "/api/autostart/disable")
@@ -304,7 +305,9 @@ class RotteAutomazione:
                                   s: Any) -> None:
         from . import autostart as as_mod
         ok = as_mod.disabilita()
-        self._json({"ok": ok, "attivo": as_mod.stato()})
+        info = as_mod.info()
+        self._json({"ok": ok, "attivo": info["attivo"],
+                    "problema": info["problema"]})
         return
 
     @rotta("POST", "/api/goal/stop")

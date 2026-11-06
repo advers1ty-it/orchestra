@@ -184,15 +184,26 @@ async function caricaAutostart() {
       if (autostartToggle) autostartToggle.hidden = true;
       return;
     }
-    if (autostartStat) autostartStat.textContent = r.attivo ? "attivo" : "disattivo";
-    if (autostartToggle) autostartToggle.textContent = r.attivo ? "Disattiva" : "Attiva";
+    // "attivo" vuol dire che la voce esiste, non che partira': se il
+    // programma registrato non c'e' piu', lo si dice invece di far
+    // credere che l'avvio automatico funzioni.
+    if (autostartStat) {
+      autostartStat.textContent = !r.attivo
+        ? "disattivo"
+        : (r.problema ? "attivo, ma non partirebbe: " + r.problema : "attivo");
+    }
+    if (autostartToggle) {
+      autostartToggle.textContent = !r.attivo ? "Attiva" : (r.problema ? "Ripara" : "Disattiva");
+    }
   } catch (e) { }
 }
 
 on("autostart-toggle", "click", async () => {
   try {
     const st = await fetch("/api/autostart/status").then((x) => x.json().catch(() => ({})));
-    const rotta = st.attivo ? "/api/autostart/disable" : "/api/autostart/enable";
+    // Con un problema il pulsante e' "Ripara": riscrive la voce con
+    // l'interprete di adesso, che e' l'unica cosa che la puo' sistemare.
+    const rotta = (st.attivo && !st.problema) ? "/api/autostart/disable" : "/api/autostart/enable";
     await fetch(rotta, { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" });
     caricaAutostart();
   } catch (e) { }
