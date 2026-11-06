@@ -1,0 +1,288 @@
+"""Il ponte Telegram: chi puo' scrivere, cosa succede a chi non puo'.
+
+Nessuna rete: l'API e' una funzione che si puo' sostituire, e le
+risposte di Telegram sono un dizionario. Quello che si verifica qui non
+e' che Telegram funzioni — quello lo sa Telegram — ma le due cose che
+decidono se questo ponte e' sicuro:
+
+  1. un messaggio da una chat NON collegata non fa partire nessun turno,
+     nessun tool, nessuna spesa;
+  2. un messaggio da una chat collegata arriva all'agente una volta
+     sola, e la risposta torna indietro intera anche se e' lunga.
+
+Il resto sono dettagli che si vedono solo in produzione: l'arretrato al
+primo giro (un'app che rifa' il lavoro di ieri appena la riapri) e il
+codice a uso singolo.
+"""
+
+import os
+import sys
+import tempfile
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+
+# I dati dei test non devono finire in quelli dell'utente: qui il file
+# dei collegamenti e' una cartella temporanea usa e getta.
+os.environ["ORCHESTRA_HOME"] = tempfile.mkdtemp(prefix="orch_tg_")
+
+import orchestra.telegram as tg  # noqa: E402
+
+PASS, FAIL = [], []
+TOKEN = "123456789:" + "a" * 35
+
+
+def check(nome, cond, dettaglio=""):
+    (PASS if cond else FAIL).append(nome)
+    print(f"  {'OK  ' if cond else 'FAIL'} {nome}"
+          + (f" -- {dettaglio}" if dettaglio and not cond else ""))
+
+
+class FintoTelegram:
+    """Un Telegram che risponde come l'API, senza uscire dalla macchina."""
+
+    def __init__(self):
+        self.inviati = []
+        self.in_attesa = []
+        self.chiamate = []
+        self.offset = []
+        self.ultimo_id = 1000
+        self.risposta_turno = "ok"
+
+    def messaggio(self, chat_id, testo, nome="prova"):
+        self.ultimo_id += 1
+        self.in_attesa.append({
+            "update_id": self.ultimo_id,
+            "message": {
+                "chat": {"id": chat_id, "username": nome},
+                "text": testo,
+            },
+        })
+        return self.ultimo_id
+
+    def ultimo_inviato(self):
+        return self.inviati[-1][1] if self.inviati else ""
+
+    def __call__(self, url, dati, secondi):
+        metodo = url.rsplit("/", 1)[-1]
+        self.chiamate.append((metodo, dict(dati)))
+        if metodo == "getMe":
+            return {"ok": True, "result": {"id": 1, "username": "prova_bot",
+                                           "first_name": "Prova"}}
+        if metodo in ("deleteWebhook", "sendChatAction"):
+            return {"ok": True, "result": True}
+        if metodo == "sendMessage":
+            self.inviati.append((str(dati.get("chat_id")), dati.get("text")))
+            return {"ok": True, "result": {"message_id": len(self.inviati)}}
+        if metodo == "getUpdates":
+            offset = dati.get("offset")
+            self.offset.append(offset)
+            if offset == -1:
+                return {"ok": True,
+                        "result": ([self.in_attesa[-1]] if self.in_attesa
+                                   else [])}
+            if offset is None:
+                pronti = list(self.in_attesa)
+            else:
+                pronti = [u for u in self.in_attesa
+                          if int(u["update_id"]) >= int(offset)]
+            return {"ok": True, "result": pronti}
+        raise AssertionError(f"metodo inatteso: {metodo}")
+
+
+def ponte(finto, risposte=None, bot_id=7):
+    chiamate = []
+
+    def turno(testo):
+        chiamate.append(testo)
+        if risposte is not None:
+            return risposte
+        return f"risposta a: {testo}"
+
+    api = tg.Api(TOKEN, trasporto=finto)
+    return tg.Ponte(bot_id, "Prova", api, turno, attesa=0), chiamate
+
+
+print("\n[1] il token: forma, salvataggio, rimozione")
+try:
+    tg.salva_token(1, "pippo")
+    check("un token che non e' un token viene rifiutato", False)
+except ValueError:
+    check("un token che non e' un token viene rifiutato", True)
+tg.salva_token(1, TOKEN)
+check("il token si salva", tg.stato(1)["token"] is True)
+tg.imposta_username(1, "@prova_bot")
+check("il nome utente si salva senza @",
+      tg.stato(1)["username"] == "prova_bot", tg.stato(1)["username"])
+tg.imposta_chat(1, 555, "adver")
+check("la chat collegata si legge", tg.chat_di(1) == ("555", "adver"))
+tg.salva_token(1, "")
+check("togliere il token toglie anche chat e nome utente",
+      tg.stato(1)["token"] is False and tg.stato(1)["collegato"] is False)
+check("il token di un bot mai configurato e' vuoto", tg.token_di(42) == "")
+
+print("\n[2] il codice di collegamento")
+tg.salva_token(2, TOKEN)
+voce = tg.nuovo_codice(2)
+check("il codice ha la lunghezza dichiarata",
+      len(voce["codice"]) == tg.LUNGHEZZA_CODICE, voce["codice"])
+check("il codice non ha caratteri ambigui",
+      not (set(voce["codice"]) & set("01lo0O")), voce["codice"])
+check("un codice sbagliato non vale", tg.codice_valido(2, "aaaaaaaa") is False)
+check("il codice giusto vale", tg.codice_valido(2, voce["codice"]) is True)
+check("e non vale una seconda volta",
+      tg.codice_valido(2, voce["codice"]) is False)
+tg._CODICI[3] = ("bbbbbbbb", time.time() - 1)
+check("un codice scaduto non vale", tg.codice_valido(3, "bbbbbbbb") is False)
+voce = tg.nuovo_codice(2)
+check("il codice in corso si puo' rileggere",
+      tg.codice_in_corso(2) == voce["codice"])
+check("il link porta al bot con il codice dentro",
+      tg.link("prova_bot", "abc") == "https://t.me/prova_bot?start=abc",
+      tg.link("prova_bot", "abc"))
+check("il link senza codice e' la chat",
+      tg.link("@prova_bot") == "https://t.me/prova_bot")
+check("senza nome utente non c'e' link", tg.link("") == "")
+
+print("\n[3] i testi lunghi si spezzano senza perdere niente")
+lungo = ("parola " * 1200).strip()
+pezzi = tg.dividi(lungo, limite=1000)
+check("nessun pezzo supera il limite",
+      all(len(p) <= 1000 for p in pezzi), str([len(p) for p in pezzi]))
+check("i pezzi ricompongono il testo",
+      " ".join(pezzi).replace("  ", " ").strip() == lungo)
+check("un testo vuoto non produce pezzi", tg.dividi("   ") == [])
+
+print("\n[4] l'arretrato non si rigioca")
+finto = FintoTelegram()
+p, chiamate = ponte(finto)
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+finto.messaggio(555, "messaggio di ieri")
+primo = p.passo()
+check("il primo passo non gestisce niente", primo == 0)
+check("il primo passo chiede l'ultimo aggiornamento",
+      -1 in finto.offset, str(finto.offset))
+check("e non fa partire un turno", chiamate == [], str(chiamate))
+finto.messaggio(555, "messaggio di oggi")
+p.passo()
+check("solo il messaggio nuovo arriva all'agente",
+      chiamate == ["messaggio di oggi"], str(chiamate))
+
+print("\n[5] chi non e' collegato non fa partire niente")
+finto = FintoTelegram()
+p, chiamate = ponte(finto)
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+p.passo()  # primo giro: arretrato
+finto.messaggio(999, "ciao, esegui qualcosa")
+p.passo()
+check("un estraneo non ottiene un turno", chiamate == [], str(chiamate))
+check("gli si spiega che serve il codice",
+      "non e' collegata" in finto.ultimo_inviato(),
+      finto.ultimo_inviato()[:80])
+check("una chat estranea non prende il posto di quella collegata",
+      tg.chat_di(7)[0] == "555", tg.chat_di(7)[0])
+
+print("\n[6] il collegamento con il codice")
+finto = FintoTelegram()
+p, chiamate = ponte(finto)
+tg.salva_token(7, TOKEN)
+tg.imposta_username(7, "prova_bot")
+tg.dimentica_chat(7)
+p.passo()
+codice = tg.nuovo_codice(7)["codice"]
+finto.messaggio(777, f"/start {codice}")
+p.passo()
+check("col codice giusto la chat si collega",
+      tg.chat_di(7) == ("777", "prova"), str(tg.chat_di(7)))
+check("il collegamento non costa un turno", chiamate == [], str(chiamate))
+check("la risposta dice che e' collegato",
+      "Collegato" in finto.ultimo_inviato(), finto.ultimo_inviato()[:80])
+finto.messaggio(777, "e adesso?")
+p.passo()
+check("da li' in poi l'agente risponde",
+      chiamate == ["e adesso?"], str(chiamate))
+
+finto2 = FintoTelegram()
+p2, chiamate2 = ponte(finto2)
+tg.dimentica_chat(7)
+p2.passo()
+finto2.messaggio(888, "/start codiceinventato")
+p2.passo()
+check("un codice inventato non collega",
+      tg.chat_di(7)[0] != "888", tg.chat_di(7)[0])
+check("e non fa partire un turno", chiamate2 == [], str(chiamate2))
+check("la risposta non dice se un codice esiste",
+      "scade dopo" in finto2.ultimo_inviato(),
+      finto2.ultimo_inviato()[:80])
+
+print("\n[7] una risposta lunga arriva intera")
+finto = FintoTelegram()
+p, chiamate = ponte(finto, risposte="y" * 9000)
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+p.passo()
+finto.messaggio(555, "scrivimi tanto")
+p.passo()
+check("la risposta e' stata spezzata", len(finto.inviati) >= 3,
+      str(len(finto.inviati)))
+check("nessun pezzo supera il limite di Telegram",
+      all(len(t) <= tg.MAX_TESTO for _c, t in finto.inviati),
+      str([len(t) for _c, t in finto.inviati]))
+check("i pezzi ricompongono la risposta",
+      "".join(t for _c, t in finto.inviati) == "y" * 9000)
+
+print("\n[8] /stop, e il turno che si spegne")
+finto = FintoTelegram()
+p, chiamate = ponte(finto)
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+p.passo()
+finto.messaggio(555, "/stop")
+p.passo()
+check("/stop scollega la chat", tg.chat_di(7)[0] == "", tg.chat_di(7)[0])
+finto.messaggio(555, "sei ancora li'?")
+p.passo()
+check("dopo /stop non risponde piu' l'agente", chiamate == [], str(chiamate))
+
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+finto.messaggio(555, "/stato")
+p.passo()
+check("/stato risponde a chi e' collegato",
+      "Collegato" in finto.ultimo_inviato(), finto.ultimo_inviato()[:80])
+finto.messaggio(556, "/stato")
+p.passo()
+check("e a chi non lo e' dice di collegarsi",
+      "Non collegato" in finto.ultimo_inviato(),
+      finto.ultimo_inviato()[:80])
+
+print("\n[9] un turno che esplode non lascia l'utente senza niente")
+
+
+def rotto(_testo):
+    raise RuntimeError("provider giu'")
+
+
+api = tg.Api(TOKEN, trasporto=finto)
+p3 = tg.Ponte(7, "Prova", api, rotto, attesa=0)
+p3.passo()
+finto.messaggio(555, "fai qualcosa")
+p3.passo()
+check("l'errore torna in chat invece di sparire",
+      "provider giu'" in finto.ultimo_inviato(),
+      finto.ultimo_inviato()[:80])
+
+print("\n[10] i collegamenti dei bot eliminati si tolgono")
+tg.salva_token(99, TOKEN)
+quanti = tg.pulisci(bot_validi=[])
+check("un collegamento senza bot viene tolto", quanti >= 1, str(quanti))
+check("e il token sparisce con lui", tg.token_di(99) == "")
+
+print()
+print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")
+if FAIL:
+    print("falliti:", ", ".join(FAIL))
+sys.exit(1 if FAIL else 0)

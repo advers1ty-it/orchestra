@@ -103,6 +103,14 @@ MAX_ALLEGATO = 20 * 1024 * 1024   # 20 MB: 12 di file + base64 + margine
 MAX_ALLEGATO_FILE_MB = 12         # il tetto che l'utente vede prima
 
 
+def _log_telegram(messaggio: str) -> None:
+    """Un ponte Telegram che si lamenta, senza far cadere niente.
+
+    Su stderr come il resto del server: se Telegram non risponde, chi
+    guarda il log deve poterlo capire senza aprire il pannello.
+    """
+    print(f"[telegram] {messaggio}", file=sys.stderr, flush=True)
+
 
 class OrchestraApp:
     """Lo stato del server, condiviso fra i thread.
@@ -1821,6 +1829,109 @@ class OrchestraApp:
             pass
         return sess
 
+    # --- Telegram -----------------------------------------------------
+    def telegram_turno(self, bot_id: int, testo: str) -> str:
+        """Un messaggio arrivato su Telegram, e la risposta da rimandare.
+
+        E' lo stesso turno della finestra: stessa sessione, stessi tool,
+        stessa policy. Telegram e' il filo da cui arriva il messaggio,
+        non un agente diverso ne' uno con meno permessi — e questo e'
+        anche il motivo per cui il ponte risponde solo alla chat
+        collegata con il codice.
+        """
+        from . import bots as bots_mod
+
+        b = bots_mod.per_id(bot_id)
+        if b is None:
+            return ("Questo bot non esiste piu' in Orchestra: manda /stop "
+                    "qui e ricollega quello giusto dal pannello.")
+        sess = self._sessione_bot(b)
+        if sess.busy:
+            return ("Sto ancora lavorando al messaggio precedente. "
+                    "Rimanda questo fra poco.")
+        if not sess.send(testo):
+            return ("C'e' gia' un turno in corso su questo bot: rimanda "
+                    "il messaggio quando ha finito.")
+        secondi = 900.0
+        try:
+            secondi = float(os.environ.get("ORCHESTRA_TELEGRAM_ATTESA",
+                                           "900"))
+        except (TypeError, ValueError):
+            pass
+        finito = sess.wait(timeout=max(30.0, secondi))
+        if not finito:
+            # Non e' un errore: e' un turno lungo. Dirlo e' meglio che
+            # inventare una risposta o lasciare l'utente senza niente.
+            return ("Sto ancora lavorando: il turno e' lungo e non e' "
+                    "finito. La risposta completa la trovi nella finestra "
+                    "di Orchestra.")
+        for m in reversed(getattr(sess.agent.state, "messages", [])):
+            if getattr(m, "role", "") == "assistant":
+                risposta = (getattr(m, "content", "") or "").strip()
+                if risposta:
+                    return risposta
+        return ""
+
+    def telegram_attivi(self) -> set[int]:
+        """Quali bot hanno un ponte che sta davvero girando."""
+        return {int(k) for k, p in
+                (getattr(self, "_telegram_ponti", {}) or {}).items()
+                if p.attivo}
+
+    def telegram_sync(self) -> int:
+        """Allinea i ponti ai token salvati. Torna quanti sono attivi.
+
+        Una funzione sola per tutti i casi — token nuovo, token tolto,
+        bot eliminato — perche' tre punti che avviano e fermano thread
+        sono tre occasioni di lasciarne uno acceso.
+        """
+        if not getattr(self, "_telegram_on", False):
+            return 0
+        from . import bots as bots_mod
+        from . import telegram as tg
+
+        ponti = getattr(self, "_telegram_ponti", None)
+        if ponti is None:
+            ponti = self._telegram_ponti = {}
+        voluti: dict[int, tuple[str, str]] = {}
+        for riga in tg.tutti():
+            if not riga["token"]:
+                continue
+            b = bots_mod.per_id(riga["bot_id"])
+            if b is None:
+                continue
+            voluti[int(riga["bot_id"])] = (riga["token"], b["nome"])
+        for bid, ponte in list(ponti.items()):
+            if bid not in voluti or voluti[bid][0] != ponte.api.token:
+                ponte.ferma()
+                ponti.pop(bid, None)
+        for bid, (token, nome) in voluti.items():
+            esistente = ponti.get(bid)
+            if esistente is not None and esistente.attivo:
+                continue
+            ponte = esistente or tg.Ponte(
+                bid, nome, tg.Api(token),
+                (lambda testo, b=bid: self.telegram_turno(b, testo)),
+                log=_log_telegram)
+            ponti[bid] = ponte
+            ponte.avvia()
+        return len(ponti)
+
+    def telegram_avvia(self) -> int:
+        """Da chiamare una volta, quando il server parte.
+
+        Non parte da `create`: chi costruisce l'app per provarla non
+        deve ritrovarsi un thread che parla con Telegram.
+        """
+        self._telegram_on = True
+        try:
+            from . import telegram as tg
+
+            tg.pulisci()
+        except Exception:  # noqa: BLE001
+            pass
+        return self.telegram_sync()
+
     def _salva_bot_attivo(self, nome: str) -> None:
         try:
             from . import keys as keys_mod
@@ -1953,6 +2064,15 @@ class OrchestraApp:
         (getattr(self, "_bots_fili", {}) or {}).pop(int(b["id"]), None)
         fatto = bots_mod.elimina(b["id"])
         if fatto:
+            # Un token dimenticato e' un bot ancora vivo su Telegram che
+            # risponde a una chat che nessuno guarda.
+            try:
+                from . import telegram as tg
+
+                tg.salva_token(b["id"], "")
+                self.telegram_sync()
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 from . import lavori as lavori_mod
 
@@ -3528,6 +3648,17 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
     app = OrchestraApp.create(remoto_attivo=remoto_attivo)
     Handler.app = app
     app.porta = port
+
+    # I bot Telegram salvati ripartono con il server: chi ha collegato
+    # una chat si aspetta di trovarla viva dopo un riavvio, senza
+    # riaprire il pannello. Se la rete non c'e', il ponte riprova da
+    # solo e il pannello lo dice.
+    try:
+        quanti = app.telegram_avvia()
+        if quanti:
+            print(f"  Telegram: {quanti} bot in ascolto", flush=True)
+    except Exception as e:  # noqa: BLE001
+        _log_telegram(f"non sono riuscito ad avviare i ponti: {e}")
 
     if remoto_attivo and app.token_remoto:
         print(f"\n  Token di accesso remoto: {app.token_remoto}\n", flush=True)

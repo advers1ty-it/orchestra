@@ -14,8 +14,9 @@ from .rotte_progetti import RotteProgetti
 from .rotte_sistema import RotteSistema
 from .rotte_skill import RotteSkill
 from .rotte_storia import RotteStoria
+from .rotte_telegram import RotteTelegram
 
 
 class Rotte(RotteAutomazione, RotteChat, RotteModelli, RotteProgetti,
-            RotteSistema, RotteSkill, RotteStoria):
+            RotteSistema, RotteSkill, RotteStoria, RotteTelegram):
     """I gestori di tutte le rotte, composti per dominio."""
