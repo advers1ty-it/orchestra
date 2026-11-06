@@ -317,8 +317,12 @@
 <p>Poi <b>Mostra il QR per collegare</b>: inquadri il codice col telefono, Telegram apre la chat e manda il codice al bot da solo. Il pannello passa a «chat collegata» senza che tu debba premere altro. Il codice vale dieci minuti, una volta sola, e si può anche scrivere a mano come <code>/start &lt;codice&gt;</code>.</p>
 <ul>
   <li><b>Risponde solo la chat collegata.</b> Chiunque altro trovi il bot riceve una spiegazione, non un turno: nessun tool, nessuna spesa.</li>
-  <li>Il bot su Telegram <b>è lo stesso bot</b>: persona, modello, progetto, profilo, policy, cronologia. Da lì arrivano solo messaggi di testo, le risposte lunghe si spezzano in più messaggi, e l'avanzamento del lavoro non si vede — solo il risultato.</li>
-  <li>Comandi: <code>/start &lt;codice&gt;</code> collega, <code>/stato</code> dice com'è messa la chat, <code>/stop</code> scollega.</li>
+  <li>Il bot su Telegram <b>è lo stesso bot</b>: persona, modello, progetto, profilo, policy, cronologia. Cambia solo il filo.</li>
+  <li><b>Foto e documenti</b> arrivano al turno come se li avessi allegati nella finestra, e la didascalia è la richiesta. Quello che non si può leggere — un video, un archivio — viene rifiutato dicendo perché. I <b>vocali</b> si trascrivono e diventano il testo della richiesta, se il motore vocale è installato (<b>Opzioni → Voce</b>).</li>
+  <li><b>Mentre lavora</b> appare un messaggio solo che si aggiorna: secondi, giro, tool in corso e la coda di quello che sta scrivendo o pensando. A turno finito sparisce e resta la risposta; le risposte lunghe si spezzano in più messaggi.</li>
+  <li><b>Comandi</b>: <code>/aiuto</code> (la lista), <code>/stato</code> (modello, turno, collegamento), <code>/steer &lt;testo&gt;</code> (guida il turno), <code>/stop</code> (ferma il turno), <code>/nuova</code> (nuova conversazione), <code>/modello</code> (mostra o cambia il modello del bot), <code>/scollega</code> (stacca la chat), <code>/start &lt;codice&gt;</code> (collega).</li>
+  <li>Mentre l'agente lavora, <b>quello che scrivi è una guida</b> al turno in corso, come <code>/steer</code>: per una richiesta nuova, <code>/stop</code> e riscrivi.</li>
+  <li><code>/modello</code> cambia il modello <b>di quel bot</b>, che da lì in poi non segue più il default di Opzioni. Vale dal messaggio successivo, e la conversazione resta.</li>
   <li>Il ponte parte col server e usa il <b>polling</b>: nessun indirizzo pubblico, nessun webhook, nessuna porta aperta. Con il PC spento il bot non risponde e non trattiene i messaggi.</li>
   <li><b>I permessi non arrivano su Telegram.</b> Se un'azione chiede una conferma, la domanda compare nella finestra di Orchestra: rispondi lì. Senza risposta entro cinque minuti viene negata.</li>
 </ul>
