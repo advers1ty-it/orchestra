@@ -369,8 +369,15 @@ echo   Controllo aggiornamenti...
 rem  update.py si usa direttamente, senza importare l'app: deve poter
 rem  aggiornare anche un'installazione che non si avvia piu', che e'
 rem  esattamente quando serve di piu'.
+rem  La cartella si passa col punto attaccato, non con la barra finale
+rem  che %~dp0 si porta dietro: dentro le virgolette "D:\dir\" la
+rem  barra mangia l'apice di chiusura, e Python riceve D:\dir" con un
+rem  apice in coda: una cartella che non esiste, quindi nessun
+rem  aggiornamento. D:\dir\. e' lo stesso percorso per chi lo apre, e
+rem  vale anche per la radice di un disco, dove togliere la barra
+rem  lascerebbe un "D:" che significa un'altra cosa.
 if exist "%ROOT%orchestra\update.py" (
-    "%PY1%" %PY2% "%ROOT%orchestra\update.py" --auto --root "%ROOT%"
+    "%PY1%" %PY2% "%ROOT%orchestra\update.py" --auto --root "%ROOT%."
 ) else (
     "%PY1%" %PY2% -m orchestra.cli update --auto
 )
