@@ -10,9 +10,18 @@ rem
 rem    Orchestra.cmd avvia
 rem    Orchestra.cmd ferma
 rem    Orchestra.cmd riavvia
+rem    Orchestra.cmd log
 rem
-rem  Senza argomento chiede. Un doppio click che non fa niente e'
-rem  peggio di uno che chiede: si vede che esiste, e si sceglie.
+rem  Senza argomento decide dallo stato: se il server non c'e' parte
+rem  subito (e' il doppio click), se c'e' chiede se aprire, riavviare o
+rem  fermare. Un doppio click che non fa niente e' peggio di uno che
+rem  agisce, ma un server avviato due volte e' peggio di entrambi.
+rem
+rem  Questo file e' l'UNICA implementazione di avvio/fermata: il
+rem  collegamento sul Desktop punta a Avvia-Orchestra.bat, che fa solo
+rem  l'aggiornamento e poi chiama qui. Due copie della stessa logica
+rem  erano due modi di sbagliare (una si fidava di `where py`, l'altra
+rem  no) e due file di log diversi da guardare.
 rem
 rem  "ferma" e' verificato, non creduto: prima guarda se qualcosa
 rem  ascolta davvero su quella porta, e dice cosa ha trovato. Un
@@ -43,8 +52,9 @@ if /i "%~1"=="stop"    goto :ferma
 if /i "%~1"=="riavvia" goto :riavvia
 if /i "%~1"=="restart" goto :riavvia
 if /i "%~1"=="log"     goto :vedilog
+if "%~1"==""        goto :scelta
 
-goto :menu
+goto :comandi
 
 rem  Python assente: si dice subito e in chiaro, prima di qualsiasi
 rem  altra cosa. Un errore a meta' avvio dice molto meno.
@@ -60,6 +70,11 @@ rem ===================================================================
 rem  Avvia
 rem ===================================================================
 :avvia
+rem  Primo di tutto: l'aggiornamento, se chi ci ha chiamato l'ha
+rem  chiesto (il collegamento sul Desktop lo fa). Va prima dell'avvio e
+rem  non dopo, altrimenti si aggiornano i file mentre il processo nuovo
+rem  e' gia' partito con quelli vecchi.
+if defined ORCHESTRA_AGGIORNA call :aggiorna
 rem  Se qualcuno e' gia' in ascolto, NON si avvia un secondo processo:
 rem  morirebbe sull'indirizzo occupato e resterebbe vivo quello vecchio,
 rem  con il codice sbagliato — il "refresha e non cambia niente". Si
@@ -213,6 +228,7 @@ rem ===================================================================
 rem  Riavvia
 rem ===================================================================
 :riavvia
+if defined ORCHESTRA_AGGIORNA call :aggiorna
 echo.
 call :chi_ha %PORTA%
 if errorlevel 1 (
@@ -294,33 +310,75 @@ exit /b 0
 rem ===================================================================
 rem  Menu
 rem ===================================================================
-:menu
+rem  Senza argomenti: la domanda giusta dipende dallo stato del server.
+rem  Spento, partire subito e' quello che si vuole; acceso, avviarlo di
+rem  nuovo non ha senso e le cose utili sono aprire, riavviare, fermare.
+:scelta
+call :chi_ha %PORTA%
+if errorlevel 1 goto :avvia
+goto :menu_su
+
+rem  Server gia' acceso.
+:menu_su
 echo.
-echo   ==================  Orchestra  ==================
+echo   Orchestra e' gia' in esecuzione: http://127.0.0.1:%PORTA%
 echo.
-echo     1  avvia     apre il browser e avvia il server
-echo     2  ferma     chiude il server
-echo     3  riavvia   ferma e riapre
-echo     4  log       apre il log del server
+echo     1  apri      apre l'interfaccia nel browser
+echo     2  riavvia   ferma e riapre
+echo     3  ferma     chiude il server
 echo.
 set "SCELTA="
-set /p "SCELTA=Scegli da 1 a 4 e premi Invio: "
-
-if "%SCELTA%"=="1" goto :avvia
-if "%SCELTA%"=="2" goto :ferma
-if "%SCELTA%"=="3" goto :riavvia
-if "%SCELTA%"=="4" goto :vedilog
-if "%SCELTA%"=="" goto :menu
-
+set /p "SCELTA=Scelta da 1 a 3, Invio per uscire: "
+if "%SCELTA%"=="" exit /b 0
+if "%SCELTA%"=="1" goto :apri
+if "%SCELTA%"=="2" goto :riavvia
+if "%SCELTA%"=="3" goto :ferma
 echo.
 echo   Non ho capito "%SCELTA%".
 ping -n 2 127.0.0.1 >nul
-goto :menu
+goto :menu_su
+
+:apri
+start "" "http://127.0.0.1:%PORTA%"
+exit /b 0
+
+rem  Argomento che non conosco: elenco i comandi invece di aprire un
+rem  menu, perche' quel menu sceglierebbe lui cosa fare e poi servirebbe
+rem  riscriverlo come argomento — due modi per la stessa cosa.
+:comandi
+echo.
+echo   Comandi: Orchestra.cmd avvia / ferma / riavvia / log
+echo.
+echo   Senza argomenti: parte se il server non c'e', altrimenti chiede
+echo   se aprire, riavviare o fermare.
+echo.
+pause
+exit /b 0
 
 
 rem ===================================================================
 rem  Funzioni
 rem ===================================================================
+
+rem  Aggiornamento automatico, quando chi chiama lo ha chiesto con
+rem  ORCHESTRA_AGGIORNA (lo imposta Avvia-Orchestra.bat, cioe' il
+rem  collegamento sul Desktop). Solo su avvio e riavvio: su ferma o log
+rem  non serve, e rallenterebbe un'operazione che deve essere immediata.
+:aggiorna
+echo   Controllo aggiornamenti...
+rem  update.py si usa direttamente, senza importare l'app: deve poter
+rem  aggiornare anche un'installazione che non si avvia piu', che e'
+rem  esattamente quando serve di piu'.
+if exist "%ROOT%orchestra\update.py" (
+    "%PY1%" %PY2% "%ROOT%orchestra\update.py" --auto --root "%ROOT%"
+) else (
+    "%PY1%" %PY2% -m orchestra.cli update --auto
+)
+if errorlevel 1 echo   [AVVISO] Aggiornamento non riuscito: continuo con la versione locale.
+rem  Una volta sola: :riavvia finisce in :avvia, e senza questa riga lo
+rem  stesso aggiornamento verrebbe controllato due volte.
+set "ORCHESTRA_AGGIORNA="
+exit /b 0
 
 rem  Trova un Python che FUNZIONA, non uno che esiste. Lascia in PY1
 rem  l'eseguibile e in PY2 l'eventuale argomento ("-3" per il launcher);
