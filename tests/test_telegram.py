@@ -10,14 +10,17 @@ decidono se questo ponte e' sicuro:
   2. un messaggio da una chat collegata arriva all'agente una volta
      sola, e la risposta torna indietro intera anche se e' lunga.
 
-Il resto sono dettagli che si vedono solo in produzione: l'arretrato al
-primo giro (un'app che rifa' il lavoro di ieri appena la riapri) e il
-codice a uso singolo.
+Il resto sono le cose che si vedono solo in uso vero: l'arretrato al
+primo giro (un'app che rifa' il lavoro di ieri appena la riapri), il
+codice a uso singolo, i file che arrivano e i vocali che si trascrivono,
+il messaggio di stato che si aggiorna e poi sparisce, e i comandi che
+fermano un turno o cambiano modello senza costo di token.
 """
 
 import os
 import sys
 import tempfile
+import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +30,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 # dei collegamenti e' una cartella temporanea usa e getta.
 os.environ["ORCHESTRA_HOME"] = tempfile.mkdtemp(prefix="orch_tg_")
 
+import orchestra.stt as stt  # noqa: E402
 import orchestra.telegram as tg  # noqa: E402
 
 PASS, FAIL = [], []
@@ -46,9 +50,12 @@ class FintoTelegram:
         self.inviati = []
         self.in_attesa = []
         self.chiamate = []
+        self.modifiche = []
+        self.cancellati = []
+        self.file_chiesti = []
         self.offset = []
         self.ultimo_id = 1000
-        self.risposta_turno = "ok"
+        self.contenuto = b"contenuto del file"
 
     def messaggio(self, chat_id, testo, nome="prova"):
         self.ultimo_id += 1
@@ -61,10 +68,29 @@ class FintoTelegram:
         })
         return self.ultimo_id
 
+    def allegato(self, chat_id, campo, voce, didascalia="", nome="prova"):
+        """Un messaggio con un file dentro, come lo manda Telegram."""
+        self.ultimo_id += 1
+        messaggio = {"chat": {"id": chat_id, "username": nome},
+                     campo: voce}
+        if didascalia:
+            messaggio["caption"] = didascalia
+        self.in_attesa.append({"update_id": self.ultimo_id,
+                               "message": messaggio})
+        return self.ultimo_id
+
     def ultimo_inviato(self):
         return self.inviati[-1][1] if self.inviati else ""
 
+    def testi(self):
+        return [t for _c, t in self.inviati]
+
+    def scarica(self, percorso, massimo):
+        return self.contenuto
+
     def __call__(self, url, dati, secondi):
+        if isinstance(dati, bytes):
+            dati = {}
         metodo = url.rsplit("/", 1)[-1]
         self.chiamate.append((metodo, dict(dati)))
         if metodo == "getMe":
@@ -75,6 +101,18 @@ class FintoTelegram:
         if metodo == "sendMessage":
             self.inviati.append((str(dati.get("chat_id")), dati.get("text")))
             return {"ok": True, "result": {"message_id": len(self.inviati)}}
+        if metodo == "editMessageText":
+            self.modifiche.append((int(dati.get("message_id") or 0),
+                                   dati.get("text")))
+            return {"ok": True, "result": True}
+        if metodo == "deleteMessage":
+            self.cancellati.append(int(dati.get("message_id") or 0))
+            return {"ok": True, "result": True}
+        if metodo == "getFile":
+            self.file_chiesti.append(dati.get("file_id"))
+            return {"ok": True, "result": {
+                "file_path": f"files/{dati.get('file_id')}",
+                "file_size": len(self.contenuto)}}
         if metodo == "getUpdates":
             offset = dati.get("offset")
             self.offset.append(offset)
@@ -91,17 +129,36 @@ class FintoTelegram:
         raise AssertionError(f"metodo inatteso: {metodo}")
 
 
-def ponte(finto, risposte=None, bot_id=7):
+def ponte(finto, risposte=None, bot_id=7, comandi=None, turno=None):
     chiamate = []
+    allegati_visti = []
 
-    def turno(testo):
+    def finto_turno(testo, allegati=None, avanzamento=None):
         chiamate.append(testo)
+        allegati_visti.append(list(allegati or []))
+        if turno is not None:
+            return turno(testo, allegati, avanzamento)
         if risposte is not None:
             return risposte
+        if avanzamento is not None:
+            avanzamento("sto facendo")
         return f"risposta a: {testo}"
 
-    api = tg.Api(TOKEN, trasporto=finto)
-    return tg.Ponte(bot_id, "Prova", api, turno, attesa=0), chiamate
+    api = tg.Api(TOKEN, trasporto=finto, scarica=finto.scarica)
+    p = tg.Ponte(bot_id, "Prova", api, finto_turno, comandi=comandi,
+                 attesa=0)
+    p.allegati_visti = allegati_visti
+    return p, chiamate
+
+
+def comandi_finti(chiamate, risposte=None):
+    def comandi(nome, argomento=""):
+        chiamate.append((nome, argomento))
+        if risposte and nome in risposte:
+            return risposte[nome]
+        return f"{nome} fatto"
+
+    return comandi
 
 
 print("\n[1] il token: forma, salvataggio, rimozione")
@@ -167,6 +224,7 @@ check("il primo passo chiede l'ultimo aggiornamento",
 check("e non fa partire un turno", chiamate == [], str(chiamate))
 finto.messaggio(555, "messaggio di oggi")
 p.passo()
+p.aspetta()
 check("solo il messaggio nuovo arriva all'agente",
       chiamate == ["messaggio di oggi"], str(chiamate))
 
@@ -178,6 +236,7 @@ tg.imposta_chat(7, 555, "adver")
 p.passo()  # primo giro: arretrato
 finto.messaggio(999, "ciao, esegui qualcosa")
 p.passo()
+p.aspetta()
 check("un estraneo non ottiene un turno", chiamate == [], str(chiamate))
 check("gli si spiega che serve il codice",
       "non e' collegata" in finto.ultimo_inviato(),
@@ -202,6 +261,7 @@ check("la risposta dice che e' collegato",
       "Collegato" in finto.ultimo_inviato(), finto.ultimo_inviato()[:80])
 finto.messaggio(777, "e adesso?")
 p.passo()
+p.aspetta()
 check("da li' in poi l'agente risponde",
       chiamate == ["e adesso?"], str(chiamate))
 
@@ -211,6 +271,7 @@ tg.dimentica_chat(7)
 p2.passo()
 finto2.messaggio(888, "/start codiceinventato")
 p2.passo()
+p2.aspetta()
 check("un codice inventato non collega",
       tg.chat_di(7)[0] != "888", tg.chat_di(7)[0])
 check("e non fa partire un turno", chiamate2 == [], str(chiamate2))
@@ -226,6 +287,7 @@ tg.imposta_chat(7, 555, "adver")
 p.passo()
 finto.messaggio(555, "scrivimi tanto")
 p.passo()
+p.aspetta()
 check("la risposta e' stata spezzata", len(finto.inviati) >= 3,
       str(len(finto.inviati)))
 check("nessun pezzo supera il limite di Telegram",
@@ -234,48 +296,278 @@ check("nessun pezzo supera il limite di Telegram",
 check("i pezzi ricompongono la risposta",
       "".join(t for _c, t in finto.inviati) == "y" * 9000)
 
-print("\n[8] /stop, e il turno che si spegne")
+print("\n[8] i comandi: /aiuto, /scollega, e chi non e' collegato")
 finto = FintoTelegram()
 p, chiamate = ponte(finto)
 tg.salva_token(7, TOKEN)
 tg.imposta_chat(7, 555, "adver")
 p.passo()
-finto.messaggio(555, "/stop")
+finto.messaggio(555, "/aiuto")
 p.passo()
-check("/stop scollega la chat", tg.chat_di(7)[0] == "", tg.chat_di(7)[0])
+aiuto = finto.ultimo_inviato()
+check("/aiuto elenca i comandi",
+      "/steer" in aiuto and "/stop" in aiuto and "/modello" in aiuto,
+      aiuto[:80])
+check("e non costa un turno", chiamate == [], str(chiamate))
+finto.messaggio(999, "/stato")
+p.passo()
+check("un comando da una chat estranea non esegue niente",
+      "non e' collegata" in finto.ultimo_inviato(),
+      finto.ultimo_inviato()[:80])
+finto.messaggio(555, "/scollega")
+p.passo()
+check("/scollega stacca la chat", tg.chat_di(7)[0] == "", tg.chat_di(7)[0])
 finto.messaggio(555, "sei ancora li'?")
 p.passo()
-check("dopo /stop non risponde piu' l'agente", chiamate == [], str(chiamate))
+p.aspetta()
+check("dopo /scollega non risponde piu' l'agente", chiamate == [],
+      str(chiamate))
 
+print("\n[9] i comandi arrivano a chi sa eseguirli")
+finto = FintoTelegram()
+visti = []
+p, _chiamate = ponte(finto, comandi=comandi_finti(visti))
 tg.salva_token(7, TOKEN)
 tg.imposta_chat(7, 555, "adver")
+p.passo()
 finto.messaggio(555, "/stato")
 p.passo()
-check("/stato risponde a chi e' collegato",
-      "Collegato" in finto.ultimo_inviato(), finto.ultimo_inviato()[:80])
-finto.messaggio(556, "/stato")
+check("/stato viene delegato",
+      visti and visti[-1] == ("stato", ""), str(visti))
+finto.messaggio(555, "/modello gpt-4o-mini")
 p.passo()
-check("e a chi non lo e' dice di collegarsi",
-      "Non collegato" in finto.ultimo_inviato(),
-      finto.ultimo_inviato()[:80])
+check("/modello passa il nome",
+      visti[-1] == ("modello", "gpt-4o-mini"), str(visti))
+check("e la risposta di chi esegue torna in chat",
+      "modello fatto" in finto.ultimo_inviato(),
+      finto.ultimo_inviato()[:60])
+finto.messaggio(555, "/pippo")
+p.passo()
+check("un comando sconosciuto lo dice",
+      "non riconosciuto" in finto.ultimo_inviato(),
+      finto.ultimo_inviato()[:60])
 
-print("\n[9] un turno che esplode non lascia l'utente senza niente")
+print("\n[10] un ponte senza comandi non finge di averli")
+finto = FintoTelegram()
+p, _chiamate = ponte(finto)
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+p.passo()
+finto.messaggio(555, "/stop")
+p.passo()
+check("senza sessione /stop lo dice invece di scollegare",
+      "non disponibile" in finto.ultimo_inviato(),
+      finto.ultimo_inviato()[:60])
+check("e la chat resta collegata", tg.chat_di(7)[0] == "555",
+      tg.chat_di(7)[0])
+
+print("\n[11] un turno che esplode non lascia l'utente senza niente")
 
 
-def rotto(_testo):
+def rotto(_testo, _allegati=None, _avanzamento=None):
     raise RuntimeError("provider giu'")
 
 
-api = tg.Api(TOKEN, trasporto=finto)
+finto = FintoTelegram()
+api = tg.Api(TOKEN, trasporto=finto, scarica=finto.scarica)
 p3 = tg.Ponte(7, "Prova", api, rotto, attesa=0)
 p3.passo()
 finto.messaggio(555, "fai qualcosa")
 p3.passo()
+p3.aspetta()
 check("l'errore torna in chat invece di sparire",
       "provider giu'" in finto.ultimo_inviato(),
       finto.ultimo_inviato()[:80])
 
-print("\n[10] i collegamenti dei bot eliminati si tolgono")
+print("\n[12] cosa c'e' dentro un messaggio")
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, 555, "adver")
+foto = tg.allegato_da({"photo": [{"file_id": "p1", "file_size": 10},
+                                 {"file_id": "p2", "file_size": 900}],
+                       "caption": "che e' questo?"})
+check("di una foto si prende la versione piu' grande",
+      foto and foto["file_id"] == "p2", str(foto))
+check("e la didascalia viaggia con lei",
+      foto and foto["didascalia"] == "che e' questo?", str(foto))
+check("una foto senza didascalia non inventa un testo",
+      tg.allegato_da({"photo": [{"file_id": "p1"}]})["didascalia"] == "")
+check("un vocale si riconosce",
+      tg.allegato_da({"voice": {"file_id": "v1", "file_size": 300}}
+                     )["tipo"] == "voce")
+check("un documento porta il suo nome",
+      tg.allegato_da({"document": {"file_id": "d1", "file_size": 5,
+                                   "file_name": "note.txt"}})["nome"]
+      == "note.txt")
+check("un messaggio di solo testo non ha allegati",
+      tg.allegato_da({"text": "ciao"}) is None)
+check("un array di foto vuoto non e' una foto",
+      tg.allegato_da({"photo": []}) is None)
+
+print("\n[13] una foto arriva all'agente come immagine")
+finto = FintoTelegram()
+finto.contenuto = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 60)
+p, chiamate = ponte(finto)
+p.passo()
+finto.allegato(555, "photo", [{"file_id": "p9", "file_size": 68}],
+               didascalia="descrivi questa foto")
+p.passo()
+p.aspetta()
+check("il turno parte con la didascalia",
+      chiamate == ["descrivi questa foto"], str(chiamate))
+allegati = p.allegati_visti[-1]
+check("e con un allegato immagine",
+      len(allegati) == 1 and getattr(allegati[0], "kind", "") == "image",
+      str([getattr(a, "kind", "?") for a in allegati]))
+check("il file e' stato chiesto a Telegram", finto.file_chiesti == ["p9"],
+      str(finto.file_chiesti))
+
+print("\n[14] un documento di testo diventa testo nel messaggio")
+finto = FintoTelegram()
+finto.contenuto = "prezzo 12,50\nprezzo 30,00".encode("utf-8")
+p, chiamate = ponte(finto)
+p.passo()
+finto.allegato(555, "document", {"file_id": "d9", "file_size": 25,
+                                 "file_name": "prezzi.txt"})
+p.passo()
+p.aspetta()
+check("senza didascalia la richiesta nomina il file",
+      chiamate and "prezzi.txt" in chiamate[0], str(chiamate))
+allegati = p.allegati_visti[-1]
+check("il documento arriva come testo",
+      len(allegati) == 1 and getattr(allegati[0], "kind", "") == "testo",
+      str([getattr(a, "kind", "?") for a in allegati]))
+
+print("\n[15] un vocale, quando il motore vocale non c'e'")
+disponibile_vero = stt.disponibile
+stt.disponibile = lambda: False
+finto = FintoTelegram()
+p, chiamate = ponte(finto)
+p.passo()
+finto.allegato(555, "voice", {"file_id": "v9", "file_size": 40})
+p.passo()
+p.aspetta()
+check("senza motore vocale il turno non parte", chiamate == [], str(chiamate))
+check("e si dice dove si installa",
+      "Opzioni" in finto.ultimo_inviato(), finto.ultimo_inviato()[:90])
+
+print("\n[16] un vocale, quando il motore vocale c'e'")
+stt.disponibile = lambda: True
+trascrivi_vero = stt.trascrivi
+stt.trascrivi = lambda dati, nome="": "accendi la luce dello studio"
+finto = FintoTelegram()
+finto.contenuto = b"OggS" + b"\x00" * 40
+p, chiamate = ponte(finto)
+p.passo()
+finto.allegato(555, "voice", {"file_id": "v8", "file_size": 44})
+p.passo()
+p.aspetta()
+check("il vocale arriva all'agente come testo",
+      chiamate == ["accendi la luce dello studio"], str(chiamate))
+check("e senza allegati", p.allegati_visti[-1] == [],
+      str(p.allegati_visti[-1]))
+stt.disponibile = disponibile_vero
+stt.trascrivi = trascrivi_vero
+
+print("\n[17] quello che non si scarica, si dice")
+finto = FintoTelegram()
+p, chiamate = ponte(finto)
+p.passo()
+finto.allegato(555, "video", {"file_id": "vid", "file_size": 100})
+p.passo()
+p.aspetta()
+check("un video non fa partire un turno", chiamate == [], str(chiamate))
+check("e la risposta dice perche'",
+      "video" in finto.ultimo_inviato().lower(),
+      finto.ultimo_inviato()[:80])
+finto.allegato(555, "document", {"file_id": "big", "file_size": 50 << 20,
+                                 "file_name": "enorme.bin"})
+p.passo()
+p.aspetta()
+check("un file oltre il limite non si scarica",
+      "big" not in finto.file_chiesti, str(finto.file_chiesti))
+check("e lo dice con i numeri",
+      "MB" in finto.ultimo_inviato(), finto.ultimo_inviato()[:80])
+
+print("\n[18] il messaggio di stato: uno solo, aggiornato, poi tolto")
+primo_vero, intervallo_vero = tg.PRIMO_AVVISO, tg.INTERVALLO_PROGRESSO
+tg.PRIMO_AVVISO, tg.INTERVALLO_PROGRESSO = 0.0, 10.0
+
+
+def turno_che_racconta(_testo, _allegati=None, avanzamento=None):
+    avanzamento("sto leggendo i test")
+    avanzamento("sto leggendo i test, ancora")
+    return "fatto"
+
+
+finto = FintoTelegram()
+p, _chiamate = ponte(finto, turno=turno_che_racconta)
+p.passo()
+finto.messaggio(555, "lavora")
+p.passo()
+p.aspetta()
+check("lo stato e' un messaggio solo",
+      finto.testi().count("sto leggendo i test") == 1, str(finto.testi()))
+check("e non e' stato modificato a raffica", finto.modifiche == [],
+      str(finto.modifiche))
+check("alla fine il messaggio di stato sparisce",
+      finto.cancellati == [1], str(finto.cancellati))
+check("e la risposta resta", finto.testi()[-1] == "fatto", str(finto.testi()))
+
+tg.INTERVALLO_PROGRESSO = 0.0
+
+
+def turno_lungo(_testo, _allegati=None, avanzamento=None):
+    avanzamento("sto leggendo i test")
+    avanzamento("sto leggendo i test, ancora")
+    return "fatto"
+
+
+finto = FintoTelegram()
+p, _chiamate = ponte(finto, turno=turno_lungo)
+p.passo()
+finto.messaggio(555, "lavora")
+p.passo()
+p.aspetta()
+check("con il tempo che passa lo stato viene riscritto",
+      finto.modifiche and finto.modifiche[-1][1] == "sto leggendo i test, ancora",
+      str(finto.modifiche))
+check("sempre sullo stesso messaggio",
+      finto.modifiche[-1][0] == 1, str(finto.modifiche))
+tg.PRIMO_AVVISO, tg.INTERVALLO_PROGRESSO = primo_vero, intervallo_vero
+
+print("\n[19] un messaggio durante un turno e' una guida")
+in_corso = threading.Event()
+partito = threading.Event()
+
+
+def turno_bloccato(_testo, _allegati=None, _avanzamento=None):
+    partito.set()
+    in_corso.wait(timeout=5)
+    return "finito"
+
+
+finto = FintoTelegram()
+visti = []
+p, chiamate = ponte(finto, comandi=comandi_finti(visti),
+                    turno=turno_bloccato)
+p.passo()
+finto.messaggio(555, "prima richiesta")
+p.passo()
+check("il turno parte subito", partito.wait(timeout=5) is True)
+check("e il ponte sa di essere occupato", p.occupato is True)
+finto.messaggio(555, "guarda anche il file B")
+p.passo()
+check("il testo in piu' diventa una guida, non un secondo turno",
+      ("steer", "guarda anche il file B") in visti, str(visti))
+check("e non parte un secondo turno", chiamate == ["prima richiesta"],
+      str(chiamate))
+in_corso.set()
+p.aspetta()
+check("il turno finisce quando lo lasci andare", p.occupato is False)
+check("la sua risposta arriva in chat",
+      "finito" in finto.testi(), str(finto.testi()))
+
+print("\n[20] i collegamenti dei bot eliminati si tolgono")
 tg.salva_token(99, TOKEN)
 quanti = tg.pulisci(bot_validi=[])
 check("un collegamento senza bot viene tolto", quanti >= 1, str(quanti))

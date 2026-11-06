@@ -82,6 +82,38 @@ MAX_TESTO = 4000
 ATTESA_POLLING = 25
 INTERVALLO_ERRORE = 10.0
 
+# Un turno lungo non deve lasciare l'utente davanti a un puntino che
+# scrive: il messaggio di stato si aggiorna, ma non a ogni evento.
+# Telegram limita le modifiche per chat, e un aggiornamento ogni token
+# servirebbe solo a far buttare via tutti gli altri.
+PRIMO_AVVISO = 1.5
+INTERVALLO_PROGRESSO = 2.5
+
+# Il tetto del Bot API per `getFile`. Oltre, il file non si scarica
+# nemmeno: dirlo prima evita un errore di rete che sembra un guasto.
+MASSIMO_FILE = 20 * 1024 * 1024
+
+# I comandi che il ponte sa consegnare a chi gestisce la sessione: la
+# chat non entra nel merito, ma deve sapere cosa e' un comando suo e
+# cosa e' un errore di battitura.
+COMANDI_AGENTE = ("stato", "steer", "stop", "nuova", "modello")
+
+GUIDA = (
+    "Quello che scrivi qui e' una richiesta all'agente: stesso bot, "
+    "stessi tool, stessa policy della finestra.\n\n"
+    "Comandi:\n"
+    "/stato - modello, turno in corso, collegamento\n"
+    "/steer <testo> - guida il turno in corso (mentre lavora, un "
+    "messaggio normale fa lo stesso)\n"
+    "/stop - ferma il turno in corso\n"
+    "/nuova - nuova conversazione\n"
+    "/modello - il modello in uso; /modello <nome> lo cambia\n"
+    "/scollega - stacca questa chat\n"
+    "/aiuto (o /guida) - questa lista\n\n"
+    "Foto e documenti li leggo, i vocali li trascrivo se il motore "
+    "vocale e' installato (Opzioni)."
+)
+
 
 class ErroreTelegram(RuntimeError):
     """La chiamata all'API non e' riuscita, e il messaggio dice perche'."""
@@ -89,6 +121,71 @@ class ErroreTelegram(RuntimeError):
     def __init__(self, messaggio: str, codice: int | None = None) -> None:
         super().__init__(messaggio)
         self.codice = codice
+
+
+class ErroreAllegato(RuntimeError):
+    """Un file arrivato male: il testo dell'errore si mostra in chat."""
+
+
+# Cosa sa arrivare da Telegram, e cosa se ne fa. Le foto sono un array di
+# versioni della stessa immagine (Telegram le prepara in piu' misure): si
+# prende la piu' grande, perche' quella piccola e' un francobollo che il
+# modello legge peggio.
+TIPI_ALLEGATO = {
+    "photo": "foto",
+    "voice": "voce",
+    "audio": "audio",
+    "document": "documento",
+    "video": "video",
+}
+
+NOME_PREDEFINITO = {
+    "foto": "foto.jpg",
+    "voce": "vocale.oga",
+    "audio": "audio.mp3",
+    "documento": "documento",
+    "video": "video.mp4",
+}
+
+
+def allegato_da(messaggio: dict[str, Any]) -> dict[str, Any] | None:
+    """Il file dentro un messaggio, se c'e': tipo, id, nome, didascalia.
+
+    Restituisce None per un messaggio di solo testo. E' una funzione a
+    se' perche' e' la parte che si puo' sbagliare in silenzio: un array
+    di foto vuoto, un campo che manca, una didascalia assente. Il resto
+    del ponte riceve un dizionario gia' pulito.
+    """
+    if not isinstance(messaggio, dict):
+        return None
+    didascalia = (messaggio.get("caption") or "").strip()
+
+    for campo, tipo in TIPI_ALLEGATO.items():
+        voci = messaggio.get(campo)
+        if isinstance(voci, list):
+            # Solo `photo` e' una lista: le altre misure sono dizionari.
+            voci = [v for v in voci if isinstance(v, dict) and v.get("file_id")]
+            if not voci:
+                continue
+            voce = max(voci, key=lambda v: int(v.get("file_size") or
+                                               v.get("width") or 0))
+        elif isinstance(voci, dict):
+            voce = voci
+        else:
+            continue
+        file_id = voce.get("file_id") or ""
+        if not file_id:
+            continue
+        nome = (voce.get("file_name") or "").strip()
+        nome = nome or NOME_PREDEFINITO.get(tipo, "file")
+        return {
+            "tipo": tipo,
+            "file_id": str(file_id),
+            "nome": nome,
+            "dimensione": int(voce.get("file_size") or 0),
+            "didascalia": didascalia,
+        }
+    return None
 
 
 # ===================================================================
@@ -381,10 +478,15 @@ class Api:
     """
 
     def __init__(self, token: str, *, trasporto: Trasporto | None = None,
-                 base: str = BASE) -> None:
+                 base: str = BASE,
+                 scarica: Callable[[str, int], bytes] | None = None) -> None:
         self.token = (token or "").strip()
         self.base = base.rstrip("/")
         self._trasporto = trasporto or _urllib
+        # Il download di un file non e' una chiamata JSON: un URL con il
+        # token dentro e dei byte come risposta. Trasporto a parte, per
+        # la stessa ragione dell'altro: i test non escono dalla macchina.
+        self._scarica = scarica or self._scarica_urllib
 
     def chiama(self, metodo: str, secondi: float = 30,
                **campi: Any) -> dict[str, Any]:
@@ -392,6 +494,64 @@ class Api:
             raise ErroreTelegram("manca il token del bot")
         url = f"{self.base}/bot{self.token}/{metodo}"
         return self._trasporto(url, campi, secondi)
+
+    def _scarica_urllib(self, percorso: str, massimo: int) -> bytes:
+        url = f"{self.base}/file/bot{self.token}/{percorso.lstrip('/')}"
+        try:
+            with urllib.request.urlopen(url, timeout=90) as risposta:
+                dati = risposta.read(max(1, int(massimo)) + 1)
+        except urllib.error.HTTPError as e:
+            raise ErroreTelegram(f"download rifiutato da Telegram ({e.code})",
+                                 e.code) from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise ErroreTelegram(f"rete non raggiungibile: {e}") from e
+        if len(dati) > massimo:
+            raise ErroreTelegram("il file supera il limite che Telegram concede")
+        return dati
+
+    def get_file(self, file_id: str, secondi: float = 20) -> dict[str, Any]:
+        """Dove sta il file, secondo Telegram. Poi si scarica a parte."""
+        if not (file_id or "").strip():
+            raise ErroreTelegram("manca l'identificativo del file")
+        risultato = self.chiama("getFile", secondi=secondi,
+                                file_id=file_id.strip())
+        file_ = risultato.get("result") or {}
+        return {"file_path": file_.get("file_path") or "",
+                "dimensione": int(file_.get("file_size") or 0)}
+
+    def scarica(self, percorso: str,
+                massimo: int = MASSIMO_FILE) -> bytes:
+        return self._scarica(percorso, int(massimo))
+
+    def edit_message(self, chat_id: str | int, message_id: int,
+                     testo: str, secondi: float = 15) -> bool:
+        """Riscrive un messaggio gia' mandato. False se non e' cambiato.
+
+        "message is not modified" non e' un errore: arriva quando due
+        aggiornamenti di stato si somigliano, ed e' esattamente il caso
+        che il limite di frequenza produce.
+        """
+        try:
+            self.chiama("editMessageText", secondi=secondi,
+                        chat_id=str(chat_id), message_id=int(message_id),
+                        text=testo, disable_web_page_preview="true")
+        except ErroreTelegram as e:
+            if "not modified" in str(e).lower():
+                return False
+            raise
+        return True
+
+    def delete_message(self, chat_id: str | int, message_id: int,
+                       secondi: float = 15) -> bool:
+        """Toglie un messaggio. Un messaggio gia' sparito non e' un guasto."""
+        try:
+            self.chiama("deleteMessage", secondi=secondi,
+                        chat_id=str(chat_id), message_id=int(message_id))
+        except ErroreTelegram as e:
+            if "not found" in str(e).lower():
+                return False
+            raise
+        return True
 
     def get_me(self, secondi: float = 15) -> dict[str, Any]:
         risultato = self.chiama("getMe", secondi=secondi)
@@ -477,30 +637,48 @@ def dividi(testo: str, limite: int = MAX_TESTO) -> list[str]:
 # ===================================================================
 #  Il ponte
 # ===================================================================
+
 class Ponte:
     """Un bot di Orchestra, il suo token, e la chat che gli scrive.
 
-    `turno(testo)` e' l'unica cosa che questo modulo non sa fare: prende
-    il messaggio dell'utente e torna la risposta dell'agente. Tutto il
-    resto — chi puo' scrivere, cosa si risponde a chi non e' collegato,
-    come si spezza un testo lungo — e' qui, e si prova senza rete.
+    Tre cose che questo modulo non sa fare, e che arrivano da fuori:
+
+    `turno(testo, allegati, avanzamento)` esegue la richiesta e torna la
+    risposta. `avanzamento` e' una funzione che il turno chiama quando ha
+    qualcosa da raccontare ("sto leggendo i test, giro 2"): il ponte
+    decide se vale la pena dirlo a Telegram, perche' le modifiche di un
+    messaggio sono limitate e un aggiornamento per token servirebbe solo
+    a far buttare via tutti gli altri.
+
+    `comandi(nome, argomento)` fa steer, stop, nuova, modello, stato.
+    Sta fuori perche' quelle cose riguardano la sessione, non la chat:
+    qui si sa chi ha scritto, la' cosa si puo' fare.
+
+    Il turno gira in un thread suo. Non e' un dettaglio: se il ponte
+    restasse fermo dentro il turno, non farebbe `getUpdates`, e i
+    messaggi che arrivano mentre l'agente lavora — cioe' proprio le
+    guide e gli stop — resterebbero su Telegram fino alla fine.
     """
 
-    def __init__(self, bot_id: int, nome: str, api: Api,
-                 turno: Callable[[str], str], *,
+    def __init__(self, bot_id: int, nome: str, api: Api, turno: Callable[..., str],
+                 *, comandi: Callable[[str, str], str] | None = None,
                  attesa: int = ATTESA_POLLING,
                  log: Callable[[str], None] | None = None) -> None:
         self.bot_id = int(bot_id)
         self.nome = (nome or "").strip() or f"bot {bot_id}"
         self.api = api
         self.turno = turno
+        self.comandi = comandi
         self.attesa = max(0, int(attesa))
         self._log = log or (lambda _m: None)
         self._fermo = threading.Event()
         self._thread: threading.Thread | None = None
         self._offset: int | None = None
         self._primo = True
+        self._turno_thread: threading.Thread | None = None
+        self._stato_progresso: dict[str, Any] | None = None
         self.fatti = 0
+        self.ultimo_turno = 0.0
 
     # --- ciclo -----------------------------------------------------
     def avvia(self) -> "Ponte":
@@ -521,6 +699,25 @@ class Ponte:
     @property
     def attivo(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
+
+    @property
+    def occupato(self) -> bool:
+        """C'e' un turno in corso adesso."""
+        t = self._turno_thread
+        return bool(t and t.is_alive())
+
+    def aspetta(self, secondi: float = 10.0) -> bool:
+        """Aspetta la fine del turno in corso.
+
+        Serve ai test, che fanno avanzare il ponte a mano: un turno che
+        si prova senza poterlo aspettare si verifica a colpi di `sleep`,
+        e un test che dorme e' un test che prima o poi fallisce da solo.
+        """
+        t = self._turno_thread
+        if t is None:
+            return True
+        t.join(timeout=secondi)
+        return not t.is_alive()
 
     def gira(self) -> None:
         try:
@@ -556,10 +753,7 @@ class Ponte:
             self._primo = False
             # L'arretrato non si rigioca: si prende l'ultimo
             # aggiornamento e si riparte da dopo.
-            try:
-                ultimi = self.api.get_updates(-1, secondi=0)
-            except ErroreTelegram:
-                raise
+            ultimi = self.api.get_updates(-1, secondi=0)
             if ultimi:
                 self._offset = int(ultimi[-1].get("update_id", 0)) + 1
             return 0
@@ -594,6 +788,7 @@ class Ponte:
         if not chat_id:
             return
         testo = (messaggio.get("text") or "").strip()
+        allegato = allegato_da(messaggio)
         chi = (chat.get("username") or chat.get("first_name")
                or chat.get("title") or chat_id)
         legata, _nome_chat = chat_di(self.bot_id)
@@ -601,10 +796,18 @@ class Ponte:
         if testo.startswith("/"):
             comando, _, argomento = testo.partition(" ")
             comando = comando.split("@", 1)[0].lower()
+            argomento = argomento.strip()
             if comando == "/start":
-                self._start(chat_id, chi, argomento.strip(), legata)
+                self._start(chat_id, chi, argomento, legata)
                 return
-            if comando == "/stop":
+            if comando in ("/aiuto", "/guida", "/help", "/comandi"):
+                self._rispondi(chat_id, GUIDA)
+                return
+            # Lo scollegamento si e' spostato: `/stop` adesso ferma il
+            # turno, che e' la cosa che serve di piu' e che non si puo'
+            # fare altrimenti dal telefono. Staccare la chat si fa
+            # apposta, con un comando che lo dice.
+            if comando == "/scollega":
                 if legata and legata == chat_id:
                     dimentica_chat(self.bot_id)
                     self._rispondi(chat_id, "Scollegato. Da adesso non "
@@ -613,64 +816,79 @@ class Ponte:
                     self._rispondi(chat_id, "Questa chat non e' collegata "
                                             "a nessun bot di Orchestra.")
                 return
-            if comando == "/stato":
-                if legata and legata == chat_id:
-                    self._rispondi(chat_id, f"Collegato a {self.nome}. "
-                                            "Scrivi e ti rispondo.")
-                else:
-                    self._rispondi(chat_id, "Non collegato: apri Orchestra, "
-                                            "pannello Bot, e inquadra il "
-                                            "codice.")
+            if not legata or legata != chat_id:
+                self._rispondi(chat_id, _invito_collegare())
                 return
-            self._rispondi(chat_id, "Comandi: /start <codice> per collegare, "
-                                    "/stato, /stop per scollegare. "
-                                    "Qualunque altro testo e' una richiesta.")
+            self._comando(chat_id, comando, argomento)
             return
 
         if not legata or legata != chat_id:
             # Nessun turno, nessun tool, nessun costo: chi non ha il
             # codice riceve una spiegazione, non un agente.
-            self._rispondi(chat_id,
-                           "Questa chat non e' collegata a nessun bot di "
-                           "Orchestra, quindi non eseguo niente.\n\n"
-                           "Apri Orchestra sul computer, vai nel pannello "
-                           "Bot, scegli il bot e inquadra il codice che "
-                           "compare (o mandalo qui come /start <codice>).")
+            self._rispondi(chat_id, _invito_collegare())
             return
 
-        if not testo:
-            self._rispondi(chat_id, "Per ora leggo solo testo: foto, "
-                                    "documenti e vocali non li ricevo.")
+        if not testo and allegato is None:
+            self._rispondi(chat_id, "Non c'e' niente da leggere in questo "
+                                    "messaggio. Leggo testo, foto, "
+                                    "documenti e vocali.")
             return
 
-        self.api.scrive(chat_id)
+        if self.occupato:
+            # Un messaggio durante un turno e' una guida, non una nuova
+            # richiesta: il turno e' gia' partito, e accodarne un altro
+            # vorrebbe dire farlo leggere sulla domanda sbagliata.
+            guida = testo or (allegato or {}).get("didascalia") or ""
+            if not guida:
+                self._rispondi(chat_id, "Sto ancora lavorando al messaggio "
+                                        "prima: questo file mandamelo quando "
+                                        "ho finito, o usa /stop.")
+                return
+            self._comando(chat_id, "steer", guida)
+            return
+
+        self._avvia_turno(chat_id, testo, allegato)
+
+    def _comando(self, chat_id: str, comando: str, argomento: str) -> None:
+        nome = comando.lstrip("/").lower()
+        # La lista sta qui e non la' fuori: un comando che il ponte non
+        # conosce e' un errore di battitura, e mandarlo al turno
+        # vorrebbe dire spendere token per far leggere all'agente
+        # "/pippo".
+        if nome not in COMANDI_AGENTE:
+            self._rispondi(chat_id, f"Comando /{nome} non riconosciuto. "
+                                    "/aiuto per la lista.")
+            return
+        if self.comandi is None:
+            if nome == "stato":
+                self._rispondi(chat_id, f"Collegato a {self.nome}. "
+                                        "Scrivi e ti rispondo.")
+            else:
+                self._rispondi(chat_id, f"Comando /{nome} non disponibile "
+                                        "in questo ponte. /aiuto per la "
+                                        "lista.")
+            return
         try:
-            risposta = (self.turno(testo) or "").strip()
+            risposta = self.comandi(nome, argomento)
         except Exception as e:  # noqa: BLE001
-            self._rispondi(chat_id, f"Errore durante il turno: "
-                                    f"{type(e).__name__}: {e}")
-            return
-        if not risposta:
-            risposta = ("Il turno e' finito senza una risposta testuale. "
-                        "Il lavoro puo' essere comunque stato fatto: "
-                        "controlla nella finestra di Orchestra.")
-        self._rispondi(chat_id, risposta)
+            risposta = f"Errore nel comando /{nome}: {type(e).__name__}: {e}"
+        self._rispondi(chat_id, risposta or "Fatto.")
 
     def _start(self, chat_id: str, chi: str, argomento: str,
                legata: str) -> None:
         if legata and legata == chat_id:
             self._rispondi(chat_id, f"Sei gia' collegato a {self.nome}. "
-                                    "Scrivi e ti rispondo.")
+                                    "Scrivi e ti rispondo, /aiuto per i "
+                                    "comandi.")
             return
         if argomento and codice_valido(self.bot_id, argomento):
             imposta_chat(self.bot_id, chat_id, chi)
             self._rispondi(chat_id,
                            f"Collegato a {self.nome}.\n\n"
                            "Quello che scrivi qui arriva all'agente, con i "
-                           "suoi tool e i suoi permessi. /stop per "
-                           "scollegare. Le risposte possono metterci un "
-                           "po': Telegram non mostra l'avanzamento del "
-                           "lavoro, solo il risultato.")
+                           "suoi tool e i suoi permessi. Mentre lavora "
+                           "puoi guidarlo scrivendo, e fermarlo con /stop. "
+                           "/aiuto per i comandi, /scollega per staccare.")
             return
         # Codice assente, scaduto o sbagliato: si dice cosa fare, non se
         # esiste un codice.
@@ -680,3 +898,174 @@ class Ponte:
                        "Telegram. Inquadra il QR da li', oppure mandalo "
                        "qui come /start <codice>. Il codice scade dopo "
                        "dieci minuti.")
+
+    # --- il turno --------------------------------------------------
+    def _avvia_turno(self, chat_id: str, testo: str,
+                     allegato: dict[str, Any] | None) -> None:
+        t = threading.Thread(target=self._esegui_turno,
+                             args=(chat_id, testo, allegato), daemon=True,
+                             name=f"telegram-turno-{self.nome}")
+        self._turno_thread = t
+        t.start()
+
+    def _esegui_turno(self, chat_id: str, testo: str,
+                      allegato: dict[str, Any] | None) -> None:
+        allegati: list[Any] = []
+        richiesta = (testo or "").strip()
+        try:
+            if allegato is not None:
+                extra, allegati = self._prepara_allegato(allegato)
+                richiesta = (richiesta or extra).strip()
+        except ErroreAllegato as e:
+            self._rispondi(chat_id, str(e))
+            return
+        except ErroreTelegram as e:
+            self._rispondi(chat_id, f"Non riesco a prendere l'allegato: {e}")
+            return
+        if not richiesta:
+            self._rispondi(chat_id, "Dimmi cosa devo fare con questo file.")
+            return
+
+        self.api.scrive(chat_id)
+        aggiorna = self._avanzatore(chat_id)
+        try:
+            risposta = (self.turno(richiesta, allegati, aggiorna) or "").strip()
+        except Exception as e:  # noqa: BLE001
+            self._fine_progresso()
+            self._rispondi(chat_id, f"Errore durante il turno: "
+                                    f"{type(e).__name__}: {e}")
+            return
+        self._fine_progresso()
+        self.ultimo_turno = time.time()
+        if not risposta:
+            risposta = ("Il turno e' finito senza una risposta testuale. "
+                        "Il lavoro puo' essere comunque stato fatto: "
+                        "controlla nella finestra di Orchestra.")
+        self._rispondi(chat_id, risposta)
+
+    def _prepara_allegato(self, rif: dict[str, Any]) -> tuple[str, list[Any]]:
+        """Scarica il file e lo prepara per il turno.
+
+        Torna (testo da mandare all'agente, allegati). Per un vocale il
+        testo e' la trascrizione e non c'e' allegato: l'agente l'audio
+        non lo sa leggere, le parole si'.
+        """
+        tipo = rif.get("tipo") or ""
+        nome = rif.get("nome") or "file"
+        if tipo == "video":
+            raise ErroreAllegato(
+                "I video non li guardo: mandami un'immagine, un documento "
+                "o un vocale.")
+        dimensione = int(rif.get("dimensione") or 0)
+        if dimensione > MASSIMO_FILE:
+            raise ErroreAllegato(
+                f"{nome}: {dimensione // (1024 * 1024)} MB. Telegram non mi "
+                f"lascia scaricare piu' di {MASSIMO_FILE // (1024 * 1024)} "
+                "MB: mandalo piu' piccolo, o mettilo nella cartella di "
+                "lavoro e dimmi il nome.")
+        info = self.api.get_file(rif.get("file_id") or "")
+        percorso = info.get("file_path") or ""
+        if not percorso:
+            raise ErroreAllegato(f"{nome}: Telegram non mi ha dato il file.")
+        dati = self.api.scarica(percorso)
+        if not dati:
+            raise ErroreAllegato(f"{nome}: e' arrivato vuoto.")
+
+        if tipo in ("voce", "audio"):
+            return self._trascrivi(nome, dati), []
+
+        from .attachments import AttachmentError, allega
+
+        try:
+            att = allega(nome, dati)
+        except AttachmentError as e:
+            raise ErroreAllegato(str(e)) from None
+        testo = (rif.get("didascalia") or "").strip()
+        if not testo:
+            testo = ("Guarda questa immagine." if tipo == "foto"
+                     else f"Leggi questo documento ({nome}).")
+        return testo, [att]
+
+    def _trascrivi(self, nome: str, dati: bytes) -> str:
+        from . import stt
+
+        if not stt.disponibile():
+            raise ErroreAllegato(
+                "Il vocale lo so trascrivere, ma il motore vocale non e' "
+                "installato. Si installa da Orchestra: Opzioni, sezione "
+                "Voce. Oppure scrivimi quello che dicevi.")
+        try:
+            testo = (stt.trascrivi(dati, nome) or "").strip()
+        except Exception as e:  # noqa: BLE001
+            raise ErroreAllegato(
+                f"Non riesco a trascrivere il vocale: {type(e).__name__}: "
+                f"{e}") from None
+        if not testo:
+            raise ErroreAllegato("Il vocale non si sente: non ho capito "
+                                 "niente.")
+        return testo
+
+    # --- il messaggio di stato -------------------------------------
+    def _avanzatore(self, chat_id: str) -> Callable[[str], None]:
+        """La funzione che il turno chiama per dire come sta andando.
+
+        Un messaggio solo, che cambia. Mandarne uno nuovo a ogni passo
+        riempirebbe la chat di righe morte che nessuno rilegge, e la
+        risposta vera finirebbe in fondo a dieci righe di cronaca.
+        """
+        stato: dict[str, Any] = {"chat": chat_id, "id": 0,
+                                 "inizio": time.monotonic(),
+                                 "ultimo": 0.0, "testo": ""}
+        self._stato_progresso = stato
+
+        def aggiorna(testo: str) -> None:
+            testo = (testo or "").strip()
+            if not testo:
+                return
+            testo = testo[:MAX_TESTO]
+            ora = time.monotonic()
+            if not stato["id"]:
+                # Un turno da due secondi non merita un messaggio che poi
+                # sparisce: si aspetta di sapere che e' lungo.
+                if ora - stato["inizio"] < PRIMO_AVVISO:
+                    return
+                try:
+                    inviato = self.api.send_message(chat_id, testo)
+                except ErroreTelegram as e:
+                    self._log(f"telegram {self.nome}: stato non inviato: {e}")
+                    return
+                stato["id"] = int((inviato.get("result") or {}).get(
+                    "message_id") or 0)
+                stato["ultimo"] = ora
+                stato["testo"] = testo
+                return
+            if ora - stato["ultimo"] < INTERVALLO_PROGRESSO:
+                return
+            if testo == stato["testo"]:
+                return
+            try:
+                self.api.edit_message(chat_id, stato["id"], testo)
+            except ErroreTelegram as e:
+                self._log(f"telegram {self.nome}: stato non aggiornato: {e}")
+            stato["ultimo"] = ora
+            stato["testo"] = testo
+
+        return aggiorna
+
+    def _fine_progresso(self) -> None:
+        stato = self._stato_progresso
+        self._stato_progresso = None
+        if not stato or not stato.get("id"):
+            return
+        try:
+            self.api.delete_message(stato["chat"], stato["id"])
+        except ErroreTelegram as e:
+            self._log(f"telegram {self.nome}: stato non tolto: {e}")
+
+
+def _invito_collegare() -> str:
+    return ("Questa chat non e' collegata a nessun bot di Orchestra, quindi "
+            "non eseguo niente.\n\n"
+            "Apri Orchestra sul computer, vai nel pannello Bot, scegli il "
+            "bot e inquadra il codice che compare (o mandalo qui come "
+            "/start <codice>).")

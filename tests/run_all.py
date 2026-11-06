@@ -214,6 +214,7 @@ SUITES = [
     # rete, con un trasporto finto — quello che si prova e' che un
     # estraneo non faccia partire un turno.
     ("telegram", "test_telegram.py", True),
+    ("telegram_sessione", "test_telegram_sessione.py", True),
     ("qr", "test_qr.py", True),
     ("skill-tools", "test_skill_tools.py", True),
     # Era scritto e non girava: nel runner non c'era, e senza un

@@ -112,6 +112,55 @@ def _log_telegram(messaggio: str) -> None:
     print(f"[telegram] {messaggio}", file=sys.stderr, flush=True)
 
 
+def _coda(testo: str, quanti: int) -> str:
+    """La fine di un testo, senza tagliare una parola a meta'.
+
+    Il messaggio di stato mostra quello che l'agente sta scrivendo
+    adesso: la testa di un discorso lungo e' proprio la parte vecchia,
+    quella che non serve piu'.
+    """
+    testo = (testo or "").strip()
+    if len(testo) <= quanti:
+        return testo
+    tagliato = testo[-quanti:]
+    spazio = tagliato.find(" ")
+    if 0 <= spazio < 40:
+        tagliato = tagliato[spazio + 1:]
+    return "..." + tagliato.lstrip()
+
+
+def _scegli_modello(scelta: str, modelli: list[str]) -> tuple[str, str]:
+    """Trova il modello che l'utente ha nominato, o spiega perche' no.
+
+    Torna (id, errore): uno dei due e' vuoto. Chi scrive da un telefono
+    non ha una lista da toccare, quindi si accetta anche un pezzo del
+    nome — ma solo se ne resta uno, perche' indovinare fra due modelli
+    che si somigliano e' peggio che chiedere di essere piu' precisi.
+    """
+    scelta = (scelta or "").strip()
+    if not scelta:
+        return "", "Uso: /modello <nome>."
+    if not modelli:
+        # Senza catalogo non c'e' niente contro cui controllare: si
+        # accetta, e chi chiama dice che non e' stato verificato.
+        return scelta, ""
+    if scelta in modelli:
+        return scelta, ""
+    basso = scelta.lower()
+    esatti = [m for m in modelli if m.lower() == basso]
+    if len(esatti) == 1:
+        return esatti[0], ""
+    parziali = [m for m in modelli if basso in m.lower()]
+    if len(parziali) == 1:
+        return parziali[0], ""
+    if len(parziali) > 1:
+        return "", (f"Piu' di un modello contiene «{scelta}»: "
+                     + ", ".join(parziali[:10])
+                     + ". Scrivi il nome per intero.")
+    return "", (f"Nessun modello di questo provider si chiama «{scelta}». "
+                 "Qualcuno: " + ", ".join(modelli[:10]) + ".")
+
+
 class OrchestraApp:
     """Lo stato del server, condiviso fra i thread.
 
@@ -1830,7 +1879,9 @@ class OrchestraApp:
         return sess
 
     # --- Telegram -----------------------------------------------------
-    def telegram_turno(self, bot_id: int, testo: str) -> str:
+    def telegram_turno(self, bot_id: int, testo: str,
+                       allegati: list | None = None,
+                       avanzamento: Any = None) -> str:
         """Un messaggio arrivato su Telegram, e la risposta da rimandare.
 
         E' lo stesso turno della finestra: stessa sessione, stessi tool,
@@ -1838,39 +1889,260 @@ class OrchestraApp:
         non un agente diverso ne' uno con meno permessi — e questo e'
         anche il motivo per cui il ponte risponde solo alla chat
         collegata con il codice.
+
+        Il turno si guarda mentre gira, con gli stessi eventi che
+        arrivano al browser, e se ne ricava una riga di stato: e' la
+        cosa piu' vicina al ragionamento che si vede nella finestra, e
+        senza quella una richiesta lunga resta un puntino che scrive per
+        dieci minuti. Solo la coda, pero': un muro di testo su un
+        telefono non lo legge nessuno.
         """
         from . import bots as bots_mod
 
         b = bots_mod.per_id(bot_id)
         if b is None:
-            return ("Questo bot non esiste piu' in Orchestra: manda /stop "
-                    "qui e ricollega quello giusto dal pannello.")
+            return ("Questo bot non esiste piu' in Orchestra: manda "
+                    "/scollega qui e ricollega quello giusto dal pannello.")
         sess = self._sessione_bot(b)
         if sess.busy:
-            return ("Sto ancora lavorando al messaggio precedente. "
-                    "Rimanda questo fra poco.")
-        if not sess.send(testo):
-            return ("C'e' gia' un turno in corso su questo bot: rimanda "
-                    "il messaggio quando ha finito.")
-        secondi = 900.0
+            return "Sto ancora lavorando al messaggio precedente."
+        # La sottoscrizione avviene prima di `send`: iscriversi dopo
+        # vorrebbe dire perdere il primo pezzo di ragionamento, che e'
+        # proprio quello che si vuole mostrare.
+        eventi = sess.stream(timeout=0.4)
         try:
-            secondi = float(os.environ.get("ORCHESTRA_TELEGRAM_ATTESA",
-                                           "900"))
-        except (TypeError, ValueError):
-            pass
-        finito = sess.wait(timeout=max(30.0, secondi))
-        if not finito:
+            if not sess.send(testo, allegati=allegati or None):
+                return ("C'e' gia' un turno in corso su questo bot: rimanda "
+                        "il messaggio quando ha finito.")
+            stato = self._telegram_segui(sess, eventi, avanzamento, b)
+        finally:
+            eventi.close()
+        if stato.get("annullato"):
+            return "Turno interrotto."
+        if not stato.get("finito"):
             # Non e' un errore: e' un turno lungo. Dirlo e' meglio che
             # inventare una risposta o lasciare l'utente senza niente.
             return ("Sto ancora lavorando: il turno e' lungo e non e' "
                     "finito. La risposta completa la trovi nella finestra "
                     "di Orchestra.")
+        return self._telegram_ultima_risposta(sess)
+
+    def _telegram_ultima_risposta(self, sess: Any) -> str:
         for m in reversed(getattr(sess.agent.state, "messages", [])):
             if getattr(m, "role", "") == "assistant":
                 risposta = (getattr(m, "content", "") or "").strip()
                 if risposta:
                     return risposta
         return ""
+
+    def _telegram_segui(self, sess: Any, eventi: Any, avanzamento: Any,
+                        bot: dict[str, Any]) -> dict[str, Any]:
+        """Legge gli eventi del turno e alimenta il messaggio di stato.
+
+        Torna cosa e' successo: se il turno e' finito e se qualcuno l'ha
+        fermato. Chi chiama lo usa per decidere cosa scrivere in chat —
+        e per non scrivere niente quando ha gia' risposto /stop.
+        """
+        stato: dict[str, Any] = {
+            "testo": "", "ragiona": "", "tool": [], "giro": 0,
+            "inizio": time.monotonic(), "annullato": False, "finito": False,
+            "ultimo_evento": time.monotonic(),
+        }
+        scadenza = stato["inizio"] + self._telegram_attesa()
+        for ev in eventi:
+            tipo = ev.get("kind")
+            dati = ev.get("data") or {}
+            if tipo == "keepalive":
+                # Un turno che muore senza emettere `idle` non deve
+                # lasciare il ponte a girare per quindici minuti: se la
+                # sessione non e' piu' occupata e non arriva niente da
+                # un secondo, il turno e' finito, in un modo o
+                # nell'altro.
+                if (not sess.busy
+                        and time.monotonic() - stato["ultimo_evento"] > 1.0):
+                    stato["finito"] = True
+                    break
+            else:
+                stato["ultimo_evento"] = time.monotonic()
+            if tipo == "ragionamento":
+                stato["ragiona"] = (stato["ragiona"]
+                                    + (dati.get("testo") or ""))[-600:]
+            elif tipo == "contenuto":
+                stato["testo"] = (stato["testo"]
+                                  + (dati.get("testo") or ""))[-600:]
+            elif tipo == "tool_start":
+                stato["tool"].append(str(dati.get("name") or "?"))
+            elif tipo == "thinking":
+                try:
+                    stato["giro"] = int(dati.get("iteration") or 0)
+                except (TypeError, ValueError):
+                    pass
+            elif tipo == "cancel_requested":
+                stato["annullato"] = True
+            elif tipo == "idle" and not dati.get("busy", True):
+                stato["finito"] = True
+                break
+            if avanzamento is not None:
+                try:
+                    avanzamento(self._telegram_stato(bot, stato))
+                except Exception:  # noqa: BLE001
+                    # Un ponte che non riesce a dire come va non deve
+                    # fermare il turno: la risposta conta piu' della
+                    # cronaca.
+                    pass
+            if time.monotonic() > scadenza:
+                break
+        return stato
+
+    def _telegram_stato(self, bot: dict[str, Any], stato: dict[str, Any]) -> str:
+        """Tre righe per dire che sta succedendo, non un log."""
+        secondi = int(time.monotonic() - stato["inizio"])
+        prima = f"{bot.get('nome') or 'bot'} · {secondi}s"
+        if stato["giro"]:
+            prima += f" · giro {stato['giro']}"
+        righe = [prima]
+        if stato["tool"]:
+            righe.append("tool: " + ", ".join(stato["tool"][-4:]))
+        testo = (stato["testo"] or "").strip()
+        if testo:
+            righe.append(_coda(testo, 400))
+        elif stato["ragiona"].strip():
+            righe.append("pensa: " + _coda(stato["ragiona"].strip(), 400))
+        return "\n".join(righe)
+
+    def _telegram_attesa(self) -> float:
+        try:
+            return max(30.0, float(
+                os.environ.get("ORCHESTRA_TELEGRAM_ATTESA", "900")))
+        except (TypeError, ValueError):
+            return 900.0
+
+    def telegram_comando(self, bot_id: int, nome: str,
+                         argomento: str = "") -> str:
+        """I comandi che si possono dare al bot dal telefono.
+
+        Un comando non e' un turno: non costa token e non entra nella
+        conversazione. `/stop` ferma un turno che dal telefono non si
+        potrebbe fermare in nessun altro modo, ed e' la ragione per cui
+        questa funzione esiste.
+        """
+        from . import bots as bots_mod
+
+        b = bots_mod.per_id(bot_id)
+        if b is None:
+            return "Questo bot non esiste piu' in Orchestra."
+        nome = (nome or "").strip().lower()
+        sess = self._sessione_bot(b)
+        if nome == "stato":
+            return self._telegram_stato_bot(b, sess)
+        if nome == "steer":
+            if not argomento.strip():
+                return ("Uso: /steer <testo>. Mentre lavora, un messaggio "
+                        "normale fa la stessa cosa.")
+            if not sess.busy:
+                return ("Nessun turno in corso da guidare: scrivi la "
+                        "richiesta e parte.")
+            if not sess.steer(argomento.strip()):
+                return ("La coda delle guide e' piena (max 5): aspetta che "
+                        "il turno ne legga una.")
+            return "Guida inviata al turno in corso."
+        if nome == "stop":
+            if not sess.busy:
+                return ("Nessun turno in corso. (Per staccare questa chat "
+                        "dal bot: /scollega.)")
+            sess.cancel()
+            return "Ho chiesto di fermare il turno."
+        if nome == "nuova":
+            if sess.busy:
+                return "C'e' un turno in corso: /stop, poi /nuova."
+            sess.reset()
+            return ("Nuova conversazione. La precedente resta nella "
+                    "cronologia di Orchestra.")
+        if nome == "modello":
+            return self._telegram_modello(b, argomento)
+        return f"Comando /{nome} non riconosciuto. /aiuto per la lista."
+
+    def _telegram_stato_bot(self, b: dict[str, Any], sess: Any) -> str:
+        provider, _configurato = self._bot_provider_modello(b)
+        righe = [f"{b.get('nome')} · {provider}",
+                 f"Modello: {sess.modello_in_uso()}",
+                 "Stato: al lavoro adesso" if sess.busy else "Stato: libero"]
+        try:
+            from . import telegram as tg
+
+            if tg.codice_in_corso(b["id"]):
+                righe.append("C'e' un codice di collegamento attivo "
+                             "(vale dieci minuti).")
+            if tg.chat_di(b["id"])[0]:
+                righe.append("Chat Telegram collegata.")
+        except Exception:  # noqa: BLE001
+            pass
+        if getattr(sess.agent, "modalita_piano", False):
+            righe.append("Modalita' piano: attiva.")
+        return "\n".join(righe)
+
+    def _telegram_modello(self, b: dict[str, Any], argomento: str) -> str:
+        provider, configurato = self._bot_provider_modello(b)
+        attuale = (b.get("modello") or "").strip() or configurato
+        modelli = self.telegram_modelli(provider)
+        if not argomento.strip():
+            righe = [f"Modello: {attuale or '?'} ({provider})"]
+            if modelli:
+                righe.append("Disponibili: " + ", ".join(modelli[:15])
+                             + ("..." if len(modelli) > 15 else ""))
+                righe.append("Cambia con /modello <nome>.")
+            else:
+                righe.append("Non riesco a leggere l'elenco dei modelli di "
+                             f"{provider}: si puo' cambiare lo stesso, ma "
+                             "senza controllo del nome.")
+                righe.append("Cambia con /modello <nome>.")
+            return "\n".join(righe)
+
+        scelto, errore = _scegli_modello(argomento, modelli)
+        if errore:
+            return errore
+        sess = self._sessione_bot(b)
+        if sess.busy:
+            return "C'e' un turno in corso: /stop, poi /modello."
+        from . import bots as bots_mod
+
+        if not bots_mod.aggiorna(b["id"], modello=scelto):
+            return "Non sono riuscito a salvare il modello."
+        # La sessione in memoria e' nata col modello vecchio: si butta, e
+        # il prossimo messaggio ne crea una nuova. La conversazione non
+        # si perde, si ricarica dallo storico.
+        runtime = getattr(self, "_bots_runtime", None) or {}
+        runtime.pop(int(b["id"]), None)
+        avviso = "" if modelli else " (non ho potuto verificare il nome)"
+        return (f"Modello cambiato in {scelto}{avviso}. Da adesso questo "
+                "bot usa un modello suo, e vale dal prossimo messaggio.")
+
+    def telegram_modelli(self, provider: str) -> list[str]:
+        """I modelli di un provider, dal catalogo.
+
+        Costa una richiesta di rete una volta per provider, e la fa un
+        comando, non un turno. Se la rete non risponde la lista resta
+        vuota e chi chiama lo dice: meglio di una lista vuota che fa
+        credere che quel provider non abbia modelli.
+        """
+        provider = (provider or "").strip()
+        if not provider:
+            return []
+        cache = getattr(self, "_catalog_per_provider", None)
+        if cache is None:
+            cache = self._catalog_per_provider = {}
+        cat = cache.get(provider)
+        if cat is None:
+            from .catalog import Catalog
+
+            try:
+                cat = Catalog.fetch(provider)
+            except Exception:  # noqa: BLE001
+                return []
+            if cat is None or not getattr(cat, "models", None):
+                return []
+            cache[provider] = cat
+        return sorted(cat.models)
 
     def telegram_attivi(self) -> set[int]:
         """Quali bot hanno un ponte che sta davvero girando."""
@@ -1911,7 +2183,10 @@ class OrchestraApp:
                 continue
             ponte = esistente or tg.Ponte(
                 bid, nome, tg.Api(token),
-                (lambda testo, b=bid: self.telegram_turno(b, testo)),
+                (lambda testo, allegati=None, avanzamento=None, b=bid:
+                 self.telegram_turno(b, testo, allegati, avanzamento)),
+                comandi=(lambda cmd, arg="", b=bid:
+                         self.telegram_comando(b, cmd, arg)),
                 log=_log_telegram)
             ponti[bid] = ponte
             ponte.avvia()
