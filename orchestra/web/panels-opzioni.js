@@ -8,9 +8,6 @@
 // viene cancellata. E' l'unico modo per essere onesto su cosa succede
 // al file .env: se il campo e' vuoto, sparisce anche la chiave.
 const opzioniPanel = $("opzioni");
-const chiaviLista = $("chiavi-lista");
-const gratisLista = $("gratis-lista");
-const opzioniNota = $("opzioni-nota");
 
 function apriOpzioni() {
   opzioniPanel.classList.remove("hidden");

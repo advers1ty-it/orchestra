@@ -52,6 +52,7 @@ WRITABLE: dict[str, str] = {
     "GEMINI_API_KEY": "Google AI Studio",
     "HF_TOKEN": "Hugging Face",
     "OPENAI_API_KEY": "OpenAI",
+    "ANTHROPIC_API_KEY": "Anthropic",
     "ARTIFICIAL_ANALYSIS_KEY": "Artificial Analysis",
     "NOUS_API_KEY": "Nous Research (token manuale)",
     "ORCHESTRA_PROVIDER": "Provider predefinito",
@@ -72,6 +73,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     # ---- senza chiave, funzionano subito ----
     {
         "id": "ollama",
+        "env": "ORCHESTRA_OLLAMA_URL",
         "gruppo": "Sul tuo computer",
         "nome": "Ollama",
         "costo": "gratis, sul tuo computer",
@@ -82,6 +84,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "lmstudio",
+        "env": "ORCHESTRA_LMSTUDIO_URL",
         "gruppo": "Sul tuo computer",
         "nome": "LM Studio",
         "costo": "gratis, sul tuo computer",
@@ -104,6 +107,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     # niente, senza che nessuno dica perche'.
     {
         "id": "openrouter",
+        "env": "OPENROUTER_API_KEY",
         "gruppo": "Gratis con chiave",
         "nome": "OpenRouter",
         "costo": "quasi tutto gratis",
@@ -115,6 +119,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "nvidia",
+        "env": "NVIDIA_API_KEY",
         "gruppo": "Gratis con chiave",
         "nome": "NVIDIA Build",
         "costo": "gratis con chiave",
@@ -126,6 +131,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "together",
+        "env": "TOGETHER_API_KEY",
         "gruppo": "Gratis con chiave",
         "nome": "Together AI",
         "costo": "gratis con chiave, con limiti",
@@ -136,6 +142,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "groq",
+        "env": "GROQ_API_KEY",
         "gruppo": "Gratis con chiave",
         "nome": "Groq",
         "costo": "gratis con limiti",
@@ -146,6 +153,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "cerebras",
+        "env": "CEREBRAS_API_KEY",
         "gruppo": "Gratis con chiave",
         "nome": "Cerebras",
         "costo": "gratis con limiti",
@@ -156,6 +164,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "mistral",
+        "env": "MISTRAL_API_KEY",
         "gruppo": "Gratis con chiave",
         "nome": "Mistral",
         "costo": "gratis con limiti",
@@ -166,6 +175,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "huggingface",
+        "env": "HF_TOKEN",
         "gruppo": "Gratis con chiave",
         "nome": "Hugging Face",
         "costo": "gratis con token, con limiti",
@@ -177,6 +187,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "google",
+        "env": "GEMINI_API_KEY",
         "gruppo": "Gratis con chiave",
         "nome": "Google AI Studio",
         "costo": "gratis con chiave, con limiti",
@@ -188,6 +199,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "nous",
+        "env": "NOUS_API_KEY",
         "gruppo": "Collegamento diretto",
         "nome": "Nous Research",
         "costo": "gratis con collegamento Orchestra, con limiti",
@@ -198,6 +210,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
 {
         "id": "anthropic",
+        "env": "ANTHROPIC_API_KEY",
         "gruppo": "A pagamento",
         "nome": "Anthropic",
         "costo": "a pagamento",
@@ -208,6 +221,7 @@ FREE_SERVICES: list[dict[str, Any]] = [
     },
     {
         "id": "openai",
+        "env": "OPENAI_API_KEY",
         "gruppo": "A pagamento",
         "nome": "OpenAI",
         "costo": "a pagamento",

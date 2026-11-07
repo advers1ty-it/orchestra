@@ -259,7 +259,6 @@
               <button id="opz-tab-budget" class="opzioni-tab" data-sez="budget">Budget</button>
               <button id="opz-tab-servizi" class="opzioni-tab" data-sez="servizi">Servizi</button>
               <button id="opz-tab-permessi" class="opzioni-tab" data-sez="permessi">Permessi</button>
-              <button id="opz-tab-gratis" class="opzioni-tab" data-sez="gratis">Gratis</button>
               <button id="opz-tab-diagnosi" class="opzioni-tab" data-sez="diagnosi">Diagnosi</button>
               <button id="opz-tab-remoto" class="opzioni-tab" data-sez="remoto">Remoto</button>
               <button id="opz-tab-autostart" class="opzioni-tab" data-sez="autostart">Avvio automatico</button>
@@ -388,13 +387,26 @@
                   </div>
                 </section>
 
+        <!-- Servizi: una sezione sola.
+             Prima erano due, e la stessa cosa stava in tutte e due:
+             "Servizi" aveva la riga con il campo della chiave,
+             "Gratis" aveva la scheda con la descrizione. Chi voleva
+             capire cosa fosse NVIDIA doveva andare in un'altra sezione
+             e ritrovarlo. Qui la descrizione sta sopra il campo che
+             riempie, e le schede sono divise in tre gruppi: gratis, a
+             pagamento, sul tuo computer. -->
         <section id="opz-sez-servizi" class="opz-sez" data-sez="servizi" hidden>
           <div class="opzioni-servizi-testa">
-            <b>Chiavi dei servizi</b>
-            <span class="dim">per OpenRouter, Groq, NVIDIA, Google e
-              per i modelli che girano in locale</span>
+            <b>Servizi</b>
+            <span class="dim">dove Orchestra prende i modelli. La chiave si
+              incolla sotto il servizio che la usa: quello che offre e
+              cosa serve sono scritti li'. Senza chiave funzionano solo i
+              motori sul tuo computer, e Nous col suo collegamento.</span>
+            <span class="dim small" id="opzioni-nota"></span>
+            <span class="dim small" id="servizi-riepilogo"></span>
           </div>
-          <div id="chiavi-lista" class="chiavi-lista"></div>
+          <div id="locali-avviso" class="gratis-locale" style="display:none"></div>
+          <div id="servizi-lista" class="servizi-lista"></div>
         </section>
 
         <section id="opz-sez-permessi" class="opz-sez" data-sez="permessi" hidden>
@@ -415,15 +427,6 @@
               <span id="permessi-msg" class="small dim"></span>
             </div>
             <div id="permessi-stato" class="permessi-stato"></div>
-          </div>
-        </section>
-
-        <section id="opz-sez-gratis" class="opz-sez" data-sez="gratis" hidden>
-          <div class="opzioni-gratis">
-            <b>Dove si trovano modelli gratis</b>
-            <span class="dim" id="opzioni-nota"></span>
-            <div id="locali-avviso" class="gratis-locale" style="display:none"></div>
-            <div id="gratis-lista"></div>
           </div>
         </section>
 

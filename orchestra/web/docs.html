@@ -170,13 +170,11 @@
 <p>Tetti di spesa per <b>task</b> (token, costo in dollari, iterazioni) e per <b>sessione</b> (token, costo, numero di richieste). Sotto «Budget globali (giorno/mese)» ci sono i tetti complessivi di costo: quando sono raggiunti Orchestra si ferma e te lo dice, invece di continuare a spendere. Zero in un campo significa «nessun limite».</p>
 
 <h3>Servizi</h3>
-<p>Le chiavi dei servizi: OpenRouter, Groq, NVIDIA, Google e i modelli che girano sul tuo computer. Una chiave salvata non viene mai rimostrata: vedi solo se c'è e le ultime quattro cifre. Restano in <code>orchestra/.env</code>, sul tuo disco, e non vengono mai stampate nei messaggi né nei log.</p>
+<p>Un elenco solo, diviso in tre gruppi: <b>gratis</b> (con una chiave o con il collegamento diretto), <b>a pagamento</b> e <b>sul tuo computer</b>. Ogni servizio porta la sua descrizione accanto al campo dove si mette la chiave: si legge cosa costa e cosa serve prima di incollarla, invece di cercarlo in un'altra sezione. Un modello locale costa zero ma richiede un programma che lo faccia girare: Orchestra ti dice cosa manca.</p>
+<p>Una chiave salvata non viene mai rimostrata: vedi solo se c'è e le ultime quattro cifre. Restano in <code>orchestra/.env</code>, sul tuo disco, e non vengono mai stampate nei messaggi né nei log. Un indirizzo locale e i numeri di configurazione invece si leggono in chiaro, perché nasconderli renderebbe impossibile accorgersi di un errore di battitura. In fondo ci sono le chiavi che non appartengono a un servizio, come quella di Artificial Analysis.</p>
 
 <h3>Permessi</h3>
 <p>Cosa è stato concesso all'agente e cosa no. Il pulsante <b>Prova il canale</b> fa comparire una domanda di prova: così scopri qui, senza spendere un token, se la finestra dei permessi funziona. Le cartelle di sistema non sono autorizzabili.</p>
-
-<h3>Gratis</h3>
-<p>Dove si trovano i modelli gratuiti e come usarne uno che gira in locale. Un modello locale non costa nulla, ma richiede un programma che lo faccia girare sulla tua macchina: Orchestra ti dice cosa manca.</p>
 
 <h3>Diagnosi</h3>
 <p>Quattro controlli che girano dal server, con l'output sotto: <b>doctor</b> (configurazione e connessione), <b>model-list</b> (modelli supportati), <b>bench-show</b> (task del benchmark), <b>dipendenze</b> (cosa manca tra i componenti opzionali). È il primo posto dove guardare quando «non funziona niente».</p>

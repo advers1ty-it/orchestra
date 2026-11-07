@@ -180,7 +180,7 @@ probe = """
   OUT.agganciati = [];
   for (const id of ["skill-ricarica", "skill-importa", "skill-filtro",
                     "opz-tab-modello", "opz-tab-servizi",
-                    "opz-tab-permessi", "opz-tab-gratis", "opzioni-nav",
+                    "opz-tab-permessi", "opzioni-nav",
                     "cap-tab-skill", "cap-tab-cestino", "cap-tab-tool",
                     "cap-filtro", "side-cap"]) {
     const e = document.getElementById(id);
@@ -253,7 +253,7 @@ probe = """
     const e = document.getElementById("opz-sez-" + n);
     return e ? e.getAttribute("hidden") === null : null;
   };
-  OUT.sezioni = ["modello", "identita", "servizi", "permessi", "gratis"]
+  OUT.sezioni = ["modello", "identita", "servizi", "permessi", "diagnosi"]
     .map((n) => [n, visibile(n)]);
 
   // --- il modale Capacita' ------------------------------------------
@@ -357,7 +357,7 @@ else:
         check("una voce per sezione", len(sez) == 5, str(o.get("sezioni")))
         check("all'inizio e' visibile solo Modello",
               sez.get("modello") is True and sez.get("identita") is False
-              and sez.get("gratis") is False, str(sez))
+              and sez.get("diagnosi") is False, str(sez))
         check("la tab attiva e' quella giusta",
               o.get("attivaAllInizio") == "opz-tab-modello",
               str(o.get("attivaAllInizio")))
@@ -418,7 +418,7 @@ else:
 print("\n[9] I nomi che il test usa esistono nell'HTML")
 _html = open(os.path.join(ROOT, "orchestra", "web", "index.html"),
               encoding="utf-8").read()
-_nomi_usati = ("modello", "identita", "servizi", "permessi", "gratis")
+_nomi_usati = ("modello", "identita", "servizi", "permessi", "diagnosi")
 for _n in _nomi_usati:
     check(f"data-sez=\"{_n}\" esiste nell'HTML",
           f'data-sez="{_n}"' in _html,

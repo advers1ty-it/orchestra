@@ -144,7 +144,7 @@ const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","sta
              "permessi-msg","permessi-prova","permessi-stato",
              "budget-day-cost","budget-global-msg","budget-month-cost","budget-msg","budget-reset","budget-salva",
              "budget-sess-cost","budget-sess-reqs","budget-sess-tokens","budget-task-cost","budget-task-iters","budget-task-tokens",
-             "locali-avviso","gratis-lista","chiavi-lista",
+             "locali-avviso","servizi-lista","servizi-riepilogo","opzioni-nota",
              "btn-allega","btn-onboard","file-input","allegati-lista","onboard","onboard-cards","onboard-skip",
              "diag-scelta","diag-run","diag-out",
              "btn-goal","goal-bar","goal-input","goal-profile","goal-kind","goal-priority","goal-depends",
@@ -227,7 +227,7 @@ IDS.forEach(function (id) {
 // Le sezioni di Opzioni. Skill e cestino non ci sono piu': sono tab del
 // modale Capacita', dove il pannello vero e' sempre stato.
 globalThis.SEZIONI_OPZIONI = ["modello", "identita", "budget", "servizi",
-                              "permessi", "gratis", "diagnosi", "remoto",
+                              "permessi", "diagnosi", "remoto",
                               "autostart", "bot", "benchmark"];
 SEZIONI_OPZIONI.forEach(
   function (n) {

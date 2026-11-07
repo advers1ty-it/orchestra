@@ -293,7 +293,7 @@ globalThis.document = {
   // document non deve ricordarsene.
   querySelectorAll(sel) {
     const OPZIONI_SEZ = ["modello", "identita", "budget", "servizi",
-                         "permessi", "gratis", "diagnosi", "remoto",
+                         "permessi", "diagnosi", "remoto",
                          "autostart", "bot", "benchmark"];
     const out = [];
     const push = (e) => { if (e && out.indexOf(e) < 0) out.push(e); };

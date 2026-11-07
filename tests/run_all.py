@@ -106,6 +106,10 @@ SUITES = [
     ("file-tracciati", "test_file_tracciati.py", True),
     ("frontend", "test_frontend_split.py", True),
     ("ui", "test_ui.py", True),
+    # Il pannello Servizi e quello Gratis erano due sezioni per la
+    # stessa cosa: qui si controlla che il DOM ne disegni una sola, con
+    # la descrizione e il campo della chiave nella stessa scheda.
+    ("servizi-ui", "test_servizi_ui.py", True),
     ("traccia-modale", "test_traccia_modale.py", True),
     # I filtri della traccia stanno nella query SQL: la lista e' gia'
     # tagliata, e filtrare nel client nasconderebbe il turno fallito di

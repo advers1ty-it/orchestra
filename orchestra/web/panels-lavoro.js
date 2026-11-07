@@ -124,22 +124,44 @@ on($("permessi-prova"), "click", async () => {
 // prossimo avvio
 
 
-// riga di una chiave: etichetta, stato, campo vuoto, due pulsanti
-function rigaChiave(k) {
-  const riga = el("div", "chiave-riga");
+// Le liste dei servizi e delle chiavi. Stanno qui e non in
+// panels-opzioni.js perche' e' qui che vengono disegnate: una costante
+// in un file e il suo uso in un altro e' il modo per lasciare, un
+// giorno, un selettore che punta a un id che non esiste piu'.
+const serviziLista = $("servizi-lista");
+const serviziRiepilogo = $("servizi-riepilogo");
+const opzioniNota = $("opzioni-nota");
+
+// riga di una chiave: stato, campo vuoto, due pulsanti. `senzaNome` serve
+// quando la riga sta dentro la scheda di un servizio: li' il nome e la
+// descrizione ci sono gia' sopra, e ripeterlo e' rumore.
+function rigaChiave(k, senzaNome) {
+  const riga = el("div", senzaNome ? "chiave-campo" : "chiave-riga");
   const testa = el("div", "chiave-testa");
-  const nome = el("span", "chiave-nome");
-  nome.textContent = k.etichetta;
+  if (!senzaNome) {
+    const nome = el("span", "chiave-nome");
+    nome.textContent = k.etichetta;
+    testa.appendChild(nome);
+  }
   const statoEl = el("span", "chiave-stato " + (k.presente ? "ok" : "vuota"));
+  // Solo le chiavi si nascondono mentre si scrivono. Un indirizzo o un
+  // numero di secondi no: nasconderli rende impossibile accorgersi di un
+  // errore di battitura, che e' l'unico motivo per cui li guardi.
+  const segreta = /(_API_KEY|_TOKEN|_KEY)$/.test(k.chiave);
   // l'indizio sono 4 caratteri, mai di piu': serve a distinguere due
-  // chiavi, non a usarne una
-  statoEl.textContent = k.presente ? ("configurata " + k.indizio) : "non configurata";
-  testa.appendChild(nome);
+  // chiavi, non a usarne una. E il testo cambia con la cosa: "manca la
+  // chiave" su un indirizzo locale o su un numero di secondi e' falso,
+  // e fa cercare una credenziale che non esiste.
+  statoEl.textContent = k.presente
+    ? ((segreta ? "configurata " : "impostato: ") + k.indizio)
+    : (segreta ? "manca la chiave" : "non impostato");
   testa.appendChild(statoEl);
 
   const campo = el("input", "chiave-input");
-  campo.type = "password";
-  campo.placeholder = k.presente ? "lascia vuoto per non cambiarla" : "incolla qui la chiave";
+  campo.type = segreta ? "password" : "text";
+  campo.placeholder = k.presente
+    ? (segreta ? "lascia vuoto per non cambiarla" : "lascia vuoto per non cambiarlo")
+    : (segreta ? "incolla qui la chiave" : "scrivi il valore");
   campo.autocomplete = "off";
   campo.spellcheck = false;
 
@@ -207,9 +229,13 @@ function rigaChiave(k) {
   return riga;
 }
 
-// scheda di un servizio gratis: cosa offre, cosa costa, come iniziare
-function schedaGratis(s) {
-  const d = el("div", "gratis-scheda" + (s.chiave ? "" : " senza-chiave"));
+// scheda di un servizio: cosa offre, cosa costa, come iniziare e — se
+// il servizio ha una chiave — il campo per metterla. Descrizione e
+// campo stanno nella stessa scheda perche' rispondono alla stessa
+// domanda: "questo che cos'e', e cosa mi serve per usarlo?".
+function schedaServizio(s, chiave) {
+  const d = el("div", "gratis-scheda" +
+    (chiave && chiave.presente ? " pronta" : (s.chiave ? "" : " senza-chiave")));
   const capo = el("div", "gratis-capo");
   const nome = el("span", "gratis-nome");
   nome.textContent = s.nome;
@@ -220,6 +246,11 @@ function schedaGratis(s) {
     // con "connesso", e il badge lo mostra invece di "nessuna chiave".
     badge.textContent = "collegato";
     badge.className = "gratis-badge senza-chiave";
+  } else if (chiave && chiave.presente) {
+    // La chiave c'e' e il servizio e' pronto: e' la cosa che si vuole
+    // sapere per prima guardando la scheda.
+    badge.textContent = "pronto";
+    badge.className = "gratis-badge con-chiave";
   }
   capo.appendChild(nome);
   capo.appendChild(badge);
@@ -243,6 +274,8 @@ function schedaGratis(s) {
     w.textContent = s.avvertenza;
     d.appendChild(w);
   }
+  // Il campo della chiave, sotto la descrizione del servizio che la usa.
+  if (chiave) d.appendChild(rigaChiave(chiave, true));
   if (s.id === "nous") {
     const box = el("div", "nous-auth");
     const stato = el("span", "dim small");
@@ -358,10 +391,33 @@ if (optToolProfile) {
   });
 }
 
+// I gruppi come li legge chi apre il pannello: gratis, a pagamento,
+// sul tuo computer. I nomi nei dati sono piu' fini — un servizio gratis
+// "con chiave" e uno "a collegamento diretto" sono due cose diverse per
+// chi li implementa, non per chi li usa.
+const GRUPPI_SERVIZI = [
+  { nome: "Gratis", da: ["Gratis con chiave", "Collegamento diretto"] },
+  { nome: "A pagamento", da: ["A pagamento"] },
+  { nome: "Sul tuo computer", da: ["Sul tuo computer"] },
+];
+
+// Una chiave che non e' un servizio: un'impostazione, o una chiave per
+// un pezzo che non compare fra i servizi. Resta visibile e modificabile:
+// un campo che c'era e sparisce fa pensare che la chiave sia stata
+// cancellata.
+function schedaChiave(k) {
+  const d = el("div", "gratis-scheda senza-chiave");
+  const capo = el("div", "gratis-capo");
+  capo.appendChild(el("span", "gratis-nome", k.etichetta));
+  d.appendChild(capo);
+  d.appendChild(rigaChiave(k, true));
+  return d;
+}
+
 async function caricaOpzioni() {
   const mia = ++generazioneChiavi;
-  chiaviLista.replaceChildren();
-  gratisLista.replaceChildren();
+  if (serviziLista) serviziLista.replaceChildren();
+  if (serviziRiepilogo) serviziRiepilogo.textContent = "";
   opzioniNota.textContent = "carico…";
   try {
     const r = await fetch("/api/chiavi");
@@ -418,27 +474,51 @@ async function caricaOpzioni() {
     }
 
     const cat = d.catalogo || {};
-    if (cat.modelli) {
-      const t = el("div", "opzioni-riepilogo");
-      t.textContent = "Catalogo attuale: " + cat.modelli + " modelli, " +
-        (cat.gratuiti || 0) + " gratuiti con tool-calling.";
-      gratisLista.appendChild(t);
+    if (cat.modelli && serviziRiepilogo) {
+      serviziRiepilogo.textContent = "Catalogo attuale: " + cat.modelli +
+        " modelli, " + (cat.gratuiti || 0) + " gratuiti con tool-calling.";
     }
 
-    for (const k of d.chiavi || []) chiaviLista.appendChild(rigaChiave(k));
-    // Gratis in gruppi ordinati per percorso, non nell'ordine dei dati:
-    // prima come si parte senza niente, in fondo il confronto a pagamento.
-    const ordineGruppi = ["Collegamento diretto", "Sul tuo computer", "Gratis con chiave", "A pagamento"];
+    // Un elenco solo, in tre gruppi. Prima erano due sezioni e la stessa
+    // cosa stava in tutte e due: il campo della chiave in una, la
+    // descrizione del servizio nell'altra. Chi voleva sapere cosa fosse
+    // NVIDIA doveva cambiare sezione, e chi metteva una chiave non
+    // sapeva cosa stava attivando.
     const schede = d.servizi_gratis || [];
-    for (const g of ordineGruppi) {
-      const del_gruppo = schede.filter((s) => (s.gruppo || "Gratis con chiave") === g);
-      if (!del_gruppo.length) continue;
-      const h = el("div", "gratis-gruppo");
-      h.textContent = g;
-      gratisLista.appendChild(h);
-      for (const s of del_gruppo) gratisLista.appendChild(schedaGratis(s));
+    const chiavi = d.chiavi || [];
+    const usate = new Set();
+    const dentroUnGruppo = new Set();
+    for (const g of GRUPPI_SERVIZI) for (const n of g.da) dentroUnGruppo.add(n);
+
+    for (const gruppo of GRUPPI_SERVIZI) {
+      const del = schede
+        .filter((s) => gruppo.da.includes(s.gruppo || "Gratis con chiave"))
+        // Prima quelli che funzionano senza niente: sono la risposta a
+        // "da dove parto", che e' la prima domanda di chi apre questa
+        // sezione. Chi ha gia' una chiave sa gia' cosa cerca.
+        .sort((a, b) => (a.chiave ? 1 : 0) - (b.chiave ? 1 : 0));
+      if (!del.length) continue;
+      serviziLista.appendChild(el("div", "gratis-gruppo", gruppo.nome));
+      for (const s of del) {
+        const k = chiavi.find((x) => x.chiave === s.env) || null;
+        if (k) usate.add(k.chiave);
+        serviziLista.appendChild(schedaServizio(s, k));
+      }
     }
-    for (const s of schede.filter((s) => !ordineGruppi.includes(s.gruppo))) gratisLista.appendChild(schedaGratis(s));
+    // Un servizio con un gruppo che non conosciamo non sparisce.
+    for (const s of schede.filter((x) => !dentroUnGruppo.has(x.gruppo || "Gratis con chiave"))) {
+      const k = chiavi.find((x) => x.chiave === s.env) || null;
+      if (k) usate.add(k.chiave);
+      serviziLista.appendChild(schedaServizio(s, k));
+    }
+
+    // Le chiavi che non appartengono a nessun servizio (impostazioni e
+    // token di servizi esterni) in fondo, con il loro campo.
+    const altre = chiavi.filter((k) => !usate.has(k.chiave));
+    if (altre.length) {
+      serviziLista.appendChild(el("div", "gratis-gruppo", "Altre chiavi"));
+      for (const k of altre) serviziLista.appendChild(schedaChiave(k));
+    }
   } catch (e) {
     opzioniNota.textContent = "caricamento fallito: " + e;
   }
