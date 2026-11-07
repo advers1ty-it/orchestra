@@ -289,8 +289,13 @@ class RotteChat:
         # perche' lo stesso vale per il menu di Telegram: due copie della
         # stessa regola sono due regole che possono divergere — e questa
         # ne era gia' una, solo scritta per una strada sola.
-        routing = bool(getattr(self.app.session, "_routing_attivo", False)) \
-            if self.app.session is not None else True
+        if self.app.session is not None:
+            routing = bool(getattr(self.app.session, "_routing_attivo", False))
+        else:
+            # Senza sessione il cambio ha scritto la scelta su disco: la
+            # risposta deve dire quello che c'e' scritto, non "acceso".
+            routing = str(self.app.env.get("ORCHESTRA_ROUTING", "")).lower() \
+                not in ("off", "0", "false", "no")
         self._json({"ok": True, "model": model_id, "routing": routing})
 
     @rotta("POST", "/api/permesso/prova")

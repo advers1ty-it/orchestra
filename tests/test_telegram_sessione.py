@@ -398,11 +398,29 @@ class CatalogoVisione:
             "caro-vl": SimpleNamespace(
                 info=SimpleNamespace(supports_vision=True, is_free=False,
                                      context_length=2_000_000)),
+            # Anonimo e in prova: dichiara tutto e non e' un rimedio su cui
+            # contare (crouton-alpha dichiara le immagini e non le vede).
+            # Contesto enorme, cosi' senza il filtro arriverebbe primo.
+            "stealth/nuovo-alpha": SimpleNamespace(
+                info=SimpleNamespace(supports_vision=True, is_free=True,
+                                     context_length=4_000_000)),
+            # Gratis, con la visione ma senza tool-calling: risponderebbe
+            # a una foto e non saprebbe lavorare.
+            "senza-tool": SimpleNamespace(
+                info=SimpleNamespace(supports_vision=True, is_free=True,
+                                     supports_tools=False,
+                                     context_length=3_000_000)),
             "boh": object(),  # il catalogo non dichiara niente
         }
 
 
 app._carica_catalogo = lambda forza=False: CatalogoVisione()
+# Il blocco [21] ha lasciato il bot su groq: qui lo si riporta al
+# servizio dell'applicazione. Il consiglio propone modelli del SERVIZIO
+# in uso — un id di un altro servizio e' un comando che non trova
+# niente — e nella cache c'e' solo quello che serve a questo blocco.
+bots_mod.aggiorna(bot["id"], provider="openrouter")
+app._catalog_per_provider = {"openrouter": CatalogoVisione()}
 sess.modello = "cieco"
 mandati = []
 sess.send = lambda *_a, **_k: mandati.append(1) or True
@@ -417,12 +435,20 @@ check("e non manda il turno", mandati == [], str(len(mandati)))
 check("e propone un modello gratis che la legge, gia' come comando",
       "gratis-vl" in str(rifiuto) and "/modello" in str(rifiuto),
       cp(str(rifiuto)))
+check("proponendo solo modelli del servizio in uso",
+      app.modelli_vision_gratis("openrouter", 3) == ["gratis-vl",
+                                                    "gratis-piccolo"]
+      and app.modelli_vision_gratis("un-altro-servizio", 3) == [],
+      str(app.modelli_vision_gratis("un-altro-servizio", 3)))
 check("senza proporre quello a pagamento (ne' un altro cieco)",
       "caro-vl" not in str(rifiuto) and "cieco" not in str(rifiuto).replace(
           "cieco non legge", ""), cp(str(rifiuto)))
+check("ne' un modello stealth in prova, ne' uno senza tool-calling",
+      "stealth/" not in str(rifiuto) and "senza-tool" not in str(rifiuto),
+      cp(str(rifiuto)))
 check("i candidati sono solo gratis con la vista, i piu' capienti prima",
-      app.modelli_vision_gratis(3) == ["gratis-vl", "gratis-piccolo"],
-      str(app.modelli_vision_gratis(3)))
+      app.modelli_vision_gratis("", 3) == ["gratis-vl", "gratis-piccolo"],
+      str(app.modelli_vision_gratis("", 3)))
 check("dalla finestra il consiglio nomina il menu, non un comando",
       "menu in alto" in app.consiglio_visione()
       and "/modello" not in app.consiglio_visione(),

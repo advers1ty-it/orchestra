@@ -2079,10 +2079,11 @@ class OrchestraApp:
         # visto. Meglio dirlo subito che far credere di aver guardato.
         if any(getattr(a, "immagini", None) for a in (allegati or [])):
             if self.modello_legge_immagini(sess) is False:
+                servizio = self._bot_provider_modello(b)[0]
                 return (f"{sess.modello_in_uso()} non legge le immagini: la "
                         "foto non l'avrebbe vista. "
-                        f"{self.consiglio_visione(da_telegram=True)} "
-                        "Oppure scrivimi cosa c'e' nella foto.")
+                        f"{self.consiglio_visione(servizio, da_telegram=True)}"
+                        " Oppure scrivimi cosa c'e' nella foto.")
         # La sottoscrizione avviene prima di `send`: iscriversi dopo
         # vorrebbe dire perdere il primo pezzo di ragionamento, che e'
         # proprio quello che si vuole mostrare.
@@ -2395,37 +2396,101 @@ class OrchestraApp:
             return "Troppo tardi: la domanda e' scaduta."
         return "Risposta inviata."
 
-    def modelli_vision_gratis(self, limite: int = 2) -> list[str]:
-        """Modelli del catalogo che leggono le immagini e non costano.
+    def _catalogo_di(self, provider: str = "") -> Any:
+        """Il catalogo del servizio indicato, o quello dell'applicazione.
+
+        `telegram_modelli` faceva gia' questa cosa, cache compresa, ma in
+        una copia sola e chiusa in se': chiunque altro avesse avuto
+        bisogno del catalogo di un servizio l'avrebbe riscritta, e la
+        seconda copia e' quella che dimentica la cache o l'errore di
+        rete.
+        """
+        provider = (provider or "").strip()
+        if not provider:
+            try:
+                return self.catalog
+            except Exception:  # noqa: BLE001
+                return None
+        cache = getattr(self, "_catalog_per_provider", None)
+        if cache is None:
+            cache = self._catalog_per_provider = {}
+        cat = cache.get(provider)
+        if cat is None:
+            from .catalog import Catalog
+
+            try:
+                cat = Catalog.fetch(provider)
+            except Exception:  # noqa: BLE001
+                return None
+            if cat is None or not getattr(cat, "models", None):
+                return None
+            cache[provider] = cat
+        return cat
+
+    def modelli_vision_gratis(self, provider: str = "",
+                              limite: int = 2) -> list[str]:
+        """Modelli del servizio in uso che leggono le immagini e non costano.
 
         Serve a non lasciare chi ha appena mandato una foto a cercare
         fra centinaia di nomi: un rifiuto che non porta con se' la
         strada per uscirne e' solo un no. Non a caso ma con un criterio:
         prima chi ha il contesto piu' grande, che serve piu' spesso.
+
+        Lo stesso servizio e non "un catalogo qualunque": il menu di
+        Telegram cambia modello dentro il servizio del bot, quindi un id
+        di un altro servizio e' un comando che non trova niente. Si
+        propone solo quello che il comando puo' davvero usare.
         """
+        catalogo = self._catalogo_di(provider)
+        if catalogo is None:
+            return []
         contesti: dict[str, int] = {}
-        cataloghi: list[Any] = []
-        try:
-            cat = self.catalog
-        except Exception:  # noqa: BLE001
-            cat = None
-        if cat is not None:
-            cataloghi.append(cat)
-        cataloghi.extend(
-            (getattr(self, "_catalog_per_provider", None) or {}).values())
-        for catalogo in cataloghi:
-            for mid, prof in (getattr(catalogo, "models", {}) or {}).items():
-                info = getattr(prof, "info", None)
-                if info is None:
-                    continue
-                if not getattr(info, "supports_vision", False):
-                    continue
-                if not getattr(info, "is_free", False):
-                    continue
-                contesti[mid] = int(getattr(info, "context_length", 0) or 0)
+        for mid, prof in (getattr(catalogo, "models", {}) or {}).items():
+            # I modelli "stealth" sono anonimi e in prova: la loro scheda
+            # e' l'unica cosa che si sa, ed e' proprio quella che a volte
+            # non corrisponde (crouton-alpha dichiara le immagini e non le
+            # vede). Proporli come rimedio stabile sarebbe consigliare il
+            # modello che ha appena deluso.
+            if not mid or mid.startswith("stealth/"):
+                continue
+            info = getattr(prof, "info", None)
+            if info is None:
+                continue
+            if not getattr(info, "supports_vision", False):
+                continue
+            if not getattr(info, "is_free", False):
+                continue
+            # `False` esplicito esclude; `None` vuol dire "il servizio non
+            # lo dichiara", e un agente senza tool non finirebbe il lavoro.
+            if getattr(info, "supports_tools", None) is False:
+                continue
+            contesti[mid] = int(getattr(info, "context_length", 0) or 0)
         return sorted(contesti, key=lambda m: (-contesti[m], m))[:limite]
 
-    def consiglio_visione(self, da_telegram: bool = False) -> str:
+    def provider_in_uso(self, sess: Any = None) -> str:
+        """Il servizio con cui parla questa sessione, per nome.
+
+        Serve a proporre modelli che il suo menu puo' usare: la
+        sessione e il pannello possono stare su due servizi diversi.
+        """
+        from . import bots as bots_mod
+
+        bid = getattr(sess, "bot_id", None)
+        if bid is not None:
+            try:
+                b = bots_mod.per_id_agente(int(bid))
+            except Exception:  # noqa: BLE001
+                b = None
+            if b is not None:
+                return self._bot_provider_modello(b)[0]
+        prov = getattr(getattr(sess, "agent", None), "provider", None)
+        nome = getattr(prov, "name", "")
+        if isinstance(nome, str) and nome.strip():
+            return nome.strip()
+        return str((self.env or {}).get("ORCHESTRA_PROVIDER") or "")
+
+    def consiglio_visione(self, provider: str = "",
+                          da_telegram: bool = False) -> str:
         """La frase da mettere accanto a un rifiuto per una foto.
 
         La scheda del servizio e' l'unica cosa che si sa prima di
@@ -2437,7 +2502,7 @@ class OrchestraApp:
         comando e' gia' pronto da toccare; nella finestra il modello si
         sceglie dal menu in alto, e li' un comando non servirebbe.
         """
-        modelli = self.modelli_vision_gratis(2)
+        modelli = self.modelli_vision_gratis(provider, 2)
         if not modelli:
             return ("Scegli un altro modello con /modello." if da_telegram
                     else "Scegli un altro modello dal menu in alto.")
@@ -2495,6 +2560,16 @@ class OrchestraApp:
         righe = [f"{b.get('nome')} · {provider}",
                  f"Modello: {sess.modello_in_uso()}",
                  "Stato: al lavoro adesso" if sess.busy else "Stato: libero"]
+        # Solo per l'agente principale: il suo instradamento e' quello che
+        # puo' riscegliere il modello a ogni messaggio, ed e' la ragione
+        # per cui una scelta a mano sembrava non essere stata salvata.
+        # Per un bot la riga sarebbe rumore: li' il router non e' attivo.
+        from . import bots as bots_mod
+
+        if int(b["id"]) == bots_mod.BASE_ID:
+            righe.append("Instradamento automatico: "
+                         + ("acceso" if getattr(sess, "_routing_attivo", False)
+                            else "spento"))
         try:
             from . import telegram as tg
 
@@ -2766,23 +2841,11 @@ class OrchestraApp:
         vuota e chi chiama lo dice: meglio di una lista vuota che fa
         credere che quel provider non abbia modelli.
         """
-        provider = (provider or "").strip()
-        if not provider:
+        if not (provider or "").strip():
             return []
-        cache = getattr(self, "_catalog_per_provider", None)
-        if cache is None:
-            cache = self._catalog_per_provider = {}
-        cat = cache.get(provider)
+        cat = self._catalogo_di(provider)
         if cat is None:
-            from .catalog import Catalog
-
-            try:
-                cat = Catalog.fetch(provider)
-            except Exception:  # noqa: BLE001
-                return []
-            if cat is None or not getattr(cat, "models", None):
-                return []
-            cache[provider] = cat
+            return []
         return sorted(cat.models)
 
     def telegram_attivi(self) -> set[int]:
@@ -4254,9 +4317,10 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             # bot che non la legge.
             if self.app.modello_legge_immagini(s) is False:
                 modello = s.modello_in_uso()
+                servizio = self.app.provider_in_uso(s)
                 self._json({
                     "error": f"{modello} non legge le immagini. "
-                             f"{self.app.consiglio_visione()} "
+                             f"{self.app.consiglio_visione(servizio)} "
                              "Se non ti serve guardarla, allega un file "
                              "di testo.",
                     "serve_visione": True,

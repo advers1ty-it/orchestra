@@ -124,8 +124,8 @@ if stato2 == 400 and risposta2.get("serve_visione"):
           "non legge le immagini" in str(risposta2.get("error", "")),
           str(risposta2.get("error"))[:110])
     check("e dice come rimediare",
-          "Cambia modello" in str(risposta2.get("error", "")),
-          str(risposta2.get("error"))[:110])
+          "menu in alto" in str(risposta2.get("error", "")),
+          str(risposta2.get("error"))[:160])
     # Senza un modello con la visione non si puo' verificare il giro.
     # Si dice, e si esce pulito: la sezione [4] verifica comunque che
     # il catalogo distingua chi legge le immagini.
