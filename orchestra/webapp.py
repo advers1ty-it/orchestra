@@ -625,7 +625,14 @@ class OrchestraApp:
         # modelli del provider sbagliato per tutto quel tempo.
         self._catalog_at = None
         from . import keys as keys_mod
-        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider_name)
+        avvisi: list[str] = []
+        avviso = keys_mod.scrivi_o_avviso(
+            ENV_PATH, "ORCHESTRA_PROVIDER", provider_name)
+        if avviso:
+            # Il servizio vale adesso ma non al prossimo avvio: senza
+            # dirlo, il pannello mostra un servizio e il file un altro.
+            avvisi.append(f"servizio non salvato per il prossimo avvio "
+                          f"({avviso})")
         # l'indirizzo viene risolto qui: se il provider e' valido ma
         # l'override nell'env e' malformato, e' meglio accorgersene
         # adesso che alla prima richiesta, con un errore di rete
@@ -659,13 +666,18 @@ class OrchestraApp:
         modello_vecchio = self.env.get("ORCHESTRA_MODEL", "")
         scelto = self._modello_per_servizio(provider_name, modello_vecchio)
         if scelto:
-            self.switch_model(scelto)
-        return {
+            altro = self.switch_model(scelto)
+            if altro:
+                avvisi.append(altro)
+        risposta = {
             "provider": provider_name,
             "modello": scelto or modello_vecchio,
             "modello_cambiato": bool(scelto and scelto != modello_vecchio),
             "ready": self.ready,
         }
+        if avvisi:
+            risposta["avviso"] = "; ".join(avvisi)
+        return risposta
 
     def _modello_per_servizio(self, provider_name: str,
                               attuale: str,
@@ -921,7 +933,15 @@ class OrchestraApp:
         try:
             from . import keys as keys_mod
             self.env["ORCHESTRA_ROUTING"] = "off"
-            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_ROUTING", "off")
+            avviso = keys_mod.scrivi_o_avviso(
+                ENV_PATH, "ORCHESTRA_ROUTING", "off")
+            if avviso:
+                # Non si butta: `switch_model` lo unisce ai suoi avvisi, ed
+                # e' li' che l'utente legge "modello cambiato". Senza,
+                # l'instradamento tornerebbe acceso al prossimo avvio e
+                # il modello scelto a mano durerebbe una richiesta sola —
+                # di nuovo, e senza una riga che lo dica.
+                self._avviso_routing = avviso
         except Exception:  # noqa: BLE001
             pass
         return True
@@ -949,7 +969,22 @@ class OrchestraApp:
         ha una riga nella tabella dei bot: senza, un tocco su Telegram
         finirebbe sul bot selezionato nel pannello invece che sull'agente
         che ha ricevuto il comando.
+
+        Ritorna una stringa: "" se la scelta e' anche su disco, altrimenti
+        il motivo per cui non lo e'. Il modello e' gia' cambiato quando
+        questo valore e' pieno — non e' un errore, e' un avviso: senza,
+        "modello cambiato" e' vero fino al riavvio, e chi lo legge non ha
+        modo di saperlo.
         """
+        from . import keys as keys_mod
+
+        avvisi: list[str] = []
+
+        def _salva(chiave: str, valore: str) -> None:
+            avviso = keys_mod.scrivi_o_avviso(ENV_PATH, chiave, valore)
+            if avviso:
+                avvisi.append(avviso)
+
         provider = (provider or "").strip() or None
         if self.session is None:
             # Senza sessione non c'e' nulla da aggiornare live: si valida
@@ -961,19 +996,18 @@ class OrchestraApp:
                     f"modello sconosciuto: {model_id}. "
                     f"Disponibili: {', '.join(sorted(cat.models)[:5])}…"
                 )
-            from . import keys as keys_mod
             if provider:
                 self.env["ORCHESTRA_PROVIDER"] = provider
-                keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider)
+                _salva("ORCHESTRA_PROVIDER", provider)
             self.env["ORCHESTRA_MODEL"] = model_id
-            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
+            _salva("ORCHESTRA_MODEL", model_id)
             if scelta_utente:
                 # Non c'e' una sessione da zittire, ma la regola vale
                 # uguale: quando nascera', l'instradamento non deve
                 # riscegliere al posto dell'utente.
                 self.env["ORCHESTRA_ROUTING"] = "off"
-                keys_mod.scrivi(ENV_PATH, "ORCHESTRA_ROUTING", "off")
-            return
+                _salva("ORCHESTRA_ROUTING", "off")
+            return "; ".join(avvisi)
         if self.session.busy:
             raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
 
@@ -1022,15 +1056,14 @@ class OrchestraApp:
                 rt["config"] = bots_mod.per_id(bot["id"]) or rt["config"]
         else:
             self.env["ORCHESTRA_MODEL"] = model_id
-            from . import keys as keys_mod
-            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
+            _salva("ORCHESTRA_MODEL", model_id)
             # Il servizio va salvato insieme al modello. Senza, al riavvio
             # il vecchio servizio ricostruirebbe il provider con un id che
             # il suo catalogo non ha, e il modello "scelto" non partirebbe
             # mai: è lo stesso errore del menu che cambia solo il modello.
             if provider:
                 self.env["ORCHESTRA_PROVIDER"] = provider
-                keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider)
+                _salva("ORCHESTRA_PROVIDER", provider)
         # La catena di fallback va RICOSTRUITA sul nuovo modello. Senza,
         # la prima entry continua a puntare al modello di prima: quello
         # morto o inesistente viene chiamato per primo, risponde 404/410,
@@ -1057,6 +1090,13 @@ class OrchestraApp:
         # perche' non stanno decidendo niente — stanno rimediando.
         if scelta_utente:
             self.zittisci_instradamento()
+            avviso_routing = getattr(self, "_avviso_routing", "")
+            if avviso_routing:
+                avvisi.append("lo spegnimento dell'instradamento non e' "
+                              f"stato salvato ({avviso_routing}): al "
+                              "prossimo avvio tornerebbe acceso")
+                self._avviso_routing = ""
+        return "; ".join(avvisi)
 
     def allinea_finestra(self, model_id: str | None = None) -> int:
         """Mette `context_limit` al 75% della finestra del modello.
@@ -2080,8 +2120,17 @@ class OrchestraApp:
         if any(getattr(a, "immagini", None) for a in (allegati or [])):
             if self.modello_legge_immagini(sess) is False:
                 servizio = self._bot_provider_modello(b)[0]
-                return (f"{sess.modello_in_uso()} non legge le immagini: la "
-                        "foto non l'avrebbe vista. "
+                # Un modello puo' essere qui per due motivi diversi, e la
+                # frase deve dire quello giusto: uno non dichiara la
+                # vista, l'altro l'ha dichiarata e non l'ha usata.
+                smentita = self.vista_smentita(sess)
+                if smentita:
+                    inizio = (f"{sess.modello_in_uso()}: la scheda dice che "
+                              f"legge le immagini, ma {smentita}.")
+                else:
+                    inizio = (f"{sess.modello_in_uso()} non legge le "
+                              "immagini: la foto non l'avrebbe vista.")
+                return (f"{inizio} "
                         f"{self.consiglio_visione(servizio, da_telegram=True)}"
                         " Oppure scrivimi cosa c'e' nella foto.")
         # La sottoscrizione avviene prima di `send`: iscriversi dopo
@@ -2396,7 +2445,8 @@ class OrchestraApp:
             return "Troppo tardi: la domanda e' scaduta."
         return "Risposta inviata."
 
-    def _catalogo_di(self, provider: str = "") -> Any:
+    def _catalogo_di(self, provider: str = "", *,
+                     rete: bool = True) -> Any:
         """Il catalogo del servizio indicato, o quello dell'applicazione.
 
         `telegram_modelli` faceva gia' questa cosa, cache compresa, ma in
@@ -2404,6 +2454,14 @@ class OrchestraApp:
         bisogno del catalogo di un servizio l'avrebbe riscritta, e la
         seconda copia e' quella che dimentica la cache o l'errore di
         rete.
+
+        `rete=False` vuol dire "solo se e' gia' in memoria": serve a chi
+        sta formulando una frase e non puo' permettersi di aspettare una
+        chiamata.
+
+        Un servizio che non risponde non viene richiesto a ogni rifiuto:
+        si ricorda il fallimento per due minuti, cosi' il caso lento
+        costa una volta e non una per ogni foto.
         """
         provider = (provider or "").strip()
         if not provider:
@@ -2415,16 +2473,27 @@ class OrchestraApp:
         if cache is None:
             cache = self._catalog_per_provider = {}
         cat = cache.get(provider)
-        if cat is None:
-            from .catalog import Catalog
+        if cat is not None:
+            return cat
+        if not rete:
+            return None
+        falliti = getattr(self, "_catalog_falliti", None)
+        if falliti is None:
+            falliti = self._catalog_falliti = {}
+        adesso = time.time()
+        if adesso - float(falliti.get(provider) or 0) < 120:
+            return None
+        from .catalog import Catalog
 
-            try:
-                cat = Catalog.fetch(provider)
-            except Exception:  # noqa: BLE001
-                return None
-            if cat is None or not getattr(cat, "models", None):
-                return None
-            cache[provider] = cat
+        try:
+            cat = Catalog.fetch(provider)
+        except Exception:  # noqa: BLE001
+            cat = None
+        if cat is None or not getattr(cat, "models", None):
+            falliti[provider] = adesso
+            return None
+        falliti.pop(provider, None)
+        cache[provider] = cat
         return cat
 
     def modelli_vision_gratis(self, provider: str = "",
@@ -2501,6 +2570,11 @@ class OrchestraApp:
         che, per dichiarazione, le legge e non costa. Su Telegram il
         comando e' gia' pronto da toccare; nella finestra il modello si
         sceglie dal menu in alto, e li' un comando non servirebbe.
+
+        Il catalogo di solito e' gia' in memoria (il menu dei modelli lo
+        ha letto); se manca, si legge qui — con un timeout corto e con
+        il fallimento ricordato per due minuti, perche' questa frase
+        arriva dentro un rifiuto e non puo' diventare un'attesa lunga.
         """
         modelli = self.modelli_vision_gratis(provider, 2)
         if not modelli:
@@ -2528,32 +2602,81 @@ class OrchestraApp:
 
         Si guarda la sessione e non la variabile d'ambiente: un bot ha
         un modello suo, e la foto parte dalla chat di quel bot.
+
+        Una scheda smentita da una prova vale meno della prova: se il
+        modello e' fra quelli che hanno detto di leggere le immagini e
+        non le hanno viste, qui si risponde False, e chi rifiuta lo
+        dice con le sue parole (`vista_smentita`).
         """
+        modello = self._modello_della_sessione(sess)
+        if not modello:
+            return None
+        from .catalog import VISTA_SMENTITA
+
+        if modello in VISTA_SMENTITA:
+            return False
+        for catalogo in self._cataloghi_del_modello(sess):
+            prof = getattr(catalogo, "models", {}).get(modello)
+            info = getattr(prof, "info", None)
+            if info is not None and hasattr(info, "supports_vision"):
+                return bool(info.supports_vision)
+        return None
+
+    def _modello_della_sessione(self, sess: Any = None) -> str:
+        """L'id del modello che sta per ricevere l'allegato."""
         modello = ""
         try:
             if sess is not None:
                 modello = (sess.modello_in_uso() or "").strip()
         except Exception:  # noqa: BLE001
             modello = ""
-        modello = modello or str((self.env or {}).get("ORCHESTRA_MODEL") or "")
-        cataloghi = []
+        return modello or str((self.env or {}).get("ORCHESTRA_MODEL") or "")
+
+    def _cataloghi_del_modello(self, sess: Any = None) -> list[Any]:
+        """Dove cercare il modello, cominciando dal servizio che lo chiama.
+
+        Un id puo' esistere su due servizi con capacita' diverse, e
+        l'ordine di questa lista era quello del dizionario delle cache:
+        capitava di rispondere con la scheda di un altro servizio. Prima
+        il servizio in uso, poi il catalogo dell'applicazione, poi gli
+        altri gia' letti (un bot puo' stare su un servizio che il
+        catalogo dell'app non conosce).
+        """
+        fuori: list[Any] = []
+        visti: set[int] = set()
+
+        def _aggiungi(cat: Any) -> None:
+            if cat is None or id(cat) in visti \
+                    or not getattr(cat, "models", None):
+                return
+            visti.add(id(cat))
+            fuori.append(cat)
+
         try:
-            cat = self.catalog
+            _aggiungi(self._catalogo_di(self.provider_in_uso(sess), rete=False))
         except Exception:  # noqa: BLE001
-            cat = None
-        if cat is not None:
-            cataloghi.append(cat)
-        # Un bot puo' usare un altro servizio: il suo modello non e' nel
-        # catalogo dell'applicazione, ma in quello gia' letto per quel
-        # servizio quando il menu lo ha mostrato.
-        cataloghi.extend(
-            (getattr(self, "_catalog_per_provider", None) or {}).values())
-        for catalogo in cataloghi:
-            prof = getattr(catalogo, "models", {}).get(modello)
-            info = getattr(prof, "info", None)
-            if info is not None and hasattr(info, "supports_vision"):
-                return bool(info.supports_vision)
-        return None
+            pass
+        try:
+            _aggiungi(self.catalog)
+        except Exception:  # noqa: BLE001
+            pass
+        for cat in (getattr(self, "_catalog_per_provider", None) or {}).values():
+            _aggiungi(cat)
+        return fuori
+
+    def vista_smentita(self, sess: Any = None) -> str:
+        """Perche' la scheda di questo modello non va creduta, se lo si sa.
+
+        "" restituito vuol dire "niente da dire". Il motivo e' una frase
+        gia' pronta, cosi' chi la usa non deve riscriverla (e non puo'
+        scriverla in modo diverso in due punti).
+        """
+        modello = self._modello_della_sessione(sess)
+        if not modello:
+            return ""
+        from .catalog import VISTA_SMENTITA
+
+        return VISTA_SMENTITA.get(modello, "")
 
     def _telegram_stato_bot(self, b: dict[str, Any], sess: Any) -> str:
         provider, _configurato = self._bot_provider_modello(b)
@@ -2633,11 +2756,17 @@ class OrchestraApp:
             # L'agente principale non ha una riga nella tabella dei bot: il
             # modello si cambia dove si cambia sempre, cioe' sulla sessione.
             try:
-                self.switch_model(scelto, provider=provider,
-                                  agente_principale=True, scelta_utente=True)
+                salvato = self.switch_model(scelto, provider=provider,
+                                           agente_principale=True,
+                                           scelta_utente=True)
             except Exception as e:  # noqa: BLE001
                 return f"Non ho cambiato il modello: {e}"
             nota = ""
+            if salvato:
+                # Vale adesso ma non al prossimo avvio: un "modello
+                # cambiato" senza questa riga si scopre al riavvio.
+                nota += ("\nAttenzione: la scelta non e' stata salvata per "
+                         f"il prossimo avvio ({salvato}).")
             if not getattr(sess, "_routing_attivo", True):
                 # Serve dirlo: senza l'instradamento il modello resta, ma
                 # l'utente ha diritto di sapere che una cosa e' cambiata
@@ -4318,8 +4447,14 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             if self.app.modello_legge_immagini(s) is False:
                 modello = s.modello_in_uso()
                 servizio = self.app.provider_in_uso(s)
+                smentita = self.app.vista_smentita(s)
+                if smentita:
+                    difetto = (f"{modello}: la scheda dice che legge le "
+                               f"immagini, ma {smentita}.")
+                else:
+                    difetto = f"{modello} non legge le immagini."
                 self._json({
-                    "error": f"{modello} non legge le immagini. "
+                    "error": f"{difetto} "
                              f"{self.app.consiglio_visione(servizio)} "
                              "Se non ti serve guardarla, allega un file "
                              "di testo.",

@@ -57,6 +57,13 @@ for n in (8, 12, 16):
 print("\n[2] Whitelist: si scrive solo cio' che Orchestra usa")
 ok, msg = K.scrivi(env_path, "PATH", "/usr/bin")
 check("una chiave fuori lista viene respinta", not ok, msg)
+# Il rifiuto deve arrivare anche a chi chiama senza leggere la tupla:
+# e' cosi' che una scrittura fallita diventava un "salvato" per l'utente.
+check("e chi non legge la tupla riceve comunque l'avviso",
+      K.scrivi_o_avviso(env_path, "PATH", "/usr/bin") != "",
+      K.scrivi_o_avviso(env_path, "PATH", "/usr/bin"))
+check("quando va, l'avviso e' vuoto",
+      K.scrivi_o_avviso(env_path, "GROQ_API_KEY", "gsk-prova") == "")
 ok, _ = K.scrivi(env_path, "LD_PRELOAD", "/tmp/x.so")
 check("una variabile pericolosa viene respinta", not ok)
 ok, _ = K.scrivi(env_path, "ORCHESTRA_MODEL", "some/model:free")

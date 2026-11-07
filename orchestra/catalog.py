@@ -63,6 +63,22 @@ CATEGORY_LABEL: dict[str, str] = {
 }
 
 
+# Modelli la cui scheda dichiara la vista e che, provati, non hanno
+# visto niente. Non e' una previsione e non e' un giudizio sul modello:
+# e' una smentita registrata, e vale piu' della scheda perche' viene da
+# una richiesta vera. La scheda resta l'unica cosa che il servizio
+# dichiara — gli endpoint di OpenRouter non espongono un campo sull'input
+# immagine — quindi quando la scheda e' smentita l'unico modo per
+# saperlo e' ricordarselo.
+#
+# La riga si toglie quando il modello torna a leggere le foto (o quando
+# il servizio lo ritira): un elenco che cresce e non cala diventa, in
+# qualche mese, un elenco di bugie diverse.
+VISTA_SMENTITA: dict[str, str] = {
+    "stealth/crouton-alpha": "non le ha viste quando l'ho provata",
+}
+
+
 @dataclass
 class ModelInfo:
     """Fatti su un modello, letti dal provider."""

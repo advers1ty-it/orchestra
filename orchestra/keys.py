@@ -25,10 +25,13 @@ Le regole:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 # Chiavi scrivibili dal menu. Ogni voce e' un provider che Orchestra sa
 # usare, o un'impostazione che il programma legge davvero. Nient'altro:
@@ -251,10 +254,14 @@ FREE_SERVICES: list[dict[str, Any]] = [
 ]
 
 
-NOTA_FREE = ("I piani gratis cambiano spesso: se un limite non torna, "
-             "ricontrolla la pagina del servizio. 'Gratis' vuol dire "
-             "'un piano gratis con limiti': fuori Ollama e LM Studio, "
-             "tutti gli altri chiedono una chiave, e alcuni una carta.")
+# La data non e' decorazione: dice a quando risalgono queste schede.
+# Quando i piani cambiano, si aggiorna il testo E la data — il test
+# controlla che una data ci sia, e una data vecchia si vede.
+NOTA_FREE = ("Schede controllate a novembre 2026. I piani gratis cambiano "
+             "spesso: se un limite non torna, ricontrolla la pagina del "
+             "servizio. 'Gratis' vuol dire 'un piano gratis con limiti': "
+             "fuori Ollama e LM Studio, tutti gli altri chiedono una "
+             "chiave, e alcuni una carta.")
 
 
 def _leggi_righe(path: str) -> list[str]:
@@ -308,12 +315,19 @@ def scrivi(path: str, chiave: str, valore: str) -> tuple[bool, str]:
     una traccia.
     """
     if chiave not in WRITABLE:
+        # Un rifiuto non deve sparire: i chiamanti che ignorano la
+        # tupla sono la maggioranza, e senza questa riga una chiave
+        # rifiutata ("non scrivibile") non lasciava traccia da nessuna
+        # parte. Il `return` resta: il chiamante che legge, legge.
+        log.warning("chiave rifiutata, non e' fra le scrivibili: %s", chiave)
         return False, f"chiave non scrivibile: {chiave}"
     valore = (valore or "").strip()
     # un a capo o un '=' nel valore cambierebbe la struttura del file
     if "\n" in valore or "\r" in valore:
+        log.warning("valore rifiutato per %s: contiene un a capo", chiave)
         return False, "il valore non puo' contenere a capo"
     if len(valore) > 500:
+        log.warning("valore rifiutato per %s: troppo lungo", chiave)
         return False, "valore troppo lungo (max 500 caratteri)"
 
     righe = _leggi_righe(path)
@@ -347,5 +361,23 @@ def scrivi(path: str, chiave: str, valore: str) -> tuple[bool, str]:
         except OSError:
             pass
     except OSError as e:
+        log.warning("scrittura di %s fallita su %s: %s", chiave, path, e)
         return False, f"scrittura fallita: {e}"
     return True, (f"{chiave} salvata" if valore else f"{chiave} rimossa")
+
+
+def scrivi_o_avviso(path: str, chiave: str, valore: str) -> str:
+    """Come `scrivi`, ma restituisce solo il problema: "" se e' andata.
+
+    Esiste per i chiamanti che dicono "salvato" a qualcuno. `scrivi`
+    risponde (ok, messaggio), ma quasi tutti leggevano solo il secondo
+    elemento — o nessuno — e un salvataggio rifiutato diventava un "ok"
+    per chi lo aveva chiesto: e' il difetto per cui ORCHESTRA_ROUTING
+    sembrava scritto e non lo era. Una funzione che sta in una riga sola
+    e' una funzione che i chiamanti usano davvero.
+
+    Chi deve solo applicare il valore a caldo puo' continuare a
+    chiamare `scrivi`: il rifiuto finisce comunque nel log.
+    """
+    ok, messaggio = scrivi(path, chiave, valore)
+    return "" if ok else (messaggio or f"{chiave} non salvata")

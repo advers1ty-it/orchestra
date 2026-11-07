@@ -476,6 +476,47 @@ check("un modello che il catalogo non conosce non si blocca",
 check("senza immagini il controllo non c'entra",
       app.modello_legge_immagini(sess) is False)
 
+# La scheda puo' mentire. `stealth/crouton-alpha` dichiara di leggere le
+# immagini e, provato, ha risposto come se la foto non ci fosse: una
+# smentita registrata vale piu' della scheda, che e' l'unica cosa che il
+# servizio dichiara. Senza questo, il rifiuto non scattava e la foto
+# arrivava a un modello che non la vedeva.
+_mentito = SimpleNamespace(modello_in_uso=lambda: "stealth/crouton-alpha")
+check("una scheda smentita da una prova non viene creduta",
+      app.modello_legge_immagini(_mentito) is False)
+check("e il motivo e' una frase pronta, non un booleano",
+      "non le ha viste" in app.vista_smentita(_mentito),
+      cp(app.vista_smentita(_mentito)))
+check("per un modello normale non c'e' nessuna smentita",
+      app.vista_smentita(SimpleNamespace(
+          modello_in_uso=lambda: "vede")) == "")
+
+# Lo stesso id puo' stare su due servizi con capacita' diverse. Prima si
+# guardava dove capitava — l'ordine del dizionario delle cache — e si
+# poteva rispondere con la scheda di un servizio che la sessione non
+# stava nemmeno chiamando.
+def _info_vista(vista):
+    return SimpleNamespace(info=SimpleNamespace(
+        supports_vision=vista, is_free=True, context_length=1000,
+        supports_tools=True))
+
+
+_cat_app = SimpleNamespace(models={"doppio": _info_vista(False)})
+_cat_prov = SimpleNamespace(models={"doppio": _info_vista(True)})
+app._carica_catalogo = lambda forza=False: _cat_app
+app._catalog_per_provider = {"openrouter": _cat_prov}
+check("lo stesso id su due servizi: dice la scheda del servizio in uso",
+      app.modello_legge_immagini(SimpleNamespace(
+          modello_in_uso=lambda: "doppio")) is True)
+# Un servizio diverso in cache non deve decidere per quello in uso, e
+# nemmeno l'ordine in cui le cache sono state lette.
+app._catalog_per_provider = {"un-altro": _cat_prov}
+check("un altro servizio in cache non risponde al posto suo",
+      app.modello_legge_immagini(SimpleNamespace(
+          modello_in_uso=lambda: "doppio")) is False)
+app._carica_catalogo = lambda forza=False: CatalogoVisione()
+app._catalog_per_provider = {"openrouter": CatalogoVisione()}
+
 print("\n[9] un turno fermato non produce una risposta finta")
 app, sess = app_finta()
 

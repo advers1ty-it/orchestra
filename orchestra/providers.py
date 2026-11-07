@@ -575,6 +575,15 @@ class OpenAICompatAdapter:
 
         `list_models` tiene solo gli id, ma il catalogo ha bisogno del
         resto per stimare i costi e filtrare chi supporta i tool.
+
+        Il timeout e' corto e non e' quello della chat. Questa chiamata
+        parte anche senza che l'utente l'abbia chiesta — per esempio
+        mentre si compone la frase di un rifiuto "questo modello non
+        legge le immagini" — e con i 30 secondi di prima un servizio
+        lento riusciva a tenere ferma la risposta per mezzo minuto. Un
+        elenco di modelli e' un GET piccolo: dieci secondi sono gia'
+        generosi, e se non risponde si dice "non lo so" invece di
+        aspettare.
         """
         try:
             r = urllib.request.Request(
@@ -584,7 +593,7 @@ class OpenAICompatAdapter:
                     "User-Agent": "Mozilla/5.0 (compatible; orchestra/0.1)",
                 },
             )
-            with urllib.request.urlopen(r, timeout=30) as resp:
+            with urllib.request.urlopen(r, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             out = data.get("data")
             return out if isinstance(out, list) else []

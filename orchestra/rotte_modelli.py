@@ -214,16 +214,24 @@ class RotteModelli:
         # spengono l'instradamento e scrivono "off". Senza questa riga,
         # riaccenderlo qui non servirebbe a niente al prossimo avvio —
         # l'interruttore tornerebbe spento e sembrerebbe rotto.
+        avviso = ""
         try:
             from . import keys as keys_mod
             from .percorsi import ENV_PATH
             valore = "on" if attivo else "off"
             self.app.env["ORCHESTRA_ROUTING"] = valore
-            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_ROUTING", valore)
-        except Exception:  # noqa: BLE001
-            pass
-        self._json({"ok": True, "routing": bool(
-            getattr(self.app.session, "_routing_attivo", False))})
+            avviso = keys_mod.scrivi_o_avviso(
+                ENV_PATH, "ORCHESTRA_ROUTING", valore)
+        except Exception as e:  # noqa: BLE001
+            avviso = str(e)
+        risposta = {"ok": True, "routing": bool(
+            getattr(self.app.session, "_routing_attivo", False))}
+        if avviso:
+            # E' successo proprio qui: l'interruttore rispondeva "ok" e
+            # al riavvio era di nuovo com'era prima.
+            risposta["avviso"] = ("Applicato, ma non salvato per il prossimo "
+                                  f"avvio: {avviso}")
+        self._json(risposta)
 
     @rotta("POST", "/api/bench")
     def _r_post_bench(self, path: str, body: dict[str, Any],

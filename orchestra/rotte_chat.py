@@ -275,7 +275,7 @@ class RotteChat:
             self._json({"error": "modello vuoto"}, 400)
             return
         try:
-            self.app.switch_model(model_id, scelta_utente=True)
+            avviso = self.app.switch_model(model_id, scelta_utente=True)
         except RuntimeError as e:
             self._json({"error": str(e)}, 409)
             return
@@ -296,7 +296,14 @@ class RotteChat:
             # risposta deve dire quello che c'e' scritto, non "acceso".
             routing = str(self.app.env.get("ORCHESTRA_ROUTING", "")).lower() \
                 not in ("off", "0", "false", "no")
-        self._json({"ok": True, "model": model_id, "routing": routing})
+        # Il modello e' cambiato: se il salvataggio su disco non e' andato,
+        # va detto qui e non scoperto al prossimo avvio — e' lo stesso
+        # "ok" bugiardo che teneva l'instradamento acceso senza dirlo.
+        risposta = {"ok": True, "model": model_id, "routing": routing}
+        if avviso:
+            risposta["avviso"] = ("Modello cambiato, ma non salvato per il "
+                                  f"prossimo avvio: {avviso}")
+        self._json(risposta)
 
     @rotta("POST", "/api/permesso/prova")
     def _r_post_permesso_prova(self, path: str, body: dict[str, Any],
@@ -487,10 +494,14 @@ class RotteChat:
                                  "attendi o annulla prima"}, 409)
             return
         from . import keys as keys_mod
-        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_REASONING", r)
+        avviso = keys_mod.scrivi_o_avviso(ENV_PATH, "ORCHESTRA_REASONING", r)
         self.app.env["ORCHESTRA_REASONING"] = r
         self.app.session.agent.config.reasoning_level = r or None
-        self._json({"ok": True, "reasoning": r})
+        # Applicato a caldo comunque, ma se il .env non l'ha preso la
+        # scelta vale fino al riavvio: dirlo e' l'unica cosa onesta.
+        self._json({"ok": True, "reasoning": r, **(
+            {"avviso": f"Applicato, ma non salvato: {avviso}"} if avviso
+            else {})})
 
     @rotta("POST", "/api/iterazioni")
     def _r_post_iterazioni(self, path: str, body: dict[str, Any],
@@ -511,10 +522,13 @@ class RotteChat:
                                  "attendi o annulla prima"}, 409)
             return
         from . import keys as keys_mod
-        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MAX_ITERS", str(n))
+        avviso = keys_mod.scrivi_o_avviso(
+            ENV_PATH, "ORCHESTRA_MAX_ITERS", str(n))
         self.app.env["ORCHESTRA_MAX_ITERS"] = str(n)
         self.app.session.agent.config.max_iterations = n
-        self._json({"ok": True, "max_iterations": n})
+        self._json({"ok": True, "max_iterations": n, **(
+            {"avviso": f"Applicato, ma non salvato: {avviso}"} if avviso
+            else {})})
 
     @rotta("POST", "/api/tempo-turno")
     def _r_post_tempo_turno(self, path: str, body: dict[str, Any],
@@ -613,8 +627,15 @@ class RotteChat:
             "month_cost": limiti.max_cost_usd_per_month,
         })
         from . import keys as keys_mod
-        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_BUDGET", budget_json)
+        avviso = keys_mod.scrivi_o_avviso(
+            ENV_PATH, "ORCHESTRA_BUDGET", budget_json)
         self.app.env["ORCHESTRA_BUDGET"] = budget_json
+        if avviso:
+            # Un tetto di spesa che non e' stato scritto e' peggio di un
+            # tetto mai messo: sembra di essere protetti.
+            self._json({"error": f"Budget applicato, ma non salvato: {avviso}"},
+                       500)
+            return
         self._json({"ok": True, "messaggio": "Budget salvato"})
 
     @rotta("POST", "/api/budget/reset")
@@ -623,8 +644,12 @@ class RotteChat:
         from .budget import budget_guard
         from . import keys as keys_mod
         budget_guard()._instance = None
-        keys_mod.scrivi(ENV_PATH, "ORCHESTRA_BUDGET", "")
+        avviso = keys_mod.scrivi_o_avviso(ENV_PATH, "ORCHESTRA_BUDGET", "")
         self.app.env.pop("ORCHESTRA_BUDGET", None)
+        if avviso:
+            self._json({"error": "Budget azzerato, ma il valore non e' stato "
+                                 f"tolto dal .env: {avviso}"}, 500)
+            return
         self._json({"ok": True, "messaggio": "Budget riportato ai valori di default"})
 
     @rotta("POST", "/api/annulla")
