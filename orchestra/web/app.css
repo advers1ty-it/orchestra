@@ -404,6 +404,8 @@ header select { max-width: 230px; }
   font-size: 11px; background: rgba(255,255,255,.05); padding: 5px 7px;
   border-radius: 4px; overflow-wrap: anywhere;
 }
+a.gratis-come { color: var(--accent); text-decoration: none; }
+a.gratis-come:hover { text-decoration: underline; }
 .gratis-avv {
   font-size: 11px; color: #ffcf9b; line-height: 1.45;
   border-left: 2px solid var(--warn); padding-left: 7px;

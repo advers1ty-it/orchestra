@@ -261,8 +261,20 @@ function schedaServizio(s, chiave) {
   cosa.textContent = s.cosa;
   const req = el("div", "gratis-req dim small");
   req.textContent = s.requisiti;
-  const come = el("code", "gratis-come");
-  come.textContent = (s.come || "").trim();
+  // Dove si prende la chiave: se il testo e' un indirizzo deve essere
+  // cliccabile. Prima era un <code>, e un dominio scritto in un blocco
+  // di codice sembra qualcosa da copiare a mano invece di un link.
+  const dove = (s.come || "").trim();
+  const eUrl = /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(dove);
+  const come = el(eUrl ? "a" : "span", "gratis-come");
+  come.textContent = dove;
+  if (eUrl) {
+    come.href = "https://" + dove;
+    come.target = "_blank";
+    // noopener: la pagina che si apre non deve poter guidare questa
+    // finestra. E' l'errore classico con target="_blank".
+    come.rel = "noopener noreferrer";
+  }
 
   d.appendChild(capo);
   d.appendChild(costo);

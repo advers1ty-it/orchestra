@@ -8,13 +8,14 @@ si stava attivando.
 
 Qui si esegue il bundle vero in Node, si finge /api/chiavi e si guarda
 il DOM: i tre gruppi ci sono, ogni servizio che ha una chiave ha il suo
-campo dentro la scheda, i locali non lo hanno, e nessuna chiave
-scompare dal pannello.
+campo dentro la scheda, e nessuna chiave compare due volte.
 
-Il "campo dentro la scheda" e' la parte fragile: e' un albero costruito
-a mano, e basta che `schedaServizio` riceva la chiave sbagliata perche'
-il campo finisca sul servizio sbagliato — cosa che a occhio, con dieci
-schede, non si vede.
+Il doppione e' il difetto da temere: se il legame servizio-chiave si
+rompe, la stessa chiave ricompare in "Altre chiavi" sotto la scheda che
+la spiega, e il pannello chiede due volte la stessa cosa. Per questo
+l'ultimo blocco non usa dati inventati ma `keys.FREE_SERVICES` e
+`keys.stato()` veri: se il campo "env" sparisce da un servizio, il test
+lo vede.
 """
 
 import json
@@ -47,8 +48,83 @@ joined = "\n;\n".join(
 harness = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "_dom_provider.js"), encoding="utf-8").read()
 
-# I dati sono quelli veri di keys.FREE_SERVICES, ridotti: se il pannello
-# dipendesse da un campo che il server non manda, qui si vedrebbe.
+PROBE = """
+(async () => {
+  const OUT = { errori: [], gruppi: [], righe: [] };
+
+  globalThis.fetch = async (u) => {
+    const ok = (o) => ({ ok: true, status: 200, json: async () => o,
+                         text: async () => JSON.stringify(o) });
+    if (u === "/api/chiavi") return ok(%s);
+    if (u === "/api/models") return ok({ provider: "openrouter", current: "x",
+                                         models: [] });
+    if (String(u).startsWith("/api/modelli")) return ok({ modelli: [] });
+    if (String(u).startsWith("/api/skill")) return ok({ lista_scaricate: [],
+                                                        lista_generate: [] });
+    return ok({});
+  };
+
+  const lista = document.getElementById("servizi-lista");
+  if (!lista) { OUT.errore = "servizi-lista non c'e'"; console.log("SERVUI" + JSON.stringify(OUT)); return; }
+  try { await caricaOpzioni(); } catch (e) { OUT.errori.push("caricaOpzioni: " + String(e)); }
+
+  const cls = (n) => String((n && n.className) || "").split(" ");
+  const testo = (n) => String((n && n.textContent) || "");
+
+  // La lista si legge come la vede chi guarda: nell'ordine, con il gruppo
+  // in cui ogni scheda capita. Cosi' un gruppo vuoto o una scheda
+  // rimasta fuori si notano senza indovinare la struttura.
+  for (const n of (lista.children || [])) {
+    if (cls(n).includes("gratis-gruppo")) { OUT.gruppi.push(testo(n)); continue; }
+    if (!cls(n).includes("gratis-scheda")) continue;
+    const gruppo = OUT.gruppi.length ? OUT.gruppi[OUT.gruppi.length - 1] : null;
+    const nome = testo(n.children && n.children[0] && n.children[0].children &&
+                       n.children[0].children[0]);
+    let campi = 0, tipo = null, link = null, nota = null;
+    const cerca = (x) => {
+      if (!x) return;
+      if (cls(x).includes("chiave-input")) { campi++; tipo = x.type; }
+      if (String(x.tagName || "").toUpperCase() === "A" && !link) link = String(x.href || "");
+      if (cls(x).includes("chiave-stato")) nota = testo(x);
+      for (const y of (x.children || [])) cerca(y);
+    };
+    cerca(n);
+    OUT.righe.push({ gruppo, nome, campi, tipo, link, nota, testo: testo(n) });
+  }
+  console.log("SERVUI" + JSON.stringify(OUT));
+})();
+"""
+
+
+def esegui(payload):
+    """Esegue il bundle con una risposta finta di /api/chiavi."""
+    f = tempfile.mktemp(suffix=".js")
+    with open(f, "w", encoding="utf-8") as fh:
+        fh.write(harness + "\n" + joined + "\n" + PROBE % json.dumps(payload))
+    proc = subprocess.run(["node", f], capture_output=True, text=True,
+                          timeout=120)
+    try:
+        os.unlink(f)
+    except OSError:
+        pass
+    if proc.returncode != 0:
+        return {"errori": ["node: " + (proc.stderr or "")[-400:]]}
+    riga = [l for l in proc.stdout.splitlines() if l.startswith("SERVUI")]
+    if not riga:
+        return {"errori": ["nessuna risposta: " + (proc.stdout or "")[-300:]]}
+    return json.loads(riga[-1][6:])
+
+
+def riga(nome, o, gruppo=None):
+    for r in o.get("righe", []):
+        if r["nome"] == nome and (gruppo is None or r["gruppo"] == gruppo):
+            return r
+    return None
+
+
+# I dati del primo blocco sono un sottoinsieme scritto a mano: servono a
+# fissare il disegno, non a dire cosa c'e' nel catalogo. Il catalogo vero
+# arriva nell'ultimo blocco.
 servizi = [
     {"id": "openrouter", "env": "OPENROUTER_API_KEY", "gruppo": "Gratis con chiave",
      "nome": "OpenRouter", "costo": "quasi tutto gratis", "chiave": True,
@@ -59,7 +135,7 @@ servizi = [
      "nome": "Nous Research", "costo": "gratis con collegamento Orchestra",
      "chiave": False, "cosa": "Accesso diretto all'inference API di Nous.",
      "requisiti": "Si collega da solo oppure con un token manuale.",
-     "come": " premi Collega Nous", "connesso": True},
+     "come": " premi Collega Nous qui sotto", "connesso": True},
     {"id": "anthropic", "env": "ANTHROPIC_API_KEY", "gruppo": "A pagamento",
      "nome": "Anthropic", "costo": "a pagamento", "chiave": True,
      "cosa": "I modelli Claude diretti dal produttore.",
@@ -73,194 +149,114 @@ servizi = [
 chiavi = [
     {"chiave": "OPENROUTER_API_KEY", "etichetta": "OpenRouter",
      "presente": True, "indizio": "...ZxfA"},
+    {"chiave": "ANTHROPIC_API_KEY", "etichetta": "Anthropic",
+     "presente": False, "indizio": ""},
     {"chiave": "NOUS_API_KEY", "etichetta": "Nous Research (token manuale)",
      "presente": False, "indizio": ""},
-    {"chiave": "ANTHROPIC_API_KEY", "etichetta": "Anthropic",
+    {"chiave": "ORCHESTRA_OLLAMA_URL", "etichetta": "Indirizzo Ollama",
      "presente": False, "indizio": ""},
     {"chiave": "ARTIFICIAL_ANALYSIS_KEY", "etichetta": "Artificial Analysis",
      "presente": True, "indizio": "...9ab1"},
     {"chiave": "ORCHESTRA_MAX_SECONDI_TURNO",
      "etichetta": "Tempo massimo per turno (secondi, 0 = nessun limite)",
      "presente": False, "indizio": ""},
-    {"chiave": "ORCHESTRA_OLLAMA_URL", "etichetta": "Indirizzo Ollama",
-     "presente": False, "indizio": ""},
 ]
 
-probe = """
-(async () => {
-  const OUT = { errori: [] };
-  const payload = %s;
-
-  // Il pannello chiede anche permessi, autostart, skill, modelli e
-  // motori locali. Qui interessa /api/chiavi; per tutto il resto una
-  // risposta vuota basta a non far esplodere il disegno, che e' l'unica
-  // cosa che questo test misura.
-  globalThis.fetch = async (u) => {
-    const ok = (o) => ({ ok: true, status: 200, json: async () => o,
-                         text: async () => JSON.stringify(o) });
-    if (u === "/api/chiavi") return ok(payload);
-    if (u === "/api/models") return ok({ provider: "openrouter", current: "x",
-                                         models: [] });
-    if (String(u).startsWith("/api/modelli")) return ok({ modelli: [] });
-    if (String(u).startsWith("/api/skill")) return ok({ lista_scaricate: [],
-                                                        lista_generate: [] });
-    return ok({});
-  };
-
-  const lista = document.getElementById("servizi-lista");
-  if (!lista) { OUT.errore = "servizi-lista non c'e'"; console.log("SERVUI" + JSON.stringify(OUT)); return; }
-
-  try { await caricaOpzioni(); } catch (e) { OUT.errori.push("caricaOpzioni: " + e); }
-
-  const nodi = [];
-  const cammina = (n, dentro) => {
-    if (!n) return;
-    nodi.push({ nodo: n, dentro });
-    for (const c of (n.children || [])) cammina(c, n);
-  };
-  cammina(lista, null);
-
-  const gruppi = nodi.filter(x => String(x.nodo.className || "") === "gratis-gruppo")
-                     .map(x => x.nodo.textContent);
-  OUT.gruppi = gruppi;
-
-  // Le schede, per nome: testo e campo devono stare nella stessa.
-  const schede = nodi.filter(x => String(x.nodo.className || "").split(" ").includes("gratis-scheda"));
-  const schedaDi = (nome) => schede.find(x =>
-    String(x.nodo.children && x.nodo.children[0] ? x.nodo.children[0].textContent : "").includes(nome));
-  const campoDentro = (nodo) => {
-    let trovato = 0;
-    const cerca = (n) => {
-      if (!n) return;
-      if (String(n.className || "").split(" ").includes("chiave-input")) trovato++;
-      for (const c of (n.children || [])) cerca(c);
-    };
-    cerca(nodo);
-    return trovato;
-  };
-  const inputDentro = (nodo) => {
-    let out = null;
-    const cerca = (n) => {
-      if (!n || out) return;
-      if (String(n.className || "").split(" ").includes("chiave-input")) { out = n; return; }
-      for (const c of (n.children || [])) cerca(c);
-    };
-    cerca(nodo);
-    return out;
-  };
-
-  const open = schedaDi("OpenRouter");
-  OUT.openCampi = open ? campoDentro(open.nodo) : -1;
-  OUT.openDescrizione = open ? String(open.nodo.textContent).includes("Scelta enorme") : null;
-  OUT.openPresente = open ? !!(inputDentro(open.nodo) && inputDentro(open.nodo).placeholder.indexOf("lascia vuoto") >= 0) : null;
-  OUT.openPassword = open ? !!(inputDentro(open.nodo) && inputDentro(open.nodo).type === "password") : null;
-
-  const anth = schedaDi("Anthropic");
-  OUT.anthCampi = anth ? campoDentro(anth.nodo) : -1;
-  OUT.anthSegnaposto = anth && inputDentro(anth.nodo) ? inputDentro(anth.nodo).placeholder : null;
-
-  const oll = schedaDi("Ollama");
-  OUT.ollCampi = oll ? campoDentro(oll.nodo) : -1;
-  OUT.ollDescrizione = oll ? String(oll.nodo.textContent).includes("Modelli locali") : null;
-
-  const nous = schedaDi("Nous Research");
-  OUT.nousCampi = nous ? campoDentro(nous.nodo) : -1;
-  OUT.nousCollega = nous ? String(nous.nodo.textContent).includes("Collega Nous")
-                            || String(nous.nodo.textContent).includes("Ricollega") : null;
-
-  // L'indirizzo di Ollama e' un'impostazione, non un segreto: il campo
-  // deve essere in chiaro, e stare nella sua scheda.
-  OUT.ollUrlInChiaro = oll && inputDentro(oll.nodo) ? inputDentro(oll.nodo).type : null;
-
-  // Nessuna chiave persa: Artificial Analysis non e' un servizio, ma ha
-  // un campo suo; l'impostazione dei secondi pure.
-  OUT.altre = gruppi.indexOf("Altre chiavi") >= 0;
-  const art = schede.find(x => String(x.nodo.textContent).includes("Artificial Analysis"));
-  OUT.artificialCampo = art ? campoDentro(art.nodo) : -1;
-  const sec = schede.find(x => String(x.nodo.textContent).includes("Tempo massimo per turno"));
-  OUT.secondiCampo = sec ? campoDentro(sec.nodo) : -1;
-  OUT.secondiTesto = sec && inputDentro(sec.nodo) ? inputDentro(sec.nodo).type : null;
-
-  // Il gruppo giusto per ognuno: la fusione non deve rimescolare le cose.
-  OUT.ordineGruppi = gruppi;
-  OUT.openDopoGratis = gruppi.indexOf("Gratis") >= 0
-    && schede.indexOf(open) > 0
-    && gruppi.indexOf("A pagamento") > gruppi.indexOf("Gratis");
-
-  OUT.numeroSchede = schede.length;
-  console.log("SERVUI" + JSON.stringify(OUT));
-})();
-""" % json.dumps({"chiavi": chiavi, "servizi_gratis": servizi,
-                   "nota_gratis": "", "catalogo": {"modelli": 12, "gratuiti": 7},
-                   "motori": [], "provider": "openrouter", "model": "",
-                   "reasoning": "", "tool_profile": None, "budget": {}})
-
-f = tempfile.mktemp(suffix=".js")
-with open(f, "w", encoding="utf-8") as fh:
-    fh.write(harness + "\n" + joined + "\n" + probe)
-proc = subprocess.run(["node", f], capture_output=True, text=True, timeout=120)
-try:
-    os.unlink(f)
-except OSError:
-    pass
+o = esegui({"chiavi": chiavi, "servizi_gratis": servizi, "nota_gratis": "",
+            "catalogo": {"modelli": 12, "gratuiti": 7}, "motori": [],
+            "provider": "openrouter", "model": "", "reasoning": "",
+            "tool_profile": None, "budget": {}})
 
 print("[1] Il bundle disegna i servizi in tre gruppi")
-if proc.returncode != 0:
-    check("il bundle gira in Node", False, proc.stderr[-400:])
-else:
-    check("il bundle gira in Node", True)
-    riga = [l for l in proc.stdout.splitlines() if l.startswith("SERVUI")]
-    if not riga:
-        check("il probe ha risposto", False, proc.stdout[-300:])
-    else:
-        o = json.loads(riga[-1][6:])
-        check("nessun errore durante il disegno", not o.get("errori"),
-              str(o.get("errori"))[:200])
-        check("i gruppi sono Gratis, A pagamento, Sul tuo computer",
-              o.get("gruppi") == ["Gratis", "A pagamento", "Sul tuo computer",
-                                  "Altre chiavi"],
-              str(o.get("gruppi")))
-        check("e il gruppo delle chiavi senza servizio sta in fondo",
-              o.get("altre") is True, str(o.get("gruppi")))
-        check("le schede sono i quattro servizi piu' le due chiavi",
-              o.get("numeroSchede") == 6, str(o.get("numeroSchede")))
+check("il bundle gira in Node", not o.get("errori"), str(o.get("errori"))[:300])
+check("nessun errore durante il disegno", not o.get("errori"),
+      str(o.get("errori"))[:200])
+check("i gruppi sono Gratis, A pagamento, Sul tuo computer",
+      o.get("gruppi") == ["Gratis", "A pagamento", "Sul tuo computer",
+                          "Altre chiavi"],
+      str(o.get("gruppi")))
+check("le schede sono i quattro servizi piu' le due chiavi",
+      len(o.get("righe", [])) == 6, len(o.get("righe", [])))
 
 print("\n[2] La chiave sta sotto la descrizione, nella stessa scheda")
+open_ = riga("OpenRouter", o, "Gratis")
 check("OpenRouter ha un campo e una sola descrizione",
-      o.get("openCampi") == 1 and o.get("openDescrizione") is True,
-      f"campi={o.get('openCampi')} descrizione={o.get('openDescrizione')}")
+      open_ and open_["campi"] == 1
+      and "Scelta enorme" in open_["testo"],
+      f"campi={open_ and open_['campi']} desc={'Scelta enorme' in (open_ or {}).get('testo', '')}")
 check("la chiave gia' salvata si dice senza mostrarla",
-      o.get("openPresente") is True, str(o.get("openPresente")))
+      "configurata" in (open_ or {}).get("nota", ""), (open_ or {}).get("nota"))
 check("ed e' un campo password",
-      o.get("openPassword") is True, str(o.get("openPassword")))
+      (open_ or {}).get("tipo") == "password", (open_ or {}).get("tipo"))
+check("e il posto dove prendere la chiave e' un link cliccabile",
+      (open_ or {}).get("link") == "https://openrouter.ai/keys",
+      (open_ or {}).get("link"))
+anth = riga("Anthropic", o, "A pagamento")
 check("una chiave mancante invita a incollarla",
-      "incolla" in str(o.get("anthSegnaposto")), str(o.get("anthSegnaposto")))
-check("e Anthropic, che e' a pagamento, ha il suo campo",
-      o.get("anthCampi") == 1, str(o.get("anthCampi")))
+      anth and anth["campi"] == 1, (anth or {}).get("campi"))
 
 print("\n[3] I locali e i collegamenti diretti non chiedono chiavi")
-# Ollama non chiede una chiave, ma ha un indirizzo configurabile: il
-# campo c'e' ed e' in chiaro, con il testo giusto.
+oll = riga("Ollama", o, "Sul tuo computer")
 check("Ollama ha il campo dell'indirizzo, non una credenziale",
-      o.get("ollCampi") == 1 and o.get("ollUrlInChiaro") == "text",
-      f"campi={o.get('ollCampi')} tipo={o.get('ollUrlInChiaro')}")
-check("ma la sua descrizione c'e'", o.get("ollDescrizione") is True)
-check("l'indirizzo locale si legge in chiaro",
-      o.get("ollUrlInChiaro") == "text", str(o.get("ollUrlInChiaro")))
+      oll and oll["campi"] == 1 and oll["tipo"] == "text",
+      f"campi={(oll or {}).get('campi')} tipo={(oll or {}).get('tipo')}")
+check("e non dice 'manca la chiave' su un indirizzo",
+      oll and "chiave" not in (oll.get("nota") or ""), (oll or {}).get("nota"))
+nous = riga("Nous Research", o, "Gratis")
 check("Nous ha il suo pulsante di collegamento",
-      o.get("nousCollega") is True, str(o.get("nousCollega")))
-check("e il token manuale ha comunque il campo",
-      o.get("nousCampi") == 1, str(o.get("nousCampi")))
+      nous and "Collega Nous" in nous["testo"], (nous or {}).get("testo", "")[:80])
+check("e non un link a un sito: si collega da qui",
+      nous and nous.get("link") is None, (nous or {}).get("link"))
 
-print("\n[4] Nessuna chiave sparisce")
+print("\n[4] Nessuna chiave sparisce e nessuna compare due volte")
+art = riga("Artificial Analysis", o, "Altre chiavi")
 check("Artificial Analysis ha il suo campo",
-      o.get("artificialCampo") == 1, str(o.get("artificialCampo")))
+      art and art["campi"] == 1, (art or {}).get("campi"))
+sec = riga("Tempo massimo per turno (secondi, 0 = nessun limite)", o,
+           "Altre chiavi")
 check("e l'impostazione dei secondi pure",
-      o.get("secondiCampo") == 1, str(o.get("secondiCampo")))
-check("e si legge in chiaro, non come una password",
-      o.get("secondiTesto") == "text", str(o.get("secondiTesto")))
+      sec and sec["campi"] == 1 and sec["tipo"] == "text",
+      f"campi={(sec or {}).get('campi')} tipo={(sec or {}).get('tipo')}")
 check("il gruppo Gratis viene prima di A pagamento",
-      o.get("openDopoGratis") is True, str(o.get("ordineGruppi")))
+      o.get("gruppi", [])[:3] == ["Gratis", "A pagamento", "Sul tuo computer"],
+      str(o.get("gruppi")))
+
+# ------------------------------------------------------------------ catalogo vero
+# `env` e' il legame fra un servizio e la sua chiave. Se manca, la chiave
+# non viene riconosciuta come gia' mostrata e ricompare in "Altre chiavi":
+# due riquadri per la stessa cosa, uno che spiega e uno che chiede.
+from orchestra import keys  # noqa: E402
+
+stato = keys.stato(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "_dati_test", ".env"), {})
+vero = esegui({"chiavi": stato, "servizi_gratis": keys.FREE_SERVICES,
+               "nota_gratis": "", "catalogo": {}, "motori": [], "provider": "",
+               "model": "", "tool_profile": None, "budget": {}})
+
+print("\n[5] Con il catalogo vero ogni chiave ha un riquadro solo")
+check("il catalogo vero si disegna", not vero.get("errori"),
+      str(vero.get("errori"))[:300])
+nomi = [r["nome"] for r in vero.get("righe", [])]
+doppi = sorted({n for n in nomi if nomi.count(n) > 1})
+check("nessun servizio spiegato due volte", not doppi, str(doppi))
+
+legate = {s.get("env") for s in keys.FREE_SERVICES}
+attese = [k["etichetta"] for k in stato if k["chiave"] not in legate]
+altre = [r["nome"] for r in vero.get("righe", []) if r["gruppo"] == "Altre chiavi"]
+check("in 'Altre chiavi' resta solo cio' che non e' un servizio",
+      altre == attese, f"trovate={altre} attese={attese}")
+
+servizi_con_chiave = [s for s in keys.FREE_SERVICES if s.get("chiave")]
+senza_campo = [s["nome"] for s in servizi_con_chiave
+               if not (riga(s["nome"], vero) or {}).get("campi")]
+check("ogni servizio che chiede una chiave ha il suo campo",
+      not senza_campo, str(senza_campo))
+senza_link = [s["nome"] for s in keys.FREE_SERVICES
+              if not (riga(s["nome"], vero) or {}).get("link")
+              and s.get("come", "").strip().count(".") and
+              " " not in s.get("come", "").strip()]
+check("e il link per prenderla, quando c'e' un indirizzo",
+      not senza_link, str(senza_link))
 
 print()
 print("=" * 60)
