@@ -387,6 +387,17 @@ class CatalogoVisione:
                 info=SimpleNamespace(supports_vision=False)),
             "vede": SimpleNamespace(
                 info=SimpleNamespace(supports_vision=True)),
+            # I due che possono essere proposti: uno con la vista e
+            # gratis, uno gratis ma con poco contesto, uno a pagamento.
+            "gratis-vl": SimpleNamespace(
+                info=SimpleNamespace(supports_vision=True, is_free=True,
+                                     context_length=1_000_000)),
+            "gratis-piccolo": SimpleNamespace(
+                info=SimpleNamespace(supports_vision=True, is_free=True,
+                                     context_length=8_000)),
+            "caro-vl": SimpleNamespace(
+                info=SimpleNamespace(supports_vision=True, is_free=False,
+                                     context_length=2_000_000)),
             "boh": object(),  # il catalogo non dichiara niente
         }
 
@@ -401,6 +412,35 @@ check("un modello senza vista lo dice invece di indovinare",
       isinstance(rifiuto, str) and "non legge le immagini" in rifiuto,
       cp(str(rifiuto)))
 check("e non manda il turno", mandati == [], str(len(mandati)))
+# Un rifiuto che non dice cosa fare lascia l'utente a cercare fra
+# centinaia di modelli. La proposta e' la strada per uscirne.
+check("e propone un modello gratis che la legge, gia' come comando",
+      "gratis-vl" in str(rifiuto) and "/modello" in str(rifiuto),
+      cp(str(rifiuto)))
+check("senza proporre quello a pagamento (ne' un altro cieco)",
+      "caro-vl" not in str(rifiuto) and "cieco" not in str(rifiuto).replace(
+          "cieco non legge", ""), cp(str(rifiuto)))
+check("i candidati sono solo gratis con la vista, i piu' capienti prima",
+      app.modelli_vision_gratis(3) == ["gratis-vl", "gratis-piccolo"],
+      str(app.modelli_vision_gratis(3)))
+check("dalla finestra il consiglio nomina il menu, non un comando",
+      "menu in alto" in app.consiglio_visione()
+      and "/modello" not in app.consiglio_visione(),
+      cp(app.consiglio_visione()))
+check("e su Telegram propone il comando pronto da toccare",
+      "/modello gratis-vl" in app.consiglio_visione(da_telegram=True),
+      cp(app.consiglio_visione(da_telegram=True)))
+# Senza nessun candidato il consiglio resta una frase, non una riga
+# vuota: meglio dire "scegline un altro" che non dire niente.
+_app_vuota, _ = app_finta()
+_app_vuota._catalog_per_provider = {}
+_app_vuota._carica_catalogo = lambda forza=False: SimpleNamespace(models={})
+check("senza candidati il consiglio non resta muto",
+      "menu in alto" in _app_vuota.consiglio_visione(),
+      cp(_app_vuota.consiglio_visione()))
+check("e su Telegram manda comunque a /modello",
+      "/modello" in _app_vuota.consiglio_visione(da_telegram=True),
+      cp(_app_vuota.consiglio_visione(da_telegram=True)))
 check("il catalogo sa che un altro modello le legge",
       app.modello_legge_immagini(SimpleNamespace(
           modello_in_uso=lambda: "vede")) is True)

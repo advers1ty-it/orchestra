@@ -2080,9 +2080,9 @@ class OrchestraApp:
         if any(getattr(a, "immagini", None) for a in (allegati or [])):
             if self.modello_legge_immagini(sess) is False:
                 return (f"{sess.modello_in_uso()} non legge le immagini: la "
-                        "foto non l'avrebbe vista. Scegli da /modello un "
-                        "modello con la vista, oppure scrivimi cosa c'e' "
-                        "nella foto.")
+                        "foto non l'avrebbe vista. "
+                        f"{self.consiglio_visione(da_telegram=True)} "
+                        "Oppure scrivimi cosa c'e' nella foto.")
         # La sottoscrizione avviene prima di `send`: iscriversi dopo
         # vorrebbe dire perdere il primo pezzo di ragionamento, che e'
         # proprio quello che si vuole mostrare.
@@ -2394,6 +2394,62 @@ class OrchestraApp:
         if not domande.rispondi(str(voce.get("id") or ""), risposta):
             return "Troppo tardi: la domanda e' scaduta."
         return "Risposta inviata."
+
+    def modelli_vision_gratis(self, limite: int = 2) -> list[str]:
+        """Modelli del catalogo che leggono le immagini e non costano.
+
+        Serve a non lasciare chi ha appena mandato una foto a cercare
+        fra centinaia di nomi: un rifiuto che non porta con se' la
+        strada per uscirne e' solo un no. Non a caso ma con un criterio:
+        prima chi ha il contesto piu' grande, che serve piu' spesso.
+        """
+        contesti: dict[str, int] = {}
+        cataloghi: list[Any] = []
+        try:
+            cat = self.catalog
+        except Exception:  # noqa: BLE001
+            cat = None
+        if cat is not None:
+            cataloghi.append(cat)
+        cataloghi.extend(
+            (getattr(self, "_catalog_per_provider", None) or {}).values())
+        for catalogo in cataloghi:
+            for mid, prof in (getattr(catalogo, "models", {}) or {}).items():
+                info = getattr(prof, "info", None)
+                if info is None:
+                    continue
+                if not getattr(info, "supports_vision", False):
+                    continue
+                if not getattr(info, "is_free", False):
+                    continue
+                contesti[mid] = int(getattr(info, "context_length", 0) or 0)
+        return sorted(contesti, key=lambda m: (-contesti[m], m))[:limite]
+
+    def consiglio_visione(self, da_telegram: bool = False) -> str:
+        """La frase da mettere accanto a un rifiuto per una foto.
+
+        La scheda del servizio e' l'unica cosa che si sa prima di
+        provare, e a volte mente: `stealth/crouton-alpha` dichiara le
+        immagini e non le vede. Gli endpoint di OpenRouter non hanno un
+        campo che lo dica (nemotron-vl e crouton hanno gli stessi
+        valori), quindi l'unico rimedio onesto e' proporre qualcuno
+        che, per dichiarazione, le legge e non costa. Su Telegram il
+        comando e' gia' pronto da toccare; nella finestra il modello si
+        sceglie dal menu in alto, e li' un comando non servirebbe.
+        """
+        modelli = self.modelli_vision_gratis(2)
+        if not modelli:
+            return ("Scegli un altro modello con /modello." if da_telegram
+                    else "Scegli un altro modello dal menu in alto.")
+        if da_telegram:
+            testo = f"Prova `/modello {modelli[0]}` (gratis)"
+            if len(modelli) > 1:
+                testo += f", oppure `/modello {modelli[1]}`"
+        else:
+            testo = f"Prova `{modelli[0]}` dal menu in alto (gratis)"
+            if len(modelli) > 1:
+                testo += f", oppure `{modelli[1]}`"
+        return testo + ": legge le immagini."
 
     def modello_legge_immagini(self, sess: Any = None) -> bool | None:
         """Se il modello in uso legge le immagini, secondo il catalogo.
@@ -4200,8 +4256,9 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 modello = s.modello_in_uso()
                 self._json({
                     "error": f"{modello} non legge le immagini. "
-                             f"Cambia modello dal menu in alto, o allega "
-                             f"un file di testo.",
+                             f"{self.app.consiglio_visione()} "
+                             "Se non ti serve guardarla, allega un file "
+                             "di testo.",
                     "serve_visione": True,
                 }, 400)
                 return
