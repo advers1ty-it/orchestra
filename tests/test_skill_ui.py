@@ -179,8 +179,10 @@ probe = """
   // fidarsi del testo del sorgente.
   OUT.agganciati = [];
   for (const id of ["skill-ricarica", "skill-importa", "skill-filtro",
-                    "opz-tab-modello", "opz-tab-skill", "opz-tab-servizi",
-                    "opz-tab-permessi", "opz-tab-gratis", "opzioni-nav"]) {
+                    "opz-tab-modello", "opz-tab-servizi",
+                    "opz-tab-permessi", "opz-tab-gratis", "opzioni-nav",
+                    "cap-tab-skill", "cap-tab-cestino", "cap-tab-tool",
+                    "cap-filtro", "side-cap"]) {
     const e = document.getElementById(id);
     OUT.agganciati.push([id, !!(e && e._handlers &&
                                   Object.keys(e._handlers).length)]);
@@ -251,8 +253,38 @@ probe = """
     const e = document.getElementById("opz-sez-" + n);
     return e ? e.getAttribute("hidden") === null : null;
   };
-  OUT.sezioni = ["modello", "skill", "servizi", "permessi", "gratis"]
+  OUT.sezioni = ["modello", "identita", "servizi", "permessi", "gratis"]
     .map((n) => [n, visibile(n)]);
+
+  // --- il modale Capacita' ------------------------------------------
+  // Le skill non stanno piu' in Opzioni: stanno qui, con il cestino e le
+  // proposte. Le tre tab devono cambiare sezione davvero, altrimenti il
+  // modale mostra sempre la stessa cosa e il cestino diventa un posto
+  // che si apre e non si vede.
+  const capVisibile = (n) => {
+    const e = document.getElementById("cap-sez-" + n);
+    return e ? e.getAttribute("hidden") === null : null;
+  };
+  const capAttiva = () => {
+    const t = document.querySelector(".cap-tab.attiva");
+    return t ? t.id : null;
+  };
+  OUT.capAllInizio = [capVisibile("skill"), capVisibile("cestino"),
+                      capVisibile("tool")];
+  OUT.capAttivaAllInizio = capAttiva();
+  try {
+    document.getElementById("cap-tab-cestino").fire("click");
+    OUT.capDopoCestino = [capVisibile("skill"), capVisibile("cestino"),
+                          capVisibile("tool")];
+    OUT.capAttivaCestino = capAttiva();
+    document.getElementById("cap-tab-tool").fire("click");
+    OUT.capDopoTool = [capVisibile("skill"), capVisibile("cestino"),
+                       capVisibile("tool")];
+    document.getElementById("cap-tab-skill").fire("click");
+    OUT.capDiNuovoSkill = [capVisibile("skill"), capVisibile("cestino"),
+                           capVisibile("tool")];
+    OUT.capAttivaFine = capAttiva();
+  } catch (e) { OUT.erroreCap = String(e); }
 
   const attiva = () => {
     const t = document.querySelector(".opzioni-tab.attiva");
@@ -261,20 +293,20 @@ probe = """
   try {
     OUT.attivaAllInizio = attiva();
     // un click vero sulla tab
-    document.getElementById("opz-tab-skill").fire("click");
-    OUT.dopoClickSkill = [visibile("modello"), visibile("skill"),
-                          visibile("servizi")];
+    document.getElementById("opz-tab-servizi").fire("click");
+    OUT.dopoClickServizi = [visibile("modello"), visibile("servizi"),
+                            visibile("permessi")];
     OUT.tabAttiva = attiva();
     // e un click su una terza
     document.getElementById("opz-tab-permessi").fire("click");
-    OUT.dopoClickPermessi = [visibile("skill"), visibile("permessi")];
+    OUT.dopoClickPermessi = [visibile("servizi"), visibile("permessi")];
     OUT.attivaPermessi = attiva();
   } catch (e) { OUT.erroreSezioni = String(e); }
 
   // una sezione inesistente non deve lasciare tutto nascosto
   try {
     mostraSezione("non-esiste");
-    OUT.dopoInesistente = ["modello", "skill", "permessi"].map(visibile);
+    OUT.dopoInesistente = ["modello", "servizi", "permessi"].map(visibile);
   } catch (e) { OUT.erroreInesistente = String(e); }
 
   console.log("SKILLUI" + JSON.stringify(OUT));
@@ -322,18 +354,18 @@ else:
 
         # le sezioni
         sez = dict(o.get("sezioni") or [])
-        check("una sezione per voce", len(sez) == 5, str(o.get("sezioni")))
+        check("una voce per sezione", len(sez) == 5, str(o.get("sezioni")))
         check("all'inizio e' visibile solo Modello",
-              sez.get("modello") is True and sez.get("skill") is False
+              sez.get("modello") is True and sez.get("identita") is False
               and sez.get("gratis") is False, str(sez))
         check("la tab attiva e' quella giusta",
               o.get("attivaAllInizio") == "opz-tab-modello",
               str(o.get("attivaAllInizio")))
-        d = o.get("dopoClickSkill") or []
+        d = o.get("dopoClickServizi") or []
         check("il click apre la sezione giusta",
               len(d) == 3 and d[1] is True and d[0] is False and d[2] is False, str(d))
         check("e la tab attiva segue",
-              o.get("tabAttiva") == "opz-tab-skill", str(o.get("tabAttiva")))
+              o.get("tabAttiva") == "opz-tab-servizi", str(o.get("tabAttiva")))
         p2 = o.get("dopoClickPermessi") or []
         check("il secondo click apre Permessi",
               len(p2) >= 2 and p2[0] is False and p2[1] is True, str(p2))
@@ -343,6 +375,34 @@ else:
         ini = o.get("dopoInesistente") or []
         check("una sezione inesistente non nasconde tutto",
               any(v is True for v in ini), str(ini))
+
+        # Il modale Capacita': le skill non stanno piu' in Opzioni, quindi
+        # il posto dove si consultano, si cestinano e si accettano e' uno
+        # solo, e le sue tre tab devono cambiare davvero sezione.
+        cap = o.get("capAllInizio") or []
+        check("nel modale si apre sulle skill",
+              len(cap) == 3 and cap[0] is True and cap[1] is False
+              and cap[2] is False, str(cap))
+        check("e la tab attiva e' Skill",
+              o.get("capAttivaAllInizio") == "cap-tab-skill",
+              str(o.get("capAttivaAllInizio")))
+        c1 = o.get("capDopoCestino") or []
+        check("il clic su Cestino apre il cestino",
+              len(c1) == 3 and c1[0] is False and c1[1] is True
+              and c1[2] is False, str(c1))
+        check("e la tab attiva segue il cestino",
+              o.get("capAttivaCestino") == "cap-tab-cestino",
+              str(o.get("capAttivaCestino")))
+        c2 = o.get("capDopoTool") or []
+        check("il clic su Strumenti apre gli strumenti",
+              len(c2) == 3 and c2[0] is False and c2[1] is False
+              and c2[2] is True, str(c2))
+        c3 = o.get("capDiNuovoSkill") or []
+        check("e si torna alle skill",
+              len(c3) == 3 and c3[0] is True and c3[1] is False
+              and c3[2] is False, str(c3))
+        check("nessun errore nelle tab del modale",
+              not o.get("erroreCap"), str(o.get("erroreCap"))[:150])
 
 # I nomi che questo test usa devono esistere nell'HTML vero.
 #
@@ -358,12 +418,31 @@ else:
 print("\n[9] I nomi che il test usa esistono nell'HTML")
 _html = open(os.path.join(ROOT, "orchestra", "web", "index.html"),
               encoding="utf-8").read()
-_nomi_usati = ("modello", "skill", "servizi", "permessi", "gratis", "cestino")
+_nomi_usati = ("modello", "identita", "servizi", "permessi", "gratis")
 for _n in _nomi_usati:
     check(f"data-sez=\"{_n}\" esiste nell'HTML",
           f'data-sez="{_n}"' in _html,
           "il test lo cerca e l'HTML non lo ha: o il nome e' cambiato "
           "dall'ultimo aggiornamento, o il test indovina")
+# Il modale Capacita': tre tab, tre sezioni, e i nomi devono combaciare
+# fra loro. Un "cap-tab-cestino" senza "cap-sez-cestino" e' un pulsante
+# che non apre niente — lo stesso difetto delle Opzioni, in un posto
+# nuovo: qui si controlla prima che diventi un'abitudine.
+_CAP_TAB = re.findall(r'<button id="cap-tab-([a-z]+)"', _html)
+_CAP_SEZ = re.findall(r'<div id="cap-sez-([a-z]+)"', _html)
+check("le tab del modale sono tre", _CAP_TAB == ["skill", "cestino", "tool"],
+      str(_CAP_TAB))
+check("e ogni tab ha la sua sezione", _CAP_TAB == _CAP_SEZ,
+      f"tab {_CAP_TAB} / sezioni {_CAP_SEZ}")
+for _t in _CAP_TAB:
+    check(f"cap-tab-{_t} dichiara data-tab",
+          f'data-tab="{_t}"' in _html, _t)
+check("le skill non sono piu' una sezione di Opzioni",
+      'id="opz-sez-skill"' not in _html and 'id="opz-tab-skill"' not in _html)
+check("e nemmeno il cestino",
+      'id="opz-sez-cestino"' not in _html
+      and 'id="opz-tab-cestino"' not in _html)
+
 check("l'id della tab modello e' opz-tab-modello",
       'id="opz-tab-modello"' in _html,
       "usato dai check come opz-tab-modello: se qui c'e' un altro "

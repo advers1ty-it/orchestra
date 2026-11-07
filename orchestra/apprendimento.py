@@ -12,7 +12,7 @@ stato eseguito davvero (gli eventi `tool_start`/`tool_end` della traccia,
 accoppiati per id, tenendo solo quelli con esito ok). Se la stessa
 sequenza di comandi torna, si conta. Alla terza volta non si scrive una
 skill: si scrive una PROPOSTA, con le tre occorrenze come prove, e la si
-mostra in Opzioni -> Skill con due pulsanti. Il modello non decide cosa
+mostra nel pannello Capacita' (tab Skill) con due pulsanti. Il modello non decide cosa
 entra nel suo prompt; l'utente si'.
 
 Perche' contare e non scrivere subito: una procedura eseguita una volta

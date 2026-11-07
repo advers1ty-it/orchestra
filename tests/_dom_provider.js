@@ -40,6 +40,17 @@ globalThis.document = {
       }
     } else if (sel === ".opzioni-nav" || sel === "nav.opzioni-nav") {
       push(R["opzioni-nav"]);
+    } else if (sel === ".cap-tab" || sel === ".cap-tab.attiva") {
+      // Le tab del modale Capacita'. Anche qui i nomi sono quelli
+      // dell'HTML, e la classe decide chi e' attiva: senza questo
+      // ramo il probe vedeva zero tab e "quale sezione mostra" non
+      // aveva niente da leggere.
+      const vuoleAttiva = sel === ".cap-tab.attiva";
+      for (const id of Object.keys(R)) {
+        if (id.indexOf("cap-tab-") !== 0) continue;
+        const e = R[id];
+        if (e && e.classList.contains("attiva") === vuoleAttiva) push(e);
+      }
     }
     return out;
   },
@@ -168,6 +179,13 @@ function mk(tag) {
         const vuoleAttiva = sel === ".opzioni-tab.attiva";
         for (const id of SEZIONI_E_TAB) {
           if (id.indexOf("opz-tab-") !== 0) continue;
+          const e = R[id];
+          if (e && e.classList.contains("attiva") === vuoleAttiva) push(e);
+        }
+      } else if (sel === ".cap-tab" || sel === ".cap-tab.attiva") {
+        const vuoleAttiva = sel === ".cap-tab.attiva";
+        for (const id of Object.keys(R)) {
+          if (id.indexOf("cap-tab-") !== 0) continue;
           const e = R[id];
           if (e && e.classList.contains("attiva") === vuoleAttiva) push(e);
         }

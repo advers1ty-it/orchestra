@@ -3500,6 +3500,24 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                 break
             letti += len(pezzo)
 
+    def _scarta_corpo(self) -> None:
+        """Legge e butta il corpo di una richiesta che stiamo rifiutando.
+
+        Se si risponde e si chiude la connessione con il corpo ancora nel
+        socket, il client riceve una connessione interrotta invece del
+        messaggio. Succedeva sul 403 dell'origine e sul 429 del rate
+        limit: la spiegazione c'era, ma arrivava come guasto di rete — e
+        il test che doveva leggerla moriva a meta' con
+        ConnectionAbortedError, in modo intermittente, a seconda di
+        quanto il corpo era grande e di quanto in fretta si chiudeva.
+        """
+        try:
+            n = int(self.headers.get("Content-Length", "0") or 0)
+        except (TypeError, ValueError):
+            return
+        if n > 0:
+            self._consuma_corpo(min(n, MAX_ALLEGATO))
+
     def _need_session(self) -> Session | None:
         if not self.app.ready or self.app.session is None:
             self._json({"error": self.app.error or "server non pronto"}, 503)
@@ -3618,6 +3636,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         attesa = self._limite(chiave, massimo, finestra)
         if not attesa:
             return False
+        self._scarta_corpo()
         self._json({"error": "troppe richieste",
                     "riprova": int(attesa) + 1}, 429)
         return True
@@ -4004,6 +4023,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         # l'agente con una POST verso 127.0.0.1. Sta PRIMA di tutto,
         # perche' anche il login e' una POST.
         if not self._origine_ammessa():
+            self._scarta_corpo()
             self._json({"error": "origine non ammessa"}, 403)
             return
         ip = (self.client_address[0] or "") if self.client_address else ""

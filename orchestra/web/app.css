@@ -1180,7 +1180,17 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
    Modale centrato: è un posto dove si VA a guardare e da cui si esce,
    non una superficie di lavoro. Riusa .panel/.panel-box delle Opzioni. */
 
-.capacita-box { max-width: 720px; width: 92vw; }
+/* Piu' larga delle Opzioni: qui dentro c'e' una griglia di schede, e a
+   720px le skill diventano due colonne con i nomi spezzati. */
+.capacita-box { max-width: 940px; width: 94vw; }
+
+/* Le sezioni del modale: una per tab. Il pannello skill si porta dietro
+   i suoi margini da sezione di Opzioni (bordo in alto, spazio ai lati):
+   qui il bordo non separa piu' niente, la tab lo fa gia'. */
+.cap-sez { padding: 6px 14px 14px; }
+.cap-sez .opzioni-skill {
+  margin: 4px 0 0; padding: 0; border-top: none;
+}
 
 .capacita-nav {
   display: flex; gap: 6px;
@@ -1241,12 +1251,6 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   color: var(--muted); border: 1px solid var(--border);
   border-radius: 3px; padding: 0 5px; margin-left: 6px;
   vertical-align: 1px;
-}
-
-.cap-apri {
-  background: none; border: none; cursor: pointer;
-  color: var(--accent); font-size: 12px; flex-shrink: 0;
-  padding: 2px 0;
 }
 
 .cap-vuoto { padding: 14px; color: var(--muted); font-size: 13px; }

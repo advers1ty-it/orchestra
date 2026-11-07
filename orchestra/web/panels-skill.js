@@ -1,9 +1,10 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-skill")<0)window.__diagFiles.push("panels-skill");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-skill");}})();
 // ------------------------------------------------------------------ skill
 //
-// Il pannello skill in Opzioni.
+// Il pannello delle skill, dentro il modale Capacita'.
 //
-// Tre sezioni: quante sono, da dove vengono, e le due liste. Le generate
+// Sta qui e non nelle Opzioni perche' e' li' che si va a guardare: tre
+// sezioni — quante sono, da dove vengono, e le due liste. Le generate
 // sono separate dalle scaricate perche' non hanno la stessa affidabilita' —
 // una e' scritta da qualcun altro, l'altra e' un'affermazione dello stesso
 // agente che la usa, e tu devi poter distinguere le due cose.
@@ -47,7 +48,7 @@ async function caricaSkill() {
       disegnaSkill();
     }
   } catch (e) {
-    // Le skill non sono un requisito. Se questo fallisce, Opzioni si
+    // Le skill non sono un requisito. Se questo fallisce, il modale si
     // apre lo stesso e la sezione resta vuota: meglio un pannello
     // muto che un pannello che impedisce di cambiare modello.
     const r = $("skill-riepilogo");
@@ -532,10 +533,9 @@ collegaSkill();
 // sulle skill finirebbe svuotato a ogni passaggio.
 //
 // Il primo caricamento e' pigro. Aprire Opzioni non deve scaricare
-// l'indice di cento skill se poi vai solo a cambiare modello: si chiede
-// quando serve e si ricorda, cosi' la seconda volta e' gia' fatto.
-
-let sezioneSkillCaricata = false;
+// l'indice di cento skill se poi vai solo a cambiare modello: le skill
+// ora si chiedono all'apertura del modale Capacita', che e' il posto
+// dove le guardi.
 
 function mostraSezione(nome) {
   const sezioni = document.querySelectorAll(".opz-sez");
@@ -557,11 +557,6 @@ function mostraSezione(nome) {
   for (const t of tabs) {
     if (t.dataset.sez === nome) t.classList.add("attiva");
     else t.classList.remove("attiva");
-  }
-  // pigro: la prima volta che si arriva alle skill, si chiedono
-  if ((nome === "skill" || nome === "cestino") && !sezioneSkillCaricata) {
-    sezioneSkillCaricata = true;
-    caricaSkill();
   }
   // Storico e memoria idem: si caricano quando si aprono, non
   // all'avvio. Caricarli sempre aggiungerebbe due richieste a ogni

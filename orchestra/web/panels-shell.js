@@ -187,30 +187,10 @@ async function caricaSideSessioni() {
   }
 }
 
-function apriPaginaSkill(nome) {
-  // Pagina dedicata costruita col DOM. Il testo di una skill arriva da un
-  // file: scriverlo dentro una stringa concatenata lo farebbe interpretare
-  // come markup, mentre textContent lo mostra e basta.
-  fetch("/api/skill/file?nome=" + encodeURIComponent(nome))
-    .then(r => r.text())
-    .then(testo => {
-      const w = window.open("", "_blank", "width=820,height=640");
-      if (!w) {
-        if (sideMsg) { sideMsg.textContent = "il browser ha bloccato la finestra"; sideMsg.className = "small rosso side-msg"; }
-        return;
-      }
-      w.document.title = nome;
-      const h = w.document.createElement("h1");
-      h.textContent = nome;
-      const pre = w.document.createElement("pre");
-      pre.textContent = testo;
-      pre.style.whiteSpace = "pre-wrap";
-      w.document.body.replaceChildren(h, pre);
-    })
-    .catch(e => {
-      if (sideMsg) { sideMsg.textContent = "non riesco ad aprire la skill: " + e; sideMsg.className = "small rosso side-msg"; }
-    });
-}
+// La finestra che apriva una skill non c'e' piu': adesso "Apri" la mostra
+// dentro al modale Capacita', con il testo e gli allegati. Una seconda
+// finestra per una cosa che il modale sa gia' mostrare e' un modo per
+// perdere il segno di dove si era.
 
 const sideNuova = $("side-nuova");
 if (sideNuova) {
@@ -235,23 +215,56 @@ if (sideRicarica) sideRicarica.addEventListener("click", caricaSide);
 
 //
 // Modale, non pannello laterale: è un posto dove si VA a guardare e da
-// cui si esce. Due tab, skill e strumenti, dallo stesso endpoint.
+// cui si esce.
+//
+// Tre tab ma due sorgenti. Le skill hanno una vita propria — importa,
+// accetta, scarta, cestina, rimetti — e il loro codice sta in
+// panels-skill.js: qui si apre la porta, non si riscrive il pannello.
+// Gli strumenti arrivano da /api/capacita e si leggono soltanto.
+//
+// Le skill stavano anche in Opzioni, con lo stesso elenco in un altro
+// formato: qui una lista di nomi con un "apri" che apriva una finestra,
+// là il pannello vero. Due elenchi della stessa cosa mentono appena
+// divergono, quindi il pannello vero adesso è qui, accanto al cestino e
+// alle proposte, e le Opzioni non ne parlano più.
 
 const capacita = $("capacita");
 const capLista = $("cap-lista");
 const capFiltro = $("cap-filtro");
 const capMsg = $("cap-msg");
 let capTab = "skill";
-let capDati = { skill: [], tool: [] };
+let capTool = [];
 
 function apriCapacita() {
   if (!capacita) return;
   capacita.classList.remove("hidden");
-  if (!capDati.skill.length && !capDati.tool.length) caricaCapacita();
+  mostraCapTab(capTab);
+  // Le skill si rileggono a ogni apertura: l'agente propone una
+  // procedura mentre il modale è chiuso, e una lista vecchia qui è
+  // esattamente il punto in cui non si nota.
+  if (typeof caricaSkill === "function") caricaSkill();
 }
 
 function chiudiCapacita() {
   if (capacita) capacita.classList.add("hidden");
+}
+
+// Una tab per volta, come le sezioni di Opzioni. Il caricamento segue
+// la tab: gli strumenti si chiedono quando li guardi, non prima.
+function mostraCapTab(t) {
+  capTab = t;
+  for (const u of ["skill", "cestino", "tool"]) {
+    const sez = $("cap-sez-" + u);
+    // hidden è l'attributo, non lo stile: è quello che il DOM dei test
+    // rispetta, ed è quello che usa anche l'accessibilità.
+    if (sez) {
+      if (u === t) sez.removeAttribute("hidden");
+      else sez.setAttribute("hidden", "");
+    }
+    const b = $("cap-tab-" + u);
+    if (b) b.classList.toggle("attiva", u === t);
+  }
+  if (t === "tool") caricaStrumenti();
 }
 
 // Il bottone che apre Capacita' e' il "side-cap" nella sidebar, agganciato
@@ -262,22 +275,14 @@ function chiudiCapacita() {
 const capClose = $("capacita-close");
 if (capClose) capClose.addEventListener("click", chiudiCapacita);
 
-// Due tab, un solo elenco: il clic cambia la sorgente e ridisegna.
-for (const t of ["skill", "tool"]) {
+for (const t of ["skill", "cestino", "tool"]) {
   const b = $("cap-tab-" + t);
-  if (b) b.addEventListener("click", () => {
-    capTab = t;
-    for (const u of ["skill", "tool"]) {
-      const bu = $("cap-tab-" + u);
-      if (bu) bu.classList.toggle("attiva", u === t);
-    }
-    disegnaCapacita();
-  });
+  if (b) b.addEventListener("click", () => mostraCapTab(t));
 }
 
-if (capFiltro) capFiltro.addEventListener("input", disegnaCapacita);
+if (capFiltro) capFiltro.addEventListener("input", disegnaStrumenti);
 
-async function caricaCapacita() {
+async function caricaStrumenti() {
   if (capMsg) { capMsg.textContent = "caricamento..."; capMsg.className = "small dim"; }
   try {
     const r = await fetch("/api/capacita");
@@ -286,10 +291,12 @@ async function caricaCapacita() {
       if (capMsg) { capMsg.textContent = d.error || ("errore " + r.status); capMsg.className = "small rosso"; }
       return;
     }
-    capDati = { skill: d.skill || [], tool: d.tool || [] };
-    disegnaCapacita();
+    capTool = d.tool || [];
+    disegnaStrumenti();
     if (capMsg) {
-      capMsg.textContent = `${capDati.skill.length} skill, ${capDati.tool.length} strumenti`;
+      capMsg.textContent = capTool.length === 1
+        ? "1 strumento"
+        : capTool.length + " strumenti";
       capMsg.className = "small dim";
     }
   } catch (e) {
@@ -297,20 +304,20 @@ async function caricaCapacita() {
   }
 }
 
-function disegnaCapacita() {
+function disegnaStrumenti() {
   if (!capLista) return;
   const q = ((capFiltro && capFiltro.value) || "").toLowerCase().trim();
-  const tutti = capDati[capTab] || [];
   const visti = q
-    ? tutti.filter(x => (x.nome || "").toLowerCase().includes(q)
-                   || (x.descrizione || "").toLowerCase().includes(q))
-    : tutti;
+    ? capTool.filter(x => (x.nome || "").toLowerCase().includes(q)
+                     || (x.descrizione || "").toLowerCase().includes(q))
+    : capTool;
 
   capLista.replaceChildren();
   if (!visti.length) {
     const p = document.createElement("p");
     p.className = "cap-vuoto";
-    p.textContent = q ? "Nessun risultato per questo filtro." : "Non c'è niente da mostrare.";
+    p.textContent = q ? "Nessun risultato per questo filtro."
+                      : "Non c'è niente da mostrare.";
     capLista.appendChild(p);
     return;
   }
@@ -338,22 +345,11 @@ function disegnaCapacita() {
       corpo.appendChild(desc);
     }
     riga.appendChild(corpo);
-
-    // Solo le skill hanno una pagina da aprire: un tool è una funzione
-    // che chiama l'agente, non un documento da leggere.
-    if (capTab === "skill") {
-      const apri = document.createElement("button");
-      apri.className = "cap-apri";
-      apri.textContent = "apri";
-      apri.addEventListener("click", () => apriPaginaSkill(x.nome));
-      riga.appendChild(apri);
-    }
-
     capLista.appendChild(riga);
   }
 }
 
-// Dalla sidebar si apre la stessa pagina, non una seconda finestra.
+// Dalla sidebar si apre lo stesso modale, non una seconda finestra.
 const sideCap = $("side-cap");
 if (sideCap) sideCap.addEventListener("click", () => apriCapacita());
 

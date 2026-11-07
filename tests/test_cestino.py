@@ -150,9 +150,12 @@ check("e non piu' righe", "function skillRiga(" not in js)
 check("la descrizione sta su due righe", "line-clamp" in css,
       "senza, le schede hanno altezze diverse")
 
-print("\n[7] Il cestino e' una sezione, e si arriva")
-check("la tab esiste", 'id="opz-tab-cestino"' in html)
-check("la sezione esiste", 'id="opz-sez-cestino"' in html)
+print("\n[7] Il cestino e' una tab del modale Capacita', e si arriva")
+check("la tab esiste", 'id="cap-tab-cestino"' in html)
+check("la sezione esiste", 'id="cap-sez-cestino"' in html)
+check("e non e' piu' una voce di Opzioni",
+      'id="opz-tab-cestino"' not in html
+      and 'id="opz-sez-cestino"' not in html)
 check("il pulsante svuota c'e'", 'id="skill-svuota"' in html)
 check("il contenitore del cestino c'e'", 'id="skill-cestino"' in html)
 check("la funzione che costruisce la scheda esiste",

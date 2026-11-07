@@ -1714,8 +1714,8 @@ class Session:
         """Conta la procedura di questo turno, e alla terza volta la propone.
 
         Non scrive una skill: scrive una proposta con le sue prove, che
-        compare in Opzioni -> Skill con due pulsanti. Il modello non
-        decide cosa entra nel suo prompt — una procedura sbagliata nel
+        compare nel pannello Capacita' (tab Skill) con due pulsanti.
+        Il modello non decide cosa entra nel suo prompt — una procedura sbagliata nel
         prompt non e' un errore visibile, e' un'istruzione seguita.
 
         Solo i turni finiti bene: un turno annullato, fermato dal budget

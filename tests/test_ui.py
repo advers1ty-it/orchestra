@@ -292,16 +292,19 @@ globalThis.document = {
   // mette una volta sola, cosi' il prossimo test che costruisce un
   // document non deve ricordarsene.
   querySelectorAll(sel) {
+    const OPZIONI_SEZ = ["modello", "identita", "budget", "servizi",
+                         "permessi", "gratis", "diagnosi", "remoto",
+                         "autostart", "bot", "benchmark"];
     const out = [];
     const push = (e) => { if (e && out.indexOf(e) < 0) out.push(e); };
     const R = Object.assign({}, globalThis.REG || {},
                             globalThis.document && globalThis.document._els || {});
     if (typeof sel !== "string") return out;
     if (sel.indexOf("opz-sez") >= 0 || sel.indexOf("section") === 0) {
-      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+      OPZIONI_SEZ
         .forEach((n) => push(R["opz-sez-" + n]));
     } else if (sel.indexOf("opzioni-tab") >= 0 || sel.indexOf("button") === 0) {
-      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+      OPZIONI_SEZ
         .forEach((n) => push(R["opz-tab-" + n]));
     } else if (sel.indexOf("opzioni-nav") >= 0) {
       push(R["opzioni-nav"]);

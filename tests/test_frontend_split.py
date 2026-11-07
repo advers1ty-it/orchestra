@@ -224,7 +224,12 @@ IDS.forEach(function (id) {
 // collegaSezioni() muore e i pulsanti di Opzioni restano scollegati.
 // Il bundle e' servito col try/catch, quindi il fallimento non si
 // vede: la pagina sembra funzionante e i tab non cambiano sezione.
-["modello", "skill", "cestino", "servizi", "permessi", "gratis"].forEach(
+// Le sezioni di Opzioni. Skill e cestino non ci sono piu': sono tab del
+// modale Capacita', dove il pannello vero e' sempre stato.
+globalThis.SEZIONI_OPZIONI = ["modello", "identita", "budget", "servizi",
+                              "permessi", "gratis", "diagnosi", "remoto",
+                              "autostart", "bot", "benchmark"];
+SEZIONI_OPZIONI.forEach(
   function (n) {
     const sez = mkEl("section");
     sez.dataset = { sez: n };
@@ -243,10 +248,10 @@ globalThis.document = {
     const out = [];
     const push = function (e) { if (e && out.indexOf(e) < 0) out.push(e); };
     if (sel === ".opz-sez" || sel === "section.opz-sez") {
-      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+      SEZIONI_OPZIONI
         .forEach(function (n) { push(REG["opz-sez-" + n]); });
     } else if (sel === ".opzioni-tab" || sel === "button.opzioni-tab") {
-      ["modello", "skill", "cestino", "servizi", "permessi", "gratis"]
+      SEZIONI_OPZIONI
         .forEach(function (n) { push(REG["opz-tab-" + n]); });
     } else if (sel === ".opzioni-nav" || sel === "nav.opzioni-nav") {
       push(REG["opzioni-nav"]);
