@@ -878,7 +878,19 @@ class OrchestraApp:
             f"uso '{sostituto}'. Cambialo dal menu in alto."
         )
 
-    def switch_model(self, model_id: str) -> None:
+    def _catalogo_scelto(self, provider: str) -> Any:
+        """Il catalogo di un servizio, se e' gia' stato letto.
+
+        Senza rete: validare un id scaricando quattrocento modelli mentre
+        si tocca un pulsante e' un pulsante che sembra rotto. Se il
+        catalogo non c'e' torna None, e chi chiama non rifiuta niente:
+        "non lo so" e' diverso da "non esiste".
+        """
+        cache = getattr(self, "_catalog_per_provider", None) or {}
+        return cache.get(provider)
+
+    def switch_model(self, model_id: str, *, provider: str | None = None,
+                     agente_principale: bool = False) -> None:
         """Cambia il modello dell'agent in uso.
 
         Solleva RuntimeError se l'agente sta lavorando: cambiarlo a metà
@@ -890,32 +902,53 @@ class OrchestraApp:
         prima chiamata, con un errore che sembra un problema di rete. Un
         id sbagliato in una select non è un errore plausibile da accettare
         in silenzio.
+
+        `provider` serve al menu di Telegram, che fa scegliere PRIMA il
+        servizio e poi il modello: il modello da solo non basta, perché
+        quasi nessun id sopravvive al cambio di servizio, e applicarlo al
+        servizio di prima costruisce un client che chiama un modello che
+        lì non esiste. `agente_principale` dice che la scelta è di chi non
+        ha una riga nella tabella dei bot: senza, un tocco su Telegram
+        finirebbe sul bot selezionato nel pannello invece che sull'agente
+        che ha ricevuto il comando.
         """
+        provider = (provider or "").strip() or None
         if self.session is None:
             # Senza sessione non c'e' nulla da aggiornare live: si valida
             # contro il catalogo (se c'e') e si registra la scelta, che
             # la sessione usera' quando nascera'.
-            cat = self.catalog
+            cat = self._catalogo_scelto(provider) if provider else self.catalog
             if cat is not None and cat.models and model_id not in cat.models:
                 raise ValueError(
                     f"modello sconosciuto: {model_id}. "
                     f"Disponibili: {', '.join(sorted(cat.models)[:5])}…"
                 )
-            self.env["ORCHESTRA_MODEL"] = model_id
             from . import keys as keys_mod
+            if provider:
+                self.env["ORCHESTRA_PROVIDER"] = provider
+                keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider)
+            self.env["ORCHESTRA_MODEL"] = model_id
             keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
             return
         if self.session.busy:
             raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
 
-        bot = self.bot_attivo()
+        bot = None if agente_principale else self.bot_attivo()
         # Il catalogo e' quello del provider dell'APPLICAZIONE. Se il bot
         # usa un provider diverso, il suo modello non c'e' dentro: rifiutarlo
         # sarebbe un errore inventato dal catalogo sbagliato.
-        provider_name = ((bot or {}).get("provider")
+        provider_name = (provider
+                         or (bot or {}).get("provider")
                          or self.env.get("ORCHESTRA_PROVIDER", "openrouter"))
-        cat = self.catalog
-        if (not bot or provider_name == self.env.get("ORCHESTRA_PROVIDER")) \
+        cat = self._catalogo_scelto(provider) if provider else self.catalog
+        if provider is not None and cat is not None and cat.models \
+                and model_id not in cat.models:
+            raise ValueError(
+                f"modello sconosciuto su {provider}: {model_id}. "
+                f"Disponibili: {', '.join(sorted(cat.models)[:5])}…"
+            )
+        if provider is None \
+                and (not bot or provider_name == self.env.get("ORCHESTRA_PROVIDER")) \
                 and cat is not None and cat.models \
                 and model_id not in cat.models:
             raise ValueError(
@@ -935,7 +968,9 @@ class OrchestraApp:
             # successivo nascerebbe col modello sbagliato.
             from . import bots as bots_mod
             try:
-                bots_mod.aggiorna(bot["id"], modello=model_id)
+                bots_mod.aggiorna(
+                    bot["id"], modello=model_id,
+                    **({"provider": provider_name} if provider else {}))
             except Exception:  # noqa: BLE001
                 pass
             rt = self._bots_runtime.get(int(bot["id"]))
@@ -945,6 +980,13 @@ class OrchestraApp:
             self.env["ORCHESTRA_MODEL"] = model_id
             from . import keys as keys_mod
             keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
+            # Il servizio va salvato insieme al modello. Senza, al riavvio
+            # il vecchio servizio ricostruirebbe il provider con un id che
+            # il suo catalogo non ha, e il modello "scelto" non partirebbe
+            # mai: è lo stesso errore del menu che cambia solo il modello.
+            if provider:
+                self.env["ORCHESTRA_PROVIDER"] = provider
+                keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider)
         # La catena di fallback va RICOSTRUITA sul nuovo modello. Senza,
         # la prima entry continua a puntare al modello di prima: quello
         # morto o inesistente viene chiamato per primo, risponde 404/410,
@@ -988,6 +1030,15 @@ class OrchestraApp:
             modello = model_id or self.env.get("ORCHESTRA_MODEL", "")
             cat = self.catalog
             prof = cat.models.get(modello) if cat is not None else None
+            if prof is None:
+                # Il modello puo' essere di un altro servizio: il menu di
+                # Telegram fa scegliere prima il servizio. Il catalogo
+                # giusto e' quello gia' letto per quel servizio, non una
+                # fetch nuova dentro il tocco di un pulsante.
+                altro = self._catalogo_scelto(
+                    self.env.get("ORCHESTRA_PROVIDER") or "")
+                prof = (altro.models.get(modello)
+                        if altro is not None else None)
             finestra = prof.info.context_length if prof is not None else 0
             if finestra and finestra > 0:
                 limite = int(finestra * 0.75)
@@ -1974,6 +2025,15 @@ class OrchestraApp:
                     "finestra sul computer, poi riprova.")
         if sess.busy:
             return "Sto ancora lavorando al messaggio precedente."
+        # Una foto a un modello che non legge le immagini non dà un
+        # errore: il modello risponde lo stesso, su qualcosa che non ha
+        # visto. Meglio dirlo subito che far credere di aver guardato.
+        if any(getattr(a, "immagini", None) for a in (allegati or [])):
+            if self.modello_legge_immagini(sess) is False:
+                return (f"{sess.modello_in_uso()} non legge le immagini: la "
+                        "foto non l'avrebbe vista. Scegli da /modello un "
+                        "modello con la vista, oppure scrivimi cosa c'e' "
+                        "nella foto.")
         # La sottoscrizione avviene prima di `send`: iscriversi dopo
         # vorrebbe dire perdere il primo pezzo di ragionamento, che e'
         # proprio quello che si vuole mostrare.
@@ -2286,6 +2346,45 @@ class OrchestraApp:
             return "Troppo tardi: la domanda e' scaduta."
         return "Risposta inviata."
 
+    def modello_legge_immagini(self, sess: Any = None) -> bool | None:
+        """Se il modello in uso legge le immagini, secondo il catalogo.
+
+        None vuol dire "il catalogo non lo sa": un modello che non c'e'
+        nella lista non e' un modello che non vede, e bloccarlo sarebbe
+        un errore inventato. True/False invece sono un fatto dichiarato
+        dal servizio, e vanno usati: mandare una foto a un modello
+        text-only non produce un errore, produce una risposta su qualcosa
+        che il modello non ha mai visto.
+
+        Si guarda la sessione e non la variabile d'ambiente: un bot ha
+        un modello suo, e la foto parte dalla chat di quel bot.
+        """
+        modello = ""
+        try:
+            if sess is not None:
+                modello = (sess.modello_in_uso() or "").strip()
+        except Exception:  # noqa: BLE001
+            modello = ""
+        modello = modello or str((self.env or {}).get("ORCHESTRA_MODEL") or "")
+        cataloghi = []
+        try:
+            cat = self.catalog
+        except Exception:  # noqa: BLE001
+            cat = None
+        if cat is not None:
+            cataloghi.append(cat)
+        # Un bot puo' usare un altro servizio: il suo modello non e' nel
+        # catalogo dell'applicazione, ma in quello gia' letto per quel
+        # servizio quando il menu lo ha mostrato.
+        cataloghi.extend(
+            (getattr(self, "_catalog_per_provider", None) or {}).values())
+        for catalogo in cataloghi:
+            prof = getattr(catalogo, "models", {}).get(modello)
+            info = getattr(prof, "info", None)
+            if info is not None and hasattr(info, "supports_vision"):
+                return bool(info.supports_vision)
+        return None
+
     def _telegram_stato_bot(self, b: dict[str, Any], sess: Any) -> str:
         provider, _configurato = self._bot_provider_modello(b)
         righe = [f"{b.get('nome')} · {provider}",
@@ -2328,7 +2427,19 @@ class OrchestraApp:
         return self._telegram_salva_modello(b, scelto, bool(modelli))
 
     def _telegram_salva_modello(self, b: dict[str, Any], scelto: str,
-                                verificato: bool) -> str:
+                                verificato: bool,
+                                provider: str | None = None) -> str:
+        """Salva modello e servizio, e butta la sessione nata col vecchio.
+
+        `provider` e' il servizio su cui l'utente ha toccato il modello.
+        Non e' un dettaglio: quasi nessun id sopravvive al cambio di
+        servizio, e salvando solo il modello la sessione successiva lo
+        chiedeva al servizio di prima — quindi o non partiva, o ripiegava
+        su un altro modello. Il menu diceva "modello cambiato" e /stato
+        mostrava quello di prima: le due cose erano entrambe vere, ed e'
+        esattamente il difetto che si vedeva.
+        """
+        provider = (provider or "").strip() or None
         sess = self._sessione_bot(b)
         if sess is None:
             return "Orchestra non ha una sessione aperta: apri la finestra."
@@ -2337,23 +2448,27 @@ class OrchestraApp:
         from . import bots as bots_mod
 
         avviso = "" if verificato else " (non ho potuto verificare il nome)"
+        dove = f" ({self._telegram_nome_servizio(provider)})" if provider else ""
         if int(b["id"]) == bots_mod.BASE_ID:
             # L'agente principale non ha una riga nella tabella dei bot: il
             # modello si cambia dove si cambia sempre, cioe' sulla sessione.
             try:
-                self.switch_model(scelto)
+                self.switch_model(scelto, provider=provider,
+                                  agente_principale=True)
             except Exception as e:  # noqa: BLE001
                 return f"Non ho cambiato il modello: {e}"
-            return (f"Modello cambiato in {scelto}{avviso}. Vale dalla "
+            return (f"Modello cambiato in {scelto}{dove}{avviso}. Vale dalla "
                     "prossima richiesta, anche da qui.")
-        if not bots_mod.aggiorna(b["id"], modello=scelto):
+        if not bots_mod.aggiorna(
+                b["id"], modello=scelto,
+                **({"provider": provider} if provider else {})):
             return "Non sono riuscito a salvare il modello."
         # La sessione in memoria e' nata col modello vecchio: si butta, e
         # il prossimo messaggio ne crea una nuova. La conversazione non
         # si perde, si ricarica dallo storico.
         runtime = getattr(self, "_bots_runtime", None) or {}
         runtime.pop(int(b["id"]), None)
-        return (f"Modello cambiato in {scelto}{avviso}. Da adesso questo "
+        return (f"Modello cambiato in {scelto}{dove}{avviso}. Da adesso questo "
                 "bot usa un modello suo, e vale dal prossimo messaggio.")
 
     def _telegram_servizi(self, attuale: str) -> list[tuple[str, str]]:
@@ -2467,7 +2582,8 @@ class OrchestraApp:
             except (ValueError, IndexError):
                 return ("Quel modello non e' piu' nell'elenco: riscrivi "
                         "/modello.")
-            return self._telegram_salva_modello(b, scelto, True)
+            return self._telegram_salva_modello(b, scelto, True,
+                                                provider=parti[0])
 
         servizi = self._telegram_servizi(provider)
         if len(servizi) == 1:
@@ -4019,10 +4135,12 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                                  "del turno o annulla"}, 409)
             return
         if any(a.immagini for a in allegati):
-            cat = self.app.catalog
-            modello = self.app.env.get("ORCHESTRA_MODEL", "")
-            profilo = cat.models.get(modello) if cat is not None else None
-            if profilo is not None and profilo.info.supports_vision is False:
+            # Il modello e' quello della sessione, non quello dell'app: con
+            # un bot attivo sono due cose diverse, e il controllo fatto
+            # sulla variabile d'ambiente lasciava passare un'immagine a un
+            # bot che non la legge.
+            if self.app.modello_legge_immagini(s) is False:
+                modello = s.modello_in_uso()
                 self._json({
                     "error": f"{modello} non legge le immagini. "
                              f"Cambia modello dal menu in alto, o allega "

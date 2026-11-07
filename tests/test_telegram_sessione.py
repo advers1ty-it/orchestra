@@ -352,6 +352,64 @@ check("senza incollare tutto il ragionamento",
       "pensa:" in insieme and all(len(t) < 600 for t in testi),
       str([len(t) for t in testi]))
 
+print("\n[21] il servizio scelto nel menu /modello non si perde per strada")
+# Il menu fa scegliere PRIMA il servizio e POI il modello, e il difetto
+# era proprio qui: si salvava il modello e non il servizio, quindi il
+# "modello cambiato" era vero e /stato mostrava quello di prima, perche'
+# la sessione successiva lo chiedeva al servizio vecchio (dove quell'id
+# non esiste) e ripiegava su un altro. Due cose vere, e nessuna delle due
+# era quello che l'utente aveva chiesto.
+app.telegram_modelli = lambda _p: ["flint-v1.0:free", "gpt-4o"]
+esito_servizio = app.telegram_comando(bot["id"], "modello",
+                                      "cb:m:groq:0")
+salvato = bots_mod.per_id(bot["id"]) or {}
+check("il servizio toccato prima del modello resta",
+      salvato.get("provider") == "groq", str(salvato.get("provider")))
+check("e il modello salvato e' quello di quel servizio",
+      salvato.get("modello") == "flint-v1.0:free",
+      str(salvato.get("modello")))
+check("la conferma dice anche su quale servizio",
+      "groq" in esito_servizio.lower(), cp(esito_servizio))
+bots_mod.aggiorna(bot["id"], modello=sess.modello)
+
+print("\n[22] una foto a un modello che non la legge non parte")
+# Flint e' text-only: dichiarato dal servizio, scritto nel catalogo. Da
+# Telegram il controllo non c'era, quindi la foto partiva lo stesso e il
+# modello rispondeva con sicurezza a una domanda su un'immagine che non
+# aveva ricevuto.
+from types import SimpleNamespace  # noqa: E402
+
+
+class CatalogoVisione:
+    def __init__(self):
+        self.models = {
+            "cieco": SimpleNamespace(
+                info=SimpleNamespace(supports_vision=False)),
+            "vede": SimpleNamespace(
+                info=SimpleNamespace(supports_vision=True)),
+            "boh": object(),  # il catalogo non dichiara niente
+        }
+
+
+app._carica_catalogo = lambda forza=False: CatalogoVisione()
+sess.modello = "cieco"
+mandati = []
+sess.send = lambda *_a, **_k: mandati.append(1) or True
+allegato_foto = SimpleNamespace(immagini=["data:image/jpeg;base64,AAAA"])
+rifiuto = app.telegram_turno(bot["id"], "cosa vedi?", [allegato_foto])
+check("un modello senza vista lo dice invece di indovinare",
+      isinstance(rifiuto, str) and "non legge le immagini" in rifiuto,
+      cp(str(rifiuto)))
+check("e non manda il turno", mandati == [], str(len(mandati)))
+check("il catalogo sa che un altro modello le legge",
+      app.modello_legge_immagini(SimpleNamespace(
+          modello_in_uso=lambda: "vede")) is True)
+check("un modello che il catalogo non conosce non si blocca",
+      app.modello_legge_immagini(SimpleNamespace(
+          modello_in_uso=lambda: "boh")) is None)
+check("senza immagini il controllo non c'entra",
+      app.modello_legge_immagini(sess) is False)
+
 print("\n[9] un turno fermato non produce una risposta finta")
 app, sess = app_finta()
 
@@ -680,10 +738,12 @@ check("e la sessione sa di essere la 0", sess0.bot_id == 0,
       str(getattr(sess0, "bot_id", None)))
 
 scelti = []
-app0.switch_model = lambda m: scelti.append(m)
+app0.switch_model = lambda m, **kw: scelti.append((m, kw))
 esito = app0.telegram_comando(0, "modello", "gpt-4o")
 check("cambiare modello all'agente principale passa dal cambio vero",
-      scelti == ["gpt-4o"], str(scelti))
+      [m for m, _kw in scelti] == ["gpt-4o"], str(scelti))
+check("e dice di essere l'agente principale, non il bot del pannello",
+      scelti and scelti[0][1].get("agente_principale") is True, str(scelti))
 check("e lo dice senza parlare di bot", "bot" not in esito.lower()
       or "agente principale" in esito.lower(), cp(esito))
 
