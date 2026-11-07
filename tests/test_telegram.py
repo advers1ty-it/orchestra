@@ -585,6 +585,61 @@ check("sempre sullo stesso messaggio",
       finto.modifiche[-1][0] == 1, str(finto.modifiche))
 tg.PRIMO_AVVISO, tg.INTERVALLO_PROGRESSO = primo_vero, intervallo_vero
 
+print("\n[18b] le azioni sono messaggi nuovi, e restano")
+primo_vero, intervallo_vero = tg.PRIMO_AVVISO, tg.INTERVALLO_PROGRESSO
+azione_vera = tg.INTERVALLO_AZIONE
+tg.PRIMO_AVVISO, tg.INTERVALLO_PROGRESSO, tg.INTERVALLO_AZIONE = 0.0, 10.0, 0.0
+
+
+def turno_con_azioni(_testo, _allegati=None, avanzamento=None):
+    avanzamento("sto leggendo i test", "\U0001f6e0 bash \u00b7 pytest")
+    avanzamento("sto leggendo i test, ancora",
+               "\U0001f6e0 read \u00b7 orchestra/app.py")
+    return "fatto"
+
+
+finto = FintoTelegram()
+p, _chiamate = ponte(finto, turno=turno_con_azioni)
+p.passo()
+finto.messaggio(555, "lavora")
+p.passo()
+p.aspetta()
+testi = finto.testi()
+# Il segno del tool e' un'emoji: nei confronti si toglie, perche' la
+# console di Windows non sa stamparla (cp1252).
+segno = "\U0001f6e0 "
+azioni = [t for t in testi if t.startswith(segno)]
+check("ogni azione e' un messaggio suo",
+      sum(1 for t in azioni if "pytest" in t) == 1
+      and sum(1 for t in azioni if "app.py" in t) == 1,
+      str([t.replace(segno, "") for t in azioni]))
+check("e le azioni restano in chat", len(azioni) == 2,
+      str([t.replace(segno, "") for t in azioni]))
+check("il pensiero non le porta con se' nel messaggio riscritto",
+      finto.modifiche == [], str(finto.modifiche))
+check("la sintesi sparisce, le azioni no",
+      len(finto.cancellati) == 1 and len(azioni) == 2,
+      f"cancellati={finto.cancellati} azioni={len(azioni)}")
+check("la risposta resta l'ultima cosa", testi[-1] == "fatto",
+      str(testi[-1]))
+
+# Due azioni partite insieme e un turno che finisce subito: la coda
+# non si perde, e non diventa una raffica di messaggi.
+tg.INTERVALLO_AZIONE = 10.0
+
+finto = FintoTelegram()
+p, _chiamate = ponte(finto, turno=turno_con_azioni)
+p.passo()
+finto.messaggio(555, "lavora")
+p.passo()
+p.aspetta()
+azioni = [t for t in finto.testi() if t.startswith(segno)]
+check("le azioni rimaste in coda partono insieme",
+      len(azioni) == 1 and "pytest" in azioni[0] and "app.py" in azioni[0],
+      str([t.replace(segno, "") for t in azioni]))
+tg.PRIMO_AVVISO, tg.INTERVALLO_PROGRESSO = primo_vero, intervallo_vero
+tg.INTERVALLO_AZIONE = azione_vera
+
 print("\n[19] un messaggio durante un turno e' una guida")
 in_corso = threading.Event()
 partito = threading.Event()
@@ -899,6 +954,61 @@ tg.salva_token(99, TOKEN)
 quanti = tg.pulisci(bot_validi=[])
 check("un collegamento senza bot viene tolto", quanti >= 1, str(quanti))
 check("e il token sparisce con lui", tg.token_di(99) == "")
+
+print("\n[26] il vocale: i campioni li decodifica Orchestra")
+# faster-whisper 1.2.1 chiama av.open(metadata_errors=...), che PyAV 19
+# ha tolto: ogni vocale moriva su un TypeError che non dipendeva dal
+# file. Ora l'audio lo apriamo noi, senza quel parametro, e al modello
+# arrivano campioni gia' decodificati (che non passano da quel codice).
+import struct  # noqa: E402
+import tempfile  # noqa: E402
+import wave  # noqa: E402
+
+ha_av = True
+try:
+    import av  # noqa: F401
+    import numpy  # noqa: F401
+except Exception:  # noqa: BLE001
+    ha_av = False
+
+if not ha_av:
+    print("  --   av/numpy assenti: la decodifica non e' verificabile qui")
+else:
+    cartella_voce = tempfile.mkdtemp(prefix="orch_stt_")
+    percorso_voce = os.path.join(cartella_voce, "voce.wav")
+    with wave.open(percorso_voce, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"".join(struct.pack("<h", (i % 200) - 100)
+                               for i in range(16000)))
+    campioni = stt._campioni(percorso_voce)
+    check("un secondo di audio sono 16000 campioni float32",
+          len(campioni) == 16000 and str(campioni.dtype) == "float32",
+          f"{len(campioni)} {campioni.dtype}")
+
+    class ModelloFinto:
+        sorgente = None
+
+        def transcribe(self, sorgente, **_kw):
+            self.sorgente = sorgente
+            return [], None
+
+    modello = ModelloFinto()
+    disponibile_vero = stt.disponibile
+    modello_vero = stt._modello
+    stt.disponibile = lambda: True
+    stt._modello = lambda: modello
+    try:
+        with open(percorso_voce, "rb") as f:
+            dati_voce = f.read()
+        stt.trascrivi(dati_voce, "voce.wav")
+    finally:
+        stt.disponibile = disponibile_vero
+        stt._modello = modello_vero
+    check("al modello arrivano campioni, non un percorso da riaprire",
+          not isinstance(modello.sorgente, (str, bytes)),
+          type(modello.sorgente).__name__)
 
 print()
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")

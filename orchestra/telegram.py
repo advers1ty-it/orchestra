@@ -90,6 +90,14 @@ INTERVALLO_ERRORE = 10.0
 PRIMO_AVVISO = 1.5
 INTERVALLO_PROGRESSO = 2.5
 
+# Le azioni (un tool che parte) sono un'altra cosa dal pensiero: sono
+# quello che uno vuole vedere, e ognuna resta in chat come messaggio
+# suo. Due limiti tengono la chat leggibile: non piu' di una raffica
+# al secondo, e un tetto per turno — oltre, la cronaca diventa un muro
+# e la risposta finisce fuori schermo.
+INTERVALLO_AZIONE = 1.0
+MAX_AZIONI = 20
+
 # Il tetto del Bot API per `getFile`. Oltre, il file non si scarica
 # nemmeno: dirlo prima evita un errore di rete che sembra un guasto.
 MASSIMO_FILE = 20 * 1024 * 1024
@@ -1008,11 +1016,12 @@ class Ponte:
     Tre cose che questo modulo non sa fare, e che arrivano da fuori:
 
     `turno(testo, allegati, avanzamento)` esegue la richiesta e torna la
-    risposta. `avanzamento` e' una funzione che il turno chiama quando ha
-    qualcosa da raccontare ("sto leggendo i test, giro 2"): il ponte
-    decide se vale la pena dirlo a Telegram, perche' le modifiche di un
-    messaggio sono limitate e un aggiornamento per token servirebbe solo
-    a far buttare via tutti gli altri.
+    risposta. `avanzamento(testo, azione=None)` e' una funzione che il
+    turno chiama quando ha qualcosa da raccontare: `testo` e' la riga di
+    sintesi ("sto leggendo i test, giro 2"), `azione` e' un passo
+    concreto appena partito ("bash · pytest"). Il ponte manda le azioni
+    come messaggi nuovi, che restano, e tiene il testo in un messaggio
+    solo che si riscrive e sparisce alla fine.
 
     `comandi(nome, argomento)` fa steer, stop, nuova, modello, stato.
     Sta fuori perche' quelle cose riguardano la sessione, non la chat:
@@ -1614,19 +1623,56 @@ class Ponte:
         return testo
 
     # --- il messaggio di stato -------------------------------------
-    def _avanzatore(self, chat_id: str) -> Callable[[str], None]:
+    def _avanzatore(self, chat_id: str) -> Callable[..., None]:
         """La funzione che il turno chiama per dire come sta andando.
 
-        Un messaggio solo, che cambia. Mandarne uno nuovo a ogni passo
-        riempirebbe la chat di righe morte che nessuno rilegge, e la
-        risposta vera finirebbe in fondo a dieci righe di cronaca.
+        Due cose diverse, due destini diversi. Il *pensiero* e' una riga
+        sola che si riscrive e alla fine sparisce: nessuno rilegge la
+        coda del ragionamento, e lasciarla li' seppellisce la risposta.
+        Le *azioni* invece sono la cronaca: ogni tool che parte e' un
+        messaggio nuovo, e resta. Prima anche quelle finivano dentro il
+        messaggio riscritto, quindi si vedeva che qualcosa cambiava ma
+        non cosa era stato fatto.
         """
         stato: dict[str, Any] = {"chat": chat_id, "id": 0,
                                  "inizio": time.monotonic(),
-                                 "ultimo": 0.0, "testo": ""}
+                                 "ultimo": 0.0, "testo": "",
+                                 "azioni": 0, "ultima_azione": 0.0,
+                                 "prima_pendente": 0.0, "pendenti": []}
         self._stato_progresso = stato
 
-        def aggiorna(testo: str) -> None:
+        def manda_azioni(forza: bool = False) -> None:
+            """Manda le azioni in attesa, se e' ora di mandarle."""
+            if not stato["pendenti"]:
+                return
+            if stato["azioni"] >= MAX_AZIONI:
+                stato["pendenti"].clear()
+                return
+            ora = time.monotonic()
+            # Si aspetta l'intervallo dalla *prima* azione in coda, non
+            # dall'ultimo invio: due tool partiti insieme sono un messaggio
+            # solo con due righe, non due messaggi a un decimo di secondo.
+            if not forza and ora - stato["prima_pendente"] < INTERVALLO_AZIONE:
+                return
+            righe = stato["pendenti"][:6]
+            del stato["pendenti"][:6]
+            try:
+                self.api.send_message(chat_id, "\n".join(righe))
+            except ErroreTelegram as e:
+                self._log(f"telegram {self.nome}: azione non inviata: {e}")
+                return
+            stato["azioni"] += 1
+            stato["ultima_azione"] = ora
+            stato["prima_pendente"] = 0.0
+
+        def aggiorna(testo: str, azione: str | None = None) -> None:
+            if azione:
+                azione = azione.strip()[:200]
+                if azione:
+                    if not stato["pendenti"]:
+                        stato["prima_pendente"] = time.monotonic()
+                    stato["pendenti"].append(azione)
+                manda_azioni()
             testo = (testo or "").strip()
             if not testo:
                 return
@@ -1663,7 +1709,20 @@ class Ponte:
     def _fine_progresso(self) -> None:
         stato = self._stato_progresso
         self._stato_progresso = None
-        if not stato or not stato.get("id"):
+        if not stato:
+            return
+        # L'ultima azione non deve sparire solo perche' il turno e'
+        # finito prima del prossimo intervallo: quelle rimaste in coda
+        # partono insieme, in un messaggio solo.
+        pendenti = stato.get("pendenti") or []
+        if pendenti and stato.get("azioni", 0) < MAX_AZIONI:
+            try:
+                self.api.send_message(stato["chat"],
+                                      "\n".join(a[:200] for a in pendenti[:6]))
+            except ErroreTelegram as e:
+                self._log(f"telegram {self.nome}: azione non inviata: {e}")
+        stato["pendenti"] = []
+        if not stato.get("id"):
             return
         try:
             self.api.delete_message(stato["chat"], stato["id"])

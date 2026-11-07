@@ -324,7 +324,16 @@ def send_con_eventi(testo, allegati=None):
 
 
 sess.send = send_con_eventi
-risposta = app.telegram_turno(bot["id"], "leggi i test", None, testi.append)
+visti_stato = []
+
+
+def avanz(testo, azione=None):
+    visti_stato.append((testo, azione))
+
+
+risposta = app.telegram_turno(bot["id"], "leggi i test", None, avanz)
+testi = [t for t, a in visti_stato if a is None]
+azioni_viste = [a for _t, a in visti_stato if a]
 # Il turno adesso torna anche i file prodotti (`{testo, file}`): il testo
 # resta l'ultima frase dell'assistente, e i file si controllano a parte.
 check("la risposta finale e' l'ultima dell'assistente",
@@ -337,8 +346,8 @@ primo = testi[0] if testi else ""
 insieme = "\n".join(testi)
 check("lo stato nomina il bot", "Prova" in primo, primo)
 check("e il giro", "giro 2" in primo, primo)
-check("il tool in corso compare appena parte",
-      "run_shell" in insieme, insieme[-200:])
+check("il tool che parte e' un'azione a se'",
+      any("run_shell" in a for a in azioni_viste), cp(str(azioni_viste)))
 check("senza incollare tutto il ragionamento",
       "pensa:" in insieme and all(len(t) < 600 for t in testi),
       str([len(t) for t in testi]))
@@ -715,6 +724,49 @@ check("e la risposta e' quella del modello, non una scusa",
       "Ciao, sono qui." in risposta, cp(risposta))
 check("la sessione vera non e' rimasta occupata",
       sess_vera.busy is False, str(sess_vera.busy))
+
+print("\n[20] ogni tool che parte diventa un'azione da mandare in chat")
+# La cronaca su Telegram non e' il messaggio riscritto: ogni tool che
+# parte deve arrivare come azione a se', con nome e argomento. Qui si
+# guarda l'accoppiata vera fra gli eventi della Session e quello che il
+# ponte riceve, che e' il punto in cui i due lati si possono perdere.
+from orchestra.types import Tool, ToolCall, ToolRegistry  # noqa: E402
+
+
+class ProviderConTool:
+    name = "finto"
+    model = "finto-1"
+
+    def __init__(self):
+        self.chiamate = 0
+
+    def chat(self, messages, tools=None, **kw):
+        self.chiamate += 1
+        if self.chiamate == 1:
+            return LLMResponse(
+                content="", model=self.model,
+                tool_calls=[ToolCall(id="c1", name="eco",
+                                     arguments='{"comando": "pytest -q"}')])
+        return LLMResponse(content="Fatto.", model=self.model)
+
+
+registro = ToolRegistry()
+registro.register(Tool(name="eco", description="ripete", schema={},
+                       handler=lambda **_: "ok"))
+sess_tool = Session(provider=ProviderConTool(), registry=registro,
+                    system_prompt="sei un agente",
+                    config=LoopConfig(max_iterations=3))
+app2, _ = app_finta(sess_tool)
+visti = []
+app2.telegram_turno(bot["id"], "prova un tool", None,
+                    lambda testo, azione=None: visti.append((testo, azione)))
+azioni = [a for _t, a in visti if a]
+check("il tool che parte arriva come azione",
+      len(azioni) == 1 and "eco" in azioni[0], cp(str(azioni)))
+check("con l'argomento che dice cosa sta facendo",
+      any("pytest" in a for a in azioni), cp(str(azioni)))
+check("e l'azione non si ripete a ogni evento dopo",
+      len(azioni) == 1, cp(str(len(azioni))))
 
 print()
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")

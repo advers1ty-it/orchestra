@@ -2050,6 +2050,10 @@ class OrchestraApp:
         for ev in eventi:
             tipo = ev.get("kind")
             dati = ev.get("data") or {}
+            # Solo l'evento che apre un tool e' un'azione: se restasse
+            # attaccata all'evento successivo, lo stesso tool tornerebbe
+            # in chat a ogni pezzo di testo che arriva dopo.
+            azione: str | None = None
             if tipo == "keepalive":
                 # Un turno che muore senza emettere `idle` non deve
                 # lasciare il ponte a girare per quindici minuti: se la
@@ -2069,7 +2073,9 @@ class OrchestraApp:
                 stato["testo"] = (stato["testo"]
                                   + (dati.get("testo") or ""))[-600:]
             elif tipo == "tool_start":
-                stato["tool"].append(str(dati.get("name") or "?"))
+                nome_tool = str(dati.get("name") or "?")
+                stato["tool"].append(nome_tool)
+                azione = self._telegram_azione(nome_tool, dati.get("args"))
             elif tipo == "thinking":
                 try:
                     stato["giro"] = int(dati.get("iteration") or 0)
@@ -2082,7 +2088,7 @@ class OrchestraApp:
                 break
             if avanzamento is not None:
                 try:
-                    avanzamento(self._telegram_stato(bot, stato))
+                    avanzamento(self._telegram_stato(bot, stato), azione)
                 except Exception:  # noqa: BLE001
                     # Un ponte che non riesce a dire come va non deve
                     # fermare il turno: la risposta conta piu' della
@@ -2091,6 +2097,28 @@ class OrchestraApp:
             if time.monotonic() > scadenza:
                 break
         return stato
+
+    def _telegram_azione(self, nome: str, argomenti: Any) -> str:
+        """Una riga per un tool che parte: cosa, e su cosa.
+
+        Il nome da solo dice poco ("bash", e allora?). Il primo
+        argomento utile lo dice, tagliato corto: e' la stessa cosa che
+        nella finestra si legge accanto al tool, e serve a capire se il
+        turno sta facendo la cosa giusta senza aprire il computer.
+        """
+        riga = f"\U0001f6e0 {nome}"
+        if isinstance(argomenti, dict):
+            for chiave in ("comando", "command", "percorso", "path",
+                           "query", "testo"):
+                valore = argomenti.get(chiave)
+                if valore:
+                    dettaglio = " ".join(str(valore).split())
+                    if len(dettaglio) > 80:
+                        dettaglio = dettaglio[:77].rstrip() + "..."
+                    if dettaglio:
+                        riga += " \u00b7 " + dettaglio
+                    break
+        return riga
 
     def _telegram_stato(self, bot: dict[str, Any], stato: dict[str, Any]) -> str:
         """Tre righe per dire che sta succedendo, non un log."""

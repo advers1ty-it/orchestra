@@ -80,6 +80,38 @@ def _modello():
         return _MODEL
 
 
+def _campioni(path: str):
+    """Decodifica un file audio in float32 mono a 16 kHz.
+
+    Non lasciamo decodificare a faster-whisper: la 1.2.1 chiama
+    `av.open(..., metadata_errors="ignore")`, e PyAV 19 ha tolto quel
+    parametro. Con av 19 installato (che e' quello che pip mette adesso)
+    ogni vocale moriva su `TypeError: open() got an unexpected keyword
+    argument 'metadata_errors'` prima ancora di leggere l'audio: il
+    difetto era nella coppia di librerie, non nel file dell'utente.
+    Qui l'apertura la facciamo noi, senza quel parametro, che e' valido
+    sia con PyAV vecchio sia con PyAV 19; il modello accetta campioni
+    gia' decodificati e non ci passa piu'.
+    """
+    import av
+    import numpy as np
+
+    pezzi = []
+    with av.open(path, mode="r") as contenitore:
+        if not contenitore.streams.audio:
+            raise RuntimeError("il file non contiene audio")
+        ricampionatore = av.AudioResampler(format="flt", layout="mono",
+                                           rate=16000)
+        for frame in contenitore.decode(contenitore.streams.audio[0]):
+            for nuovo in ricampionatore.resample(frame):
+                pezzi.append(nuovo.to_ndarray().reshape(-1))
+        for nuovo in ricampionatore.resample(None):
+            pezzi.append(nuovo.to_ndarray().reshape(-1))
+    if not pezzi:
+        raise RuntimeError("l'audio e' vuoto")
+    return np.concatenate(pezzi).astype(np.float32)
+
+
 def trascrivi(audio_bytes: bytes, filename: str = "audio.webm") -> str:
     if not disponibile():
         raise RuntimeError("whisper non installato")
@@ -89,8 +121,15 @@ def trascrivi(audio_bytes: bytes, filename: str = "audio.webm") -> str:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(audio_bytes)
+        # Se la decodifica nostra non riesce (av assente, contenitore
+        # strano) si ripiega sul percorso: cosi' un ambiente sano
+        # continua a funzionare come prima.
+        try:
+            sorgente = _campioni(path)
+        except Exception:  # noqa: BLE001
+            sorgente = path
         segments, info = model.transcribe(
-            path, language=(_LANG or None), beam_size=1)
+            sorgente, language=(_LANG or None), beam_size=1)
         testo = " ".join((s.text or "").strip() for s in segments).strip()
         return testo
     finally:
