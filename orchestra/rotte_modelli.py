@@ -210,6 +210,18 @@ class RotteModelli:
         except Exception as e:  # noqa: BLE001
             self._json({"error": str(e)}, 400)
             return
+        # La scelta va anche su disco: le scelte manuali di modello
+        # spengono l'instradamento e scrivono "off". Senza questa riga,
+        # riaccenderlo qui non servirebbe a niente al prossimo avvio —
+        # l'interruttore tornerebbe spento e sembrerebbe rotto.
+        try:
+            from . import keys as keys_mod
+            from .percorsi import ENV_PATH
+            valore = "on" if attivo else "off"
+            self.app.env["ORCHESTRA_ROUTING"] = valore
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_ROUTING", valore)
+        except Exception:  # noqa: BLE001
+            pass
         self._json({"ok": True, "routing": bool(
             getattr(self.app.session, "_routing_attivo", False))})
 

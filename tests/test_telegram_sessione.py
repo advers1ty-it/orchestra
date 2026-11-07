@@ -746,6 +746,61 @@ check("e dice di essere l'agente principale, non il bot del pannello",
       scelti and scelti[0][1].get("agente_principale") is True, str(scelti))
 check("e lo dice senza parlare di bot", "bot" not in esito.lower()
       or "agente principale" in esito.lower(), cp(esito))
+check("ed e' una scelta dell'utente, non un ripiego",
+      scelti and scelti[0][1].get("scelta_utente") is True, str(scelti))
+
+print("\n[23] una scelta a mano spegne l'instradamento automatico")
+# Il difetto vero visto dall'utente: /modello cambia, /stato conferma, poi
+# un messaggio e /stato torna al modello di prima. L'instradamento
+# automatico risceglie a ogni invio e scrive la sua scelta nel .env:
+# il modello scelto a mano durava UNA richiesta. La finestra lo spegneva
+# gia' (rotta /api/model), Telegram no — e da li' non c'era nessun modo
+# di accorgersene se non guardando /stato dopo.
+
+
+class SessioneRouting:
+    """Solo l'interruttore: qui serve sapere se qualcuno lo tocca."""
+
+    def __init__(self):
+        self._routing_attivo = True
+        self.chiamate = []
+
+    def instradamento_attivo(self, attivo=True):
+        self.chiamate.append(bool(attivo))
+        self._routing_attivo = bool(attivo)
+
+
+app_r = webapp.OrchestraApp.__new__(webapp.OrchestraApp)
+app_r.env = {"ORCHESTRA_MODEL": "gpt-4o-mini"}
+app_r.session = SessioneRouting()
+# Il .env vero non si tocca: si punta a uno temporaneo e si rimette a
+# posto. Un test che scrive nella configurazione di chi lo lancia non e'
+# un test, e' un guasto che si scopre al riavvio.
+_env_vero = webapp.ENV_PATH
+webapp.ENV_PATH = os.path.join(tempfile.mkdtemp(prefix="orch_env_"), ".env")
+check("all'inizio l'instradamento e' acceso",
+      app_r.session._routing_attivo is True)
+check("una scelta a mano lo spegne", app_r.zittisci_instradamento() is True)
+check("e l'interruttore e' davvero spento",
+      app_r.session._routing_attivo is False,
+      str(app_r.session.chiamate))
+check("la scelta resta scritta per il prossimo avvio",
+      app_r.env.get("ORCHESTRA_ROUTING") == "off",
+      str(app_r.env.get("ORCHESTRA_ROUTING")))
+check("spegnerlo due volte non e' un errore",
+      app_r.zittisci_instradamento() is False)
+_righe_env = open(webapp.ENV_PATH, encoding="utf-8").read()
+check("e la scelta e' scritta anche nel file, non solo in memoria",
+      "ORCHESTRA_ROUTING=off" in _righe_env, cp(_righe_env[-120:]))
+webapp.ENV_PATH = _env_vero
+
+sess0._routing_attivo = False
+scelti.clear()
+esito_spento = app0.telegram_comando(0, "modello", "gpt-4o")
+check("e la conferma lo dice, invece di lasciarlo scoprire da /stato",
+      "Instradamento automatico spento" in esito_spento, cp(esito_spento))
+check("e non promette piu' che vale 'dalla prossima richiesta'",
+      "prossima richiesta" not in esito_spento, cp(esito_spento))
 
 print("\n[19] un turno vero, con la Session vera, non muore piu' sullo stream")
 # Il giro in chat ha rotto qui: `telegram_turno` leggeva gli eventi con

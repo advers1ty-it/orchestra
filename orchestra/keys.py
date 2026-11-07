@@ -37,7 +37,7 @@ from typing import Any
 # pannello le espone come menu a tendina. Se comparissero anche nella
 # lista delle chiavi, ci sarebbero due modi per cambiarle e divergerebbero
 # senza che nessuno se ne accorga.
-SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL", "ORCHESTRA_REASONING", "ORCHESTRA_BUDGET", "ORCHESTRA_MAX_ITERS", "ORCHESTRA_CONTEXT_LIMIT")
+SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL", "ORCHESTRA_REASONING", "ORCHESTRA_BUDGET", "ORCHESTRA_MAX_ITERS", "ORCHESTRA_CONTEXT_LIMIT", "ORCHESTRA_ROUTING")
 
 # Impostazioni che hanno gia' il loro campo in un'altra sezione del
 # pannello. Stanno qui e non nel frontend perche' questa e' l'unica lista
@@ -75,6 +75,11 @@ WRITABLE: dict[str, str] = {
     "ORCHESTRA_MAX_ITERS": "Max iterazioni loop",
     "ORCHESTRA_MAX_SECONDI_TURNO": "Tempo massimo per turno (secondi, 0 = nessun limite)",
     "ORCHESTRA_CONTEXT_LIMIT": "Limite contesto (token)",
+    # Una scelta di modello fatta a mano spegne l'instradamento
+    # automatico, e deve restare spento dopo un riavvio: senza questa
+    # chiave il salvataggio falliva in silenzio e il modello scelto
+    # tornava a durare una richiesta sola.
+    "ORCHESTRA_ROUTING": "Instradamento automatico (on/off)",
     "ORCHESTRA_OLLAMA_URL": "Indirizzo Ollama",
     "ORCHESTRA_LMSTUDIO_URL": "Indirizzo LM Studio",
 }

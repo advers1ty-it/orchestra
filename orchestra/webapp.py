@@ -831,7 +831,12 @@ class OrchestraApp:
         # significherebbe instradare con un catalogo che potrebbe non
         # essere ancora stato caricato.
         if hasattr(self.session, "instradamento_attivo"):
-            self.session.instradamento_attivo(True)
+            # Rispetto dell'interruttore: chi ha scelto un modello a mano
+            # ha spento l'instradamento, e riaccenderlo a ogni avvio
+            # rimetterebbe il modello a durare una richiesta sola.
+            spento = str(self.env.get("ORCHESTRA_ROUTING", "")).lower() in (
+                "off", "0", "false", "no")
+            self.session.instradamento_attivo(not spento)
         self.session._scegli_sostituto = scegli
         self.session._cambia_modello = cambia
 
@@ -889,8 +894,41 @@ class OrchestraApp:
         cache = getattr(self, "_catalog_per_provider", None) or {}
         return cache.get(provider)
 
+    def zittisci_instradamento(self) -> bool:
+        """Spegne l'instradamento automatico, se era acceso.
+
+        Una scelta fatta a mano deve durare piu' di una richiesta.
+        L'instradamento automatico risceglie a ogni invio e — questo e'
+        il punto — scrive la sua scelta nel `.env`, quindi dopo un solo
+        messaggio `/stato` torna al modello di prima e la risposta
+        arriva da un altro. Non e' un ripiego e non e' un guasto: e' una
+        decisione presa al posto dell'utente, per giunta quella che il
+        messaggio appena letto diceva di non prendere.
+
+        Ritorna True solo se l'ha spento davvero, cosi' chi parla
+        all'utente puo' dirlo invece di lasciarlo scoprire da /stato.
+        """
+        sess = self.session
+        if sess is None or not getattr(sess, "_routing_attivo", False):
+            return False
+        try:
+            sess.instradamento_attivo(False)
+        except Exception:  # noqa: BLE001
+            return False
+        # Anche su disco: altrimenti il prossimo avvio lo riaccende e il
+        # modello scelto a mano torna a durare una richiesta sola. Non si
+        # sa quando l'utente riavvia, ma si sa che lo fara'.
+        try:
+            from . import keys as keys_mod
+            self.env["ORCHESTRA_ROUTING"] = "off"
+            keys_mod.scrivi(ENV_PATH, "ORCHESTRA_ROUTING", "off")
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+
     def switch_model(self, model_id: str, *, provider: str | None = None,
-                     agente_principale: bool = False) -> None:
+                     agente_principale: bool = False,
+                     scelta_utente: bool = False) -> None:
         """Cambia il modello dell'agent in uso.
 
         Solleva RuntimeError se l'agente sta lavorando: cambiarlo a metà
@@ -929,6 +967,12 @@ class OrchestraApp:
                 keys_mod.scrivi(ENV_PATH, "ORCHESTRA_PROVIDER", provider)
             self.env["ORCHESTRA_MODEL"] = model_id
             keys_mod.scrivi(ENV_PATH, "ORCHESTRA_MODEL", model_id)
+            if scelta_utente:
+                # Non c'e' una sessione da zittire, ma la regola vale
+                # uguale: quando nascera', l'instradamento non deve
+                # riscegliere al posto dell'utente.
+                self.env["ORCHESTRA_ROUTING"] = "off"
+                keys_mod.scrivi(ENV_PATH, "ORCHESTRA_ROUTING", "off")
             return
         if self.session.busy:
             raise RuntimeError("l'agente sta lavorando: attendi o annulla prima")
@@ -1008,6 +1052,11 @@ class OrchestraApp:
         # 120k — e uno da 32k non viene compattato finché non è troppo
         # tardi. Entrambi i versi sbagliano, e nessuno dei due avvisa.
         self.allinea_finestra(model_id)
+        # Ultima cosa, e solo per una scelta dell'utente: il ripiego e la
+        # riparazione all'avvio devono poter continuare a instradare,
+        # perche' non stanno decidendo niente — stanno rimediando.
+        if scelta_utente:
+            self.zittisci_instradamento()
 
     def allinea_finestra(self, model_id: str | None = None) -> int:
         """Mette `context_limit` al 75% della finestra del modello.
@@ -2454,11 +2503,19 @@ class OrchestraApp:
             # modello si cambia dove si cambia sempre, cioe' sulla sessione.
             try:
                 self.switch_model(scelto, provider=provider,
-                                  agente_principale=True)
+                                  agente_principale=True, scelta_utente=True)
             except Exception as e:  # noqa: BLE001
                 return f"Non ho cambiato il modello: {e}"
-            return (f"Modello cambiato in {scelto}{dove}{avviso}. Vale dalla "
-                    "prossima richiesta, anche da qui.")
+            nota = ""
+            if not getattr(sess, "_routing_attivo", True):
+                # Serve dirlo: senza l'instradamento il modello resta, ma
+                # l'utente ha diritto di sapere che una cosa e' cambiata
+                # da sola — e che si riaccende da un posto preciso.
+                nota = ("\nInstradamento automatico spento: era lui a "
+                        "riscegliere il modello a ogni messaggio. Si "
+                        "riaccende dal pannello Benchmark.")
+            return (f"Modello cambiato in {scelto}{dove}{avviso}. Vale da "
+                    f"adesso, anche da qui.{nota}")
         if not bots_mod.aggiorna(
                 b["id"], modello=scelto,
                 **({"provider": provider} if provider else {})):

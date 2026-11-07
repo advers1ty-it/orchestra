@@ -275,7 +275,7 @@ class RotteChat:
             self._json({"error": "modello vuoto"}, 400)
             return
         try:
-            self.app.switch_model(model_id)
+            self.app.switch_model(model_id, scelta_utente=True)
         except RuntimeError as e:
             self._json({"error": str(e)}, 409)
             return
@@ -285,14 +285,12 @@ class RotteChat:
         # Scelta manuale: da qui il modello resta. L'instradamento
         # automatico risceglierebbe a ogni invio (spesso il vecchio),
         # rendendo il menu una decorazione: si spegne, e si riaccende
-        # dal pannello Benchmark.
-        routing = True
-        if self.app.session is not None:
-            try:
-                self.app.session.instradamento_attivo(False)
-                routing = False
-            except Exception:
-                pass
+        # dal pannello Benchmark. Lo spegnimento sta in `switch_model`
+        # perche' lo stesso vale per il menu di Telegram: due copie della
+        # stessa regola sono due regole che possono divergere — e questa
+        # ne era gia' una, solo scritta per una strada sola.
+        routing = bool(getattr(self.app.session, "_routing_attivo", False)) \
+            if self.app.session is not None else True
         self._json({"ok": True, "model": model_id, "routing": routing})
 
     @rotta("POST", "/api/permesso/prova")
