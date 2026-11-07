@@ -39,6 +39,19 @@ from typing import Any
 # senza che nessuno se ne accorga.
 SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL", "ORCHESTRA_REASONING", "ORCHESTRA_BUDGET", "ORCHESTRA_MAX_ITERS", "ORCHESTRA_CONTEXT_LIMIT")
 
+# Impostazioni che hanno gia' il loro campo in un'altra sezione del
+# pannello. Stanno qui e non nel frontend perche' questa e' l'unica lista
+# di chiavi che il pannello conosce: una seconda lista di esclusioni nei
+# .js e' il posto in cui, un giorno, una chiave sparisce da tutte e due le
+# schermate. Il valore e' il nome della sezione, cosi' il perche' sta
+# scritto accanto alla regola.
+#
+# Il tempo massimo per turno si imposta in Modello, in minuti. Due campi
+# per lo stesso numero non sono un doppione innocuo: si salva uno dei due
+# e l'altro resta a mostrare il valore vecchio, e nessuno sa quale dei
+# due il server usa.
+ALTROVE = {"ORCHESTRA_MAX_SECONDI_TURNO": "Modello"}
+
 WRITABLE: dict[str, str] = {
     # Ordine di visualizzazione: prima il predefinito, poi le chiavi
     # con piano gratis, poi il resto. Scritte per nome, mai per
@@ -276,6 +289,9 @@ def stato(path: str, valori: dict[str, str]) -> list[dict[str, Any]]:
             "indizio": ("..." + v[-4:]) if len(v) > 8 else ("*" * len(v) if v else ""),
             "lunghezza": len(v),
             "writable": True,
+            # "Modello" se il campo esiste gia' in un'altra sezione del
+            # pannello, stringa vuota se va mostrata fra le chiavi.
+            "dove": ALTROVE.get(chiave, ""),
         })
     return out
 

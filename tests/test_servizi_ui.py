@@ -156,10 +156,11 @@ chiavi = [
     {"chiave": "ORCHESTRA_OLLAMA_URL", "etichetta": "Indirizzo Ollama",
      "presente": False, "indizio": ""},
     {"chiave": "ARTIFICIAL_ANALYSIS_KEY", "etichetta": "Artificial Analysis",
-     "presente": True, "indizio": "...9ab1"},
+     "presente": True, "indizio": "...9ab1", "dove": ""},
+    # il server dice "dove": questa ha gia' il suo campo in Modello
     {"chiave": "ORCHESTRA_MAX_SECONDI_TURNO",
      "etichetta": "Tempo massimo per turno (secondi, 0 = nessun limite)",
-     "presente": False, "indizio": ""},
+     "presente": False, "indizio": "", "dove": "Modello"},
 ]
 
 o = esegui({"chiavi": chiavi, "servizi_gratis": servizi, "nota_gratis": "",
@@ -175,8 +176,8 @@ check("i gruppi sono Gratis, A pagamento, Sul tuo computer",
       o.get("gruppi") == ["Gratis", "A pagamento", "Sul tuo computer",
                           "Altre chiavi"],
       str(o.get("gruppi")))
-check("le schede sono i quattro servizi piu' le due chiavi",
-      len(o.get("righe", [])) == 6, len(o.get("righe", [])))
+check("le schede sono i quattro servizi piu' la chiave orfana",
+      len(o.get("righe", [])) == 5, len(o.get("righe", [])))
 
 print("\n[2] La chiave sta sotto la descrizione, nella stessa scheda")
 open_ = riga("OpenRouter", o, "Gratis")
@@ -212,11 +213,16 @@ print("\n[4] Nessuna chiave sparisce e nessuna compare due volte")
 art = riga("Artificial Analysis", o, "Altre chiavi")
 check("Artificial Analysis ha il suo campo",
       art and art["campi"] == 1, (art or {}).get("campi"))
-sec = riga("Tempo massimo per turno (secondi, 0 = nessun limite)", o,
-           "Altre chiavi")
-check("e l'impostazione dei secondi pure",
-      sec and sec["campi"] == 1 and sec["tipo"] == "text",
-      f"campi={(sec or {}).get('campi')} tipo={(sec or {}).get('tipo')}")
+sec = riga("Tempo massimo per turno (secondi, 0 = nessun limite)", o)
+check("il tempo massimo per turno non si ripete qui",
+      sec is None, (sec or {}).get("gruppo"))
+# ...e non sparisce dal pannello: il suo campo e' nel tab Modello, in
+# minuti. Se quel campo se ne andasse, "dove" in keys.py sarebbe una
+# bugia e la chiave non avrebbe piu' nessun posto dove essere scritta.
+index = open(os.path.join(ROOT, "orchestra", "web", "index.html"),
+             encoding="utf-8").read()
+check("perche' il suo campo e' in Modello, in minuti",
+      'id="opt-max-minuti"' in index)
 check("il gruppo Gratis viene prima di A pagamento",
       o.get("gruppi", [])[:3] == ["Gratis", "A pagamento", "Sul tuo computer"],
       str(o.get("gruppi")))
@@ -241,10 +247,15 @@ doppi = sorted({n for n in nomi if nomi.count(n) > 1})
 check("nessun servizio spiegato due volte", not doppi, str(doppi))
 
 legate = {s.get("env") for s in keys.FREE_SERVICES}
-attese = [k["etichetta"] for k in stato if k["chiave"] not in legate]
+attese = [k["etichetta"] for k in stato
+          if k["chiave"] not in legate and not k.get("dove")]
 altre = [r["nome"] for r in vero.get("righe", []) if r["gruppo"] == "Altre chiavi"]
 check("in 'Altre chiavi' resta solo cio' che non e' un servizio",
       altre == attese, f"trovate={altre} attese={attese}")
+ospiti = [k["etichetta"] for k in stato if k.get("dove")]
+ripetute = [n for n in ospiti if n in nomi]
+check("e nessuna chiave che vive in un'altra sezione compare qui",
+      not ripetute, str(ripetute))
 
 servizi_con_chiave = [s for s in keys.FREE_SERVICES if s.get("chiave")]
 senza_campo = [s["nome"] for s in servizi_con_chiave

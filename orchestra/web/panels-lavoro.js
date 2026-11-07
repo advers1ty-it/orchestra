@@ -525,8 +525,12 @@ async function caricaOpzioni() {
     }
 
     // Le chiavi che non appartengono a nessun servizio (impostazioni e
-    // token di servizi esterni) in fondo, con il loro campo.
-    const altre = chiavi.filter((k) => !usate.has(k.chiave));
+    // token di servizi esterni) in fondo, con il loro campo. Quelle che
+    // il pannello mostra gia' da un'altra parte no: il tempo massimo per
+    // turno ha il suo campo in Modello, e ripeterlo qui in secondi invece
+    // che in minuti vuol dire due valori per la stessa impostazione, con
+    // l'utente che guarda quello sbagliato. Il server dice quale: `dove`.
+    const altre = chiavi.filter((k) => !usate.has(k.chiave) && !k.dove);
     if (altre.length) {
       serviziLista.appendChild(el("div", "gratis-gruppo", "Altre chiavi"));
       for (const k of altre) serviziLista.appendChild(schedaChiave(k));
