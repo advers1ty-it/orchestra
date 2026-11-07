@@ -1977,7 +1977,13 @@ class OrchestraApp:
         # La sottoscrizione avviene prima di `send`: iscriversi dopo
         # vorrebbe dire perdere il primo pezzo di ragionamento, che e'
         # proprio quello che si vuole mostrare.
-        eventi = sess.stream(timeout=0.4)
+        # Gli eventi si leggono dal bridge della sessione, non dalla
+        # sessione: `stream` sta su EventBridge, e chiamarlo qui su `sess`
+        # faceva rispondere al primo messaggio su Telegram con
+        # "'Session' object has no attribute 'stream'". Il percorso della
+        # finestra lo sapeva gia' (`s.bridge.stream`); questo no, ed era
+        # il primo turno che passava di qui.
+        eventi = sess.bridge.stream(timeout=0.4)
         try:
             if not sess.send(testo, allegati=allegati or None):
                 return ("C'e' gia' un turno in corso su questo bot: rimanda "

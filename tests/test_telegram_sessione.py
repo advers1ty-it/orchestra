@@ -67,11 +67,45 @@ class Agente:
         self.modalita_piano = False
 
 
+class BridgeEventiFinto:
+    """Il `bridge` di una Session: qui vive `stream`, come in EventBridge.
+
+    Prima questo metodo stava sulla sessione finta, e la sessione vera non
+    ce l'ha: il finto era piu' generoso del vero, quindi il turno Telegram
+    passava i test e moriva in chat con "'Session' object has no attribute
+    'stream'". Un finto che offre un metodo che il vero non ha non prova
+    niente.
+    """
+
+    def __init__(self, sessione):
+        self.sessione = sessione
+
+    def stream(self, timeout=0.4):
+        sess = self.sessione
+
+        def genera():
+            while True:
+                if sess.eventi:
+                    ev = sess.eventi.pop(0)
+                    if ev.get("kind") == "idle":
+                        sess.busy = False
+                    yield ev
+                    if ev.get("kind") == "idle":
+                        return
+                    continue
+                # Come il bridge vero: uno stream non finisce da solo,
+                # manda keepalive finche' qualcuno non chiude.
+                yield {"kind": "keepalive", "data": {}, "seq": -1, "ts": 0}
+
+        return genera()
+
+
 class SessioneFinta:
     """Quello che le funzioni Telegram usano di una Session, e niente altro."""
 
     def __init__(self):
         self.busy = False
+        self.bridge = BridgeEventiFinto(self)
         self.modello = "gpt-4o-mini"
         self.agent = Agente()
         self.steer_chiamate = []
@@ -109,23 +143,6 @@ class SessioneFinta:
         self.testo = testo
         self.allegati = allegati
         return True
-
-    def stream(self, timeout=0.4):
-        def genera():
-            while True:
-                if self.eventi:
-                    ev = self.eventi.pop(0)
-                    if ev.get("kind") == "idle":
-                        self.busy = False
-                    yield ev
-                    if ev.get("kind") == "idle":
-                        return
-                    continue
-                # Come il bridge vero: uno stream non finisce da solo,
-                # manda keepalive finche' qualcuno non chiude.
-                yield {"kind": "keepalive", "data": {}, "seq": -1, "ts": 0}
-
-        return genera()
 
 
 class Messaggio:
@@ -279,6 +296,12 @@ sess.busy = False
 
 print("\n[8] il turno su Telegram: eventi -> una riga di stato")
 app, sess = app_finta()
+# Il contratto che il primo giro in chat ha violato: gli eventi si leggono
+# dal bridge, e la Session non offre un `stream()` suo. Se il finto se lo
+# inventasse, questo blocco tornerebbe verde su un metodo che il vero non ha.
+check("la sessione finta non inventa un metodo che Session non ha",
+      hasattr(sess.bridge, "stream") and not hasattr(sess, "stream"),
+      "gli eventi stanno su bridge.stream")
 sess.eventi = []
 testi = []
 
@@ -654,6 +677,44 @@ check("cambiare modello all'agente principale passa dal cambio vero",
       scelti == ["gpt-4o"], str(scelti))
 check("e lo dice senza parlare di bot", "bot" not in esito.lower()
       or "agente principale" in esito.lower(), cp(esito))
+
+print("\n[19] un turno vero, con la Session vera, non muore piu' sullo stream")
+# Il giro in chat ha rotto qui: `telegram_turno` leggeva gli eventi con
+# `sess.stream`, che la Session vera non ha. I blocchi sopra usavano una
+# sessione finta con un `stream` inventato, quindi erano verdi lo stesso.
+# Qui la sessione e' quella di produzione e l'unica cosa finta e' il
+# provider: se il turno chiama un metodo che non esiste, si vede.
+from orchestra import LoopConfig  # noqa: E402
+from orchestra.session import Session  # noqa: E402
+from orchestra.tools import default_registry  # noqa: E402
+from orchestra.types import LLMResponse  # noqa: E402
+
+
+class ProviderFinto:
+    name = "finto"
+    model = "finto-1"
+
+    def chat(self, messages, tools=None, **kw):
+        return LLMResponse(content="Ciao, sono qui.", model=self.model)
+
+
+sess_vera = Session(provider=ProviderFinto(),
+                    registry=default_registry(),
+                    system_prompt="sei un agente",
+                    config=LoopConfig(max_iterations=2))
+app, _ = app_finta(sess_vera)
+errore = ""
+try:
+    esito = app.telegram_turno(bot["id"], "ciao", None, None)
+except Exception as e:  # noqa: BLE001 - se muore, deve dirlo, non sparire
+    esito, errore = None, f"{type(e).__name__}: {e}"
+check("il turno finisce invece di sollevare", not errore, errore)
+risposta = ((esito or {}).get("testo") if isinstance(esito, dict)
+            else str(esito or ""))
+check("e la risposta e' quella del modello, non una scusa",
+      "Ciao, sono qui." in risposta, cp(risposta))
+check("la sessione vera non e' rimasta occupata",
+      sess_vera.busy is False, str(sess_vera.busy))
 
 print()
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")
