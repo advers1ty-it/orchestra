@@ -213,7 +213,6 @@ SUITES = [
     ("verifica-js", "test_verifica_js.py", True),
     ("confronto", "test_confronto.py", True),
     ("rate-limit", "test_rate_limit.py", True),
-    ("decisions-schema", "test_decisions_schema.py", False),
     ("curva5", "test_curva5.py", True),
     ("skills", "test_skills.py", True),
     ("apprendimento", "test_apprendimento.py", True),

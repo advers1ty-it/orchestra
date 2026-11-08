@@ -19,12 +19,12 @@
 #                così "lancia il workflow" significa "verifica l'API
 #                adesso" e non "spendi token senza saperlo".
 #
-# Nota su `test_decisions_schema`: sta nella suite, ma sonda un endpoint
-# alpha su un modello gratuito che OpenRouter può ritirare da un giorno
-# all'altro (è successo con `inception/mercury-decide:free`). Quando non
-# risponde più, la sonda si dichiara "non avvenuta" invece di far fallire
-# la corsia: il rosso racconterebbe la scomparsa di un modello di terzi,
-# non un difetto di Orchestra.
+# Nota: qui non c'è più `test_decisions_schema`. Sondava un endpoint alpha
+# di OpenRouter su un modello gratuito che il provider può ritirare da un
+# giorno all'altro (è successo), e non verificava niente di Orchestra:
+# nessun modulo chiama quell'endpoint. Il contratto che aveva ricostruito
+# sta in `orchestra/web/docs.md`, senza una corsia che resta grigia per
+# sempre.
 name: CI
 
 on:
