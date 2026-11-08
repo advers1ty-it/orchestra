@@ -188,18 +188,24 @@ check("e il log del server e' leggibile anche a server acceso",
       bool(letto) and "in esecuzione" in letto, letto[:160])
 fermato = tool.handler(azione="ferma", id=sid) if sid else ""
 check("ferma chiude il server", "FERMATO" in fermato, fermato[:160])
-# Un server ucciso ma con il figlio vivo tiene la porta: si prova a
-# connettersi, non si crede al messaggio.
-volta = 0
-for _ in range(10):
+check("e il processo risulta subito morto",
+      processi.leggi(sid)["vivo"] is False)
+# Un server ucciso ma con il figlio vivo tiene la porta occupata: si
+# prova a connettersi, non si crede al messaggio. La chiusura del socket
+# pero' non e' istantanea (il kernel lo libera quando il processo e'
+# davvero stato raccolto: su Linux ci vuole qualche decimo di secondo),
+# quindi si aspetta entro un tetto — quello che conta e' che la porta
+# TORNI libera. Un orfano la tiene per tutta la finestra dei 5 secondi.
+libera = False
+for _ in range(20):
     try:
         with socket.create_connection(("127.0.0.1", int(porta)), timeout=0.4):
-            volta += 1
-            time.sleep(0.2)
+            time.sleep(0.25)
     except OSError:
+        libera = True
         break
-check("la porta e' libera dopo lo stop (nessun figlio rimasto)",
-      volta == 0, f"connessa {volta} volte")
+check("la porta torna libera dopo lo stop (nessun figlio rimasto)",
+      libera, "la porta risponde ancora dopo 5s: un figlio e' rimasto vivo")
 
 print("\n[9] All'uscita di Orchestra i processi si fermano")
 ultimo = tool.handler(azione="avvia",
