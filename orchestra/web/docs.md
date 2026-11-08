@@ -41,6 +41,14 @@
 - `screenshot_view` legge un file immagine (lo PNG prodotto da `browser_screenshot` / `computer_screenshot`, ma anche una foto o un logo nel progetto) e lo passa al modello come immagine: la cattura da sola dà un percorso, non uno schermo. Sta in ogni profilo accanto a `image_edit`, perché guardare l'immagine è il passo prima di montarci sopra qualcosa. Su un PDF restituisce il testo, se c'è.
 - I percorsi relativi dei tool partono dalla cartella di lavoro; un percorso assoluto fuori da lì chiede il permesso all'utente.
 
+## Shell e processi lunghi
+- `run_shell` **aspetta** il comando e lo uccide al timeout (60s predefiniti): un `npm run dev` non sopravvive alla chiamata, quindi con la sola shell l'agente non poteva avviare un server e poi aprirlo.
+- `processo` è il tool per i comandi che non finiscono: `azione=avvia` stacca il processo e restituisce un id, `leggi` dà le ultime N righe del log senza consumarle (due letture di fila dicono lo stesso stato), `ferma` uccide l'albero, `elenca` mostra cosa è acceso. Sta in ogni profilo, accanto a `run_shell`.
+- L'output va su file in `tmp/processi/`, dentro la cartella di lavoro, così `read_file` lo può aprire. Una pipe invece si riempie e blocca il figlio quando nessuno la legge: cioè un server che smette di rispondere proprio mentre lo guardi.
+- All'avvio si aspettano due secondi: se il comando è già morto — porta occupata, modulo mancante, comando sbagliato — il messaggio porta l'exit code e l'output, invece di un id che sembra sano.
+- Stessi controlli di `run_shell` (policy del bot, confine della root, comandi distruttivi), dalla stessa funzione: il background non è una via per non far comparire la domanda.
+- Tetto di 8 processi vivi, e all'uscita di Orchestra si fermano tutti: un server orfano tiene la porta occupata e il turno dopo non riesce più ad avviarlo.
+
 ## Immagini
 - `read_file` legge il **testo** dentro un PDF e dentro un `.docx`/`.xlsx`/`.pptx` (questi ultimi con la sola libreria standard: un file Office è uno zip di XML). I PDF hanno bisogno di `pypdf`, dichiarato in `requirements.txt`: senza, l'errore dice quale comando installare invece di dichiarare il file illeggibile. Su un'immagine `read_file` non mente: dice di usare `screenshot_view`.
 - `image_gen` genera un'immagine da un prompt con OpenAI Images, Google Gemini o OpenRouter, usando la chiave già presente in Opzioni, e la salva in `immagini/` nel progetto.

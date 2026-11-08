@@ -3,9 +3,31 @@
 from __future__ import annotations
 
 from fnmatch import fnmatch
+from pathlib import Path
 
 from ..types import Tool
 from ._guard import _root, _safe_path
+
+# Quanti file si contano al massimo dentro una sottocartella. Serve perche'
+# il conteggio ricorsivo di ogni voce costa O(tutto l'albero della voce):
+# elencare una cartella che contiene `node_modules` o `.git` faceva
+# scandire decine di migliaia di file per stampare una riga di riepilogo,
+# e il tempo cresceva con l'albero invece che con la cartella elencata.
+# Oltre il tetto si dice "2000+": il numero esatto non serve a nessuno, il
+# "e' enorme" si'.
+_TETTO_CONTEGGIO = 2000
+
+
+def _conta(cartella: Path) -> str:
+    n = 0
+    try:
+        for _ in cartella.rglob("*"):
+            n += 1
+            if n >= _TETTO_CONTEGGIO:
+                return f"{_TETTO_CONTEGGIO}+"
+    except OSError:
+        return "?"
+    return str(n)
 
 
 def tool_list_dir() -> Tool:
@@ -45,8 +67,7 @@ def tool_list_dir() -> Tool:
             except ValueError:
                 rel = x
             if x.is_dir():
-                n = len(list(x.rglob("*")))
-                out.append(f"[dir]  {rel}/  ({n} elementi)")
+                out.append(f"[dir]  {rel}/  ({_conta(x)} elementi)")
             else:
                 out.append(f"[file] {rel}  ({x.stat().st_size} byte)")
         if not out and pattern:

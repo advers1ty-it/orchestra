@@ -41,6 +41,9 @@ TOOL_CHE_CAMBIANO = {
     "write_file",
     "edit_file",
     "run_shell",
+    # Avviare un processo e' un effetto anche quando il comando non
+    # scrive niente: apre una porta, scrive un log, resta acceso.
+    "processo",
     "run_tests",
     "cron",
     "mcp",

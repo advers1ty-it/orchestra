@@ -40,6 +40,10 @@ SUITES = [
     ("orchestrazione", "test_orchestrazione.py", True),
     ("update", "test_update.py", True),
     ("shell", "test_shell.py", True),
+    # I processi che restano vivi: avvio, lettura, stop, e i permessi che
+    # non si aggirano passando dal background. La prova vera avvia un
+    # http.server e ci parla.
+    ("processo", "test_processo.py", True),
     ("sicurezza", "test_security.py", True),
     ("sessione", "test_session.py", True),
     # Dopo lo stop, l'agente deve poter tornare a lavorare. Il flag di

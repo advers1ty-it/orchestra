@@ -551,6 +551,118 @@ def _detect_posix_shell() -> str | None:
     return None
 
 
+def verifica_comando(command: str) -> str | None:
+    """I controlli che ogni comando deve passare, in un posto solo.
+
+    Erano dentro l'handler di `run_shell`, ed erano la parte del tool che
+    conta davvero: la policy del bot (che vieta `sudo`, i `curl | sh`),
+    il confine della root, i file di credenziali, e le cancellazioni
+    dentro la root che vanno chieste.
+
+    Stanno qui perche' dal 0.5.83 esiste un secondo modo di eseguire un
+    comando — `processo`, che lo avvia in background. Un secondo percorso
+    che non rifa' questi controlli non e' un tool in piu': e' il modo per
+    aggirare il primo, e basta scrivere `rm -rf src &` perche' nessuno
+    chieda niente. La forma giusta non e' duplicarli, e' averne una copia
+    sola che tutti i chiamanti usano.
+
+    Torna il messaggio da restituire al modello se il comando va fermato,
+    `None` se puo' partire.
+    """
+    # Import qui e non in testa: `policy` non importa `_guard`, ma questo
+    # modulo e' importato da mezzo pacchetto e un ciclo scoperto dopo e'
+    # un ImportError all'avvio — che si nota, ma solo in produzione.
+    from .. import policy as policy_mod
+
+    # La policy del bot viene PRIMA del gate: non ha senso chiedere
+    # all'utente il permesso per un comando che la policy ha gia'
+    # vietato. La domanda sarebbe una scelta finta, e la risposta
+    # "si'" non cambierebbe niente.
+    blocco = policy_mod.motivo_blocco(command)
+    if blocco:
+        return f"NON ESEGUITO: {blocco}.\nComando: {command[:200]}"
+
+    # Il percorso e' il confine di sicurezza, e vale anche per la
+    # shell: se l'agente chiede il permesso per read_file e poi usa
+    # `cat` per arrivarci lo stesso, il permesso non protegge niente.
+    # La domanda e' per il comando intero, non per il percorso singolo:
+    # un comando puo' toccare tre file, e chiedere per uno e poi
+    # eseguirlo cosi' com'e' sarebbe autorizzare tutto.
+    gate = _gate()
+    fuori = _percorso_fuori(command)
+    concesso = False
+    if gate is not None and fuori:
+        # si chiede sul percorso REALE che il comando tocca, non sulla
+        # root: chiedere "questa cartella e' fuori dalla root" indicando
+        # la root stessa e' una domanda con la risposta gia' scritta, e
+        # non e' quello che e' successo
+        concesso = gate.chiedi_all_utente(fuori, "eseguire",
+                                          f"comando: {command[:200]}")
+        if not concesso:
+            return (
+                "NON ESEGUITO: comando fuori dalla cartella di lavoro, "
+                f"permesso non concesso per {fuori}.\n"
+                f"Il root consentito è {_root()}.\n"
+                f"Comando: {command[:200]}"
+            )
+    elif fuori and gate is None:
+        # nessuno a cui chiedere (CLI, benchmark): si nega, e si dice
+        # perche' invece di lasciare che fallisca in silenzio. Si dice
+        # anche l'alternativa: un blocco che non dice cosa fare
+        # costringe il modello a indovinare e a riprovare
+        return (
+            f"NON ESEGUITO: il comando tocca {fuori}, fuori dalla "
+            f"cartella di lavoro ({_root()}), e non c'è nessuno a cui "
+            f"chiedere il permesso.\n"
+            f"Usa un percorso relativo dentro il progetto, oppure "
+            f"avvia Orchestra con ORCHESTRA_ROOT su quella cartella."
+        )
+
+    # _check_shell_access gira SOLO senza gate, oppure quando il gate
+    # non ha avuto niente da dire (nessun percorso fuori). Con il gate
+    # che ha concesso, farlo comunque era un modo di rispondere due
+    # volte: l'utente autorizzava, il gate concedeva, e subito dopo
+    # questo controllo diceva "BLOCCATO per sicurezza". Due risposte
+    # contraddittorie alla stessa domanda, e la seconda vinceva.
+    if not (gate is not None and fuori and concesso):
+        denied = _check_shell_access(command)
+        if denied:
+            return (f"BLOCCATO per sicurezza: {denied}\n"
+                    f"Il root consentito è {_root()}. Usa path relativi "
+                    f"dentro il progetto.")
+
+    # La root e' un confine, ma non e' una cassaforte: `rm -rf src/`
+    # sta dentro, non esce da nessuna parte, e cancella il lavoro. Il
+    # checkpoint non aiuta — copre i file modificati, non quelli
+    # cancellati. Non si blocca: e' un comando di lavoro, e un agente
+    # che non puo' ripulire una cartella di build si arrende. Si chiede,
+    # con una azione diversa da "eseguire": cosi' un "per sessione"
+    # dato per un comando innocuo non autorizza anche le cancellazioni.
+    rischio = policy_mod.rischio_operativo(command)
+    if rischio:
+        if gate is not None:
+            if not gate.chiedi_all_utente(
+                    _root(), "distruggere",
+                    f"{rischio}. Comando: {command[:200]}"):
+                return (
+                    "NON ESEGUITO: comando che cancella o riporta indietro "
+                    f"file dentro la cartella di lavoro ({rischio}), "
+                    "permesso non concesso.\n"
+                    f"Comando: {command[:200]}"
+                )
+        elif os.environ.get("ORCHESTRA_CONSENTI_DISTRUTTIVI") != "1":
+            return (
+                "NON ESEGUITO: comando distruttivo dentro la cartella di "
+                f"lavoro ({rischio}) e nessuno a cui chiedere il "
+                "permesso in questa modalita'.\n"
+                "Se e' quello che vuoi, rilancia Orchestra con "
+                "ORCHESTRA_CONSENTI_DISTRUTTIVI=1, oppure esegui il "
+                "comando a mano.\n"
+                f"Comando: {command[:200]}"
+            )
+    return None
+
+
 def _sq(s: str) -> str:
     """ quoting per -lc: il comando va in una singola stringa con gli apici
     singoli raddoppiati. Non è un involucro di sicurezza (il comando è del

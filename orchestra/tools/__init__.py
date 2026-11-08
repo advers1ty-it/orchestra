@@ -1,7 +1,7 @@
 """Loader e registro degli strumenti Orchestra.
 
 Questo pacchetto raccoglie tutti i tool in moduli singoli:
-- read_file, write_file, edit_file, list_dir, run_shell, calculate
+- read_file, write_file, edit_file, list_dir, run_shell, processo, calculate
 - memoria, web, storico, skill, browser, computer
 - image_gen (genera), image_edit (monta su una foto esistente)
 
@@ -60,6 +60,7 @@ from .esegui_test import tool_run_tests  # noqa: E402
 from .ask_user import tool_ask_user  # noqa: E402
 from .piano import tool_proponi_piano  # noqa: E402
 from .run_shell import tool_run_shell  # noqa: E402
+from .processo import tool_processo  # noqa: E402
 from .calculate import tool_calculate  # noqa: E402
 from .memoria import tool_memoria  # noqa: E402
 from .web import tool_web_cerca, tool_web_leggi  # noqa: E402
@@ -233,6 +234,7 @@ La shell:
 - Se la shell è cmd.exe (Windows) il separatore è ` && `, non `;`. Con cmd.exe il `;` non è un separatore: esegue solo il primo comando e restituisce successo, e il secondo sparisce senza errore. Con bash vale `;`.
 - La shell è soggetta allo stesso confine degli altri strumenti: un comando che tocca un percorso fuori dalla cartella di lavoro chiede il permesso all'utente, e i percorsi sensibili sono negati.
 - Usa path relativi dentro il progetto: è più semplice e non fa scattare la domanda di permesso.
+- `run_shell` ASPETTA il comando e lo uccide al timeout. Per un comando che non finisce — un server di sviluppo, un watcher, un tunnel — usa `processo`: lo avvia, resta vivo fra una chiamata e l'altra, e `processo(azione="leggi")` ti dà le ultime righe del log. Se il comando muore subito te lo dice all'avvio con l'output: è lì che sta `EADDRINUSE` o il modulo mancante. Fermalo con `ferma` quando hai finito: un server lasciato acceso tiene occupata la porta, e il prossimo avvio fallisce senza dirti perché.
 
 Immagini:
 - Per aggiungere testo, un prezzo, un logo o una filigrana a una foto che l'utente ha allegato usa `image_edit`: incolla i file veri e disegna il testo vero, e i pixel che non tocca restano quelli dell'originale. Va bene anche per ritagliare e ridimensionare, e non costa niente.
@@ -285,22 +287,26 @@ _PROFILI: dict[str, set[str]] = {
     "base": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
+        "processo",
         "image_gen", "image_edit", "screenshot_view",
     },
     "ricerca": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
+        "processo",
         "skill_cerca", "skill_leggi", "image_gen", "image_edit",
         "screenshot_view",
     },
     "skill": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
+        "processo",
         "skill_cerca", "skill_leggi", "skill_genera", "skill_importa",
         "image_gen", "image_edit", "screenshot_view",
     },
     "pieno": {
         "read_file", "write_file", "edit_file", "list_dir", "run_shell", "calculate",
+        "processo",
         "memoria", "web_cerca", "web_leggi", "storico_cerca",
         "skill_cerca", "skill_leggi", "skill_genera", "skill_importa",
         "browser_apri", "browser_render", "browser_screenshot",
@@ -450,7 +456,7 @@ def default_registry() -> ToolRegistry:
                  tool_list_dir(), tool_search_text(), tool_find_files(),
                  tool_analisi_python(), tool_run_tests(),
                  tool_ask_user(), tool_proponi_piano(),
-                 tool_run_shell(), tool_calculate(),
+                 tool_run_shell(), tool_processo(), tool_calculate(),
                  tool_memoria(), tool_web_cerca(), tool_web_leggi(),
                  tool_storico_cerca(), tool_cron(),
                  tool_skill_cerca(), tool_skill_leggi(),

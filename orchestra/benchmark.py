@@ -622,6 +622,10 @@ def _registro_benchmark() -> ToolRegistry:
     """
     reg = default_registry()
     reg.disattiva("run_shell")
+    # `processo` e' la stessa capacita' con un altro nome: senza questa
+    # riga la shell resterebbe disponibile per la porta di servizio, e il
+    # commento sopra sarebbe falso.
+    reg.disattiva("processo")
     return reg
 
 
