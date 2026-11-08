@@ -244,6 +244,13 @@ i = sk.Indice(RADICE)
 p = i.prompt("estrai tabelle da un pdf")
 check("le skill ci sono nel prompt", "estrai-pdf" in p, p[:150])
 check("e i loro tool si spiegano", "skill_leggi" in p, p[:200])
+# Il blocco lo legge il modello, e le descrizioni delle skill sono in
+# inglese: un'istruzione in italiano in mezzo a quelle righe e' la parte
+# che il modello salta. L'italiano resta dove lo legge una persona.
+check("il blocco delle skill e' in inglese", "Available skills" in p,
+      p[:150])
+check("e non e' rimasto in italiano", "Skill disponibili" not in p,
+      p[:150])
 # La generata porta il segno '+' in capo: a colpo d'occhio si
 # distingue da una scaricata, e il segno conta perche' una skill
 # generata e' un'affermazione dello stesso agente, non una procedura
@@ -254,6 +261,8 @@ pg = i.prompt("compila apk android release")
 check("la generata entra col suo contesto", "build-rn" in pg, pg[:200])
 check("e porta il segno",
       any(l.strip().startswith("+") for l in pg.splitlines()), pg[:250])
+check("il rinvio alle prove e' in inglese",
+      "proof(s)" in pg, pg[:250])
 check("la scaricata non lo porta",
       not any(l.strip().startswith("+") and "estrai-pdf" in l
               for l in pg.splitlines()), pg[:250])

@@ -224,17 +224,25 @@ def tool_run_shell() -> Tool:
                 "combinare i comandi, il ';' NON funziona e non segnala errore. "
                 "Le variabili $VAR non vengono espanse.]"
             )
-        return f"exit={r.returncode}\n{out[:8000]}{hint}"
+        # Il taglio si DICE. Otto kilobyte sono tanti, e un output che
+        # finisce a meta' senza una riga che lo dichiari sembra un output
+        # completo: l'agente legge un traceback tagliato, conclude che il
+        # difetto e' l'ultima riga che ha visto, e corregge quella. Meglio
+        # una riga in piu' che una diagnosi su un testo mutilato.
+        testa = out[:8000]
+        if len(out) > len(testa):
+            testa += (f"\n... [output tagliato: {len(out)} caratteri in "
+                      f"totale, qui i primi {len(testa)}]")
+        return f"exit={r.returncode}\n{testa}{hint}"
 
-    desc = "Esegue un comando shell e restituisce stdout, stderr e codice di uscita."
+    desc = ("Runs a shell command and returns stdout, stderr and the exit "
+            "code.")
     if posix:
-        desc += " Ambiente POSIX disponibile: puoi usare ';' per i separatori."
+        desc += " A POSIX shell is available: ';' works as a separator."
     else:
-        desc += " Attenzione: su Windows il separatore è ' && ', il ';' non funziona."
-    desc += (
-        " Attenzione: i percorsi che escono dalla directory di lavoro "
-        "vengono bloccati."
-    )
+        desc += (" Careful: on Windows the separator is ' && ', ';' does not "
+                 "work.")
+    desc += (" Paths outside the working directory are blocked.")
 
     return Tool(
         name="run_shell",
@@ -243,12 +251,14 @@ def tool_run_shell() -> Tool:
             "type": "object",
             "properties": {
                 "command": {"type": "string", "description": (
-     "Comando da eseguire. Può nominare percorsi ASSOLUTI: se sono "
-     "fuori dalla cartella di lavoro, all'utente compare una domanda "
-     "con le scelte (una volta / per questa sessione / sempre / mai) e "
-     "il comando aspetta la risposta. Non serve spiegare come chiedere."
+     "The command to run. It may name ABSOLUTE paths: if they lie "
+     "outside the working directory the user is asked (once / for this "
+     "session / always / never) and the command waits for the answer. "
+     "There is nothing to explain about asking."
  )},
-                "timeout": {"type": "integer", "description": "Timeout in secondi.", "default": 60},
+                "timeout": {"type": "integer",
+                            "description": "Timeout in seconds.",
+                            "default": 60},
             },
             "required": ["command"],
         },

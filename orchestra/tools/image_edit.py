@@ -104,33 +104,32 @@ def tool_image_edit() -> Tool:
     return Tool(
         name="image_edit",
         description=(
-            "Monta su un'immagine esistente senza rigenerarla: incolla un "
-            "logo PNG (con la sua trasparenza), scrive testo, ritaglia, "
-            "ridimensiona. I pixel fuori dalle zone toccate restano quelli "
-            "dell'originale, quindi un logo e un prezzo restano corretti. "
-            "Funziona con JPEG, PNG e WebP; l'uscita ha lo stesso formato "
-            "dell'ingresso. Salva in immagini/ e mostra l'anteprima. "
-            "E' il tool giusto per testi, prezzi, loghi, filigrane, cornici "
-            "su una foto che l'utente ha allegato: per quelle cose NON usare "
-            "`image_gen`, che ridisegna tutto e inventa le lettere. Non costa "
-            "niente: nessuna chiave, nessun credito. Le coordinate accettano "
-            "pixel oppure percentuali (\"50%\") e valgono sull'immagine gia' "
-            "raddrizzata secondo l'EXIF."
+            "Composites onto an existing image without regenerating it: "
+            "pastes a PNG logo (keeping its transparency), draws text, crops, "
+            "resizes. Pixels outside the touched areas stay exactly as they "
+            "were, so a logo and a price stay correct. Works with JPEG, PNG "
+            "and WebP; the output keeps the input format. Saves into "
+            "immagini/ and shows a preview. This is the right tool for text, "
+            "prices, logos, watermarks and frames on a photo the user "
+            "attached: for those do NOT use `image_gen`, which redraws "
+            "everything and invents the letters. It costs nothing: no key, "
+            "no credit. Coordinates accept pixels or percentages (\"50%\") "
+            "and apply to the image already straightened according to EXIF."
         ),
         schema={
             "type": "object",
             "properties": {
                 "immagine": {
                     "type": "string",
-                    "description": "Immagine di partenza: percorso relativo "
-                                   "al progetto, data URL, oppure `ultimo` "
-                                   "per l'ultima immagine allegata in chat "
+                    "description": "Starting image: path relative to the "
+                                   "project, data URL, or `ultimo` for the "
+                                   "image attached last in the chat "
                                    "(default).",
                 },
                 "operazioni": {
                     "type": "array",
-                    "description": "Le operazioni, in ordine. Ogni oggetto ha "
-                                   "`tipo`. Esempio: [{\"tipo\":\"incolla\","
+                    "description": "The operations, in order. Each object "
+                                   "has `tipo`. Example: [{\"tipo\":\"incolla\","
                                    "\"immagine\":\"logo.png\",\"x\":\"82%\","
                                    "\"y\":\"4%\",\"larghezza\":\"16%\"},"
                                    "{\"tipo\":\"testo\",\"testo\":\"€540\","
@@ -144,110 +143,112 @@ def tool_image_edit() -> Tool:
                             "tipo": {
                                 "type": "string",
                                 "enum": list(montaggio.OPERAZIONI),
-                                "description": "ritaglia, ridimensiona, "
-                                               "incolla o testo.",
+                                "description": "One of the names in the "
+                                               "enum: ritaglia (crop), "
+                                               "ridimensiona (resize), "
+                                               "incolla (paste), testo "
+                                               "(text).",
                             },
                             "x": {
                                 "type": "string",
-                                "description": "Posizione orizzontale: pixel "
-                                               "(120) o percentuale (\"50%\").",
+                                "description": "Horizontal position: pixels "
+                                               "(120) or percentage (\"50%\").",
                             },
                             "y": {
                                 "type": "string",
-                                "description": "Posizione verticale, come `x`.",
+                                "description": "Vertical position, same as `x`.",
                             },
                             "larghezza": {
                                 "type": "string",
-                                "description": "ritaglia/ridimensiona: "
-                                               "larghezza in pixel o % della "
-                                               "base. incolla: quanto deve "
-                                               "essere largo il logo.",
+                                "description": "Crop/resize: width in pixels "
+                                               "or % of the original. Paste: "
+                                               "how wide the logo must be.",
                             },
                             "altezza": {
                                 "type": "string",
-                                "description": "Come `larghezza` per "
-                                               "l'altezza. Se ne dai una sola, "
-                                               "le proporzioni si conservano.",
+                                "description": "Same as `larghezza` for "
+                                               "height. Give only one and the "
+                                               "proportions are kept.",
                             },
                             "scala": {
                                 "type": "string",
-                                "description": "ridimensiona: \"50%\" o 0.5.",
+                                "description": "Resize: \"50%\" or 0.5.",
                             },
                             "ancora": {
                                 "type": "string",
-                                "description": "Quale punto di incolla/testo "
-                                               "cade su x,y: due lettere, "
-                                               "orizzontale l/m/r e verticale "
-                                               "a/m/b. \"la\" e' in alto a "
-                                               "sinistra (default), \"mm\" il "
-                                               "centro, \"rb\" in basso a "
-                                               "destra.",
+                                "description": "Which point of the paste/text "
+                                               "lands on x,y: two letters, "
+                                               "horizontal l/m/r and vertical "
+                                               "a/m/b. \"la\" is top left "
+                                               "(default), \"mm\" the center, "
+                                               "\"rb\" bottom right.",
                             },
                             "immagine": {
                                 "type": "string",
-                                "description": "incolla: il file da "
-                                               "incollare (percorso, data URL "
-                                               "o `ultimo`). Un PNG con "
-                                               "trasparenza resta "
-                                               "trasparente.",
+                                "description": "Paste: the file to paste "
+                                               "(path, data URL or "
+                                               "`ultimo`). A PNG with "
+                                               "transparency stays "
+                                               "transparent.",
                             },
                             "opacita": {
                                 "type": "string",
-                                "description": "incolla: 1-100, per un logo "
-                                               "in filigrana.",
+                                "description": "Paste: 1-100, for a logo "
+                                               "used as a watermark.",
                             },
                             "testo": {
                                 "type": "string",
-                                "description": "testo: la stringa da "
-                                               "disegnare. \\n va a capo.",
+                                "description": "Text: the string to draw. "
+                                               "\\n starts a new line.",
                             },
                             "dimensione": {
                                 "type": "integer",
-                                "description": "testo: altezza del carattere "
-                                               "in pixel (default 64).",
+                                "description": "Text: font height in pixels "
+                                               "(default 64).",
                             },
                             "colore": {
                                 "type": "string",
-                                "description": "testo: colore del testo, "
-                                               "`#rrggbb` (default bianco).",
+                                "description": "Text: text color, `#rrggbb` "
+                                               "(default white).",
                             },
                             "grassetto": {
                                 "type": "boolean",
-                                "description": "testo: usa un font bold di "
-                                               "sistema, se disponibile.",
+                                "description": "Text: use a system bold "
+                                               "font, when available.",
                             },
                             "font": {
                                 "type": "string",
-                                "description": "testo: percorso di un .ttf o "
-                                               ".otf nel progetto, se serve un "
-                                               "font preciso.",
+                                "description": "Text: path of a .ttf or .otf "
+                                               "inside the project, when an "
+                                               "exact font is needed.",
                             },
                             "riquadro": {
                                 "type": "string",
-                                "description": "testo: colore dello sfondo "
-                                               "dietro al testo (es. "
-                                               "\"#d40000\"), per renderlo "
-                                               "leggibile sulla foto.",
+                                "description": "Text: background color "
+                                               "behind the text (e.g. "
+                                               "\"#d40000\") to keep it "
+                                               "readable on a photo.",
                             },
                             "margine": {
                                 "type": "integer",
-                                "description": "testo: pixel di spazio fra "
-                                               "testo e riquadro (default 18).",
+                                "description": "Text: pixels of padding "
+                                               "between text and box "
+                                               "(default 18).",
                             },
                             "raggio": {
                                 "type": "integer",
-                                "description": "testo: angoli arrotondati del "
-                                               "riquadro (default 14).",
+                                "description": "Text: rounded corners of the "
+                                               "box (default 14).",
                             },
                             "bordo": {
                                 "type": "integer",
-                                "description": "testo: spessore del contorno "
-                                               "attorno alle lettere.",
+                                "description": "Text: thickness of the outline "
+                                               "around the letters.",
                             },
                             "colore_bordo": {
                                 "type": "string",
-                                "description": "testo: colore del contorno "
-                                               "(default nero).",
+                                "description": "Text: outline color "
+                                               "(default black).",
                             },
                         },
                         "required": ["tipo"],
@@ -255,20 +256,20 @@ def tool_image_edit() -> Tool:
                 },
                 "nome_file": {
                     "type": "string",
-                    "description": "Nome del file senza estensione. Default: "
+                    "description": "File name without extension. Default: "
                                    "montaggio.",
                 },
                 "formato": {
                     "type": "string",
                     "enum": ["", "jpg", "png", "webp"],
-                    "description": "Formato di uscita. Vuoto = come "
-                                   "l'ingresso. Usa `png` se serve la "
-                                   "trasparenza: un JPEG non la conserva.",
+                    "description": "Output format. Empty = same as the "
+                                   "input. Use `png` when transparency is "
+                                   "needed: a JPEG cannot keep it.",
                 },
                 "qualita": {
                     "type": "integer",
-                    "description": "Qualita' JPEG/WebP, 1-100 (default 95). "
-                                   "Bassa = file leggero, piu' artefatti.",
+                    "description": "JPEG/WebP quality, 1-100 (default 95). "
+                                   "Low = smaller file, more artifacts.",
                 },
             },
             "required": ["operazioni"],

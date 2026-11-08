@@ -112,26 +112,26 @@ def tool_proponi_piano() -> Tool:
     return Tool(
         name="proponi_piano",
         description=(
-            "Mostra all'utente il piano di lavoro e aspetta l'approvazione, "
-            "dentro lo stesso turno. Obbligatorio quando la modalita' piano "
-            "e' attiva e vuoi modificare file o eseguire comandi: finche' il "
-            "piano non e' approvato quei tool sono bloccati. Usalo anche "
-            "fuori dalla modalita' piano per un lavoro che tocca piu' file o "
-            "cambia qualcosa che l'utente vede."
+            "Shows the user the work plan and waits for approval, inside the "
+            "same turn. Required when plan mode is on and you want to change "
+            "files or run commands: until the plan is approved those tools "
+            "stay locked. Use it outside plan mode too for work that touches "
+            "several files or changes something the user can see."
         ),
         schema={
             "type": "object",
             "properties": {
                 "piano": {
                     "type": "string",
-                    "description": ("Il piano, in testo leggibile: cosa hai "
-                                    "capito e cosa farai. Righe separate."),
+                    "description": ("The plan, in readable text: what you "
+                                    "understood and what you will do. One "
+                                    "line per point."),
                 },
                 "passi": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": ("I passi concreti, uno per voce: file "
-                                    "toccati, comandi, cosa cambia."),
+                    "description": ("The concrete steps, one per item: files "
+                                    "touched, commands, what changes."),
                 },
             },
             "required": ["piano"],

@@ -334,6 +334,20 @@ check("search_text non legge i file di credenziali",
 check("find_files trova per nome",
       "codice.py" in reg_c.get("find_files").handler(
           pattern="*.py", path="_test_cerca"))
+# Un `*` vale in tutto l'albero. Prima `*.py` era un glob di primo
+# livello: da una radice di progetto trovava solo i file sciolti nella
+# radice, e il modello concludeva che una funzione viveva in un file che
+# non esisteva. La sottocartella e' la parte che mancava.
+os.makedirs(os.path.join(PROVA, "sotto"))
+with open(os.path.join(PROVA, "sotto", "fondo.py"), "w",
+          encoding="utf-8") as f:
+    f.write("X = 1\n")
+annidato = reg_c.get("find_files").handler(
+    pattern="*.py", path="_test_cerca")
+check("e scende nelle sottocartelle", "sotto/fondo.py" in annidato,
+      annidato[:200])
+check("con i percorsi ordinati",
+      annidato.splitlines() == sorted(annidato.splitlines()), annidato[:200])
 check("search_text spiega una regex rotta",
       "ERRORE" in reg_c.get("search_text").handler(pattern="(."))
 shutil.rmtree(PROVA, ignore_errors=True)

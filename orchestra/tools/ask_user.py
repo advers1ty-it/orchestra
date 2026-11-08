@@ -38,23 +38,29 @@ def tool_ask_user() -> Tool:
     return Tool(
         name="ask_user",
         description=(
-            "Fa UNA domanda all'utente e aspetta la risposta, dentro lo "
-            "stesso turno. Usalo quando un'informazione che non puoi "
-            "ricavare dagli strumenti cambia quello che stai per fare: "
-            "un nome, quale dei due file, un requisito ambiguo. Non usarlo "
-            "per chiedere permesso (lo fa gia' lo strumento) e non per "
-            "confermare che il lavoro va bene: quello lo vede l'utente."),
+            "Asks the user ONE question and waits for the answer, inside the "
+            "same turn. Use it when a piece of information you cannot get "
+            "from the tools changes what you are about to do: a name, which "
+            "of the two files, an ambiguous requirement. Do not use it to "
+            "ask permission (the tool does that already) nor to confirm the "
+            "work is fine: the user can see it."),
         schema={
             "type": "object",
             "properties": {
                 "domanda": {
                     "type": "string",
-                    "description": "La domanda, in una frase. Dì perche' la fai e cosa cambia in base alla risposta.",
+                    "description": (
+                        "The question, in one sentence. Say why you ask and "
+                        "what changes with the answer."
+                    ),
                 },
                 "opzioni": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Fino a 6 risposte probabili, mostrate come scorciatoie. La risposta resta libera.",
+                    "description": (
+                        "Up to 6 likely answers, shown as shortcuts. The "
+                        "answer stays free."
+                    ),
                 },
             },
             "required": ["domanda"],

@@ -106,8 +106,11 @@ check("le prove sono nel testo d'uso",
 s = i.get("pdf-estrazione")
 check("la scaricata non ha prove", s and not s.con_prove)
 riga = g.per_prompt()
-check("nel prompt la generata e' segnata", "[2 prove]" in riga, riga[:100])
-check("la scaricata non lo e'", "[prove]" not in s.per_prompt())
+# Il conteggio delle prove e il rinvio ora sono in inglese, perche'
+# quella riga finisce nel prompt: quello che conta e' che le prove si
+# vedano, non in che lingua e' scritta la parentesi.
+check("nel prompt la generata e' segnata", "[2 proof(s)]" in riga, riga[:100])
+check("la scaricata non lo e'", "proof(s)" not in s.per_prompt())
 # Il segno '+': a colpo d'occhio si distingue l'una dall'altra.
 check("la generata porta il segno", riga.strip().startswith("+"), riga[:30])
 
@@ -257,7 +260,7 @@ nomip = [l.strip() for l in p.splitlines()
 check("una riga sola nel prompt", len(nomip) == 1, f"{len(nomip)}: {nomip}")
 check("ed e' quella giusta", "compila-apk" in nomip[0] or "build-rn" in nomip[0],
       str(nomip)[:110])
-check("annuncia il totale", f"{len(i.tutte())} in tutto" in p, p[:120])
+check("annuncia il totale", f"{len(i.tutte())} in total" in p, p[:120])
 
 print("\n[12] La ricerca guarda al contesto, non alla massa")
 # Una skill che non c'entra col contesto non deve entrare nel prompt:

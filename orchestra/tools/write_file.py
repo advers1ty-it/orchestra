@@ -59,12 +59,15 @@ def tool_write_file() -> Tool:
 
     return Tool(
         name="write_file",
-        description="Scrive un file di testo, creando le directory necessarie.",
+        description=(
+            "Writes a whole text file, creating the directories it needs. "
+            "For a small change inside an existing file prefer edit_file."
+        ),
         schema={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Percorso relativo alla root, o ASSOLUTO: un percorso fuori dalla root chiede il permesso all utente."},
-                "content": {"type": "string", "description": "Contenuto completo del file."},
+                "path": {"type": "string", "description": "Path relative to the project root, or ABSOLUTE: a path outside the root asks the user for permission."},
+                "content": {"type": "string", "description": "Complete content of the file."},
             },
             "required": ["path", "content"],
         },

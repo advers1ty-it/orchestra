@@ -255,14 +255,58 @@ mancanti = set(r.all_names()) - _PROFILI["pieno"]
 check("il profilo pieno ha TUTTI i tool registrati", not mancanti,
       f"fuori dal profilo pieno: {sorted(mancanti)}")
 
-print("\n[8] Il contratto dice cosa sanno fare")
+# Il profilo "auto" sceglie dalla PROSSIMA mossa, non dalla prima parola
+# che combacia. La regola che lo rende verificabile: il profilo scelto
+# contiene i tool che il testo richiede. Se non li contiene, l'agente
+# risponde "tool inesistente" a un compito che ha letto per intero.
+from orchestra.tools import profilo_per_testo  # noqa: E402
+
+for testo, atteso, tool in (
+    ("apri https://esempio.it e dimmi cosa c'e'", "pieno", "browser_apri"),
+    ("clicca il pulsante Accedi sul sito", "pieno", "browser_click"),
+    ("spegni la finestra del desktop", "pieno", "computer_click"),
+    ("ogni giorno alle 8 fai il riepilogo", "pieno", "cron"),
+    ("usa la skill del deploy per pubblicare", "skill", "skill_leggi"),
+    ("cerca sul web quanto costa", "ricerca", "web_cerca"),
+    ("sistema il bug in src/app.py", "base", "read_file"),
+    ("genera un'immagine di un gatto", "base", "image_gen"),
+):
+    scelto = profilo_per_testo(testo)
+    check(f"auto: {testo[:34]!r} -> {atteso}", scelto == atteso, scelto)
+    check(f"  e {tool} c'e'", tool in _PROFILI[scelto],
+          f"{scelto} non ha {tool}")
+
+print("\n[8] Il contratto dice cosa sanno fare, in inglese")
 descr = r.get("screenshot_view").description.lower()
 check("screenshot_view parla di immagini, non solo di schermi",
-      "immagine" in descr or "foto" in descr, descr[:120])
+      "image" in descr or "photo" in descr, descr[:120])
 check("e nomina il percorso relativo", "relativ" in descr, descr[:120])
 descr = r.get("read_file").description.lower()
 check("read_file dice che legge i PDF", "pdf" in descr, descr[:140])
 check("e manda le immagini a screenshot_view", "screenshot_view" in descr, descr[:140])
+
+# Il contratto lo legge il modello, quindi e' in inglese (le descrizioni
+# in italiano dentro uno schema inglese erano la regola prima, non
+# l'eccezione). Queste due invarianti sono quelle che si rompono in
+# silenzio: un parametro senza descrizione il modello lo riempie a caso
+# o lo omette, e un carattere corrotto e' una parola che non esiste.
+SENZA = [(t.name, k) for t in r.active
+         for k, v in (t.schema.get("properties") or {}).items()
+         if not (v.get("description") or "").strip()]
+check("ogni parametro di ogni tool ha una descrizione", not SENZA,
+      f"senza descrizione: {SENZA[:8]}")
+CORROTTI = [(t.name, k) for t in r.active
+            for k, v in ([(None, {"description": t.description})]
+                         + list((t.schema.get("properties") or {}).items()))
+            if "\ufffd" in (v.get("description") or "")]
+check("nessuna descrizione contiene caratteri corrotti", not CORROTTI,
+      f"corrotti: {CORROTTI[:8]}")
+IT = (" leggi ", " legge ", " scrive ", " percorso", " riga ", " esegue ",
+      " cerca ", " restituisce ", " apre ", " elenca ")
+ITALIANE = [t.name for t in r.active
+            if any(w in (t.description or "").lower() for w in IT)]
+check("le descrizioni dei tool sono in inglese", not ITALIANE,
+      f"ancora in italiano: {ITALIANE}")
 
 print("\n[9] edit_file lavora nella codifica del file, e sui binari si ferma")
 CP2 = scrivi("anagrafica.txt", "Perché è così: € 540\n".encode("cp1252"))

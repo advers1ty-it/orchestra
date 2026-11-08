@@ -94,20 +94,20 @@ def tool_screenshot_view() -> Tool:
     return Tool(
         name="screenshot_view",
         description=(
-            "Guarda un file immagine (PNG/JPG/GIF/WebP: uno screenshot, ma "
-            "anche una foto o un logo) e lo mostra al modello. È l'unico "
-            "modo di VEDERE un'immagine che sta sul disco: read_file su un "
-            "PNG non dà il contenuto, e un percorso non è un'immagine. "
-            "Usalo per descrivere una schermata, trovare un elemento in una "
-            "pagina, verificare un layout, o capire cosa c'è in una foto "
-            "prima di montarci sopra un testo. Accetta un percorso relativo "
-            "alla cartella di lavoro o un assoluto (fuori chiede permesso). "
-            "Su un PDF restituisce il testo, se c'è."
+            "Looks at an image file (PNG/JPG/GIF/WebP: a screenshot, but "
+            "also a photo or a logo) and shows it to the model. It is the "
+            "only way to SEE an image on disk: read_file on a PNG does not "
+            "give its content, and a path is not an image. Use it to "
+            "describe a screen, find an element on a page, check a layout, "
+            "or see what a photo contains before placing text on it. "
+            "Accepts a path relative to the working directory or an "
+            "absolute one (outside the root it asks permission). On a PDF "
+            "it returns the text, when there is one."
         ),
         schema={"type": "object",
                 "properties": {"nome_file": {
                     "type": "string",
-                    "description": "Percorso del file immagine da leggere."}},
+                    "description": "Path of the image file to look at."}},
                 "required": ["nome_file"]},
         handler=handler,
     )

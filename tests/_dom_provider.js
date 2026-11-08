@@ -227,12 +227,21 @@ globalThis.Option = function (testo, val) {
 // file c'e' in uno dei due, e se non c'e' in nessuno il throw dice
 // quale — invece di lasciare il DOM vuoto e ogni check passare per
 //che' non c'era niente da misurare.
+//
+// ORDINE DI RICERCA, e perche' il primo c'e'. Il file temporaneo vive
+// in %TEMP%, quindi __dirname/.. non porta al progetto: i due percorsi
+// sotto funzionano solo se il test e' lanciato dalla root. Lanciato da
+// `tests/`, come si fa di solito, fallivano tutti e ventitré i check con
+// un errore che parlava di un modulo non trovato. La cwd non e' una
+// informazione affidabile: la passa il lato Python, che la root la
+// conosce per costruzione.
 const _fs = require("fs");
 const _path = require("path");
 const _percorsi = [
+  process.env.ORCHESTRA_WEB_INDEX || "",
   _path.join(__dirname, "..", "orchestra", "web", "index.html"),
   _path.join(process.cwd(), "orchestra", "web", "index.html"),
-];
+].filter(Boolean);
 const _trovato = _percorsi.find((p) => _fs.existsSync(p));
 if (!_trovato) {
   throw new Error("index.html non trovato in nessuno di: "

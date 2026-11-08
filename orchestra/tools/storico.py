@@ -67,19 +67,19 @@ def tool_storico_cerca() -> Tool:
     return Tool(
         name="storico_cerca",
         description=(
-            "Cerca nelle conversazioni passate. Usala quando qualcuno "
-            "dice «quella cosa di cui avevamo parlato», «come avevamo "
-            "fatto», o quando la risposta potrebbe essere in una chat "
-            "precedente invece che nel web. Ogni risultato torna con "
-            "l'id della sessione, così puoi dire all'utente quale aprire."
+            "Searches past conversations. Use it when someone says \"that "
+            "thing we talked about\", \"how did we do it\", or when the answer "
+            "may be in an earlier chat instead of the web. Every result "
+            "carries the session id, so you can tell the user which one to "
+            "open."
         ),
         schema={
             "type": "object",
             "properties": {
                 "query": {"type": "string",
-                          "description": "Parole da cercare nelle chat passate."},
+                          "description": "Words to search for in past chats."},
                 "limite": {"type": "integer",
-                           "description": "Quanti risultati. Default 10."},
+                           "description": "How many results. Default 10."},
             },
             "required": ["query"],
         },

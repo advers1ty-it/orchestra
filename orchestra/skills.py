@@ -142,11 +142,18 @@ class Skill:
 
         Niente corpo. E' la differenza fra 20.000 token e 900.
         """
+        # Inglese: questa riga la legge il modello, non l'utente. Le
+        # descrizioni delle skill sono gia' in inglese (a parte le
+        # scaricate da store italiani), e mescolare le due lingue nella
+        # stessa riga costringe il modello a un cambio di lingua a meta'
+        # frase. I messaggi d'errore e l'interfaccia restano in italiano:
+        # quelli li legge una persona.
         segno = "+" if self.origine == "generata" else " "
         riga = f"  {segno} {self.nome}: {self.descrizione}"
         if self.origine == "generata":
             n = len(self.prove)
-            riga += f" [{n} prove] se vuoi i dettagli chiedi: skill_leggi {self.nome}"
+            riga += (f" [{n} proof(s)] for the details ask: "
+                     f"skill_leggi {self.nome}")
         return riga
 
     def per_uso(self) -> str:
@@ -156,23 +163,26 @@ class Skill:
         procedura senza le prove che l'hanno generata e' un'affermazione;
         con, e' qualcosa che l'ha appena funzionato.
         """
+        # Anche questo testo lo legge il modello, quindi in inglese; i
+        # VALORI (obiettivo, comandi, esito) restano come sono stati
+        # scritti quando la skill e' nata.
         parti = [f"# Skill: {self.nome}", "", self.corpo]
         if self.prove:
-            parti += ["", "## Prove che questa procedura ha funzionato", ""]
+            parti += ["", "## Evidence that this procedure worked", ""]
             for i, p in enumerate(self.prove, 1):
                 quando = time.strftime(
                     "%Y-%m-%d %H:%M", time.localtime(p.get("ts", 0)))
-                parti.append(f"### Prova {i} — {quando}")
+                parti.append(f"### Proof {i} - {quando}")
                 if p.get("obiettivo"):
-                    parti.append(f"Obiettivo: {p['obiettivo']}")
+                    parti.append(f"Objective: {p['obiettivo']}")
                 if p.get("comandi"):
-                    parti.append("Comandi usati:")
+                    parti.append("Commands used:")
                     parti.append("```")
                     for c in p["comandi"]:
                         parti.append(str(c))
                     parti.append("```")
                 if p.get("esito"):
-                    parti.append(f"Esito: {p['esito']}")
+                    parti.append(f"Outcome: {p['esito']}")
                 parti.append("")
         return "\n".join(parti)
 
@@ -427,15 +437,19 @@ class Indice:
                 if len(scelte) >= limite:
                     break
         righe = [s.per_prompt() for s in scelte[:limite]]
+        # In inglese perche' e' un blocco che il modello legge per
+        # decidere se leggere una skill: sta accanto alle descrizioni,
+        # che sono in inglese, e un'istruzione in italiano in mezzo a
+        # quelle righe e' la cosa che il modello salta.
         return (
-            f"\n## Skill disponibili ({len(attive)} in tutto, "
-            f"quelle sotto sono le piu' vicine a cio' che ti hanno chiesto)\n"
-            "Una skill e' una procedura gia' scritta. Se il tuo compito e' "
-            "vicino a una, leggila PRIMA di improvvisare:\n"
-            "  skill_leggi <nome>  porta la procedura nel contesto\n"
-            "  skill_cerca <parole> cerca fra tutte\n"
-            "Chiedere costa un messaggio. Improvvisare costa un intervento "
-            "sbagliato che devi disfare.\n"
+            f"\n## Available skills ({len(attive)} in total, "
+            f"the ones below are the closest to what you were asked)\n"
+            "A skill is a procedure already written down. If your task is "
+            "close to one, read it BEFORE improvising:\n"
+            "  skill_leggi <name>  brings the procedure into the context\n"
+            "  skill_cerca <words> searches all of them\n"
+            "Asking costs one message. Improvising costs a wrong "
+            "intervention you have to undo.\n"
             + "\n".join(righe)
         )
 

@@ -10,19 +10,9 @@ default_registry() restituisce il registro completo con tutti i tool attivi.
 
 from __future__ import annotations
 
-import os
-import sys
-from pathlib import Path
-
 # ---------------------------------------------------------------------------
 # Root del progetto e guardie di percorso
 # ---------------------------------------------------------------------------
-
-# La cartella DEL PACCHETTO (`orchestra/`): serve alla pulizia qui sotto e
-# a nient'altro. Non e' la cartella di lavoro, e chiamarla `_ROOT` era
-# meta' del fraintendimento.
-_PACCHETTO = Path(__file__).resolve().parent
-
 
 # La cartella di lavoro vera non si definisce qui: si riesporta da
 # `._guard`, che la rivaluta a ogni chiamata (progetto attivo del thread,
@@ -375,12 +365,55 @@ def applica_profilo(registry: ToolRegistry, profilo: str) -> None:
         registry.attiva(nome)
 
 
+# Profilo "auto": si parte da cosa serve, non da quale parola c'e'.
+#
+# La versione precedente cercava tre gruppi di sottostringhe e prendeva
+# la prima che combaciava, quindi il profilo dipendeva da una parola
+# qualsiasi del messaggio. Due casi veri, entrambi sbagliati:
+#
+# - "genera un'immagine di un gatto" conteneva "genera", che stava fra
+#   le parole delle SKILL: diventava il profilo "skill". Li' `image_gen`
+#   c'e', quindi per caso funzionava — ma la ragione era "genera", e
+#   "genera un pdf" avrebbe portato al profilo delle procedure.
+# - "apri https://esempio.it" non conteneva nessuna parola chiave: cadeva
+#   su "base", che NON ha `browser_apri`. L'agente rispondeva "tool
+#   inesistente" a un compito che il messaggio dichiarava per intero.
+#
+# Un profilo che toglie il tool che il testo richiede non e' una
+# preferenza: e' una promessa rotta, e l'utente l'ha scelta proprio per
+# farsi dare il minimo necessario. Qui si fa l'inverso: si riconoscono
+# le CAPACITA' richieste e si prende il profilo piu' piccolo che le
+# contiene tutte. Nessuna parola chiave nuova va aggiunta a occhio:
+# questi gruppi sono quelli che i profili distinguono davvero.
+_AUTO_BROWSER = (
+    "browser", "sito", "url", "http", "https", "pagina", "clic",
+    "modulo", "login", "cdp",
+)
+_AUTO_COMPUTER = ("desktop", "mouse", "finestra", "programma")
+_AUTO_AUTOMAZIONE = ("cron", "schedulat", "mcp", "ogni giorno")
+_AUTO_SKILL = ("skill", "procedura", "importa", "riusa", "come si fa")
+_AUTO_WEB = ("cerca", "web", "storico", "passato", "internet",
+             "documentazione")
+
+
 def profilo_per_testo(testo: str) -> str:
-    """Sceglie il profilo in base al testo dell'utente."""
+    """Sceglie il profilo in base a quello che l'utente chiede di fare.
+
+    Il profilo scelto deve contenere TUTTI i tool che il testo richiede:
+    "pieno" e' l'unico che ha browser, computer, cron e mcp insieme, e
+    per questo vince appena il testo nomina uno di quelli. Un testo che
+    non nomina nessuna capacita' speciale resta su "base", che e' il
+    minimo onesto: file, comandi, ricerca e immagini.
+    """
     t = testo.lower()
-    if any(k in t for k in ("skill", "procedura", "genera", "importa")):
+    # Una capacita' speciale vale il profilo che la contiene: browser e
+    # computer stanno solo in "pieno", insieme a cron e mcp. Prendere un
+    # profilo piu' piccolo vorrebbe dire togliere il tool richiesto.
+    if any(k in t for k in _AUTO_BROWSER + _AUTO_COMPUTER + _AUTO_AUTOMAZIONE):
+        return "pieno"
+    if any(k in t for k in _AUTO_SKILL):
         return "skill"
-    if any(k in t for k in ("cerca", "web", "storico", "passato")):
+    if any(k in t for k in _AUTO_WEB):
         return "ricerca"
     return "base"
 
@@ -468,19 +501,17 @@ def default_registry() -> ToolRegistry:
     return registry
 
 
-# ---------------------------------------------------------------------------
-# Pulizia automatica all'avvio
-# ---------------------------------------------------------------------------
-
-def _pulizia_tools_obsoleti() -> None:
-    """Rimuove il vecchio orchestra/tools.py se coesiste con la nuova cartella orchestra/tools/."""
-    tools_py = _PACCHETTO / "tools.py"
-    tools_dir = _PACCHETTO / "tools"
-    if tools_py.exists() and tools_dir.is_dir():
-        try:
-            tools_py.unlink()
-        except OSError:
-            pass
-
-
-_pulizia_tools_obsoleti()
+# La migrazione da `orchestra/tools.py` a `orchestra/tools/` non sta qui.
+#
+# C'era una `_pulizia_tools_obsoleti()` eseguita all'import di questo
+# pacchetto: cancellava un file dentro `orchestra/` come effetto
+# collaterale di un `import`. Due difetti, il secondo peggiore del primo:
+# un modulo che importa non deve scrivere sul disco, e una libreria che
+# cancella file all'import e' esattamente cio' che un antivirus, un
+# pacchetto congelato o un utente prudente hanno ragione a fermare.
+#
+# La stessa pulizia esiste dove serve il contrario di un import: all'avvio
+# dell'app (`webapp.OrchestraApp._pulizia_tools_obsoleti`), che e' il punto
+# in cui l'utente ha gia' deciso di far girare Orchestra e la cartella di
+# installazione e' la sua. La' non e' un effetto nascosto, e' una
+# riparazione dichiarata.

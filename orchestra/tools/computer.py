@@ -96,14 +96,14 @@ def tool_computer_screenshot() -> Tool:
     return Tool(
         name="computer_screenshot",
         description=(
-            "Cattura lo schermo principale in PNG. Usalo solo se devi "
-            "verificare aspetto visivo o quando non puoi leggere il testo "
-            "diversamente."
+            "Captures the main screen to a PNG file. Use it only to check "
+            "how something looks, or when the text cannot be read any "
+            "other way."
         ),
         schema={"type": "object",
                 "properties": {"nome_file": {
                     "type": "string",
-                    "description": "Nome del file PNG da creare (opzionale)."}},
+                    "description": "PNG file name to create (optional)."}},
                 "required": []},
         handler=handler,
     )
@@ -152,14 +152,15 @@ def tool_computer_click() -> Tool:
     return Tool(
         name="computer_click",
         description=(
-            "Muove il cursore e clicca a coordinate assolute dello schermo. "
-            "Usalo solo se davvero necessario; coordinate sbagliate possono "
-            "attivare azioni indesiderate."
+            "Moves the cursor and clicks at absolute screen coordinates. "
+            "Use it only when there is no other way: wrong coordinates can "
+            "trigger actions nobody asked for."
         ),
         schema={"type": "object", "properties": {
-            "x": {"type": "integer", "description": "coordinata X."},
-            "y": {"type": "integer", "description": "coordinata Y."},
-            "bottone": {"type": "string", "description": "sinistro (default) o destro."}},
+            "x": {"type": "integer", "description": "X coordinate on the screen."},
+            "y": {"type": "integer", "description": "Y coordinate on the screen."},
+            "bottone": {"type": "string",
+                        "description": "left (default) or right."}},
             "required": ["x", "y"]},
         handler=handler,
     )
@@ -201,11 +202,11 @@ def tool_computer_type() -> Tool:
     return Tool(
         name="computer_type",
         description=(
-            "Scrive testo come se fosse la tastiera (SendKeys) nella "
-            "finestra attiva. Usalo solo dopo aver messo a fuoco il campo."
+            "Types text as if from the keyboard (SendKeys) into the active "
+            "window. Use it only after the field has focus."
         ),
         schema={"type": "object", "properties": {
-            "testo": {"type": "string", "description": "Testo da scrivere."}},
+            "testo": {"type": "string", "description": "Text to type."}},
             "required": ["testo"]},
         handler=handler,
     )
@@ -230,12 +231,12 @@ def tool_computer_open() -> Tool:
     return Tool(
         name="computer_open",
         description=(
-            "Apre un programma o sito locale via il sistema. Usa nomi "
-            "noti (notepad, calc) oppure un percorso/modalità supportata."
+            "Opens a program or a local site through the system. Use known "
+            "names (notepad, calc) or a path/URL the system understands."
         ),
         schema={"type": "object", "properties": {
             "app": {"type": "string",
-                    "description": "Nome o percorso da aprire."}},
+                    "description": "Name or path to open."}},
                 "required": ["app"]},
         handler=handler,
     )

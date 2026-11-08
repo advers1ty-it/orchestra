@@ -209,104 +209,112 @@ def tool_image_gen() -> Tool:
     return Tool(
         name="image_gen",
         description=(
-            "Genera un'immagine da un prompt di testo, oppure modifica "
-            "un'immagine esistente, con il provider configurato (OpenAI, "
-            "Google o OpenRouter). Salva il risultato in immagini/ nel "
-            "progetto. Per modificare, passa `riferimento`: un percorso del "
-            "progetto, una data URL, oppure `ultimo` per l'immagine appena "
-            "allegata dall'utente. Per l'inpainting (cambiare SOLO una zona, "
-            "lasciando intatto il resto) passa `zone`: rettangoli o ellissi "
-            "in pixel o percentuali, e la maschera la costruisce il tool. "
-            "L'inpainting funziona solo con OpenAI; con Google e OpenRouter "
-            "il tool lo dice invece di partire. Con `elenco_modelli` elenca i "
-            "modelli immagine di OpenRouter, per sceglierne uno con "
-            "`modello`. Costa denaro o credito sul provider: usalo quando "
-            "l'utente chiede di creare o trasformare un'immagine, non per "
-            "descrivere un allegato. Se nessuna chiave e' configurata, il "
-            "tool lo dice: in quel caso proponi la generazione locale con la "
-            "skill `invokeai`."
+            "Generates an image from a text prompt, or edits an existing "
+            "image, with the configured provider (OpenAI, Google or "
+            "OpenRouter). Saves the result into immagini/ in the project. "
+            "To edit, pass `riferimento`: a path in the project, a data URL, "
+            "or `ultimo` for the image the user just attached. For "
+            "inpainting (change ONLY one area, leave the rest untouched) "
+            "pass `zone`: rectangles or ellipses in pixels or percentages, "
+            "and the tool builds the mask itself. Inpainting works only "
+            "with OpenAI; with Google and OpenRouter the tool says so "
+            "instead of starting. With `elenco_modelli` it lists the "
+            "OpenRouter image models, so one can be picked with `modello`. "
+            "It spends money or provider credit: use it when the user asks "
+            "to create or transform an image, not to describe an "
+            "attachment. Without a key configured the tool says so: in "
+            "that case propose local generation with the `invokeai` skill."
         ),
         schema={
             "type": "object",
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "Cosa deve mostrare l'immagine, o quale "
-                                   "modifica applicare se c'e' un "
-                                   "riferimento. In inglese di solito rende "
-                                   "meglio.",
+                    "description": "What the image must show, or which edit "
+                                   "to apply when there is a `riferimento`. "
+                                   "English usually works better.",
                 },
                 "riferimento": {
                     "type": "string",
-                    "description": "Immagine da modificare: percorso (relativo "
-                                   "al progetto), data URL, oppure `ultimo` "
-                                   "per l'ultima immagine allegata in chat. "
-                                   "Ometti per generare da zero.",
+                    "description": "Image to edit: path (relative to the "
+                                   "project), data URL, or `ultimo` for the "
+                                   "image attached last in the chat. Omit it "
+                                   "to generate from scratch.",
                 },
                 "provider": {
                     "type": "string",
                     "enum": ["openai", "google", "openrouter"],
-                    "description": "Forza un provider. Se omesso si usa "
-                                   "quello con la chiave configurata.",
+                    "description": "Forces a provider. When omitted, the "
+                                   "one with a configured key is used.",
                 },
                 "modello": {
                     "type": "string",
-                    "description": "Modello di immagini del provider. Su "
-                                   "OpenRouter e' lo slug del catalogo, per "
-                                   "esempio openai/gpt-image-2: guardalo con "
-                                   "`elenco_modelli`. Ometti per il "
-                                   "predefinito.",
+                    "description": "Image model of the provider. On "
+                                   "OpenRouter it is the catalog slug, for "
+                                   "example openai/gpt-image-2: see it with "
+                                   "`elenco_modelli`. Omit for the default.",
                 },
                 "dimensione": {
                     "type": "string",
                     "description": "OpenAI: 1024x1024, 1536x1024, 1024x1536 "
-                                   "o auto. Google e OpenRouter: proporzioni "
-                                   "come 1:1, 16:9.",
+                                   "or auto. Google and OpenRouter: aspect "
+                                   "ratios such as 1:1, 16:9.",
                 },
                 "nome_file": {
                     "type": "string",
-                    "description": "Nome del file senza estensione. Se "
-                                   "omesso si ricava dal prompt.",
+                    "description": "File name without extension. When "
+                                   "omitted it is derived from the prompt.",
                 },
                 "zone": {
                     "type": "array",
-                    "description": "Inpainting: le zone in cui il modello puo' "
-                                   "ridisegnare, e nient'altro. Solo con "
-                                   "OpenAI (per Google e OpenRouter il tool lo "
-                                   "dice e non spende). Richiede "
+                    "description": "Inpainting: the areas the model may "
+                                   "redraw, and nothing else. OpenAI only "
+                                   "(with Google and OpenRouter the tool says "
+                                   "so and spends nothing). Requires "
                                    "`riferimento`.",
                     "items": {
                         "type": "object",
                         "properties": {
                             "tipo": {"type": "string",
-                                     "enum": ["rettangolo", "ellisse"]},
-                            "x": {"type": ["integer", "string"]},
-                            "y": {"type": ["integer", "string"]},
-                            "larghezza": {"type": ["integer", "string"]},
-                            "altezza": {"type": ["integer", "string"]},
+                                     "enum": ["rettangolo", "ellisse"],
+                                     "description": "rettangolo "
+                                                    "(rectangle) or "
+                                                    "ellisse (ellipse).",
+                                     "default": "rettangolo"},
+                            "x": {"type": ["integer", "string"],
+                                  "description": "Left edge: pixels or "
+                                                 "percentage (\"20%\")."},
+                            "y": {"type": ["integer", "string"],
+                                  "description": "Top edge: pixels or "
+                                                 "percentage."},
+                            "larghezza": {"type": ["integer", "string"],
+                                          "description": "Width: pixels or "
+                                                         "percentage."},
+                            "altezza": {"type": ["integer", "string"],
+                                        "description": "Height: pixels or "
+                                                       "percentage."},
                         },
                         "required": ["x", "y", "larghezza", "altezza"],
                     },
                 },
                 "maschera": {
                     "type": "string",
-                    "description": "Maschera gia' pronta per l'inpainting: "
-                                   "percorso di un PNG con trasparenza o data "
-                                   "URL. Trasparente = zona da ridisegnare, "
-                                   "stessa misura dell'immagine. Alternativa a "
-                                   "`zone`.",
+                    "description": "A ready-made inpainting mask: path of "
+                                   "a PNG with transparency or a data URL. "
+                                   "Transparent = area to redraw, same size "
+                                   "as the image. Alternative to `zone`.",
                 },
                 "morbido": {
                     "type": "integer",
-                    "description": "Pixels di sfumatura dei bordi delle zone "
-                                   "(0 = bordo netto). Utile quando attorno "
-                                   "alla zona c'e' un colore uniforme.",
+                    "description": "Pixels of blur on the zone edges "
+                                   "(0 = hard edge). Useful when the area "
+                                   "around the zone is one flat color.",
                 },
                 "elenco_modelli": {
                     "type": "boolean",
-                    "description": "Se true, non genera niente: elenca i "
-                                   "modelli immagine di OpenRouter con il loro "
-                                   "slug. Nessun costo.",
+                    "description": "When true, generates nothing: lists the "
+                                   "OpenRouter image models with their "
+                                   "slug. No cost.",
                 },
             },
             "required": ["prompt"],

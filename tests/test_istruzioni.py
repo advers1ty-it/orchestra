@@ -71,8 +71,10 @@ reg = T.default_registry()
 for nome in ("read_file", "write_file", "run_shell", "list_dir"):
     spec = reg.get(nome).schema
     testo = " ".join(str(v) for v in spec.get("properties", {}).values())
+    # Le descrizioni sono in inglese (le legge il modello); la parola
+    # che conta e' ABSOLUTE, non la sua traduzione.
     check(f"{nome}: dice che esistono anche i percorsi assoluti",
-          "ASSOLUT" in testo.upper(), testo[:80])
+          "ABSOLUT" in testo.upper(), testo[:80])
 
 print("\n[3] list_dir su una cartella FUORI dalla root autorizzata")
 root = tempfile.mkdtemp(prefix="root-")
@@ -109,6 +111,20 @@ with open(os.path.join(dentro, "a.txt"), "w", encoding="utf-8") as f:
 r3 = reg.get("list_dir").handler(".")
 check("i percorsi relativi funzionano ancora", "sotto" in r3, r3[:90])
 check("e restano relativi alla root", os.path.join(root, "sotto") not in r3, r3[:120])
+
+print("\n[5] Un output tagliato lo dice")
+# `run_shell` taglia a 8.000 caratteri. Prima li tagliava in silenzio: il
+# modello riceveva un traceback che finiva a meta' e sembrava completo, e
+# la diagnosi finiva sull'ultima riga visibile. La riga di avviso non e'
+# decorazione, e' la differenza fra un output corto e un output mutilato.
+os.environ["ORCHESTRA_ROOT"] = root
+r4 = reg.get("run_shell").handler(
+    command='python -c "print(chr(120) * 9000)"')
+check("l'output lungo si taglia", len(r4) < 9000, str(len(r4)))
+check("e lo dichiara", "tagliato" in r4, r4[-90:])
+r5 = reg.get("run_shell").handler(
+    command='python -c "print(chr(121) * 100)"')
+check("quello corto non porta l'avviso", "tagliato" not in r5, r5[-90:])
 
 T.set_permission_gate(None)
 shutil.rmtree(root, ignore_errors=True)

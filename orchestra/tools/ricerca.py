@@ -220,11 +220,11 @@ def tool_search_text() -> Tool:
     return Tool(
         name="search_text",
         description=(
-            "Cerca un testo o un'espressione regolare DENTRO i file del "
-            "progetto e restituisce `file:riga: contenuto`. Usalo per "
-            "trovare dove sta una funzione, una variabile, un messaggio: "
-            "e' molto piu' veloce ed economico che leggere file interi. "
-            "Salta da solo .git, node_modules e i file di credenziali."
+            "Searches for a text or a regular expression INSIDE the files of "
+            "the project and returns `file:line: content`. Use it to find "
+            "where a function, a variable or a message lives: far faster and "
+            "cheaper than reading whole files. It skips .git, node_modules "
+            "and credential files by itself."
         ),
         schema={
             "type": "object",
@@ -232,40 +232,40 @@ def tool_search_text() -> Tool:
                 "pattern": {
                     "type": "string",
                     "description": (
-                        "Testo o espressione regolare da cercare, es. "
-                        "`def main` o `class\\s+Utente`."
+                        "Text or regular expression to search for, e.g. "
+                        "`def main` or `class\\s+Utente`."
                     ),
                 },
                 "path": {
                     "type": "string",
                     "description": (
-                        "File o cartella da cui partire (default '.', "
-                        "cioe' la root del progetto)."
+                        "File or directory to start from (default '.', the "
+                        "project root)."
                     ),
                     "default": ".",
                 },
                 "glob": {
                     "type": "string",
                     "description": (
-                        "Filtra i file per nome, es. '*.py' o '*.ts'. "
-                        "Vuoto = tutti i file di testo."
+                        "Filter files by name, e.g. '*.py' or '*.ts'. "
+                        "Empty = every text file."
                     ),
                     "default": "",
                 },
                 "max_results": {
                     "type": "integer",
-                    "description": "Righe massime da restituire (default 50, max 200).",
+                    "description": "Maximum lines to return (default 50, max 200).",
                     "default": 50,
                 },
                 "case_sensitive": {
                     "type": "boolean",
-                    "description": "Distingue maiuscole e minuscole. Default false.",
+                    "description": "Match letter case. Default false.",
                     "default": False,
                 },
                 "context": {
                     "type": "integer",
                     "description": (
-                        "Righe di contesto prima e dopo ogni corrispondenza "
+                        "Lines of context before and after each match "
                         "(0-5, default 0)."
                     ),
                     "default": 0,
@@ -294,10 +294,25 @@ def tool_find_files() -> Tool:
         except (TypeError, ValueError):
             massimo = 100
 
-        # Senza metacaratteri si cerca il nome che CONTIENE la stringa:
-        # chiedere "utente" e ricevere zero perche' il file si chiama
-        # `utente.py` sarebbe un tool che risponde alla domanda sbagliata.
-        glob_pattern = p if any(c in p for c in "*?[") else f"**/*{p}*"
+        # Un pattern senza `/` cerca in TUTTO l'albero, non solo nella
+        # cartella di partenza.
+        #
+        # Prima un pattern con metacaratteri si passava intatto a
+        # `Path.glob`: `*.py` diventava un glob di primo livello, e dalla
+        # radice di un progetto Python `find_files('*.py')` restituiva i
+        # due file sciolti nella radice e nient'altro. Il modello leggeva
+        # un elenco corto e concludeva che il file non esisteva; il tool
+        # non diceva niente, perche' dal suo punto di vista aveva finito.
+        # Un `*` in mano a chi cerca significa "ovunque", ed e' quello
+        # che significa anche per `find` e `rg --files`.
+        if any(c in p for c in "*?[("):
+            glob_pattern = p if "/" in p else f"**/{p}"
+        else:
+            # Senza metacaratteri si cerca il nome che CONTIENE la
+            # stringa: chiedere "utente" e ricevere zero perche' il file
+            # si chiama `utente.py` sarebbe un tool che risponde alla
+            # domanda sbagliata.
+            glob_pattern = f"**/*{p}*"
         trovati: list[str] = []
         try:
             candidati = base.glob(glob_pattern) if base.is_dir() else [base]
@@ -329,6 +344,10 @@ def tool_find_files() -> Tool:
                 break
         if not trovati:
             return f"Nessun file corrisponde a {p!r} in {path}."
+        # Ordinati: l'ordine di una glob dipende dal filesystem, e due
+        # chiamate identiche che rispondono in ordine diverso fanno
+        # sembrare cambiato un albero che non e' cambiato.
+        trovati.sort()
         coda = ("\n[...fermo al tetto: usa un pattern piu' preciso]"
                 if len(trovati) >= massimo else "")
         return "\n".join(trovati) + coda
@@ -336,10 +355,13 @@ def tool_find_files() -> Tool:
     return Tool(
         name="find_files",
         description=(
-            "Trova file e cartelle per nome o per percorso con un glob "
-            "(es. '*.py', 'src/**/test_*.ts'). Senza metacaratteri cerca i "
-            "nomi che contengono la stringa. Usalo per orientarti prima di "
-            "leggere, invece di elencare cartelle una per una."
+            "Finds files and directories by name or by path with a glob "
+            "(e.g. '*.py', 'src/**/test_*.ts'). A pattern without '/', "
+            "wildcards or not, searches the whole tree below `path` (so "
+            "'*.py' means every .py anywhere); a pattern with '/' is "
+            "relative to `path`. Without wildcards it finds the names that "
+            "contain the string. Use it to orient yourself before reading, "
+            "instead of listing directories one by one."
         ),
         schema={
             "type": "object",
@@ -347,19 +369,19 @@ def tool_find_files() -> Tool:
                 "pattern": {
                     "type": "string",
                     "description": (
-                        "Glob sul nome o sul percorso, es. '*.py', "
+                        "Glob on the name or the path, e.g. '*.py', "
                         "'**/*.test.ts', 'utente'. Default '*'."
                     ),
                     "default": "*",
                 },
                 "path": {
                     "type": "string",
-                    "description": "Cartella da cui partire (default '.').",
+                    "description": "Directory to start from (default '.').",
                     "default": ".",
                 },
                 "max_results": {
                     "type": "integer",
-                    "description": "Risultati massimi (default 100, max 500).",
+                    "description": "Maximum results (default 100, max 500).",
                     "default": 100,
                 },
             },

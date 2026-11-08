@@ -1,6 +1,6 @@
 ---
 name: cron
-description: "Job programmati: crea/modifica/elimina job cron che eseguono obiettivi o comandi shell a orari programmati. Usa il tool `cron`."
+description: "Scheduled jobs: create, edit and delete cron jobs that run objectives or shell commands on a schedule. Uses the `cron` tool."
 version: 1.0.0
 author: Orchestra
 categoria: base
@@ -9,35 +9,35 @@ origine: base
 
 # cron
 
-Usa il tool `cron` per programmare esecuzioni ricorrenti o one-shot.
+Use the `cron` tool to schedule recurring or one-shot runs.
 
-## Quando usarlo
-- L'utente chiede un'attività ricorrente (per esempio "ogni giorno alle 9", "lunedì mattina", "ogni ora").
-- Per un'attività una tantum, non creare una regola cron che potrebbe ripetersi: usa un goal con `--not-before <epoch>` oppure chiedi quando eseguirlo se l'orario non è chiaro.
-- Automatizzare report, backup, controlli periodici.
+## When to use it
+- The user asks for a recurring activity (for example "every day at 9", "Monday morning", "every hour").
+- For a one-off activity, do not create a cron rule that could repeat: use a goal with `--not-before <epoch>`, or ask when to run it if the time is unclear.
+- Automating reports, backups, periodic checks.
 
-## Azioni
-- `lista`: elenca i job.
-- `crea`: crea un job. Parametri: nome, schedule, action_type (goal/shell), objective o command, profile, enabled.
-- `modifica`: cambia campi di un job (id richiesto).
-- `elimina`: rimuove un job.
+## Actions
+- `lista`: lists the jobs.
+- `crea`: creates a job. Parameters: name, schedule, action_type (goal/shell), objective or command, profile, enabled.
+- `modifica`: changes fields of a job (id required).
+- `elimina`: removes a job.
 - `abilita`/`disabilita`: toggle.
-- `esegui`: esegue subito un job.
-- `dettagli`: dettagli di un job.
-- `stato`: stato dello scheduler cron.
-- `avvia_scheduler`/`ferma_scheduler`: avvia/ferma il demone.
+- `esegui`: runs a job now.
+- `dettagli`: details of one job.
+- `stato`: state of the cron scheduler.
+- `avvia_scheduler`/`ferma_scheduler`: starts/stops the daemon.
 
 ## Schedule
-Espressione cron a 5 campi: `minuto ora giorno mese giorno-settimana`.
-Shortcut: `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`, `@reboot` (una sola volta all'avvio).
+5-field cron expression: `minute hour day month weekday`.
+Shortcuts: `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`, `@reboot` (once, at startup).
 
-Esempi:
-- ogni giorno alle 9: `0 9 * * *`
-- ogni lunedi' alle 8: `0 8 * * 1`
-- ogni 15 minuti: `*/15 * * * *`
-- ogni ora: `@hourly`
+Examples:
+- every day at 9: `0 9 * * *`
+- every Monday at 8: `0 8 * * 1`
+- every 15 minutes: `*/15 * * * *`
+- every hour: `@hourly`
 
-## Note
-- I job di tipo goal avviano un obiettivo (costa token). I job shell eseguono un comando.
-- Lo scheduler cron parte in automatico all'avvio del server (intervallo 30s). Si puo' fermare dal pannello Cron o via tool.
-- Per modificare/eliminare usa l'id restituito da `lista`/`crea`.
+## Notes
+- Jobs of type goal start an objective (they cost tokens). Shell jobs run a command.
+- The cron scheduler starts by itself when the server starts (30s interval). It can be stopped from the Cron panel or through the tool.
+- To edit or delete, use the id returned by `lista`/`crea`.

@@ -209,18 +209,18 @@ def tool_web_cerca() -> Tool:
     return Tool(
         name="web_cerca",
         description=(
-            "Cerca sul web (DuckDuckGo, senza chiave). Usala quando la "
-            "domanda dipende da fatti che potrebbero essere cambiati dopo "
-            "la tua data di addestramento — prezzi, versioni, notizie, "
-            "documentazione. Non usarla per cose che sai già."
+            "Searches the web (DuckDuckGo, no key). Use it when the question "
+            "depends on facts that may have changed since your training "
+            "date: prices, versions, news, documentation. Do not use it "
+            "for things you already know."
         ),
         schema={
             "type": "object",
             "properties": {
                 "query": {"type": "string",
-                          "description": "Cosa cercare."},
+                          "description": "What to search for."},
                 "limite": {"type": "integer",
-                           "description": "Quanti risultati, 1-10. Default 5."},
+                           "description": "How many results, 1-10. Default 5."},
             },
             "required": ["query"],
         },
@@ -299,22 +299,22 @@ def tool_web_leggi() -> Tool:
     return Tool(
         name="web_leggi",
         description=(
-            "Scarica una pagina web e ne estrae il testo. Usala DOPO "
-            "`web_cerca` per aprire un risultato che promette di avere "
-            "quello che serve: la ricerca dà il titolo e un riassunto, "
-            "questo dà la pagina."
+            "Downloads a web page and extracts its text. Use it AFTER "
+            "`web_cerca` to open a result that promises the information "
+            "you need: the search gives the title and a snippet, this "
+            "gives the page."
         ),
         schema={
             "type": "object",
             "properties": {
                 "url": {"type": "string",
-                       "description": "Indirizzo http o https da leggere."},
+                       "description": "http or https address to read."},
                 "righe": {
                     "type": "integer",
                     "description": (
-                        "Tiene solo le prime N righe del testo (0 = tutte, "
-                        "default). Per pagine lunghissime: la ricerca serve a "
-                        "non riempire il contesto di una pagina intera."
+                        "Keeps only the first N lines of text (0 = all, "
+                        "default). For very long pages: the point is not to "
+                        "fill the context with a whole page."
                     ),
                     "default": 0,
                 },

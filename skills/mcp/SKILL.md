@@ -1,6 +1,6 @@
 ---
 name: mcp
-description: "Client MCP: connessione a server MCP esterni (Supabase, Unreal, Godot, ecc.) che espongono tool. Usa il tool `mcp`."
+description: "MCP client: connect to external MCP servers (Supabase, Unreal, Godot, etc.) that expose tools. Uses the `mcp` tool."
 version: 1.0.0
 author: Orchestra
 categoria: base
@@ -9,23 +9,23 @@ origine: base
 
 # mcp
 
-Gestisci server MCP esterni con il tool `mcp`.
+Manage external MCP servers with the `mcp` tool.
 
-## Quando usarlo
-- L'utente vuole collegare un programma che espone un server MCP (Supabase, Unreal, Godot, filesystem, ecc.).
-- Serve un tool non nativo di Orchestra.
+## When to use it
+- The user wants to connect a program that exposes an MCP server (Supabase, Unreal, Godot, filesystem, etc.).
+- A tool is needed that Orchestra does not have natively.
 
-## Azioni
-- `lista`: elenca i server configurati e stato.
-- `tools`: elenca i tool remoti disponibili.
-- `stato`: stato completo.
-- `aggiungi`: aggiunge un server (nome, transport, command, args, env, url). Per `stdio`, `command` e `args` avviano un processo locale; per HTTP usa `url` e il transport supportato dal tool.
-- `rimuovi`: rimuove un server configurato (id/nome); non disinstalla il software né elimina dati del server remoto.
-- `connetti` / `disconnetti`: connessione.
-- `connetti_tutti`: connette tutti i server abilitati.
+## Actions
+- `lista`: lists the configured servers and their state.
+- `tools`: lists the remote tools available.
+- `stato`: full state.
+- `aggiungi`: adds a server (nome, transport, command, args, env, url). For `stdio`, `command` and `args` start a local process; for HTTP use `url` and the transport the tool supports.
+- `rimuovi`: removes a configured server (id/nome); it does not uninstall the software nor delete data on the remote server.
+- `connetti` / `disconnetti`: connect and disconnect.
+- `connetti_tutti`: connects every enabled server.
 
-## Note
-- I server `stdio` vengono avviati come subprocess. I loro tool diventano strumenti nativi con prefisso `mcp_<server>__<tool>` e sono disponibili nei turni successivi.
-- I server abilitati vengono connessi automaticamente all'avvio di Orchestra; verificane lo stato con `mcp` → `stato` o `lista`.
-- La UI "MCP" permette configurazione grafica.
-- Tratta `command`, `args`, `env` e `url` come configurazione eseguibile/di rete: usa solo server fidati e non inserire segreti nei campi visibili o nei log.
+## Notes
+- `stdio` servers are started as subprocesses. Their tools become native tools with the prefix `mcp_<server>__<tool>` and are available in later turns.
+- Enabled servers are connected automatically when Orchestra starts; check their state with `mcp` -> `stato` or `lista`.
+- The "MCP" UI allows graphical configuration.
+- Treat `command`, `args`, `env` and `url` as executable/network configuration: use only trusted servers and never put secrets in visible fields or in logs.

@@ -101,8 +101,13 @@ def esegui(payload):
     f = tempfile.mktemp(suffix=".js")
     with open(f, "w", encoding="utf-8") as fh:
         fh.write(harness + "\n" + joined + "\n" + PROBE % json.dumps(payload))
+    # L'harness legge index.html: glielo si dice, perche' la cwd da cui
+    # parte il test non e' una risposta affidabile (vedi _dom_provider.js).
+    env = dict(os.environ)
+    env["ORCHESTRA_WEB_INDEX"] = os.path.join(ROOT, "orchestra", "web",
+                                              "index.html")
     proc = subprocess.run(["node", f], capture_output=True, text=True,
-                          timeout=120)
+                          timeout=120, env=env)
     try:
         os.unlink(f)
     except OSError:

@@ -51,30 +51,42 @@ def tool_list_dir() -> Tool:
                 out.append(f"[file] {rel}  ({x.stat().st_size} byte)")
         if not out and pattern:
             return f"NESSUN ELEMENTO '{pattern}' in {path}"
-        return "\n".join(out[:max_items]) or "(vuota)"
+        # Il taglio si dice. Un elenco che si ferma a 300 voci senza una
+        # riga che lo dichiari sembra completo, e il modello conclude che
+        # il file che cercava non c'e': e' la stessa bugia di un output di
+        # shell tagliato, con lo stesso costo.
+        voci = out[:max_items]
+        testo = "\n".join(voci) or "(vuota)"
+        if len(out) > len(voci):
+            testo += (f"\n... [{len(out) - len(voci)} voci in piu' non "
+                      f"mostrate: alza max_items o filtra con pattern]")
+        return testo
 
     return Tool(
         name="list_dir",
-        description="Elenca il contenuto di una directory con dimensioni.",
+        description=(
+            "Lists the content of one directory with sizes. To find files "
+            "by name anywhere in the tree use find_files instead."
+        ),
         schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
                     "description": (
-                        "Directory, default '.'. Può essere ASSOLUTA: se è fuori "
-                        "dalla root, all'utente compare la domanda sul permesso."
+                        "Directory, default '.'. It may be ABSOLUTE: outside "
+                        "the root the user is asked for permission."
                     ),
                     "default": ".",
                 },
                 "max_items": {
                     "type": "integer",
-                    "description": "Elementi massimi da elencare (default 300).",
+                    "description": "Maximum entries to list (default 300).",
                     "default": 300,
                 },
                 "pattern": {
                     "type": "string",
-                    "description": "Filtra per nome con un glob, es. '*.py'. Vuoto = tutto.",
+                    "description": "Filter by name with a glob, e.g. '*.py'. Empty = everything.",
                     "default": "",
                 },
             },

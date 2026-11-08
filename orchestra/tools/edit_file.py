@@ -144,10 +144,10 @@ def tool_edit_file() -> Tool:
     return Tool(
         name="edit_file",
         description=(
-            "Modifica pezzi di file senza riscrivere tutto: sostituisce una "
-            "stringa con un'altra. Usalo invece di write_file per i file "
-            "grandi. Controlla il contenuto con read_file PRIMA, e passa la "
-            "stringa esatta come appare nel file."
+            "Edits part of a file without rewriting it: replaces one string "
+            "with another. Use it instead of write_file for large files. "
+            "Read the content with read_file FIRST, and pass the exact "
+            "string as it appears in the file."
         ),
         schema={
             "type": "object",
@@ -155,41 +155,41 @@ def tool_edit_file() -> Tool:
                 "path": {
                     "type": "string",
                     "description": (
-                        "Percorso relativo alla root, o ASSOLUTO: un percorso "
-                        "fuori dalla root chiede il permesso all'utente."
+                        "Path relative to the project root, or ABSOLUTE: a "
+                        "path outside the root asks the user for permission."
                     ),
                 },
                 "trova": {
                     "type": "string",
                     "description": (
-                        "Stringa esatta da trovare nel file (copiala da "
-                        "read_file, spazi e righe incluse)."
+                        "Exact string to find in the file (copy it from "
+                        "read_file, whitespace and line breaks included)."
                     ),
                 },
                 "sostituisci": {
                     "type": "string",
-                    "description": "Stringa che la sostituisce.",
+                    "description": "String that replaces it.",
                 },
                 "all": {
                     "type": "boolean",
                     "description": (
-                        "Sostituisce TUTTE le occorrenze. Default false: "
-                        "solo la prima."
+                        "Replace EVERY occurrence. Default false: only the "
+                        "first one."
                     ),
                     "default": False,
                 },
                 "count": {
                     "type": "integer",
                     "description": (
-                        "Sostituisce al massimo N occorrenze (alternative a "
+                        "Replace at most N occurrences (alternative to "
                         "all). Default: 1."
                     ),
                 },
                 "dry_run": {
                     "type": "boolean",
                     "description": (
-                        "Mostra quante sostituzioni farebbe SENZA scrivere. "
-                        "Utile prima di modificare."
+                        "Reports how many replacements it would make WITHOUT "
+                        "writing. Useful before changing anything."
                     ),
                     "default": False,
                 },

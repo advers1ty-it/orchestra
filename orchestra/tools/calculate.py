@@ -42,11 +42,14 @@ def tool_calculate() -> Tool:
 
     return Tool(
         name="calculate",
-        description="Calcola un'espressione aritmetica. Supporta + - * / // % **.",
+        description=(
+            "Evaluates an arithmetic expression. Supports + - * / // % **. "
+            "Use it instead of doing the arithmetic yourself."
+        ),
         schema={
             "type": "object",
             "properties": {
-                "expression": {"type": "string", "description": "Espressione aritmetica, es. '(3+4)*2'"}
+                "expression": {"type": "string", "description": "Arithmetic expression, e.g. '(3+4)*2'"}
             },
             "required": ["expression"],
         },

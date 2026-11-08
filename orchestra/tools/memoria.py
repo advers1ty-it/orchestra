@@ -286,14 +286,13 @@ def tool_memoria() -> Tool:
     return Tool(
         name="memoria",
         description=(
-            "Cerca, aggiunge, toglie o riscrive fatti nella memoria a "
-            "lungo termine. "
-            "Usa 'cerca' PRIMA di chiedere qualcosa che potresti già sapere "
-            "dalle conversazioni precedenti, e 'aggiungi' quando l'utente "
-            "dice di ricordare qualcosa o prende una decisione che varrà "
-            "anche domani. Con priorita='alta' il fatto viene ripetuto "
-            "in ogni conversazione: usala solo per il pochissimo che deve "
-            "essere vero sempre."
+            "Searches, adds, removes or rewrites facts in long-term "
+            "memory. Use 'cerca' BEFORE asking for something you may "
+            "already know from earlier conversations, and 'aggiungi' when "
+            "the user says to remember something or takes a decision that "
+            "will still hold tomorrow. With priorita='alta' the fact is "
+            "repeated in every conversation: use it only for the very few "
+            "things that must always be true."
         ),
         schema={
             "type": "object",
@@ -301,60 +300,79 @@ def tool_memoria() -> Tool:
                 "azione": {
                     "type": "string",
                     "enum": ["cerca", "aggiungi", "elimina", "modifica", "elenca", "ottimizza"],
-                    "description": "Cosa fare. Default: cerca.",
+                    "description": (
+                        "What to do: cerca (search), aggiungi (add), "
+                        "elimina (delete), modifica (edit), elenca (list), "
+                        "ottimizza (dedupe). Default: cerca."
+                    ),
                 },
                 "query": {
                     "type": "string",
                     "description": (
-                        "Testo da cercare. Per 'elimina' e 'modifica' puo' "
-                        "essere anche il fatto da togliere o da cambiare."
+                        "Text to search for. For 'elimina' and 'modifica' "
+                        "it can also be the fact to remove or to change."
                     ),
                 },
                 "fatto": {
                     "type": "string",
                     "description": (
-                        "Il fatto da ricordare (per 'aggiungi'), oppure il "
-                        "fatto attuale da cambiare (per 'modifica')."
+                        "The fact to remember (for 'aggiungi'), or the "
+                        "current fact to change (for 'modifica')."
                     ),
                 },
                 "vecchio": {
                     "type": "string",
-                    "description": "Il fatto attuale, per azione=modifica.",
+                    "description": "The current fact, for azione=modifica.",
                 },
                 "nuovo": {
                     "type": "string",
-                    "description": "Il testo nuovo, per azione=modifica.",
+                    "description": "The new text, for azione=modifica.",
                 },
                 "priorita": {
                     "type": "string",
                     "enum": ["", "alta"],
-                    "description": "'alta' lo inietta in ogni conversazione.",
+                    "description": (
+                        "'alta' (high) injects the fact into every "
+                        "conversation."
+                    ),
                 },
                 "limite": {
                     "type": "integer",
-                    "description": "Quanti risultati. Default 10.",
+                    "description": "How many results. Default 10.",
                 },
                 "progetto": {
                     "type": "string",
                     "description": (
-                        "Il progetto a cui il fatto appartiene. Facoltativo: "
-                        "vuoto significa 'tutti i progetti'. Usalo per "
-                        "separare un fatto di un progetto dagli altri, così "
-                        "poi puoi chiedere solo quelli di quello che stai "
-                        "lavorando."
+                        "The project the fact belongs to. Optional: empty "
+                        "means 'all projects'. Use it to separate one "
+                        "project's facts from the others, so you can later "
+                        "ask only for the one you are working on."
                     ),
                 },
                 "dry_run": {
                     "type": "boolean",
-                    "description": "Se true (default), mostra solo cosa verrebbe fatto.",
+                    "description": (
+                        "Only meaningful for azione='ottimizza': when true "
+                        "(default) it reports what would be pruned or "
+                        "merged without touching memory. 'aggiungi', "
+                        "'modifica' and 'elimina' always act, whatever "
+                        "this says — do not set it expecting a preview "
+                        "of them."
+                    ),
                 },
                 "giorni_grazia": {
                     "type": "integer",
-                    "description": "Giorni di grazia prima di potare un fatto mai usato. Default 30.",
+                    "description": (
+                        "Grace days before pruning a fact never used. "
+                        "Default 30."
+                    ),
                 },
                 "unisci": {
                     "type": "boolean",
-                    "description": "Se true, fonde i fatti simili (richiede un provider).",
+                    "description": (
+                        "When true, merges similar facts (needs a "
+                        "provider)."
+                    ),
                 },
             },
         },

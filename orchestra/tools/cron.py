@@ -135,23 +135,25 @@ def tool_cron() -> Tool:
 
     return Tool(
         name="cron",
-        description=("Gestisce job programmati (cron): crea/modifica/elimina job che eseguono "
-                     "obiettivi o comandi shell a orari programmati (espressione cron a 5 campi "
-                     "o shortcut @daily, @hourly, @weekly, @monthly, @yearly, @reboot). "
-                     "Azioni: lista, crea, modifica, elimina, abilita, disabilita, esegui, "
-                     "dettagli, stato, avvia_scheduler, ferma_scheduler."),
+        description=("Manages scheduled jobs (cron): create, edit and delete jobs that "
+                     "run objectives or shell commands on a schedule (5-field cron "
+                     "expression, or the shortcuts @daily, @hourly, @weekly, @monthly, "
+                     "@yearly, @reboot). Actions: lista, crea, modifica, elimina, abilita, "
+                     "disabilita, esegui, dettagli, stato, avvia_scheduler, "
+                     "ferma_scheduler (list, create, edit, delete, enable, disable, run "
+                     "now, details, status, start/stop scheduler)."),
         schema={
             "type": "object",
             "properties": {
-                "azione": {"type": "string", "description": "lista|crea|modifica|elimina|abilita|disabilita|esegui|dettagli|stato|avvia_scheduler|ferma_scheduler"},
-                "id": {"type": "string", "description": "id del job (per modifica/elimina/esegui/dettagli)"},
-                "nome": {"type": "string", "description": "nome del job"},
-                "schedule": {"type": "string", "description": "espressione cron 5 campi o shortcut (@daily, @hourly, @weekly, @monthly, @yearly, @reboot)"},
-                "action_type": {"type": "string", "description": "goal (default) o shell"},
-                "objective": {"type": "string", "description": "obiettivo da eseguire (se action_type=goal)"},
-                "profile": {"type": "string", "description": "profilo strumenti per il goal (auto/base/ricerca/skill/pieno)"},
-                "command": {"type": "string", "description": "comando shell (se action_type=shell)"},
-                "enabled": {"type": "boolean", "description": "abilitato (default true)"},
+                "azione": {"type": "string", "description": "The action to run: lista|crea|modifica|elimina|abilita|disabilita|esegui|dettagli|stato|avvia_scheduler|ferma_scheduler (list|create|edit|delete|enable|disable|run|details|status|start/stop scheduler)."},
+                "id": {"type": "string", "description": "Job id (for modifica/elimina/esegui/dettagli)."},
+                "nome": {"type": "string", "description": "Job name."},
+                "schedule": {"type": "string", "description": "5-field cron expression or a shortcut (@daily, @hourly, @weekly, @monthly, @yearly, @reboot)."},
+                "action_type": {"type": "string", "description": "goal (default) or shell: what the job runs."},
+                "objective": {"type": "string", "description": "Objective to run (when action_type=goal)."},
+                "profile": {"type": "string", "description": "Tool profile for the goal (auto/base/ricerca/skill/pieno)."},
+                "command": {"type": "string", "description": "Shell command (when action_type=shell)."},
+                "enabled": {"type": "boolean", "description": "Whether the job is enabled (default true)."},
             },
             "required": [],
         },

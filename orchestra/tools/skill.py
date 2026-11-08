@@ -104,16 +104,17 @@ def tool_skill_cerca() -> Tool:
 
     return Tool(
         name="skill_cerca",
-        description=("Cerca fra le skill per parole chiave. Restituisce nomi e "
-                     "descrizioni. Usalo se il prompt non mostra quello che ti "
-                     "serve: e' possibile, il prompt mostra solo le piu' vicine."),
+        description=("Searches the skills by keyword. Returns names and "
+                     "descriptions. Use it when the prompt does not show what "
+                     "you need: it may not, there the prompt only lists the "
+                     "closest ones."),
         schema={
             "type": "object",
             "properties": {
                 "parole": {"type": "string",
-                           "description": "Parole chiave separate da spazi"},
+                           "description": "Keywords separated by spaces."},
                 "limite": {"type": "integer",
-                           "description": "Quante risultati (default 8)"},
+                           "description": "How many results (default 8)."},
             },
             "required": ["parole"],
         },
@@ -148,14 +149,15 @@ def tool_skill_leggi() -> Tool:
 
     return Tool(
         name="skill_leggi",
-        description=("Porta nel contesto la procedura di una skill, per intero. "
-                     "Usalo quando il tuo compito e' vicino a una skill nel "
-                     "prompt: meglio eseguire una procedura scritta che "
-                     "improvvisare, e l'improvvisazione va disfatta."),
+        description=("Brings the procedure of a skill into the context, whole. "
+                     "Use it when your task is close to a skill shown in the "
+                     "prompt: following a written procedure beats improvising, "
+                     "and improvising has to be undone."),
         schema={
             "type": "object",
             "properties": {
-                "nome": {"type": "string", "description": "Nome esatto della skill"},
+                "nome": {"type": "string",
+                         "description": "Exact skill name."},
             },
             "required": ["nome"],
         },
@@ -200,23 +202,31 @@ def tool_skill_genera() -> Tool:
 
     return Tool(
         name="skill_genera",
-        description=("Salva una procedura che hai appena eseguito con successo, "
-                     "per ripeterla in futuro. Scrivila SOLO se il metodo ha "
-                     "funzionato: una skill che descrive un tentativo fallito "
-                     "fa ripetere l'errore. Include le prove, cosi' si puo' "
-                     "vedere che funziona davvero."),
+        description=("Saves a procedure you have just carried out successfully, "
+                     "so it can be repeated later. Write it ONLY when the "
+                     "method worked: a skill describing a failed attempt makes "
+                     "the error repeat. Include the evidence, so anyone can "
+                     "see it really works."),
         schema={
             "type": "object",
             "properties": {
-                "nome": {"type": "string", "description": "Nome breve, senza spazi"},
+                "nome": {"type": "string",
+                         "description": "Short name, no spaces."},
                 "descrizione": {"type": "string",
-                                "description": "Quando si usa. Una riga, con parole che capitano nel compito."},
+                                "description": ("When to use it. One line, "
+                                                "with words that show up "
+                                                "in the task.")},
                 "procedura": {"type": "string",
-                              "description": "I passi, con i comandi esatti. Scrivi per qualcun altro."},
-                "obiettivo": {"type": "string", "description": "Cosa stavi facendo"},
+                              "description": ("The steps, with the exact "
+                                              "commands. Write for someone "
+                                              "else.")},
+                "obiettivo": {"type": "string",
+                              "description": "What you were doing."},
                 "comandi": {"type": "array", "items": {"type": "string"},
-                            "description": "I comandi che hai eseguito, nell'ordine"},
-                "esito": {"type": "string", "description": "Cosa e' successo"},
+                            "description": ("The commands you ran, in "
+                                            "order.")},
+                "esito": {"type": "string",
+                          "description": "What happened."},
             },
             "required": ["nome", "procedura"],
         },
@@ -241,14 +251,18 @@ def tool_skill_importa() -> Tool:
 
     return Tool(
         name="skill_importa",
-        description=("Porta dentro uno store di skill: una cartella che contiene "
-                     "altre cartelle, ognuna con un SKILL.md. Copia anche gli "
-                     "script e i reference che stanno dentro."),
+        description=("Imports a skill store: a directory holding other "
+                     "directories, each with a SKILL.md. It also copies the "
+                     "scripts and references kept inside them."),
         schema={
             "type": "object",
             "properties": {
-                "cartella": {"type": "string", "description": "Cartella dello store"},
-                "categoria": {"type": "string", "description": "Categoria in cui metterle"},
+                "cartella": {"type": "string",
+                             "description": ("Path of the store, or a git URL "
+                                             "(https://... or git@...).")},
+                "categoria": {"type": "string",
+                              "description": ("Category to file them "
+                                              "under.")},
             },
             "required": ["cartella"],
         },

@@ -158,29 +158,29 @@ def tool_run_tests() -> Tool:
     return Tool(
         name="run_tests",
         description=(
-            "Esegue la suite di test del progetto col comando che il "
-            "progetto usa (tests/run_all.py, pytest, npm test, cargo test, "
-            "go test, make test) e restituisce l'output. Passa dagli stessi "
-            "permessi di run_shell. Usalo per verificare una modifica invece "
-            "di dichiararla fatta."
+            "Runs the project's test suite with the command the project "
+            "uses (tests/run_all.py, pytest, npm test, cargo test, go test, "
+            "make test) and returns the output. It goes through the same "
+            "permissions as run_shell. Use it to verify a change instead of "
+            "declaring it done."
         ),
         schema={
             "type": "object",
             "properties": {
                 "target": {
                     "type": "string",
-                    "description": ("Cosa eseguire, se il runner lo accetta "
-                                    "(es. un file o un test pytest). "
-                                    "Vuoto = tutta la suite."),
+                    "description": ("What to run, when the runner accepts "
+                                    "it (e.g. one file or one pytest test). "
+                                    "Empty = the whole suite."),
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "Secondi massimi (1-600, predefinito 180).",
+                    "description": "Maximum seconds (1-600, default 180).",
                 },
                 "comando": {
                     "type": "string",
-                    "description": ("Comando esplicito, se quello rilevato "
-                                    "non e' quello giusto."),
+                    "description": ("Explicit command, when the detected one "
+                                    "is not the right one."),
                 },
             },
         },

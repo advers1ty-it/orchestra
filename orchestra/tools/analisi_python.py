@@ -216,29 +216,36 @@ def tool_analisi_python() -> Tool:
     return Tool(
         name="analisi_python",
         description=(
-            "Legge la STRUTTURA di un file Python senza leggerne il corpo: "
-            "definizioni con firma e riga (`simboli`), import, chiamate "
-            "(`chiamate`, filtrabili con `nome`), usi di un nome, e se il "
-            "file compila (`sintassi`). Usalo per orientarti in un file "
-            "grande; read_file resta per il contenuto."
+            "Reads the STRUCTURE of a Python file without its body: "
+            "definitions with signature and line (`simboli`), imports, "
+            "calls (`chiamate`, filterable with `nome`), uses of one name, "
+            "and whether the file compiles (`sintassi`). Use it to orient "
+            "yourself in a big file; read_file stays the one for content."
         ),
         schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Percorso del file .py (relativo alla root o assoluto).",
+                    "description": (
+                        "Path of the .py file (relative to the root or "
+                        "absolute)."
+                    ),
                 },
                 "cosa": {
                     "type": "string",
                     "enum": ["simboli", "import", "chiamate", "usi", "sintassi"],
-                    "description": "Cosa estrarre (predefinito: simboli).",
+                    "description": (
+                        "What to extract: simboli (symbols), import, "
+                        "chiamate (calls), usi (uses), sintassi (syntax "
+                        "check). Default: simboli."
+                    ),
                 },
                 "nome": {
                     "type": "string",
-                    "description": ("Filtro: per `chiamate` limita a quelle "
-                                    "che contengono questo nome; per `usi` "
-                                    "e' il nome da cercare."),
+                    "description": ("Filter: for `chiamate` keeps only the "
+                                    "calls containing this name; for `usi` "
+                                    "it is the name to look for."),
                 },
             },
             "required": ["path"],

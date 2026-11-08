@@ -76,27 +76,82 @@ def tool_mcp():
         return ("azioni: lista, tools, risorse, risorsa, prompt, stato, "
                 "aggiungi, rimuovi, connetti, disconnetti, connetti_tutti")
 
+    # Ogni parametro qui sotto aveva il TIPO e niente descrizione: lo
+    # schema diceva al modello che `args` era una lista di stringhe, ma
+    # non che fossero gli argomenti del processo del server. Un
+    # parametro senza descrizione e' un parametro che il modello
+    # riempie a caso, o omette.
     schema = {
         "type": "object",
         "properties": {
-            "azione": {"type": "string", "default": "lista"},
-            "nome": {"type": "string"},
-            "id": {"type": "string"},
+            "azione": {"type": "string", "default": "lista",
+                       "description": (
+                           "What to do: lista (list servers), tools, "
+                           "risorse (resources), risorsa (read one resource), "
+                           "prompt, stato (status), aggiungi (add), rimuovi "
+                           "(remove), connetti (connect), disconnetti "
+                           "(disconnect), connetti_tutti (connect all). "
+                           "Default: lista."
+                       )},
+            "nome": {"type": "string",
+                     "description": (
+                         "Server name (for aggiungi) or prompt name (for "
+                         "prompt)."
+                     )},
+            "id": {"type": "string",
+                   "description": (
+                       "Id of an already configured server, to target it "
+                       "with the other actions."
+                   )},
             "transport": {"type": "string",
-                          "enum": ["stdio", "http", "sse"]},
-            "command": {"type": "string"},
-            "args": {"type": "array", "items": {"type": "string"}},
-            "env": {"type": "object"},
-            "url": {"type": "string"},
-            "headers": {"type": "object"},
-            "uri": {"type": "string"},
-            "argomenti": {"type": "object"},
-            "enabled": {"type": "boolean"},
+                          "enum": ["stdio", "http", "sse"],
+                          "description": (
+                              "How to reach the server: stdio (a local "
+                              "process), http or sse (a URL)."
+                          )},
+            "command": {"type": "string",
+                        "description": (
+                            "Executable to launch (stdio only), e.g. "
+                            "`npx` or `python`."
+                        )},
+            "args": {"type": "array", "items": {"type": "string"},
+                     "description": (
+                         "Arguments of `command`, one per item, e.g. "
+                         "['-y', '@modelcontextprotocol/server-filesystem', "
+                         "'D:/progetti']"
+                     )},
+            "env": {"type": "object",
+                    "description": (
+                        "Extra environment variables for the server "
+                        "process, e.g. {\"API_KEY\": \"...\"}."
+                    )},
+            "url": {"type": "string",
+                    "description": "Server URL (http and sse only)."},
+            "headers": {"type": "object",
+                        "description": (
+                            "HTTP headers sent with every request (http "
+                            "and sse), e.g. an Authorization token."
+                        )},
+            "uri": {"type": "string",
+                    "description": (
+                        "URI of the resource to read, for azione=risorsa."
+                    )},
+            "argomenti": {"type": "object",
+                          "description": (
+                              "Arguments of the prompt, for azione=prompt: "
+                              "{name: value} as the prompt declares them."
+                          )},
+            "enabled": {"type": "boolean",
+                        "description": (
+                            "Whether the server starts enabled (default "
+                            "true)."
+                        )},
         },
     }
     from ..tools import Tool
     return Tool(name="mcp", description=(
-        "Gestione client MCP: elenca/aggiungi/rimuovi server (stdio, http, sse), "
-        "connetti/disconnetti, elenca tool, risorse e prompt. I tool dei server "
-        "connessi diventano strumenti nativi (prefisso mcp_)."),
+        "MCP client management: list, add and remove servers (stdio, http, "
+        "sse), connect and disconnect them, list their tools, resources and "
+        "prompts. Tools of connected servers become native tools with the "
+        "mcp_ prefix."),
         schema=schema, handler=handler)

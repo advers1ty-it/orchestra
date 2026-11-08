@@ -130,28 +130,27 @@ def tool_read_file() -> Tool:
     return Tool(
         name="read_file",
         description=(
-            "Legge un file di testo con numeri di riga, o elenca una "
-            "directory. Legge anche il TESTO dentro un PDF o un "
-            ".docx/.xlsx/.pptx. Per un'immagine (foto, logo, screenshot) "
-            "usa screenshot_view."
+            "Reads a text file with line numbers, or lists a directory. "
+            "It also extracts the TEXT inside a PDF or a .docx/.xlsx/.pptx. "
+            "For an image (photo, logo, screenshot) use screenshot_view."
         ),
         schema={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Percorso relativo alla root, o ASSOLUTO: un percorso fuori dalla root chiede il permesso all utente."},
+                "path": {"type": "string", "description": "Path relative to the project root, or ABSOLUTE: a path outside the root asks the user for permission."},
                 "start_line": {
                     "type": "integer",
-                    "description": "Riga da cui partire (1 = inizio, default 1).",
+                    "description": "First line to read (1 = start, default 1).",
                     "default": 1,
                 },
                 "max_lines": {
                     "type": "integer",
-                    "description": "Righe massime da leggere (default 400). Ignorato se end_line e' specificato.",
+                    "description": "Maximum lines to read (default 400). Ignored when end_line is given.",
                     "default": 400,
                 },
                 "end_line": {
                     "type": "integer",
-                    "description": "Riga finale da leggere (inclusiva). Se specificato, sovrascrive max_lines. Es: start_line=50, end_line=100 legge le righe 50-100.",
+                    "description": "Last line to read, inclusive. Overrides max_lines. E.g. start_line=50, end_line=100 reads lines 50-100.",
                 },
             },
             "required": ["path"],
