@@ -320,14 +320,14 @@ def _post_json(url: str, corpo: dict, intestazioni: dict,
     return _richiedi(req, provider)
 
 
-def _post_multipart(url: str, campi: dict, nome_file: str, mime: str,
-                    dati_file: bytes, intestazioni: dict,
-                    provider: str) -> dict:
+def _post_multipart(url: str, campi: dict, allegati: list[tuple],
+                    intestazioni: dict, provider: str) -> dict:
     """Una richiesta multipart/form-data, senza dipendenze.
 
-    OpenAI vuole il file come parte `image`, non come base64 nel JSON. Il
-    confine lo genera `uuid`: deve essere unico, o un pezzo di file che
-    contiene la stessa stringa spezza la richiesta.
+    Ogni allegato e' `(nome_campo, nome_file, mime, byte)`: di solito c'e'
+    solo `image`, ma l'inpainting ne vuole due, `image` e `mask`. Il confine
+    lo genera `uuid`: deve essere unico, o un pezzo di file che contiene la
+    stessa stringa spezza la richiesta.
     """
     confine = "----orchestra" + uuid.uuid4().hex
     parti: list[bytes] = []
@@ -335,12 +335,13 @@ def _post_multipart(url: str, campi: dict, nome_file: str, mime: str,
         parti.append(
             f'--{confine}\r\nContent-Disposition: form-data; name="{nome}"'
             f'\r\n\r\n{valore}\r\n'.encode("utf-8"))
-    parti.append(
-        (f'--{confine}\r\nContent-Disposition: form-data; name="image"; '
-         f'filename="{nome_file}"\r\nContent-Type: {mime}\r\n\r\n')
-        .encode("utf-8"))
-    parti.append(dati_file)
-    parti.append(b"\r\n")
+    for campo, nome_file, mime, dati_file in allegati:
+        parti.append(
+            (f'--{confine}\r\nContent-Disposition: form-data; name="{campo}"; '
+             f'filename="{nome_file}"\r\nContent-Type: {mime}\r\n\r\n')
+            .encode("utf-8"))
+        parti.append(dati_file)
+        parti.append(b"\r\n")
     parti.append(f"--{confine}--\r\n".encode("utf-8"))
     corpo = b"".join(parti)
     testa = {
@@ -393,7 +394,13 @@ def _immagine_da_openai(dati: dict, modello: str) -> Immagine:
 
 def _genera_openai(prompt: str, modello: str, dimensione: str,
                    env: dict[str, str],
-                   riferimento: tuple[bytes, str] | None = None) -> Immagine:
+                   riferimento: tuple[bytes, str] | None = None,
+                   maschera: tuple[bytes, str] | None = None) -> Immagine:
+    if maschera and not riferimento:
+        raise ImageGenError(
+            "una maschera da sola non basta: serve anche l'immagine da "
+            "modificare (`riferimento`)."
+        )
     token = chiave("openai", env)
     if not token:
         raise ImageGenError(
@@ -414,10 +421,23 @@ def _genera_openai(prompt: str, modello: str, dimensione: str,
         campi = {"model": nome_modello, "prompt": prompt}
         if dim:
             campi["size"] = dim
+        allegati = [("image", f"riferimento.{estensione}", mime_rif, dati_rif)]
+        if maschera:
+            dati_mas, mime_mas = maschera
+            if mime_mas.lower() != "image/png":
+                raise ImageGenError(
+                    f"la maschera deve essere un PNG con trasparenza, non "
+                    f"{mime_mas}: la zona da ridisegnare e' quella trasparente."
+                )
+            if len(dati_mas) > 4 * 1024 * 1024:
+                raise ImageGenError(
+                    f"maschera troppo grande: {len(dati_mas) // (1024 * 1024)} "
+                    f"MB, il limite e' 4 MB."
+                )
+            allegati.append(("mask", "maschera.png", mime_mas, dati_mas))
         dati = _post_multipart(
-            ENDPOINT_EDITS, campi, f"riferimento.{estensione}",
-            mime_rif, dati_rif, {"Authorization": f"Bearer {token}"},
-            "openai")
+            ENDPOINT_EDITS, campi, allegati,
+            {"Authorization": f"Bearer {token}"}, "openai")
     else:
         corpo: dict = {"model": nome_modello, "prompt": prompt}
         if dim:
@@ -664,7 +684,8 @@ def _nome_libero(cartella: Path, base: str, estensione: str) -> Path:
 def genera(prompt: str, *, provider: str = "", modello: str = "",
            dimensione: str = "", cartella: str | Path = "",
            nome_file: str = "", env: dict[str, str] | None = None,
-           riferimento: tuple[bytes, str] | None = None) -> Immagine:
+           riferimento: tuple[bytes, str] | None = None,
+           maschera: tuple[bytes, str] | None = None) -> Immagine:
     """Genera un'immagine e la salva nella cartella indicata.
 
     `cartella` e' la base (di solito la root del progetto). L'immagine finisce
@@ -675,6 +696,12 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
     diverse (OpenAI un endpoint `/images/edits`, Google lo stesso
     generateContent con l'immagine fra le parti), ma il risultato e' lo
     stesso: un file in `immagini/`.
+
+    Con `maschera` (PNG, byte) la modifica e' limitata alle zone trasparenti
+    della maschera: e' l'inpainting vero, non un "prova a non toccare il
+    resto". Solo OpenAI ha un parametro per questo: chiederlo a Google o
+    OpenRouter e' un errore esplicito, non una richiesta che parte e torna
+    diversa.
     """
     testo = (prompt or "").strip()
     if not testo:
@@ -699,9 +726,18 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
             "alternativa la skill `invokeai` genera in locale senza chiave."
             + (f" Trovate: {', '.join(configurati)}." if configurati else "")
         )
+    if maschera and scelto != "openai":
+        raise ImageGenError(
+            "la maschera per l'inpainting la accetta solo OpenAI: Google e "
+            "OpenRouter non hanno una modifica per regione. Usa "
+            "provider=\"openai\" con OPENAI_API_KEY, oppure togli la "
+            "maschera e descrivi la zona nel prompt. Per coprire qualcosa "
+            "senza modello c'e' `image_edit`. Nessun credito e' stato "
+            "speso."
+        )
     if scelto == "openai":
         img = _genera_openai(testo, modello.strip(), dimensione, env,
-                             riferimento)
+                             riferimento, maschera)
     elif scelto == "openrouter":
         img = _genera_openrouter(testo, modello.strip(), dimensione, env,
                                  riferimento)

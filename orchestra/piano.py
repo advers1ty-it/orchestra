@@ -46,6 +46,7 @@ TOOL_CHE_CAMBIANO = {
     "mcp",
     "memoria",
     "image_gen",
+    "image_edit",
     "skill_genera",
     "skill_importa",
     "computer_click",

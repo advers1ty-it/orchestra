@@ -3,6 +3,7 @@
 Questo pacchetto raccoglie tutti i tool in moduli singoli:
 - read_file, write_file, edit_file, list_dir, run_shell, calculate
 - memoria, web, storico, skill, browser, computer
+- image_gen (genera), image_edit (monta su una foto esistente)
 
 default_registry() restituisce il registro completo con tutti i tool attivi.
 """
@@ -79,6 +80,7 @@ from .browser import (
 )
 from .screenshot import tool_screenshot_view  # noqa: E402
 from .image_gen import tool_image_gen  # noqa: E402
+from .image_edit import tool_image_edit  # noqa: E402
 from .computer import (
     tool_computer_screenshot,
     tool_computer_click,
@@ -227,6 +229,14 @@ La shell:
 - La shell è soggetta allo stesso confine degli altri strumenti: un comando che tocca un percorso fuori dalla cartella di lavoro chiede il permesso all'utente, e i percorsi sensibili sono negati.
 - Usa path relativi dentro il progetto: è più semplice e non fa scattare la domanda di permesso.
 
+Immagini:
+- Per aggiungere testo, un prezzo, un logo o una filigrana a una foto che l'utente ha allegato usa `image_edit`: incolla i file veri e disegna il testo vero, e i pixel che non tocca restano quelli dell'originale. Va bene anche per ritagliare e ridimensionare, e non costa niente.
+- `image_gen` inventa o trasforma: un modello ridisegna tutto, quindi un logo torna con le lettere sbagliate e un prezzo con altre cifre. Non usarlo per un fotoritocco, e non promettere che terra' un logo o un testo che esistono gia'.
+- Un'immagine allegata in chat e' gia' raggiungibile come `ultimo` in entrambi i tool: non chiedere all'utente di salvarla o di passarti un percorso.
+- Se un montaggio non e' dove lo volevi, rifallo con coordinate diverse: le percentuali ("50%") evitano di dover conoscere i pixel, e il risultato dice sempre la dimensione finale.
+- Per cambiare **solo una zona** (togliere una scritta, sostituire un dettaglio) usa `image_gen` con `zone`: rettangolo o ellisse in percentuali, e la maschera la costruisce il tool. Il resto dell'immagine non viene ridisegnato. Funziona solo con OpenAI: con Google e OpenRouter il tool te lo dice senza spendere credito, e allora la zona la descrivi nel prompt.
+- Non mandare l'utente su Canva o Photoshop prima di aver provato `image_edit`. Se il montaggio non basta davvero (inpainting per regione, maschere), dillo in una riga e spiega cosa manca.
+
 ---
 Cose che valgono in ogni conversazione. Non ripeterle se non servono. Per tutto il resto hai il tool `memoria`: cerca quello che ti serve invece di assumere di non saperlo.
 
@@ -262,18 +272,18 @@ _PROFILI: dict[str, set[str]] = {
     "base": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
-        "image_gen",
+        "image_gen", "image_edit",
     },
     "ricerca": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
-        "skill_cerca", "skill_leggi", "image_gen",
+        "skill_cerca", "skill_leggi", "image_gen", "image_edit",
     },
     "skill": {
         "read_file", "write_file", "edit_file", "list_dir",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
         "skill_cerca", "skill_leggi", "skill_genera", "skill_importa",
-        "image_gen",
+        "image_gen", "image_edit",
     },
     "pieno": {
         "read_file", "write_file", "edit_file", "list_dir", "run_shell", "calculate",
@@ -282,7 +292,7 @@ _PROFILI: dict[str, set[str]] = {
         "browser_apri", "browser_render", "browser_screenshot",
         "browser_click", "browser_digita", "browser_attendi",
         "browser_console", "browser_rete",
-        "screenshot_view", "image_gen",
+        "screenshot_view", "image_gen", "image_edit",
         "computer_screenshot", "computer_click", "computer_open", "computer_type",
     },
 }
@@ -393,7 +403,7 @@ def default_registry() -> ToolRegistry:
                  tool_browser_digita(), tool_browser_attendi(),
                  tool_browser_console(), tool_browser_rete(),
                  tool_screenshot_view(),
-                 tool_image_gen(),
+                 tool_image_gen(), tool_image_edit(),
                  tool_computer_screenshot(), tool_computer_click(),
                  tool_computer_open(), tool_computer_type(),
                  tool_mcp()):

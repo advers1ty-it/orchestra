@@ -44,6 +44,10 @@
 - `image_gen` genera un'immagine da un prompt con OpenAI Images, Google Gemini o OpenRouter, usando la chiave già presente in Opzioni, e la salva in `immagini/` nel progetto.
 - Con `provider="openrouter"` si sceglie uno qualsiasi dei modelli immagine del catalogo (`modello`); `elenco_modelli=true` li elenca con lo slug, senza generare né spendere.
 - Con `riferimento` modifica un'immagine esistente: un percorso del progetto, una data URL, oppure `ultimo` per l'immagine appena allegata in chat.
+- `image_edit` non genera: **monta** su una foto esistente. Incolla un logo PNG con la sua trasparenza, scrive testo, ritaglia, ridimensiona. I pixel fuori dalle zone toccate restano quelli dell'originale, quindi un logo e un prezzo restano corretti — cosa che `image_gen` non può fare, perché ridisegna tutto. Non usa chiavi né credito.
+- Funziona con JPEG, PNG e WebP; l'uscita ha lo stesso formato dell'ingresso (JPEG resta JPEG, qualità 95), quindi una foto non diventa un PNG enorme. Se serve la trasparenza si chiede `formato="png"`: un JPEG non la conserva.
+- Inpainting: `image_gen` accetta `zone` (rettangoli o ellissi, in pixel o percentuali) e costruisce lui la maschera, oppure `maschera` con un PNG gia' pronto. Il modello ridisegna solo li' dentro e non tocca il resto: e' la via per togliere una scritta o cambiare un dettaglio senza rifare la foto. La maschera la accetta solo OpenAI; con Google e OpenRouter il tool lo dice prima di spendere, e in quel caso conviene descrivere la zona nel prompt.
+- L'orientamento EXIF viene applicato prima del montaggio, quindi le coordinate valgono sull'immagine che si vede: pixel oppure percentuali (`"50%"`), con `ancora` in stile Pillow (`la`, `mm`, `rb`).
 - La generazione è a pagamento sul provider (per immagine o in image token): il tool lo ricorda quando manca la chiave, e non è un'alternativa gratuita a `invokeai`.
 - L'anteprima compare nel riquadro del tool; il file resta nel progetto.
 

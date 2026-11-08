@@ -24,6 +24,7 @@ from pathlib import Path
 
 from .. import attachments as _att
 from .. import image_gen as ig
+from .. import montaggio
 from ..types import Tool, ToolResult
 
 # Il limite degli allegati e' 12 MB; il riferimento non deve poter essere
@@ -107,10 +108,42 @@ def _riferimento(valore: str) -> tuple[bytes, str] | None:
     return dati, mime
 
 
+def _maschera(valore: str, zone, morbido: int,
+              rif: tuple[bytes, str] | None) -> tuple[bytes, str] | None:
+    """La maschera: costruita dalle `zone`, o presa da un file gia' pronto.
+
+    Le due strade esistono perche' sono due utenti diversi: chi dice "cancella
+    la scritta in basso a destra" non ha un PNG da dare, e chi l'ha gia'
+    disegnato in un editor non vuole che glielo si ricalcoli.
+    """
+    v = (valore or "").strip()
+    if isinstance(zone, dict):
+        # Un oggetto singolo invece di un elenco: errore facile da fare, e
+        # non c'e' ambiguita' su cosa intendesse.
+        zone = [zone]
+    if not zone and not v:
+        return None
+    if rif is None:
+        raise ig.ImageGenError(
+            "la maschera dice dove ridisegnare, ma manca l'immagine da "
+            "modificare: passa `riferimento` (o allega la foto e usa `ultimo`)."
+        )
+    if zone:
+        # La misura la decide l'immagine: chiedere all'utente di indovinare i
+        # pixel di una maschera sarebbe un modo per farla sbagliare sempre.
+        dati = montaggio.maschera(rif[0], zone, morbido=morbido)
+        return dati, "image/png"
+    pronta = _riferimento(v)
+    larghezza, altezza = montaggio.dimensioni(rif[0])
+    montaggio.controlla_maschera(pronta[0], larghezza, altezza)
+    return pronta
+
+
 def tool_image_gen() -> Tool:
     def handler(prompt: str = "", provider: str = "", modello: str = "",
                 dimensione: str = "", nome_file: str = "",
-                riferimento: str = "", elenco_modelli: bool = False) -> ToolResult:
+                riferimento: str = "", maschera: str = "", zone=None,
+                morbido: int = 0, elenco_modelli: bool = False) -> ToolResult:
         if elenco_modelli:
             # L'elenco non costa nulla e non genera niente: e' il modo per
             # scegliere uno slug invece di indovinarlo. Il catalogo e'
@@ -135,6 +168,7 @@ def tool_image_gen() -> Tool:
             ))
         try:
             rif = _riferimento(riferimento)
+            mas = _maschera(maschera, zone, morbido, rif)
             img = ig.genera(
                 prompt,
                 provider=provider,
@@ -143,8 +177,9 @@ def tool_image_gen() -> Tool:
                 cartella=_root_progetto(),
                 nome_file=nome_file,
                 riferimento=rif,
+                maschera=mas,
             )
-        except ig.ImageGenError as e:
+        except (ig.ImageGenError, montaggio.MontaggioError) as e:
             return ToolResult(text=f"ERRORE: {e}")
         except OSError as e:
             return ToolResult(text=f"ERRORE: non leggo l'immagine: {e}")
@@ -156,7 +191,8 @@ def tool_image_gen() -> Tool:
             percorso = str(img.percorso.relative_to(_root_progetto()))
         except ValueError:
             pass
-        verbo = "modificata" if rif else "generata"
+        verbo = ("modificata dentro la maschera" if mas
+                 else "modificata" if rif else "generata")
         # Il contenuto e' sintetico e va detto: e' l'art. 50(2) dell'AI
         # Act, e vale anche quando il file e' marcato, perche' la
         # marcatura dentro il PNG non la vede chi guarda la chat.
@@ -178,13 +214,17 @@ def tool_image_gen() -> Tool:
             "Google o OpenRouter). Salva il risultato in immagini/ nel "
             "progetto. Per modificare, passa `riferimento`: un percorso del "
             "progetto, una data URL, oppure `ultimo` per l'immagine appena "
-            "allegata dall'utente. Con `elenco_modelli` elenca i modelli "
-            "immagine di OpenRouter, per sceglierne uno con `modello`. "
-            "Costa denaro o credito sul provider: usalo quando l'utente "
-            "chiede di creare o trasformare un'immagine, non per descrivere "
-            "un allegato. Se nessuna chiave e' configurata, il tool lo dice: "
-            "in quel caso proponi la generazione locale con la skill "
-            "`invokeai`."
+            "allegata dall'utente. Per l'inpainting (cambiare SOLO una zona, "
+            "lasciando intatto il resto) passa `zone`: rettangoli o ellissi "
+            "in pixel o percentuali, e la maschera la costruisce il tool. "
+            "L'inpainting funziona solo con OpenAI; con Google e OpenRouter "
+            "il tool lo dice invece di partire. Con `elenco_modelli` elenca i "
+            "modelli immagine di OpenRouter, per sceglierne uno con "
+            "`modello`. Costa denaro o credito sul provider: usalo quando "
+            "l'utente chiede di creare o trasformare un'immagine, non per "
+            "descrivere un allegato. Se nessuna chiave e' configurata, il "
+            "tool lo dice: in quel caso proponi la generazione locale con la "
+            "skill `invokeai`."
         ),
         schema={
             "type": "object",
@@ -227,6 +267,40 @@ def tool_image_gen() -> Tool:
                     "type": "string",
                     "description": "Nome del file senza estensione. Se "
                                    "omesso si ricava dal prompt.",
+                },
+                "zone": {
+                    "type": "array",
+                    "description": "Inpainting: le zone in cui il modello puo' "
+                                   "ridisegnare, e nient'altro. Solo con "
+                                   "OpenAI (per Google e OpenRouter il tool lo "
+                                   "dice e non spende). Richiede "
+                                   "`riferimento`.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "tipo": {"type": "string",
+                                     "enum": ["rettangolo", "ellisse"]},
+                            "x": {"type": ["integer", "string"]},
+                            "y": {"type": ["integer", "string"]},
+                            "larghezza": {"type": ["integer", "string"]},
+                            "altezza": {"type": ["integer", "string"]},
+                        },
+                        "required": ["x", "y", "larghezza", "altezza"],
+                    },
+                },
+                "maschera": {
+                    "type": "string",
+                    "description": "Maschera gia' pronta per l'inpainting: "
+                                   "percorso di un PNG con trasparenza o data "
+                                   "URL. Trasparente = zona da ridisegnare, "
+                                   "stessa misura dell'immagine. Alternativa a "
+                                   "`zone`.",
+                },
+                "morbido": {
+                    "type": "integer",
+                    "description": "Pixels di sfumatura dei bordi delle zone "
+                                   "(0 = bordo netto). Utile quando attorno "
+                                   "alla zona c'e' un colore uniforme.",
                 },
                 "elenco_modelli": {
                     "type": "boolean",
