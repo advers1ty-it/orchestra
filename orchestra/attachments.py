@@ -15,6 +15,12 @@ che sembra di rete. Si ferma prima, e lo dice.
 """
 
 import base64
+# `io` serve a `pypdf` e a `_png`: senza, `io.BytesIO` sollevava NameError
+# dentro un `except Exception` che lo inghiottiva, e OGNI PDF con testo
+# veniva dichiarato "scansionato". Un import mancante non si vede finche'
+# qualcuno non lo cerca, e qui nessuno lo cercava perche' il sintomo
+# sembrava un fatto sul file.
+import io
 import os
 import sys
 from dataclasses import dataclass, field
@@ -242,7 +248,7 @@ def allega(nome: str, dati: bytes) -> Attachment:
 
 def _prepara_pdf(nome: str, dati: bytes, mime: str) -> Attachment:
     """Un PDF: testo se c'e', immagini se e' scansionato."""
-    testo, pagine = _leggi_pdf(dati)
+    testo, pagine, motivo = _leggi_pdf(dati)
     if pagine > LIMITE_PDF_PAGINE:
         raise AttachmentError(
             f"{nome}: {pagine} pagine, il limite e' {LIMITE_PDF_PAGINE}. "
@@ -256,27 +262,49 @@ def _prepara_pdf(nome: str, dati: bytes, mime: str) -> Attachment:
         # ottenere qualcosa di peggio, e con reflow diverso.
         return Attachment(nome=nome, kind="pdf", mime=mime,
                           testo=testo, pagine=pagine)
-    # Nessun testo: e' scansionato. Serve un modello con la visione.
+    # Nessun testo: o e' scansionato, o non ho potuto guardarci dentro.
+    # Sono due cose diverse e il messaggio non deve scambiarle.
     immagini = _renderizza(dati)
     if not immagini:
+        if motivo:
+            raise AttachmentError(
+                f"{nome}: non riesco a leggerlo, {motivo}."
+            )
         raise AttachmentError(
-            f"{nome}: PDF scansionato e non c'e' un modo di trasformare "
-            f"le pagine in immagini. Serve un PDF con testo, oppure un "
-            f"modello con la visione su un file gia' convertito."
+            f"{nome}: PDF scansionato (le pagine sono immagini, non "
+            f"testo). Per leggerlo servono le immagini delle pagine: "
+            f"installando `pypdfium2` (`pip install pypdfium2`) Orchestra "
+            f"le rende da solo e le manda a un modello con la visione; "
+            f"senza, converti tu le pagine in PNG."
         )
     return Attachment(nome=nome, kind="pdf", mime=mime,
                       immagini=immagini, pagine=pagine)
 
 
-def _leggi_pdf(dati: bytes) -> tuple[str, int]:
-    """Il testo di un PDF, e quante pagine ha. ("", 0) se non si puo'."""
+def _leggi_pdf(dati: bytes) -> tuple[str, int, str]:
+    """Il testo di un PDF, quante pagine ha, e perche' il testo manca.
+
+    Il terzo valore e' la parte che conta: "" vuol dire "letto, e non c'e'
+    testo" (un PDF scansionato); una stringa vuol dire "non ho potuto
+    guardare", e la ragione. Prima questi due casi erano lo stesso
+    ritorno — `("", n)` — e il messaggio che ne usciva accusava il file:
+    un PDF con testo perfettamente leggibile veniva dichiarato
+    "scansionato" solo perche' mancava `pypdf`. Un errore che incolpa il
+    dato quando il guasto e' nell'ambiente costa all'utente la ricerca di
+    un problema che non ha.
+    """
     try:
         import pypdf  # noqa: PLC0415
     except ImportError:
         try:
             import PyPDF2 as pypdf  # noqa: PLC0415
         except ImportError:
-            return "", dati.count(b"/Type /Page") + dati.count(b"/Type/Page")
+            pagine = dati.count(b"/Type /Page") + dati.count(b"/Type/Page")
+            return ("", pagine,
+                    "per leggere il testo di un PDF serve la libreria "
+                    "`pypdf`, che qui non c'e'. Installala con "
+                    "`pip install pypdf` (o `pip install -r "
+                    "requirements.txt`) e riprova")
     try:
         lettore = pypdf.PdfReader(io.BytesIO(dati))
         pagine = len(lettore.pages)
@@ -286,9 +314,12 @@ def _leggi_pdf(dati: bytes) -> tuple[str, int]:
                 parti.append(p.extract_text() or "")
             except Exception:  # noqa: BLE001 - una pagina fallita non
                 parti.append("")   # deve far fallire tutto il documento
-        return "\n".join(parti), pagine
-    except Exception:  # noqa: BLE001
-        return "", 0
+        return "\n".join(parti), pagine, ""
+    except Exception as e:  # noqa: BLE001
+        return ("", 0,
+                f"il PDF non si apre ({type(e).__name__}: {e}); il file "
+                f"potrebbe essere troncato, protetto da password o non "
+                f"essere un PDF")
 
 
 def _renderizza(dati: bytes) -> list[str]:

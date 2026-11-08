@@ -11,6 +11,7 @@ Ora il pacchetto esiste e il tool sta dentro, importabile come gli altri.
 
 from __future__ import annotations
 
+from ..testo import codifica, decodifica, tipo_binario
 from ..types import Tool
 from ._guard import _root, _safe_path
 
@@ -58,15 +59,43 @@ def tool_edit_file() -> Tool:
         if p.is_dir():
             return f"È UNA DIRECTORY: {path} (edit_file modifica un file)"
 
+        # I byte, non il testo tradotto: `read_text` con il default
+        # converte ogni \r\n in \n, e riscrivere il risultato toglieva i
+        # fine riga CRLF da TUTTO il file. Una sostituzione di una riga
+        # faceva comparire il file intero nel diff — su un repo Windows e'
+        # un danno che si vede solo dopo, quando il commit e' grande come
+        # il file.
         try:
-            originale = p.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            # Un file binario non si modifica a stringhe: si segnala invece
-            # di scrivere bytes come se fossero testo.
-            return (f"ERRORE: {path} non e' un file di testo UTF-8 "
-                    f"(file binario?). Usa write_file solo se sai cosa fai.")
+            dati = p.read_bytes()
+        except OSError as e:
+            return f"NON RIESCO A LEGGERLO: {path}: {e}"
+        tipo = tipo_binario(dati)
+        if tipo:
+            # Un file binario non si modifica a stringhe: si segnala con
+            # quello che e' davvero, invece di dire "file binario?" a un
+            # .txt in cp1252 (che e' testo, solo non UTF-8).
+            return (f"ERRORE: {path} e' {tipo}, non un file di testo: "
+                    f"modificarlo a stringhe lo corromperebbe.")
+        # L'encoding lo decide `testo.decodifica`, lo stesso che usa
+        # read_file: due tool che leggono lo stesso file in due modi
+        # diversi danno due verita' diverse, e l'utente non sa quale
+        # credere.
+        originale, codifica_file = decodifica(dati)
 
-        occorrenze = originale.count(trova)
+        cerca, metti = trova, sostituisci
+        occorrenze = originale.count(cerca)
+        if occorrenze == 0 and "\r\n" in originale:
+            # Il modello copia le righe da read_file, che mostra il testo
+            # con i \n (splitlines li toglie): su un file CRLF una ricerca
+            # multilinea copiata cosi' non combacia, e il tool rispondeva
+            # "NESSUNA CORRISPONDENZA" su una stringa che esiste. Si riprova
+            # con i fine riga del file, e la sostituzione adotta gli
+            # stessi, altrimenti si mescolano due stili nello stesso file.
+            altra = trova.replace("\r\n", "\n").replace("\n", "\r\n")
+            if altra != trova and originale.count(altra):
+                cerca = altra
+                metti = sostituisci.replace("\r\n", "\n").replace("\n", "\r\n")
+                occorrenze = originale.count(cerca)
         if occorrenze == 0:
             return (f"NESSUNA CORRISPONDENZA in {path}: la stringa cercata "
                     f"non c'e'. Leggi il file e riprova con la stringa esatta.")
@@ -78,7 +107,7 @@ def tool_edit_file() -> Tool:
         else:
             quante = 1
 
-        nuovo, fatte = _sostituisci(originale, trova, sostituisci, quante)
+        nuovo, fatte = _sostituisci(originale, cerca, metti, quante)
         if fatte == 0:
             return f"NESSUNA SOSTITUZIONE in {path}"
 
@@ -95,11 +124,13 @@ def tool_edit_file() -> Tool:
         except Exception:  # noqa: BLE001
             pass
         # Atomica anche qui: questa riscrive il file intero, quindi vale
-        # lo stesso rischio di write_file.
-        from ..scrittura import scrivi_testo
+        # lo stesso rischio di write_file. E nella codifica del file: un
+        # .txt cp1252 modificato non deve tornare indietro come UTF-8,
+        # altrimenti l'encoding l'ha cambiato il tool, non l'utente.
+        from ..scrittura import scrivi_bytes
 
         try:
-            scrivi_testo(p, nuovo)
+            scrivi_bytes(p, codifica(nuovo, codifica_file))
         except OSError as e:
             return f"MODIFICA FALLITA: {path}: {e} (il file non e' stato toccato)"
         resto = occorrenze - fatte

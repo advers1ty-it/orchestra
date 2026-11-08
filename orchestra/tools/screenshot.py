@@ -24,33 +24,51 @@ from ..attachments import AttachmentError, allega
 from ..types import Tool, ToolResult
 
 
-def _risolvi(nome_file: str) -> Path:
-    """Il percorso dello screenshot: relativo alla root, o assoluto."""
-    p = Path(nome_file)
-    if not p.is_absolute():
-        try:
-            from . import _root
+def _risolvi(nome_file: str) -> tuple[Path | None, str]:
+    """(percorso, problema). Il problema e' "" quando il percorso va bene.
 
-            p = _root() / p
-        except Exception:  # noqa: BLE001 - senza root si lavora sul CWD
-            p = Path(os.getcwd()) / p
-    return p
+    Passa da `_safe_path` come ogni altro tool, e non da una risoluzione
+    fatta a mano. Due ragioni, entrambe viste succedere:
+
+    - il confine. Prima un percorso ASSOLUTO fuori dalla cartella di
+      lavoro veniva letto senza chiedere niente, mentre `read_file` sullo
+      stesso file chiedeva il permesso: il tool che non applica la
+      guardia e' la porta girevole, e questa e' la porta piu' comoda
+      (un'immagine si guarda, non si legge riga per riga, quindi nessuno
+      se ne accorge).
+    - la cartella. Prima `from . import _root` prendeva la root del
+      PACCHETTO (`orchestra/`), non quella di lavoro: un percorso
+      relativo corretto diventava "Non trovo", e il messaggio invitava a
+      passarne un altro. `_safe_path` usa la root giusta.
+    """
+    from ._guard import _safe_path
+
+    try:
+        return _safe_path(nome_file), ""
+    except PermissionError as e:
+        return None, str(e)
+    except (ValueError, OSError) as e:
+        return None, f"Non posso aprire '{nome_file}': {e}"
 
 
 def tool_screenshot_view() -> Tool:
     def handler(nome_file: str = "") -> ToolResult:
         if not nome_file:
             return ToolResult(
-                text=("Serve il nome del file: computer_screenshot e "
-                      "browser_screenshot dicono il percorso nel loro "
-                      "risultato."))
+                text=("Serve il percorso dell'immagine: quello che "
+                      "computer_screenshot e browser_screenshot dicono nel "
+                      "loro risultato, oppure il nome di un file immagine "
+                      "nella cartella di lavoro."))
+        p, problema = _risolvi(nome_file)
+        if p is None:
+            return ToolResult(text=problema)
         try:
-            dati = _risolvi(nome_file).read_bytes()
+            dati = p.read_bytes()
         except FileNotFoundError:
             return ToolResult(
-                text=(f"Non trovo '{nome_file}'. Chiamalo con il percorso "
-                      "esatto che computer_screenshot o browser_screenshot "
-                      "hanno restituito."))
+                text=(f"Non trovo '{nome_file}'. Un percorso relativo parte "
+                      f"dalla cartella di lavoro; per un file altrove serve "
+                      f"il percorso assoluto, e li' chiedo il permesso."))
         except OSError as e:
             return ToolResult(text=f"Non leggo '{nome_file}': {e}")
 
@@ -76,12 +94,15 @@ def tool_screenshot_view() -> Tool:
     return Tool(
         name="screenshot_view",
         description=(
-            "Legge un file immagine (screenshot PNG/JPG, es. quello creato "
-            "da computer_screenshot o browser_screenshot) e lo mostra al "
-            "modello come immagine. Usalo quando devi VEDERE qualcosa "
-            "allora che il testo del tool non basta: descrivere uno "
-            "schermo, trovare un elemento in una pagina, verificare un "
-            "layout. Passa il percorso che lo screenshot ha restituito."
+            "Guarda un file immagine (PNG/JPG/GIF/WebP: uno screenshot, ma "
+            "anche una foto o un logo) e lo mostra al modello. È l'unico "
+            "modo di VEDERE un'immagine che sta sul disco: read_file su un "
+            "PNG non dà il contenuto, e un percorso non è un'immagine. "
+            "Usalo per descrivere una schermata, trovare un elemento in una "
+            "pagina, verificare un layout, o capire cosa c'è in una foto "
+            "prima di montarci sopra un testo. Accetta un percorso relativo "
+            "alla cartella di lavoro o un assoluto (fuori chiede permesso). "
+            "Su un PDF restituisce il testo, se c'è."
         ),
         schema={"type": "object",
                 "properties": {"nome_file": {

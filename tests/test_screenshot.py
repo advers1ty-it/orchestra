@@ -48,7 +48,15 @@ PNG_1PX = base64.b64decode(
 # La cartella vive per tutto il file: se la chiudessi prima della sezione
 # [3], il file sparirebbe lì e il test segnalerebbe un difetto che non
 # c'è (l'agente che non trova il file). Si pulisce in fondo.
-_d = tempfile.mkdtemp(prefix="orchestra_shot_")
+#
+# E vive DENTRO la cartella di lavoro, non in una temp di sistema:
+# `screenshot_view` ora passa da `_safe_path` come ogni altro tool, quindi
+# un percorso assoluto fuori dalla root chiede il permesso — e qui non c'è
+# nessuno a rispondere, quindi nega. Prima questo test passava scrivendo
+# fuori dal progetto, cioè perché la guardia mancava: il fixture stava
+# verificando il buco, non il tool.
+_d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_probe_shot")
+os.makedirs(_d, exist_ok=True)
 p = os.path.join(_d, "schermo.png")
 with open(p, "wb") as f:
     f.write(PNG_1PX)

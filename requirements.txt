@@ -9,3 +9,10 @@ ddgs>=9.0
 # testo, logo, ritaglio su una foto esistente). Senza, quel tool dice cosa
 # installare e `image_gen` continua a funzionare lo stesso.
 Pillow>=10.1
+
+# `pypdf` legge il testo dei PDF: un allegato PDF con testo costa zero
+# token e arriva esatto, invece di essere dichiarato "scansionato" (era
+# quello che succedeva senza questa riga: il messaggio incolpava il file
+# mentre il guasto era la libreria mancante). Senza, Orchestra funziona
+# lo stesso e dice quale comando manca.
+pypdf>=5.0

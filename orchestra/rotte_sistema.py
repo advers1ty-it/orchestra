@@ -9,10 +9,11 @@ che le serve; la tabella e il dispatch stanno in `rotte.py` e in
 
 from __future__ import annotations
 
-import importlib
-import os
-import shutil
+# `importlib`, `os` e `shutil` stavano qui per la lista delle dipendenze
+# scritta a mano in questo file. Ora quella lista sta in `dipendenze.py`
+# (che li usa per davvero) e qui non servono piu'.
 import subprocess
+import sys
 import threading
 from typing import Any
 
@@ -30,42 +31,14 @@ class RotteSistema:
     @rotta("GET", "/api/dipendenze/stato")
     def _r_get_dipendenze_stato(self, path: str, body: dict[str, Any],
                                 s: Any) -> None:
-        import importlib.util, importlib.metadata, shutil, os as _os, sys as _sys
-        deps = []
-        # ddgs (ricerca web) — find_spec non importa il modulo (niente cache)
-        if importlib.util.find_spec("ddgs") is not None:
-            try:
-                ver = importlib.metadata.version("ddgs")
-            except Exception:
-                ver = "?"
-            deps.append({"nome": "ddgs", "stato": "ok",
-                         "versione": ver, "via": "pip"})
-        else:
-            deps.append({"nome": "ddgs", "stato": "da installare", "via": "pip"})
-        # faster-whisper (STT server)
-        if importlib.util.find_spec("faster_whisper") is not None:
-            try:
-                ver = importlib.metadata.version("faster-whisper")
-            except Exception:
-                ver = "?"
-            deps.append({"nome": "faster-whisper", "stato": "ok",
-                         "versione": ver, "via": "pip"})
-        else:
-            deps.append({"nome": "faster-whisper", "stato": "da installare", "via": "pip"})
-        cf = shutil.which("cloudflared")
-        if not cf:
-            for cand in (r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
-                         r"C:\Program Files\cloudflared\cloudflared.exe"):
-                if _os.path.exists(cand):
-                    cf = cand
-                    break
-        if cf:
-            deps.append({"nome": "cloudflared", "stato": "ok",
-                         "versione": "installato", "via": "winget",
-                         "path": cf})
-        else:
-            deps.append({"nome": "cloudflared", "stato": "da installare", "via": "winget"})
-        self._json({"python": _sys.version.split()[0], "deps": deps})
+        # E' QUESTA la rotta che chiama il pannello (`fetch(".../stato")`
+        # senza corpo e' una GET). La POST qui sotto fa la stessa cosa per
+        # compatibilita': due copie della stessa risposta sono il modo in
+        # cui sono nate due liste diverse, quindi entrambe delegano allo
+        # stesso modulo.
+        from . import dipendenze as _dep
+
+        self._json({"python": sys.version.split()[0], "deps": _dep.stato()})
         return
 
     @rotta("GET", "/api/tools/profile")
@@ -208,87 +181,46 @@ class RotteSistema:
     @rotta("POST", "/api/dipendenze/stato")
     def _r_post_dipendenze_stato(self, path: str, body: dict[str, Any],
                                  s: Any) -> None:
-        import importlib.util, importlib.metadata, shutil, os as _os, sys as _sys
-        deps = []
-        # ddgs (ricerca web)
-        if importlib.util.find_spec("ddgs") is not None:
-            try:
-                ver = importlib.metadata.version("ddgs")
-            except Exception:
-                ver = "?"
-            deps.append({"nome": "ddgs", "stato": "ok",
-                         "versione": ver, "via": "pip"})
-        else:
-            deps.append({"nome": "ddgs", "stato": "da installare", "via": "pip"})
-        # faster-whisper (STT server)
-        if importlib.util.find_spec("faster_whisper") is not None:
-            try:
-                ver = importlib.metadata.version("faster-whisper")
-            except Exception:
-                ver = "?"
-            deps.append({"nome": "faster-whisper", "stato": "ok",
-                         "versione": ver, "via": "pip"})
-        else:
-            deps.append({"nome": "faster-whisper", "stato": "da installare", "via": "pip"})
-        # cloudflared (tunnel)
-        cf = shutil.which("cloudflared")
-        if not cf:
-            for cand in (r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
-                         r"C:\Program Files\cloudflared\cloudflared.exe"):
-                if _os.path.exists(cand):
-                    cf = cand
-                    break
-        if cf:
-            deps.append({"nome": "cloudflared", "stato": "ok",
-                         "versione": "installato", "via": "winget",
-                         "path": cf})
-        else:
-            deps.append({"nome": "cloudflared", "stato": "da installare", "via": "winget"})
-        self._json({"python": _sys.version.split()[0], "deps": deps})
+        # La lista NON sta piu' qui: sta in `dipendenze.py`, che legge
+        # `requirements.txt`. Prima era scritta a mano in questo metodo —
+        # ddgs, faster-whisper, cloudflared — e una dipendenza aggiunta al
+        # requirements (Pillow, pypdf) non compariva nel pannello e non si
+        # poteva installare da li'. La cura non e' aggiungere due righe a
+        # mano (la prossima si dimentica allo stesso modo): e' leggere il
+        # file che il progetto gia' dichiara come la sua lista.
+        from . import dipendenze as _dep
+
+        self._json({"python": sys.version.split()[0], "deps": _dep.stato()})
         return
 
     @rotta("POST", "/api/dipendenze/installa")
     def _r_post_dipendenze_installa(self, path: str, body: dict[str, Any],
                                     s: Any) -> None:
-        import sys as _sys, subprocess
+        from . import dipendenze as _dep
+
         nome = (body.get("nome") if isinstance(body, dict) else None) or ""
-        nome = nome.strip().lower()
-        # cloudflared via winget
-        if nome == "cloudflared":
-            try:
-                r = subprocess.run(
-                    ["winget", "install", "--id", "Cloudflare.cloudflared", "-e",
-                     "--silent", "--accept-package-agreements",
-                     "--accept-source-agreements"],
-                    text=True, capture_output=True, timeout=300)
-                self._json({
-                    "ok": r.returncode == 0,
-                    "returncode": r.returncode,
-                    "output": ((r.stdout or "") + (r.stderr or ""))[-1800:],
-                })
-            except Exception as e:  # noqa: BLE001
-                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+        nome = str(nome).strip()
+        comando = _dep.comando_installazione(nome)
+        if comando is None:
+            self._json({"error": "dipendenza sconosciuta: " + nome}, 400)
             return
-        # pip packages
-        pkg = None
-        if nome in ("ddgs",):
-            pkg = "ddgs"
-        elif nome in ("faster-whisper", "faster_whisper", "whisper"):
-            pkg = "faster-whisper"
-        if pkg:
-            try:
-                r = subprocess.run(
-                    [_sys.executable, "-m", "pip", "install", pkg],
-                    text=True, capture_output=True, timeout=300)
-                self._json({
-                    "ok": r.returncode == 0,
-                    "returncode": r.returncode,
-                    "output": ((r.stdout or "") + (r.stderr or ""))[-1800:],
-                })
-            except Exception as e:  # noqa: BLE001
-                self._json({"error": f"{type(e).__name__}: {e}"}, 500)
-            return
-        self._json({"error": "dipendenza sconosciuta: " + nome}, 400)
+        # winget impiega piu' di pip (scarica un installer, non un wheel),
+        # e il timeout deve dire la stessa cosa del comando che lancia.
+        timeout = 600 if comando[0] == "winget" else 300
+        try:
+            r = subprocess.run(comando, text=True, capture_output=True,
+                               timeout=timeout)
+            self._json({
+                "ok": r.returncode == 0,
+                "returncode": r.returncode,
+                "comando": " ".join(comando),
+                "output": ((r.stdout or "") + (r.stderr or ""))[-1800:],
+            })
+        except subprocess.TimeoutExpired:
+            self._json({"error": f"timeout {timeout}s: " + " ".join(comando)},
+                       504)
+        except Exception as e:  # noqa: BLE001
+            self._json({"error": f"{type(e).__name__}: {e}"}, 500)
         return
 
     @rotta("POST", "/api/diagnosi/stato")
@@ -318,9 +250,20 @@ class RotteSistema:
         elif cmd_id == "bench-show":
             args = [_sys.executable, "-m", "orchestra.cli", "bench", "--show"]
         elif cmd_id == "dipendenze":
-            # riuso lo stato deps esistente
-            cur = root / "requirements.txt"
-            self._json({"comando": cmd_id, "output": str(cur), "ok": cur.exists()})
+            # Prima stampava il PERCORSO di requirements.txt come se fosse
+            # un referto: un comando che promette "stato dipendenze" e
+            # risponde con un nome di file non dice niente. Ora è la
+            # tabella, la stessa che mostra il pannello.
+            from . import dipendenze as _dep
+
+            righe = []
+            for d in _dep.stato():
+                segno = "ok  " if d["stato"] == "ok" else "--  "
+                ver = f" {d['versione']}" if d.get("versione") else ""
+                cosa = f" — {d['perche']}" if d.get("perche") else ""
+                righe.append(f"{segno}{d['nome']}{ver} [{d['via']}]{cosa}")
+            self._json({"comando": cmd_id, "ok": True,
+                        "output": "\n".join(righe)})
             return
         else:
             self._json({"error": "comando non consentito"}, 400)

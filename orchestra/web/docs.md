@@ -10,7 +10,7 @@
 - Opzioni → Modello: seleziona provider/modello.
 - Modal "Cosa fai?": carica profilo + prompt iniziale.
 - Task e Tool → attiva profili (base/ricerca/skill/pieno).
-- Dipendenze: pulsante "Dipendenze" per installare `ddgs`.
+- Dipendenze: il pulsante "Dipendenze" mostra lo stato di ciò che è elencato in `requirements.txt` (`ddgs`, `Pillow`, `pypdf`) e permette di installarlo da lì, più le componenti che non arrivano da pip (`cloudflared` via winget) e le opzionali (`faster-whisper`). La lista si legge dal file, non è una seconda copia dentro il codice: aggiungere una riga a `requirements.txt` basta a farla comparire nel pannello.
 
 ## Steer e Stop
 - Steer: durante un turno compare una barra sopra il campo; il messaggio arriva al modello alla prima occasione utile — dopo il tool in corso, o prima di chiudere se stava già rispondendo — senza fermare il turno (max 5 per turno). Fuori da un turno viene rifiutato, per non finire sulla domanda successiva.
@@ -38,9 +38,11 @@
 ## Browser / computer
 - Browser render apre Chrome/Edge locale (headless).
 - Computer automation usa api Windows e richiede permesso.
-- `screenshot_view` legge lo PNG prodotto da `browser_screenshot` / `computer_screenshot` e lo passa al modello come immagine: la cattura da sola dà un percorso, non uno schermo.
+- `screenshot_view` legge un file immagine (lo PNG prodotto da `browser_screenshot` / `computer_screenshot`, ma anche una foto o un logo nel progetto) e lo passa al modello come immagine: la cattura da sola dà un percorso, non uno schermo. Sta in ogni profilo accanto a `image_edit`, perché guardare l'immagine è il passo prima di montarci sopra qualcosa. Su un PDF restituisce il testo, se c'è.
+- I percorsi relativi dei tool partono dalla cartella di lavoro; un percorso assoluto fuori da lì chiede il permesso all'utente.
 
 ## Immagini
+- `read_file` legge il **testo** dentro un PDF e dentro un `.docx`/`.xlsx`/`.pptx` (questi ultimi con la sola libreria standard: un file Office è uno zip di XML). I PDF hanno bisogno di `pypdf`, dichiarato in `requirements.txt`: senza, l'errore dice quale comando installare invece di dichiarare il file illeggibile. Su un'immagine `read_file` non mente: dice di usare `screenshot_view`.
 - `image_gen` genera un'immagine da un prompt con OpenAI Images, Google Gemini o OpenRouter, usando la chiave già presente in Opzioni, e la salva in `immagini/` nel progetto.
 - Con `provider="openrouter"` si sceglie uno qualsiasi dei modelli immagine del catalogo (`modello`); `elenco_modelli=true` li elenca con lo slug, senza generare né spendere.
 - Con `riferimento` modifica un'immagine esistente: un percorso del progetto, una data URL, oppure `ultimo` per l'immagine appena allegata in chat.

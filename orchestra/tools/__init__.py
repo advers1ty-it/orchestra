@@ -18,12 +18,26 @@ from pathlib import Path
 # Root del progetto e guardie di percorso
 # ---------------------------------------------------------------------------
 
-_ROOT = Path(__file__).resolve().parent.parent
+# La cartella DEL PACCHETTO (`orchestra/`): serve alla pulizia qui sotto e
+# a nient'altro. Non e' la cartella di lavoro, e chiamarla `_ROOT` era
+# meta' del fraintendimento.
+_PACCHETTO = Path(__file__).resolve().parent
 
 
-def _root() -> Path:
-    """Restituisce la root del progetto Orchestra."""
-    return _ROOT
+# La cartella di lavoro vera non si definisce qui: si riesporta da
+# `._guard`, che la rivaluta a ogni chiamata (progetto attivo del thread,
+# poi ORCHESTRA_ROOT, poi cwd).
+#
+# Prima in questo file c'era una `_root()` locale che restituiva
+# `Path(__file__).parent.parent`, cioe' `orchestra/`, e OMBREGGIAVA quella
+# di `_guard`. Tutti i tool che fanno `from . import _root` — screenshot,
+# browser, computer, image_gen — risolvevano i percorsi relativi DENTRO il
+# pacchetto: `screenshot_view("foto.png")` rispondeva "non trovo" su un
+# file che esisteva nella cartella di lavoro, e gli screenshot finivano
+# dentro l'installazione (in un `pip install`, dentro `site-packages`, che
+# e' di sola lettura). Due funzioni con lo stesso nome e due significati
+# diversi sono il difetto, non la cura: qui si riesporta quella giusta.
+from ._guard import _root  # noqa: E402,F401
 
 
 # Il gate vero sta in ._guard: qui si riesporta solo, perche' webapp lo
@@ -197,6 +211,7 @@ Come lavori:
 - Se uno strumento restituisce un errore, leggi l'errore e correggi. Non ripetere la stessa chiamata identica.
 - Preferisci `list_dir` e `read_file` a indovinare il contenuto di un file.
 - Per trovare qualcosa usa `search_text` (contenuto: `file:riga: testo`) e `find_files` (nomi con glob). Non elencare cartelle a caso e non leggere file interi per cercare una riga: costa token e tempo.
+- `read_file` legge anche il testo DENTRO un PDF e un `.docx`/`.xlsx`/`.pptx`: non serve convertire niente e non serve chiedere all'utente di incollare il contenuto. Se un PDF e' scansionato il tool lo dice: allora le pagine sono immagini, e servono gli occhi (`screenshot_view`), non `read_file`.
 - Per orientarti in un file Python grande usa `analisi_python` (`simboli`, `import`, `chiamate`, `usi`, `sintassi`) invece di leggerlo tutto: dice firme e righe senza il corpo.
 - Per verificare una modifica usa `run_tests`: rileva il comando che il progetto usa. Se non lo trova, non inventarlo — chiedi o leggi il progetto. Una modifica non e' fatta finche' il test che la copre non e' verde (o finche' non dici perche' quel test non si puo' girare).
 - Se un dato che non puoi leggere decide il lavoro (un nome, quale dei due file, un requisito ambiguo), usa `ask_user` e aspetta: una domanda breve costa meno di tre file scritti sull'ipotesi sbagliata. Non chiedere quello che puoi verificare con gli strumenti, e non chiedere conferma di un lavoro che l'utente vede.
@@ -233,6 +248,7 @@ Immagini:
 - Per aggiungere testo, un prezzo, un logo o una filigrana a una foto che l'utente ha allegato usa `image_edit`: incolla i file veri e disegna il testo vero, e i pixel che non tocca restano quelli dell'originale. Va bene anche per ritagliare e ridimensionare, e non costa niente.
 - `image_gen` inventa o trasforma: un modello ridisegna tutto, quindi un logo torna con le lettere sbagliate e un prezzo con altre cifre. Non usarlo per un fotoritocco, e non promettere che terra' un logo o un testo che esistono gia'.
 - Un'immagine allegata in chat e' gia' raggiungibile come `ultimo` in entrambi i tool: non chiedere all'utente di salvarla o di passarti un percorso.
+- Per GUARDARE un'immagine che sta sul disco — una foto, un logo, uno screenshot — usa `screenshot_view` col suo percorso: `read_file` su un PNG non ti da' il contenuto, e un percorso non e' un'immagine. Fallo prima di montarci sopra un testo, invece di indovinare dove sono le cose.
 - Se un montaggio non e' dove lo volevi, rifallo con coordinate diverse: le percentuali ("50%") evitano di dover conoscere i pixel, e il risultato dice sempre la dimensione finale.
 - Per cambiare **solo una zona** (togliere una scritta, sostituire un dettaglio) usa `image_gen` con `zone`: rettangolo o ellisse in percentuali, e la maschera la costruisce il tool. Il resto dell'immagine non viene ridisegnato. Funziona solo con OpenAI: con Google e OpenRouter il tool te lo dice senza spendere credito, e allora la zona la descrivi nel prompt.
 - Non mandare l'utente su Canva o Photoshop prima di aver provato `image_edit`. Se il montaggio non basta davvero (inpainting per regione, maschere), dillo in una riga e spiega cosa manca.
@@ -268,22 +284,30 @@ Cose che valgono in ogni conversazione. Non ripeterle se non servono. Per tutto 
 # Perche' allora il profilo esiste ancora? Perche' i profili alti
 # AGGIUNGONO (skill, browser, computer), non tolgono: un profilo e' un
 # livello di capacita', non un livello di fiducia.
+#
+# Da li' segue una regola che `test_documenti` controlla: `pieno`
+# contiene TUTTI i tool del registro, senza eccezioni. `cron` e `mcp` non
+# stavano in nessun profilo — nemmeno in questo — e con qualunque profilo
+# scelto sparivano: lo scheduler e i server MCP si spegnevano al primo
+# turno e niente lo diceva. Un tool che nessun profilo contiene e' un
+# tool che si spegne da solo.
 _PROFILI: dict[str, set[str]] = {
     "base": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
-        "image_gen", "image_edit",
+        "image_gen", "image_edit", "screenshot_view",
     },
     "ricerca": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
         "skill_cerca", "skill_leggi", "image_gen", "image_edit",
+        "screenshot_view",
     },
     "skill": {
-        "read_file", "write_file", "edit_file", "list_dir",
+        "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
         "skill_cerca", "skill_leggi", "skill_genera", "skill_importa",
-        "image_gen", "image_edit",
+        "image_gen", "image_edit", "screenshot_view",
     },
     "pieno": {
         "read_file", "write_file", "edit_file", "list_dir", "run_shell", "calculate",
@@ -292,7 +316,7 @@ _PROFILI: dict[str, set[str]] = {
         "browser_apri", "browser_render", "browser_screenshot",
         "browser_click", "browser_digita", "browser_attendi",
         "browser_console", "browser_rete",
-        "screenshot_view", "image_gen", "image_edit",
+        "screenshot_view", "image_gen", "image_edit", "cron", "mcp",
         "computer_screenshot", "computer_click", "computer_open", "computer_type",
     },
 }
@@ -450,8 +474,8 @@ def default_registry() -> ToolRegistry:
 
 def _pulizia_tools_obsoleti() -> None:
     """Rimuove il vecchio orchestra/tools.py se coesiste con la nuova cartella orchestra/tools/."""
-    tools_py = _ROOT / "tools.py"
-    tools_dir = _ROOT / "tools"
+    tools_py = _PACCHETTO / "tools.py"
+    tools_dir = _PACCHETTO / "tools"
     if tools_py.exists() and tools_dir.is_dir():
         try:
             tools_py.unlink()

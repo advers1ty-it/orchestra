@@ -855,12 +855,18 @@ async function _depsApri() {
   modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;";
   const box = document.createElement("div");
   box.style.cssText = "background:var(--bg,#1a1a2e);color:var(--fg,#eee);padding:20px;border-radius:12px;max-width:420px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.4);";
-  let html = "<h3 style='margin:0 0 12px'>Dipendenze opzionali</h3>";
+  // Il titolo diceva "opzionali" perche' il pannello conosceva solo quelle
+  // tre (ddgs, faster-whisper, cloudflared). Ora la lista viene da
+  // `requirements.txt`, quindi contiene anche cio' che serve ai tool:
+  // chiamarle opzionali sarebbe falso, e un utente che non le installa
+  // trova un tool che dice "installa Pillow" e un pannello che non lo
+  // nominava.
+  let html = "<h3 style='margin:0 0 12px'>Dipendenze</h3>";
   html += "<p style='font-size:12px;opacity:.7;margin:0 0 12px'>Python: " + (data.python || "?") + "</p>";
   for (const d of deps) {
     const ok = d.stato === "ok";
     html += "<div style='display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1)'>";
-    html += "<div><strong>" + d.nome + "</strong><br><span style='font-size:11px;opacity:.6'>" + (ok ? (d.versione || "ok") : "da installare") + " · " + (d.via || "") + "</span></div>";
+    html += "<div><strong>" + d.nome + "</strong><br><span style='font-size:11px;opacity:.6'>" + (ok ? (d.versione || "ok") : "da installare") + " · " + (d.via || "") + (d.perche ? " · " + d.perche : "") + "</span></div>";
     if (!ok) {
       html += "<button class='deps-install' data-nome='" + d.nome + "' style='padding:4px 10px;border-radius:6px;border:1px solid #555;background:transparent;color:inherit;cursor:pointer;font-size:12px'>Installa</button>";
     } else {

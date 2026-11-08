@@ -28,22 +28,36 @@ from pathlib import Path
 
 
 def scrivi_testo(percorso: str | Path, testo: str) -> None:
-    """Scrive `testo` in `percorso` in modo atomico.
+    """Scrive `testo` in `percorso` in modo atomico, in UTF-8.
 
     Solleva OSError come farebbe `write_text`: chi chiama gia' gestisce
     il caso "non ho i permessi" e non deve scoprire un tipo nuovo.
     """
+    _scrivi_atomico(percorso, testo.encode("utf-8"))
+
+
+def scrivi_bytes(percorso: str | Path, dati: bytes) -> None:
+    """Scrive `dati` in modo atomico, byte per byte.
+
+    Serve a chi modifica un file che non era UTF-8: `edit_file` legge un
+    .txt cp1252, sostituisce una riga e deve restituirlo in cp1252. Con
+    `scrivi_testo` il file tornerebbe UTF-8, cioe' cambiato in tutte le
+    righe con un accento — lo stesso danno dei fine riga, in un'altra
+    forma. I byte sono l'unica scrittura che non decide niente al posto
+    di chi chiama.
+    """
+    _scrivi_atomico(percorso, dati)
+
+
+def _scrivi_atomico(percorso: str | Path, dati: bytes) -> None:
     p = Path(percorso)
     cartella = p.parent
     cartella.mkdir(parents=True, exist_ok=True)
 
-    # newline="" : il testo arriva gia' con i suoi a capo, e convertirli
-    # qui cambierebbe il contenuto di un file che l'utente ha scritto
-    # cosi' (o che il modello ha letto cosi').
     fd, temporaneo = tempfile.mkstemp(prefix=".orchestra-", dir=str(cartella))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-            f.write(testo)
+        with os.fdopen(fd, "wb") as f:
+            f.write(dati)
             f.flush()
             # Senza fsync il contenuto puo' essere ancora nella cache del
             # sistema quando `os.replace` rende visibile il nome nuovo:
