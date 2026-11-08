@@ -38,6 +38,12 @@ python tests/run_all.py                            # suite completa (server acce
 
 Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
 
+### Un endpoint che non usiamo
+
+`POST https://openrouter.ai/api/alpha/decisions` (OpenRouter, alpha) prende uno `state` e domande tipizzate: `noul` vuole `instructions` (stringa, lista o oggetto), `choice` vuole `criteria` come **oggetto**, `score` come **lista**; senza `type` la domanda passa, e `state` è obbligatorio. Orchestra non lo chiama: le decisioni del consiglio le ragiona in casa con i modelli dell'utente, e l'endpoint è alpha su un modello gratuito che il provider ha già ritirato una volta.
+
+Il contratto è stato ricostruito facendolo parlare, perché **la validazione dello schema avviene prima del rate limit**: `400` = schema sbagliato (e il messaggio dice quale campo), `429` = schema giusto fermato dal tetto. Così si mappa tutto senza consumare richieste. La forma della **risposta** invece non è mai stata vista, perché il tetto era raggiunto. La sonda che lo verificava (`tests/test_decisions_schema.py`) è stata tolta quando il modello è sparito: misurava un'API di terzi, non Orchestra.
+
 ## Cosa sa fare
 
 - **Chat agentica** — conversa, chiama strumenti, mostra tool ed eventi in tempo reale, si può interrompere e resettare.

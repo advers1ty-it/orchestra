@@ -117,11 +117,4 @@
 ## Supporto
 - non ci sono dipendenze esterne per default.
 - offline-first, DB locale; goal reminder su file persistente.
-
-## Nota: `/api/alpha/decisions` di OpenRouter (non usata)
-- È un endpoint alpha che prende uno `state` e una lista di domande tipizzate e torna decisioni. **Orchestra non lo usa**: le decisioni multi-modello le fa `council.py` in casa, con i modelli scelti dall'utente. La nota resta perché il contratto è stato ricostruito a mano e non era documentato.
-- Richiesta: `POST https://openrouter.ai/api/alpha/decisions` con `{"model", "state", "questions": {"<domanda>": {"type", "instructions", "criteria"}}}`. `state` è obbligatorio (un oggetto qualsiasi con lo stato della decisione).
-- `type: "noul"` vuole `instructions` (stringa, lista o oggetto). `type: "choice"` vuole `criteria` come **oggetto** (un record, non un array). `type: "score"` vuole `criteria` come **lista**. Senza `type` la domanda passa: il tipo lo sceglie chi chiama.
-- Come è stato scoperto: la validazione dello schema avviene **prima** del rate limit, quindi `400` significa schema sbagliato (e il messaggio dice quale campo) e `429` significa schema giusto fermato dal tetto. Si mappa tutto il contratto senza consumare richieste. La **forma della risposta** non è stata verificata: il tetto era già raggiunto, quindi non si è mai vista una risposta vera.
-- La sonda che lo verificava (`tests/test_decisions_schema.py`) è stata tolta: misurava un'API di terzi che cambia senza preavviso — il modello gratuito su cui girava è stato ritirato e rispondeva `404` — e nessun codice di Orchestra la chiama. Se serve davvero, si riparte da qui con una chiave e un modello che esista, guardando la risposta e non solo la validazione.
 - credenziali mai stampate.
