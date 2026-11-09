@@ -231,6 +231,13 @@ SUITES = [
     ("task-leggibili", "test_task_leggibili.py", True),
     ("tool-etichetta", "test_tool_etichetta.py", True),
     ("lista-provider", "test_lista_provider.py", True),
+    # Le suite delle immagini (generazione, montaggio, inpainting) erano
+    # scritte e fuori dal runner: nessuno se n'e' accorto finche' la
+    # marcatura AI Act ha cambiato i byte salvati e sei controlli sono
+    # rimasti rossi in silenzio. Adesso girano.
+    ("image-gen", "test_image_gen.py", True),
+    ("image-edit", "test_image_edit.py", True),
+    ("inpainting", "test_inpainting.py", True),
     ("e2e", "test_e2e.py", False),
 ]
 

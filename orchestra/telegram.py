@@ -57,7 +57,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable
 
-from .dati import percorso as percorso_dati
+from .dati import FILE_STATO, percorso as percorso_dati
 
 BASE = "https://api.telegram.org"
 _DB = "telegram.db"
@@ -97,6 +97,15 @@ INTERVALLO_PROGRESSO = 2.5
 # e la risposta finisce fuori schermo.
 INTERVALLO_AZIONE = 1.0
 MAX_AZIONI = 20
+
+# Un album (tre foto mandate insieme) non e' un messaggio: sono tre
+# aggiornamenti separati che Telegram consegna a pochi decimi l'uno
+# dall'altro, e l'unica cosa che li lega e' lo stesso `media_group_id`.
+# Trattare il primo come la richiesta vuol dire far partire un turno con una
+# foto mentre le altre due sono ancora per strada, e l'agente chiede all'utente
+# una foto che ha gia' mandato. Si aspetta un attimo l'ultima: il timer si
+# riarma a ogni pezzo, quindi parte da sola quando il gruppo e' finito.
+ATTESA_ALBUM = 1.5
 
 # Il tetto del Bot API per `getFile`. Oltre, il file non si scarica
 # nemmeno: dirlo prima evita un errore di rete che sembra un guasto.
@@ -179,6 +188,12 @@ TIPI_ALLEGATO = {
     "document": "documento",
     "video": "video",
 }
+
+# Cosa si dice all'agente di una foto senza didascalia. E' una costante
+# perche' serve due volte: come predefinito, e per riconoscerlo quando le
+# foto sono tante e una didascalia vera c'e' gia' — tre righe uguali
+# sotto la stessa richiesta non aggiungono niente.
+TESTO_FOTO = "Guarda questa immagine."
 
 NOME_PREDEFINITO = {
     "foto": "foto.jpg",
@@ -960,6 +975,13 @@ def file_del_turno(root: str, inizio: float,
                 break
             if os.path.splitext(nome)[1].lower() not in ALLEGABILI:
                 continue
+            # I file di stato di Orchestra (memory.md, il budget, gli
+            # obiettivi) vengono riscritti ogni volta che il turno li legge:
+            # allegarli vuol dire mandare in chat cose che nessuno ha
+            # chiesto, e che non sono il lavoro del turno. Sono una lista
+            # chiusa, in `dati.FILE_STATO`: non si indovina dal nome.
+            if nome.lower() in FILE_STATO:
+                continue
             percorso = os.path.join(cartella, nome)
             try:
                 stato = os.stat(percorso)
@@ -1059,6 +1081,10 @@ class Ponte:
         self._primo = True
         self._turno_thread: threading.Thread | None = None
         self._stato_progresso: dict[str, Any] | None = None
+        # Gli album in raccolta, per `media_group_id`: chat, didascalia,
+        # allegati e il timer che li chiude.
+        self._album: dict[str, dict[str, Any]] = {}
+        self._album_lock = threading.Lock()
         self.fatti = 0
         self.ultimo_turno = 0.0
 
@@ -1074,6 +1100,14 @@ class Ponte:
 
     def ferma(self, secondi: float = 3.0) -> None:
         self._fermo.set()
+        # Un album a meta' non deve partire dopo la fermata: il timer
+        # sopravvive alla chat, e farebbe un turno su un ponte chiuso.
+        with self._album_lock:
+            for voce in self._album.values():
+                timer = voce.get("timer")
+                if timer is not None:
+                    timer.cancel()
+            self._album.clear()
         t = self._thread
         if t and t.is_alive() and t is not threading.current_thread():
             t.join(timeout=secondi)
@@ -1364,7 +1398,15 @@ class Ponte:
             self._comando(chat_id, "steer", guida)
             return
 
-        self._avvia_turno(chat_id, testo, allegato)
+        gruppo = str(messaggio.get("media_group_id") or "").strip()
+        if gruppo and allegato is not None:
+            # Un album arriva a pezzi e la richiesta e' il gruppo, non la
+            # prima foto. Qui non parte nessun turno, quindi `occupato`
+            # resta falso per tutti i pezzi e nessuno di loro viene
+            # scambiato per una guida.
+            self._raccogli_album(chat_id, gruppo, testo, allegato)
+            return
+        self._avvia_turno(chat_id, testo, [allegato] if allegato else [])
 
     def _comando(self, chat_id: str, comando: str, argomento: str) -> None:
         nome = comando.lstrip("/").lower()
@@ -1419,29 +1461,98 @@ class Ponte:
                        "qui come /start <codice>. Il codice scade dopo "
                        "dieci minuti.")
 
+    # --- album -----------------------------------------------------
+    def _raccogli_album(self, chat_id: str, gruppo: str, testo: str,
+                        allegato: dict[str, Any]) -> None:
+        """Tiene da parte le foto di un album, e parte quando sono finite.
+
+        Il timer si riarma a ogni pezzo: a decidere il momento e' l'ultimo
+        che arriva, non il primo. La didascalia la porta uno solo dei
+        messaggi del gruppo (Telegram non la ripete), quindi si tiene
+        l'ultima non vuota che si vede.
+        """
+        with self._album_lock:
+            voce = self._album.get(gruppo)
+            if voce is None:
+                voce = {"chat": chat_id, "testo": "", "allegati": [],
+                        "timer": None, "visto": 0.0}
+                self._album[gruppo] = voce
+            if (testo or "").strip():
+                voce["testo"] = testo.strip()
+            voce["allegati"].append(allegato)
+            voce["visto"] = time.time()
+            vecchio = voce.get("timer")
+            if vecchio is not None:
+                vecchio.cancel()
+            timer = threading.Timer(ATTESA_ALBUM, self._chiudi_album,
+                                    args=(gruppo,))
+            timer.daemon = True
+            voce["timer"] = timer
+            timer.start()
+
+    def _chiudi_album(self, gruppo: str) -> None:
+        """Il gruppo e' finito: un turno solo, con tutte le foto."""
+        with self._album_lock:
+            voce = self._album.get(gruppo)
+        if voce is None:
+            return
+        # Il timer e' scattato nello stesso istante in cui arrivava un
+        # altro pezzo: quel pezzo ha gia' riarmato un timer nuovo, e questo
+        # giro non deve rubargli l'album.
+        if time.time() - float(voce.get("visto") or 0.0) < ATTESA_ALBUM - 0.2:
+            return
+        with self._album_lock:
+            voce = self._album.pop(gruppo, None)
+        if not voce:
+            return
+        allegati = list(voce.get("allegati") or [])
+        if not allegati:
+            return
+        self._avvia_turno(str(voce.get("chat") or ""),
+                          str(voce.get("testo") or ""), allegati)
+
     # --- il turno --------------------------------------------------
     def _avvia_turno(self, chat_id: str, testo: str,
-                     allegato: dict[str, Any] | None) -> None:
+                     allegati: list[dict[str, Any]]) -> None:
         t = threading.Thread(target=self._esegui_turno,
-                             args=(chat_id, testo, allegato), daemon=True,
+                             args=(chat_id, testo, allegati), daemon=True,
                              name=f"telegram-turno-{self.nome}")
         self._turno_thread = t
         t.start()
 
     def _esegui_turno(self, chat_id: str, testo: str,
-                      allegato: dict[str, Any] | None) -> None:
+                      allegati_rif: list[dict[str, Any]]) -> None:
         allegati: list[Any] = []
         richiesta = (testo or "").strip()
-        try:
-            if allegato is not None:
-                extra, allegati = self._prepara_allegato(allegato)
-                richiesta = (richiesta or extra).strip()
-        except ErroreAllegato as e:
-            self._rispondi(chat_id, str(e))
+        testi: list[str] = []
+        for rif in allegati_rif or []:
+            try:
+                extra, presi = self._prepara_allegato(rif)
+            except ErroreAllegato as e:
+                # Un file rifiutato non porta via gli altri: l'album puo'
+                # avere una foto troppo grande e due buone.
+                self._rispondi(chat_id, str(e))
+                continue
+            except ErroreTelegram as e:
+                self._rispondi(chat_id,
+                               f"Non riesco a prendere l'allegato: {e}")
+                continue
+            allegati.extend(presi)
+            if extra and extra not in testi:
+                testi.append(extra)
+        if allegati_rif and not allegati and not testi:
+            # Ogni file e' gia' stato rifiutato con il suo motivo: un turno
+            # su una richiesta fatta di soli allegati, senza allegati, non
+            # ha niente da leggere. I vocale fanno eccezione: non portano
+            # allegati perche' il loro contenuto sono le parole trascritte.
             return
-        except ErroreTelegram as e:
-            self._rispondi(chat_id, f"Non riesco a prendere l'allegato: {e}")
-            return
+        if not richiesta:
+            # Un album di sole foto ha una didascalia sola, e le altre foto
+            # portano il predefinito. Se una didascalia vera c'e', il
+            # predefinito e' rumore: resta solo quello che ha scritto
+            # l'utente.
+            vere = [t for t in testi if t != TESTO_FOTO]
+            richiesta = "\n".join(vere or testi).strip()
         if not richiesta:
             self._rispondi(chat_id, "Dimmi cosa devo fare con questo file.")
             return
@@ -1598,7 +1709,7 @@ class Ponte:
             raise ErroreAllegato(str(e)) from None
         testo = (rif.get("didascalia") or "").strip()
         if not testo:
-            testo = ("Guarda questa immagine." if tipo == "foto"
+            testo = (TESTO_FOTO if tipo == "foto"
                      else f"Leggi questo documento ({nome}).")
         return testo, [att]
 

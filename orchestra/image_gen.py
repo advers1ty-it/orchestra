@@ -21,6 +21,7 @@ resto di Orchestra. E nessuna chiave in chiaro: si leggono dall'ambiente e dal
 from __future__ import annotations
 
 import base64
+import io
 import json
 import math
 import os
@@ -45,6 +46,20 @@ TIMEOUT = 180
 # Oltre questo il prompt non e' piu' un prompt: e' un testo incollato, e i
 # provider lo troncano o lo rifiutano. Si ferma prima e lo si dice.
 MAX_PROMPT = 4000
+
+# Quante immagini di riferimento si possono mandare in una richiesta. Il
+# tetto vero lo decide il modello, non l'API: Gemini 3.1 Flash Image
+# ("Nano Banana 2") ne accetta 14, Gemini 2.5 Flash Image 3, GPT Image 16.
+# Quattordici e' il massimo che il catalogo dichiara, e fermarsi li' evita
+# una richiesta che il provider rifiuterebbe comunque.
+MAX_RIFERIMENTI = 14
+
+# Oltre questa somma di byte i riferimenti si riducono prima di partire: tre
+# foto a piena risoluzione in una data URL base64 sono peso che il modello non
+# usa (le riporta comunque a una misura di lavoro), si pagano come token di
+# ingresso e possono far rispondere 413.
+LIMITE_BYTES_RIFERIMENTI = 3 * 1024 * 1024
+LATO_RIFERIMENTO = 1536
 
 # I modelli predefiniti, verificati sulla documentazione ufficiale. Sono
 # costanti e non stringhe sparse nel codice: quando un provider ne ritira uno,
@@ -268,6 +283,15 @@ def _errore_http(provider: str, code: int, dettaglio: str) -> ImageGenError:
     elif code == 400:
         testo = (f"{nome}: richiesta rifiutata (400: prompt o parametri non "
                  f"validi). Prova un prompt piu' semplice o un'altra dimensione.")
+        if "reference" in pulito.lower():
+            # Il tetto dei riferimenti e' una proprieta' del modello, non
+            # dell'API: lo stesso corpo su un altro modello passa. Dirlo
+            # solo quando il dettaglio ne parla, o sembrerebbe un consiglio
+            # sempre valido.
+            testo += (" Se il dettaglio parla di immagini di riferimento: "
+                      "questo modello ne accetta meno di quelle che hai "
+                      "mandato. Scegline un altro con `elenco_modelli`, o "
+                      "togli quelle che il prompt non nomina.")
     elif code >= 500:
         testo = f"{nome}: errore del servizio ({code}). Riprova fra poco."
     else:
@@ -394,9 +418,9 @@ def _immagine_da_openai(dati: dict, modello: str) -> Immagine:
 
 def _genera_openai(prompt: str, modello: str, dimensione: str,
                    env: dict[str, str],
-                   riferimento: tuple[bytes, str] | None = None,
+                   riferimenti: list[tuple[bytes, str]] | None = None,
                    maschera: tuple[bytes, str] | None = None) -> Immagine:
-    if maschera and not riferimento:
+    if maschera and not riferimenti:
         raise ImageGenError(
             "una maschera da sola non basta: serve anche l'immagine da "
             "modificare (`riferimento`)."
@@ -410,18 +434,24 @@ def _genera_openai(prompt: str, modello: str, dimensione: str,
     nome_modello = (modello or env.get("ORCHESTRA_IMAGE_MODEL", "")
                    or MODELLI["openai"])
     dim = _dimensione_openai(dimensione)
-    if riferimento:
-        dati_rif, mime_rif = riferimento
-        estensione = _ESTENSIONI.get(mime_rif.lower(), "")
-        if not estensione:
-            raise ImageGenError(
-                f"formato non supportato per la modifica: {mime_rif}. "
-                f"Usa PNG, JPEG o WebP."
-            )
+    if riferimenti:
         campi = {"model": nome_modello, "prompt": prompt}
         if dim:
             campi["size"] = dim
-        allegati = [("image", f"riferimento.{estensione}", mime_rif, dati_rif)]
+        # Con piu' immagini OpenAI vuole il campo ripetuto `image[]`: un
+        # solo `image` con tre file resta una richiesta con un file solo.
+        campo = "image[]" if len(riferimenti) > 1 else "image"
+        allegati = []
+        for indice, (dati_rif, mime_rif) in enumerate(riferimenti, start=1):
+            estensione = _ESTENSIONI.get(mime_rif.lower(), "")
+            if not estensione:
+                raise ImageGenError(
+                    f"formato non supportato per la modifica: {mime_rif}. "
+                    f"Usa PNG, JPEG o WebP."
+                )
+            nome_rif = (f"riferimento.{estensione}" if len(riferimenti) == 1
+                        else f"riferimento-{indice}.{estensione}")
+            allegati.append((campo, nome_rif, mime_rif, dati_rif))
         if maschera:
             dati_mas, mime_mas = maschera
             if mime_mas.lower() != "image/png":
@@ -474,7 +504,8 @@ def _parte_immagine(parti: list) -> tuple[bytes, str] | None:
 
 def _genera_google(prompt: str, modello: str, dimensione: str,
                    env: dict[str, str],
-                   riferimento: tuple[bytes, str] | None = None) -> Immagine:
+                   riferimenti: list[tuple[bytes, str]] | None = None
+                   ) -> Immagine:
     token = chiave("google", env)
     if not token:
         raise ImageGenError(
@@ -483,8 +514,7 @@ def _genera_google(prompt: str, modello: str, dimensione: str,
         )
     nome = modello or env.get("ORCHESTRA_IMAGE_MODEL", "") or MODELLI["google"]
     parti: list[dict] = [{"text": prompt}]
-    if riferimento:
-        dati_rif, mime_rif = riferimento
+    for dati_rif, mime_rif in (riferimenti or []):
         if not _ESTENSIONI.get(mime_rif.lower(), ""):
             raise ImageGenError(
                 f"formato non supportato per la modifica: {mime_rif}. "
@@ -536,6 +566,69 @@ def _genera_google(prompt: str, modello: str, dimensione: str,
     return Immagine(grezzi, mime, Path(), "google", nome)
 
 
+def _lista_riferimenti(riferimento) -> list[tuple[bytes, str]]:
+    """I riferimenti in una lista, comunque arrivino.
+
+    La prima forma era una sola immagine, `(byte, MIME)`, e resta valida:
+    un elenco di quelle e' l'aggiunta. Il caso singolo si riconosce dal
+    primo elemento, cosi' chi chiamava ieri non deve cambiare niente.
+    """
+    if not riferimento:
+        return []
+    if (isinstance(riferimento, tuple) and len(riferimento) == 2
+            and isinstance(riferimento[0], (bytes, bytearray))):
+        return [(bytes(riferimento[0]), str(riferimento[1]))]
+    voci: list[tuple[bytes, str]] = []
+    for voce in riferimento:
+        if not voce:
+            continue
+        voci.append((bytes(voce[0]), str(voce[1])))
+    return voci
+
+
+def _riduci_riferimenti(riferimenti: list[tuple[bytes, str]]
+                        ) -> list[tuple[bytes, str]]:
+    """Riferimenti piu' leggeri, quando sono pesanti.
+
+    Tre foto a piena risoluzione dentro una richiesta JSON sono base64 su
+    base64: si pagano come token di ingresso e si rischia un 413, mentre il
+    modello le riporta comunque a una misura di lavoro. Si accorcia il lato
+    lungo e si ricodifica, tenendo il formato: un PNG resta PNG perche' puo'
+    avere la trasparenza, e diventare JPEG la butterebbe via.
+    """
+    if not riferimenti:
+        return riferimenti
+    if sum(len(dati) for dati, _mime in riferimenti) <= LIMITE_BYTES_RIFERIMENTI:
+        return riferimenti
+    try:
+        from PIL import Image
+    except ImportError:  # pragma: no cover - Pillow e' fra le dipendenze
+        return riferimenti
+    ridotti: list[tuple[bytes, str]] = []
+    for dati, mime in riferimenti:
+        try:
+            with Image.open(io.BytesIO(dati)) as im:
+                im.load()
+                if max(im.size) <= LATO_RIFERIMENTO:
+                    ridotti.append((dati, mime))
+                    continue
+                im.thumbnail((LATO_RIFERIMENTO, LATO_RIFERIMENTO),
+                             Image.LANCZOS)
+                uscita = io.BytesIO()
+                if mime.lower() in ("image/jpeg", "image/jpg"):
+                    im.convert("RGB").save(uscita, "JPEG", quality=88,
+                                           optimize=True)
+                    ridotti.append((uscita.getvalue(), "image/jpeg"))
+                else:
+                    if im.mode not in ("RGB", "RGBA"):
+                        im = im.convert("RGBA")
+                    im.save(uscita, "PNG", optimize=True)
+                    ridotti.append((uscita.getvalue(), "image/png"))
+        except Exception:  # noqa: BLE001 - un file strano passa com'era
+            ridotti.append((dati, mime))
+    return ridotti
+
+
 def _forma_openrouter(dimensione: str) -> dict:
     """La dimensione nel dialetto di OpenRouter.
 
@@ -574,7 +667,8 @@ def _forma_openrouter(dimensione: str) -> dict:
 
 def _genera_openrouter(prompt: str, modello: str, dimensione: str,
                        env: dict[str, str],
-                       riferimento: tuple[bytes, str] | None = None) -> Immagine:
+                       riferimenti: list[tuple[bytes, str]] | None = None
+                       ) -> Immagine:
     token = chiave("openrouter", env)
     if not token:
         raise ImageGenError(
@@ -587,18 +681,24 @@ def _genera_openrouter(prompt: str, modello: str, dimensione: str,
             or MODELLI["openrouter"])
     corpo: dict = {"model": nome, "prompt": prompt, "n": 1}
     corpo.update(_forma_openrouter(dimensione))
-    if riferimento:
-        dati_rif, mime_rif = riferimento
-        if not _ESTENSIONI.get(mime_rif.lower(), ""):
-            raise ImageGenError(
-                f"formato non supportato per la modifica: {mime_rif}. "
-                f"Usa PNG, JPEG o WebP."
-            )
-        corpo["input_references"] = [{
-            "type": "image_url",
-            "image_url": {"url": f"data:{mime_rif};base64,"
-                                 + base64.b64encode(dati_rif).decode("ascii")},
-        }]
+    if riferimenti:
+        # `input_references` e' una lista anche quando l'immagine e' una
+        # sola: l'ordine conta, perche' il prompt nomina "la prima" e "le
+        # altre" e il modello non ha altri modi per sapere quale sia la
+        # base da modificare e quale il logo da inserire.
+        voci = []
+        for dati_rif, mime_rif in riferimenti:
+            if not _ESTENSIONI.get(mime_rif.lower(), ""):
+                raise ImageGenError(
+                    f"formato non supportato per la modifica: {mime_rif}. "
+                    f"Usa PNG, JPEG o WebP."
+                )
+            voci.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime_rif};base64,"
+                                     + base64.b64encode(dati_rif).decode("ascii")},
+            })
+        corpo["input_references"] = voci
     intestazioni = {"Authorization": f"Bearer {token}"}
     # Le stesse intestazioni facoltative della chat: servono a OpenRouter per
     # attribuire il traffico, e senza non cambia niente nel risultato.
@@ -684,18 +784,22 @@ def _nome_libero(cartella: Path, base: str, estensione: str) -> Path:
 def genera(prompt: str, *, provider: str = "", modello: str = "",
            dimensione: str = "", cartella: str | Path = "",
            nome_file: str = "", env: dict[str, str] | None = None,
-           riferimento: tuple[bytes, str] | None = None,
+           riferimento: tuple[bytes, str] | list[tuple[bytes, str]] | None = None,
            maschera: tuple[bytes, str] | None = None) -> Immagine:
     """Genera un'immagine e la salva nella cartella indicata.
 
     `cartella` e' la base (di solito la root del progetto). L'immagine finisce
     in `<cartella>/immagini/`, che e' il posto in cui l'utente la cerca.
 
-    Con `riferimento` (byte, MIME) l'immagine viene modificata invece che
-    creata da zero: il prompt descrive la modifica. I provider usano strade
-    diverse (OpenAI un endpoint `/images/edits`, Google lo stesso
-    generateContent con l'immagine fra le parti), ma il risultato e' lo
-    stesso: un file in `immagini/`.
+    Con `riferimento` (byte, MIME, oppure un elenco di quelli) l'immagine
+    viene modificata invece che creata da zero: il prompt descrive la
+    modifica. Piu' riferimenti servono quando la scena va ricomposta e non
+    solo ritoccata — il poster da tenere, il logo vero, la foto del prodotto
+    vero — e l'ordine e' il modo in cui il prompt li nomina: il primo e' la
+    base, gli altri sono riferimenti. I provider usano strade diverse (OpenAI
+    un endpoint `/images/edits`, Google lo stesso generateContent con le
+    immagini fra le parti, OpenRouter `input_references`), ma il risultato e'
+    lo stesso: un file in `immagini/`.
 
     Con `maschera` (PNG, byte) la modifica e' limitata alle zone trasparenti
     della maschera: e' l'inpainting vero, non un "prova a non toccare il
@@ -712,6 +816,15 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
             f"{MAX_PROMPT}. Riducilo a cosa deve mostrare l'immagine."
         )
     env = env if env is not None else ambiente()
+    riferimenti = _lista_riferimenti(riferimento)
+    if len(riferimenti) > MAX_RIFERIMENTI:
+        raise ImageGenError(
+            f"{len(riferimenti)} immagini di riferimento: il massimo e' "
+            f"{MAX_RIFERIMENTI}. I modelli ne accettano meno (Gemini 2.5 "
+            f"Flash Image tre, Gemini 3.1 Flash Image quattordici): togli "
+            f"quelle che il prompt non nomina."
+        )
+    riferimenti = _riduci_riferimenti(riferimenti)
     scelto = provider_disponibile(provider, env)
     if scelto not in MODELLI:
         configurati = [p for p in MODELLI if chiave(p, env)]
@@ -737,13 +850,13 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
         )
     if scelto == "openai":
         img = _genera_openai(testo, modello.strip(), dimensione, env,
-                             riferimento, maschera)
+                             riferimenti, maschera)
     elif scelto == "openrouter":
         img = _genera_openrouter(testo, modello.strip(), dimensione, env,
-                                 riferimento)
+                                 riferimenti)
     else:
         img = _genera_google(testo, modello.strip(), dimensione, env,
-                             riferimento)
+                             riferimenti)
 
     base = Path(cartella) if str(cartella or "").strip() else Path.cwd()
     destinazione = base / "immagini"

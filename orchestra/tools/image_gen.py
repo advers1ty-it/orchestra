@@ -142,8 +142,9 @@ def _maschera(valore: str, zone, morbido: int,
 def tool_image_gen() -> Tool:
     def handler(prompt: str = "", provider: str = "", modello: str = "",
                 dimensione: str = "", nome_file: str = "",
-                riferimento: str = "", maschera: str = "", zone=None,
-                morbido: int = 0, elenco_modelli: bool = False) -> ToolResult:
+                riferimento: str = "", riferimenti=None, maschera: str = "",
+                zone=None, morbido: int = 0,
+                elenco_modelli: bool = False) -> ToolResult:
         if elenco_modelli:
             # L'elenco non costa nulla e non genera niente: e' il modo per
             # scegliere uno slug invece di indovinarlo. Il catalogo e'
@@ -167,7 +168,20 @@ def tool_image_gen() -> Tool:
                 + "\nPer usarne uno: provider=\"openrouter\", modello=\"<id>\"."
             ))
         try:
-            rif = _riferimento(riferimento)
+            # `riferimenti` e' la forma nuova (piu' immagini), `riferimento`
+            # quella che c'era prima: si accettano tutte e due e si mette
+            # in ordine il singolo davanti, che e' la base da modificare.
+            elenco = [str(v) for v in (riferimenti or [])
+                      if str(v or "").strip()]
+            if elenco:
+                rifs = [_riferimento(v) for v in elenco]
+                singolo = (riferimento or "").strip()
+                if singolo:
+                    rifs.insert(0, _riferimento(singolo))
+                rifs = [r for r in rifs if r]
+            else:
+                rifs = [r for r in [_riferimento(riferimento)] if r]
+            rif = rifs[0] if rifs else None
             mas = _maschera(maschera, zone, morbido, rif)
             img = ig.genera(
                 prompt,
@@ -176,7 +190,7 @@ def tool_image_gen() -> Tool:
                 dimensione=dimensione,
                 cartella=_root_progetto(),
                 nome_file=nome_file,
-                riferimento=rif,
+                riferimento=rifs or None,
                 maschera=mas,
             )
         except (ig.ImageGenError, montaggio.MontaggioError) as e:
@@ -192,14 +206,16 @@ def tool_image_gen() -> Tool:
         except ValueError:
             pass
         verbo = ("modificata dentro la maschera" if mas
-                 else "modificata" if rif else "generata")
+                 else "modificata" if rifs else "generata")
+        quante = (f" con {len(rifs)} immagini di riferimento"
+                  if len(rifs) > 1 else "")
         # Il contenuto e' sintetico e va detto: e' l'art. 50(2) dell'AI
         # Act, e vale anche quando il file e' marcato, perche' la
         # marcatura dentro il PNG non la vede chi guarda la chat.
         meta = (f" Marcata come sintetica in {img.metadati.name}."
                 if img.metadati else "")
         return ToolResult(
-            text=(f"Immagine {verbo}: {percorso} ({img.kb} KB, "
+            text=(f"Immagine {verbo}{quante}: {percorso} ({img.kb} KB, "
                   f"{img.provider}/{img.modello}).{meta} Mostrala "
                   f"all'utente citando quel percorso, e scrivi che e' "
                   f"generata da un'IA."),
@@ -213,7 +229,11 @@ def tool_image_gen() -> Tool:
             "image, with the configured provider (OpenAI, Google or "
             "OpenRouter). Saves the result into immagini/ in the project. "
             "To edit, pass `riferimento`: a path in the project, a data URL, "
-            "or `ultimo` for the image the user just attached. For "
+            "or `ultimo` for the image the user just attached. When the edit "
+            "needs more than one image (the poster to keep, the real logo, "
+            "the real product photo) pass `riferimenti`: the model rebuilds "
+            "the scene around them instead of pasting rectangles over the "
+            "original. For "
             "inpainting (change ONLY one area, leave the rest untouched) "
             "pass `zone`: rectangles or ellipses in pixels or percentages, "
             "and the tool builds the mask itself. Inpainting works only "
@@ -240,6 +260,19 @@ def tool_image_gen() -> Tool:
                                    "project), data URL, or `ultimo` for the "
                                    "image attached last in the chat. Omit it "
                                    "to generate from scratch.",
+                },
+                "riferimenti": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Images for the edit, in order: the "
+                                   "first is the one being edited, the "
+                                   "others are references the prompt can "
+                                   "name (\"the logo in the second image\"). "
+                                   "Same forms as `riferimento`. Use this "
+                                   "when the scene must be rebuilt around "
+                                   "the real files; the cap is per model "
+                                   "(14 on Gemini 3.1 Flash Image, 3 on "
+                                   "Gemini 2.5 Flash Image).",
                 },
                 "provider": {
                     "type": "string",

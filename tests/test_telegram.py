@@ -84,13 +84,18 @@ class FintoTelegram:
         })
         return self.ultimo_id
 
-    def allegato(self, chat_id, campo, voce, didascalia="", nome="prova"):
+    def allegato(self, chat_id, campo, voce, didascalia="", nome="prova",
+                 gruppo=""):
         """Un messaggio con un file dentro, come lo manda Telegram."""
         self.ultimo_id += 1
         messaggio = {"chat": {"id": chat_id, "username": nome},
                      campo: voce}
         if didascalia:
             messaggio["caption"] = didascalia
+        if gruppo:
+            # Un album: ogni foto e' un aggiornamento suo, legato agli altri
+            # solo da questo identificativo.
+            messaggio["media_group_id"] = gruppo
         self.in_attesa.append({"update_id": self.ultimo_id,
                                "message": messaggio})
         return self.ultimo_id
@@ -948,6 +953,55 @@ check("il codice non e' un allegato", "script.py" not in nomi, str(nomi))
 check("e non si guarda dentro node_modules", "dentro.pdf" not in nomi, str(nomi))
 check("un turno senza file non allega niente",
       tg.file_del_turno(os.path.join(cartella, "manca"), adesso) == [])
+# I file di stato di Orchestra non sono lavoro del turno: memory.md lo
+# riscrive l'agente ogni volta che lo legge, e ritrovarselo allegato a ogni
+# risposta riempie la chat di cose che nessuno ha chiesto.
+memoria = os.path.join(cartella, "memory.md")
+with open(memoria, "wb") as f:
+    f.write(b"- vuole il poster corretto\n")
+nomi = [t["nome"] for t in tg.file_del_turno(cartella, adesso - 60, massimo=99)]
+check("memory.md non si allega", "memory.md" not in nomi, str(nomi))
+check("ma il report del turno si'", "report.pdf" in nomi, str(nomi))
+
+print("\n[27] un album: tre foto insieme sono una richiesta sola")
+finto = FintoTelegram()
+finto.contenuto = (b"\x89PNG\r\n\x1a\n" + b"\x00" * 60)
+p, chiamate = ponte(finto)
+p.passo()
+# L'attesa resta lunga per tutto il test: a chiudere l'album ci pensa la
+# chiamata esplicita, non l'orologio. Un test che dorme e' un test che
+# prima o poi fallisce da solo.
+attesa_vera = tg.ATTESA_ALBUM
+tg.ATTESA_ALBUM = 30.0
+try:
+    finto.allegato(555, "photo", [{"file_id": "a1", "file_size": 68}],
+                   didascalia="metti il logo nel poster", gruppo="g1")
+    p.passo()
+    finto.allegato(555, "photo", [{"file_id": "a2", "file_size": 68}],
+                   gruppo="g1")
+    p.passo()
+    finto.allegato(555, "photo", [{"file_id": "a3", "file_size": 68}],
+                   gruppo="g1")
+    p.passo()
+    p.aspetta()
+    check("nessun turno prima dell'ultima foto", chiamate == [], str(chiamate))
+    with p._album_lock:
+        voce = p._album["g1"]
+        voce["timer"].cancel()
+        voce["visto"] = 0.0
+    p._chiudi_album("g1")
+    p.aspetta()
+finally:
+    tg.ATTESA_ALBUM = attesa_vera
+
+check("parte un turno solo", len(chiamate) == 1, str(chiamate))
+check("con la didascalia dell'album",
+      chiamate == ["metti il logo nel poster"], str(chiamate))
+allegati = p.allegati_visti[-1] if p.allegati_visti else []
+check("e tutte e tre le foto", len(allegati) == 3, str(len(allegati)))
+check("chieste a Telegram una per una",
+      finto.file_chiesti == ["a1", "a2", "a3"], str(finto.file_chiesti))
+check("l'album non resta appeso", not p._album, str(list(p._album)))
 
 print("\n[21] i collegamenti dei bot eliminati si tolgono")
 tg.salva_token(99, TOKEN)
