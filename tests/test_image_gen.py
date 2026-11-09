@@ -640,6 +640,33 @@ try:
     check("e lo dice nel risultato",
           "3 immagini di riferimento" in res_tre.text, res_tre.text[:140])
 
+    # Un album di tre foto arriva in un turno solo: senza un indice la
+    # seconda e la terza non hanno un nome, e `ultimo` ne nomina una. E' il
+    # caso vero del poster: base, logo e prodotto sono tre file distinti.
+    url_uno = data_url
+    url_due = ("data:image/png;base64,"
+               + base64.b64encode(PNG_1PX + b"due").decode("ascii"))
+    url_tre = ("data:image/png;base64,"
+               + base64.b64encode(PNG_1PX + b"tre").decode("ascii"))
+    att.registra_immagini([url_uno, url_due, url_tre])
+    check("l'allegato n-esimo si trova", att.allegato(2) == url_due)
+    check("e l'ultimo resta l'ultimo", att.ultima_immagine() == url_tre)
+    check("fuori elenco non c'e' niente",
+          att.allegato(0) == "" and att.allegato(9) == "")
+    check("si sa quante sono", len(att.immagini_allegate()) == 3)
+    r1 = tool_mod._riferimento("allegato:1")
+    r3 = tool_mod._riferimento("allegato:3")
+    check("il tool distingue la prima dalla terza",
+          bool(r1) and bool(r3) and r1[0] != r3[0],
+          str([r1[0][:4] if r1 else None, r3[0][:4] if r3 else None]))
+    try:
+        tool_mod._riferimento("allegato:9")
+        check("un indice inesistente lo dice", False, "nessun errore")
+    except ig.ImageGenError as e:
+        check("un indice inesistente lo dice",
+              "3" in str(e) and "allegato:1" in str(e), str(e)[:140])
+    att._ultime_immagini = []
+
     # Tre foto a piena risoluzione in base64 sono peso che il modello non
     # usa e che si paga in token: prima di partire si accorcia il lato lungo.
     try:

@@ -354,6 +354,59 @@ def _ridimensiona(im, op, note: list[str]):
     return im.resize(nuova, Image.Resampling.LANCZOS)
 
 
+def _scontorna(logo, colore, tolleranza: float, sfumatura: int):
+    """Toglie un fondo uniforme e restituisce quanta parte e' sparita.
+
+    Perche' serve: un JPEG col fondo bianco incollato su un poster scuro non
+    e' "un logo con un po' di margine", e' un rettangolo bianco. Mandare
+    l'utente su remove.bg per un fondo bianco uniforme e' fargli fare a mano
+    un lavoro che sappiamo fare: ogni pixel vicino al colore di fondo diventa
+    trasparente, con un bordo sfumato per non lasciare scalini.
+    """
+    from PIL import Image, ImageChops, ImageFilter
+
+    rgb = logo.convert("RGB")
+    distanza = ImageChops.difference(rgb, Image.new("RGB", logo.size, colore))
+    distanza = distanza.convert("L")
+    # `tolleranza` e' in percentuale: 0 vuol dire "solo il colore esatto",
+    # 100 "qualsiasi cosa". La fascia alta e' quella che ammorbidisce il
+    # confine, e sta 24 valori sopra la soglia.
+    bassa = max(0, min(255, int(round(tolleranza * 2.55))))
+    alta = min(255, bassa + 24)
+    if alta <= bassa:
+        mappa = distanza.point(lambda d: 255 if d > bassa else 0)
+    else:
+        mappa = distanza.point(
+            lambda d: 0 if d <= bassa
+            else 255 if d >= alta
+            else int(round((d - bassa) * 255 / (alta - bassa))))
+    if sfumatura > 0:
+        mappa = mappa.filter(ImageFilter.GaussianBlur(sfumatura))
+    logo.putalpha(ImageChops.multiply(logo.getchannel("A"), mappa))
+    istogramma = mappa.histogram()
+    tolti = sum(istogramma[:8])
+    totale = max(1, logo.width * logo.height)
+    return logo, round(100.0 * tolti / totale, 1)
+
+
+def _ombra_su(im, logo, x: int, y: int, distanza: int,
+             opacita: float = 0.45) -> None:
+    """Un'ombra morbida sotto il logo.
+
+    Un ritaglio incollato senza ombra sembra un adesivo appoggiato sopra; con
+    l'ombra il bordo irregolare si legge come parte della scena. Si disegna
+    sulla base nella posizione finale, cosi' le coordinate del logo restano
+    quelle che l'utente ha chiesto.
+    """
+    from PIL import Image, ImageFilter
+
+    nero = Image.new("RGBA", logo.size, (0, 0, 0, int(round(255 * opacita))))
+    strato = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    strato.paste(nero, (x + distanza, y + distanza), logo.getchannel("A"))
+    strato = strato.filter(ImageFilter.GaussianBlur(max(1.0, distanza / 2.0)))
+    im.alpha_composite(strato)
+
+
 def _incolla(im, op, note: list[str], risolvi):
     """Incolla un'altra immagine, con la sua trasparenza."""
     Image, _d, _f, _o = _pillow()
@@ -372,6 +425,28 @@ def _incolla(im, op, note: list[str], risolvi):
             )
         sorgente = risolvi(str(grezzo))
     logo = apri(sorgente, cosa=f"incolla.immagine ({grezzo})")
+
+    # Lo scontorno si fa prima di ridimensionare: l'alfa viene riscalato
+    # insieme ai pixel e il bordo resta morbido anche rimpicciolendo.
+    if op.get("scontorna") not in (None, "", False):
+        colore = _colore(op.get("colore_sfondo") or "#ffffff",
+                         "incolla.colore_sfondo")
+        tolleranza = _numero(op.get("tolleranza", 18) or 0,
+                             "incolla.tolleranza")
+        if not 0 <= tolleranza <= 100:
+            raise MontaggioError(
+                f"incolla.tolleranza: va da 0 a 100, non {op.get('tolleranza')!r}."
+            )
+        sfumatura = int(_numero(op.get("sfumatura", 1) or 0,
+                                "incolla.sfumatura"))
+        if sfumatura < 0:
+            raise MontaggioError("incolla.sfumatura: non puo' essere negativa.")
+        logo, tolti = _scontorna(logo, colore, tolleranza, sfumatura)
+        note.append(
+            f"incolla: sfondo tolto ({tolti}% dell'immagine e' diventato "
+            f"trasparente). Se ha mangiato anche il soggetto, abbassa "
+            f"`tolleranza`."
+        )
 
     larghezza, altezza = im.size
     if op.get("larghezza") not in (None, ""):
@@ -408,6 +483,11 @@ def _incolla(im, op, note: list[str], risolvi):
     # che esce, e lo si dice.
     if x + logo.width > larghezza or y + logo.height > altezza or x < 0 or y < 0:
         note.append("incolla: la parte che usciva dall'immagine e' stata tagliata.")
+    ombra = int(_numero(op.get("ombra", 0) or 0, "incolla.ombra"))
+    if ombra < 0:
+        raise MontaggioError("incolla.ombra: non puo' essere negativa.")
+    if ombra:
+        _ombra_su(im, logo, x, y, ombra)
     im.alpha_composite(logo, dest=(max(0, x), max(0, y)))
     return im
 

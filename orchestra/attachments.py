@@ -152,6 +152,29 @@ def ultima_immagine() -> str:
     return _ultime_immagini[-1] if _ultime_immagini else ""
 
 
+def immagini_allegate() -> list[str]:
+    """Tutte le immagini dell'ultimo messaggio, nell'ordine in cui sono arrivate."""
+    return list(_ultime_immagini)
+
+
+def allegato(indice: int) -> str:
+    """La n-esima immagine dell'ultimo messaggio (1 = la prima), "" se non c'e'.
+
+    Perche' serve: `ultima_immagine` basta a "modifica la foto che ti ho
+    mandato", ma un album di tre foto arriva in un turno solo, e con una
+    sola parola per nominarle la seconda e la terza non esistono. Chi deve
+    ricomporre un poster con base, logo e prodotto non puo' fare niente con
+    "l'ultima".
+    """
+    try:
+        n = int(indice)
+    except (TypeError, ValueError):
+        return ""
+    if 1 <= n <= len(_ultime_immagini):
+        return _ultime_immagini[n - 1]
+    return ""
+
+
 def tipo_descrizione(dati: bytes) -> str:
     """Che cosa dice DAVVERO questo file, per il messaggio d'errore.
 

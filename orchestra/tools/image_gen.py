@@ -20,6 +20,7 @@ prompt: gli basta il percorso.
 from __future__ import annotations
 
 import base64
+import re
 from pathlib import Path
 
 from .. import attachments as _att
@@ -33,6 +34,12 @@ from ..types import Tool, ToolResult
 MAX_RIFERIMENTO_MB = 12
 
 _PAROLE_ULTIMO = {"ultimo", "ultima", "last", "ultimo-allegato"}
+
+# La n-esima immagine dell'ultimo messaggio. Un album di tre foto arriva come
+# tre allegati in un turno solo, e `ultimo` ne nomina uno: senza un indice, la
+# base, il logo e il prodotto non si possono distinguere, ed e' esattamente il
+# caso in cui il montaggio va fatto col modello invece che a mano.
+_ALLEGATO = re.compile(r"^allegat[oi][\s:_-]*(\d{1,2})$", re.IGNORECASE)
 
 
 def _root_progetto() -> Path:
@@ -76,6 +83,19 @@ def _riferimento(valore: str) -> tuple[bytes, str] | None:
                 "non c'e' nessuna immagine allegata da modificare. Allega una "
                 "foto nella chat, oppure passa un percorso in `riferimento`."
             )
+    else:
+        scelto = _ALLEGATO.match(v)
+        if scelto:
+            quante = len(_att.immagini_allegate())
+            v = _att.allegato(int(scelto.group(1)))
+            if not v:
+                raise ig.ImageGenError(
+                    f"`{valore}` non corrisponde a nessuna immagine "
+                    f"allegata: l'ultimo messaggio ne ha {quante}. "
+                    + (f"Usa `allegato:1`..`allegato:{quante}`, oppure "
+                       f"`ultimo` per l'ultima." if quante else
+                       "Allega le foto nella chat, oppure passa un percorso.")
+                )
     if v.startswith("data:"):
         return _da_data_url(v)
 
@@ -229,8 +249,11 @@ def tool_image_gen() -> Tool:
             "image, with the configured provider (OpenAI, Google or "
             "OpenRouter). Saves the result into immagini/ in the project. "
             "To edit, pass `riferimento`: a path in the project, a data URL, "
-            "or `ultimo` for the image the user just attached. When the edit "
-            "needs more than one image (the poster to keep, the real logo, "
+            "or `ultimo` for the image the user just attached. When the user "
+            "attached several images in one message, name them with "
+            "`allegato:1`, `allegato:2`, … — `ultimo` is only the last one, "
+            "and an album of three photos needs all three named. When the "
+            "edit needs more than one image (the poster to keep, the real logo, "
             "the real product photo) pass `riferimenti`: the model rebuilds "
             "the scene around them instead of pasting rectangles over the "
             "original. For "
@@ -257,8 +280,12 @@ def tool_image_gen() -> Tool:
                 "riferimento": {
                     "type": "string",
                     "description": "Image to edit: path (relative to the "
-                                   "project), data URL, or `ultimo` for the "
-                                   "image attached last in the chat. Omit it "
+                                   "project), data URL, `ultimo` for the "
+                                   "image attached last in the chat, or "
+                                   "`allegato:N` for the Nth image of the "
+                                   "last message (N starts at 1: with three "
+                                   "photos attached, that is the only way to "
+                                   "name the first and the second). Omit it "
                                    "to generate from scratch.",
                 },
                 "riferimenti": {
@@ -268,11 +295,14 @@ def tool_image_gen() -> Tool:
                                    "first is the one being edited, the "
                                    "others are references the prompt can "
                                    "name (\"the logo in the second image\"). "
-                                   "Same forms as `riferimento`. Use this "
-                                   "when the scene must be rebuilt around "
-                                   "the real files; the cap is per model "
-                                   "(14 on Gemini 3.1 Flash Image, 3 on "
-                                   "Gemini 2.5 Flash Image).",
+                                   "Same forms as `riferimento`, including "
+                                   "`allegato:1`, `allegato:2`, … when the "
+                                   "user attached several images in one "
+                                   "message (`ultimo` is only the last). "
+                                   "Use this when the scene must be rebuilt "
+                                   "around the real files; the cap is per "
+                                   "model (14 on Gemini 3.1 Flash Image, 3 "
+                                   "on Gemini 2.5 Flash Image).",
                 },
                 "provider": {
                     "type": "string",

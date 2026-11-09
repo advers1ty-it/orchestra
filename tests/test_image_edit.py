@@ -197,7 +197,55 @@ for nome, dati, atteso in [
     except mo.MontaggioError as e:
         check(nome, atteso in str(e).lower(), str(e))
 
-print("\n[11] Il tool: anteprima, profili, registro")
+print("\n[11] Scontorno e ombra: il fondo bianco non e' un rettangolo")
+# Il caso vero: il logo e la foto del telefono arrivano come JPEG col fondo
+# bianco. Incollati su un poster scuro senza scontorno sono due rettangoli
+# bianchi — ed e' quello che si vedeva. Il lavoro lo fa il montaggio, non
+# l'utente con remove.bg.
+bianco = Image.new("RGB", (80, 80), (255, 255, 255))
+for _y in range(25, 55):
+    for _x in range(25, 55):
+        bianco.putpixel((_x, _y), (220, 20, 20))
+_buf = io.BytesIO()
+bianco.save(_buf, format="PNG")
+quadrato = _buf.getvalue()
+
+
+def _incolla_quadrato(extra, nome):
+    op = {"tipo": "incolla", "immagine": quadrato, "x": 200, "y": 150,
+          "ancora": "mm"}
+    op.update(extra)
+    return mo.monta(JPEG, "image/jpeg", [op], cartella=TMP, nome_file=nome,
+                    risolvi=lambda v: quadrato)
+
+
+crudo = _incolla_quadrato({}, "incolla-crudo")
+crudo_out = Image.open(crudo.percorso).convert("RGB")
+angolo_crudo = crudo_out.getpixel((165, 115))
+check("senza scontorno il fondo bianco si vede",
+      min(angolo_crudo) > 200, str(angolo_crudo))
+
+pulito = _incolla_quadrato({"scontorna": True, "tolleranza": 10},
+                           "incolla-pulito")
+pulito_out = Image.open(pulito.percorso).convert("RGB")
+angolo = pulito_out.getpixel((165, 115))
+check("con scontorno il fondo sparisce",
+      max(angolo) < 200 and abs(angolo[2] - 160) < 40, str(angolo))
+check("e il soggetto resta dov'era",
+      pulito_out.getpixel((200, 150))[0] > 150,
+      str(pulito_out.getpixel((200, 150))))
+check("il referto dice che il fondo e' stato tolto",
+      any("sfondo tolto" in n for n in pulito.note), str(pulito.note))
+
+ombra = _incolla_quadrato({"scontorna": True, "tolleranza": 10,
+                           "ombra": 10}, "incolla-ombra")
+ombra_out = Image.open(ombra.percorso).convert("RGB")
+sotto_ombra = ombra_out.getpixel((200, 180))
+sotto_pulito = pulito_out.getpixel((200, 180))
+check("l'ombra scurisce appena sotto il soggetto",
+      sum(sotto_ombra) < sum(sotto_pulito), f"{sotto_ombra} vs {sotto_pulito}")
+
+print("\n[12] Il tool: anteprima, profili, registro")
 tool = tool_image_edit()
 check("il nome e' image_edit", tool.name == "image_edit", tool.name)
 check("lo schema chiede le operazioni", "operazioni" in tool.schema["required"])

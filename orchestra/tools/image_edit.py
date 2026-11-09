@@ -122,9 +122,11 @@ def tool_image_edit() -> Tool:
                 "immagine": {
                     "type": "string",
                     "description": "Starting image: path relative to the "
-                                   "project, data URL, or `ultimo` for the "
-                                   "image attached last in the chat "
-                                   "(default).",
+                                   "project, data URL, `ultimo` for the image "
+                                   "attached last in the chat, or "
+                                   "`allegato:N` for the Nth image of the "
+                                   "last message (N starts at 1). Default: "
+                                   "`ultimo`.",
                 },
                 "operazioni": {
                     "type": "array",
@@ -186,8 +188,8 @@ def tool_image_edit() -> Tool:
                             "immagine": {
                                 "type": "string",
                                 "description": "Paste: the file to paste "
-                                               "(path, data URL or "
-                                               "`ultimo`). A PNG with "
+                                               "(path, data URL, `ultimo` or "
+                                               "`allegato:N`). A PNG with "
                                                "transparency stays "
                                                "transparent.",
                             },
@@ -195,6 +197,46 @@ def tool_image_edit() -> Tool:
                                 "type": "string",
                                 "description": "Paste: 1-100, for a logo "
                                                "used as a watermark.",
+                            },
+                            "scontorna": {
+                                "type": "boolean",
+                                "description": "Paste: cut out a flat "
+                                               "background (white, usually) "
+                                               "and keep only the subject. "
+                                               "Use it for a logo or a "
+                                               "product photo saved as a "
+                                               "JPEG: without it the paste "
+                                               "is a white rectangle on a "
+                                               "dark poster. Do not send "
+                                               "the user to remove.bg for "
+                                               "a flat background.",
+                            },
+                            "colore_sfondo": {
+                                "type": "string",
+                                "description": "Paste + scontorna: the "
+                                               "background color to remove, "
+                                               "`#rrggbb` (default white).",
+                            },
+                            "tolleranza": {
+                                "type": "integer",
+                                "description": "Paste + scontorna: 0-100, "
+                                               "how far from the "
+                                               "background color still "
+                                               "counts as background "
+                                               "(default 18). Too high "
+                                               "eats the subject.",
+                            },
+                            "sfumatura": {
+                                "type": "integer",
+                                "description": "Paste + scontorna: pixels "
+                                               "of soft edge (default 1).",
+                            },
+                            "ombra": {
+                                "type": "integer",
+                                "description": "Paste: pixels of drop "
+                                               "shadow (0 = none). A cutout "
+                                               "without a shadow looks like "
+                                               "a sticker laid on top.",
                             },
                             "testo": {
                                 "type": "string",
