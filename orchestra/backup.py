@@ -41,7 +41,7 @@ import zipfile
 from typing import Any
 
 from . import __version__
-from .dati import cartella_dati, installazioni
+from .dati import SEGNAPOSTO, cartella_dati, installazioni
 from .percorsi import ENV_PATH
 
 # La versione del formato dell'archivio. Un archivio con un numero
@@ -108,11 +108,36 @@ def _dati(installazione: str | None) -> str:
     scelta = str(installazione or "").strip()
     if not scelta:
         return cartella_dati()
-    if os.path.isdir(scelta):
-        return os.path.abspath(scelta)
     normalizzata = os.path.normcase(os.path.abspath(scelta))
     for voce in installazioni():
         if os.path.normcase(voce["dati"]) == normalizzata:
+            return voce["dati"]
+        # Anche il percorso dell'INSTALLAZIONE (la radice del codice) e'
+        # una risposta valida: e' quello che l'utente vede in `--elenco`,
+        # e prima la cartella esistente veniva rifiutata proprio perche'
+        # esisteva.
+        if voce.get("percorso") and os.path.normcase(
+                os.path.abspath(voce["percorso"])) == normalizzata:
+            return voce["dati"]
+    if os.path.isdir(scelta):
+        # Un percorso esistente NON basta: senza questo controllo
+        # `--profilo D:\\` zippava il contenuto di qualunque cartella, e
+        # un ripristino ci scriveva dentro. Solo cartelle dati vere.
+        pieno = os.path.abspath(scelta)
+        from .dati import _sembra_installazione
+
+        if _sembra_installazione(pieno):
+            return pieno
+        raise InstallazioneSconosciuta(
+            f"{pieno} non e' una cartella dati di Orchestra: non ha "
+            "installazione.json ne' i file di un'installazione. Usa "
+            "`orchestra backup --elenco` per l'elenco vero.")
+    # L'id e' il nome della cartella dati (`bc58b8342926`): non e' un
+    # percorso, quindi va confrontato con quello che l'utente ha scritto,
+    # non con la sua forma assoluta.
+    solo_nome = os.path.normcase(scelta.strip().rstrip("\\/"))
+    for voce in installazioni():
+        if os.path.normcase(voce["id"]) == solo_nome:
             return voce["dati"]
         if os.path.normcase(os.path.abspath(voce["id"])) == normalizzata:
             return voce["dati"]
@@ -378,7 +403,11 @@ def _manifesto(z: zipfile.ZipFile) -> dict[str, Any]:
             "MANIFEST.json") from None
     except (ValueError, UnicodeDecodeError):
         raise RuntimeError("il MANIFEST.json dell'archivio e' illeggibile") from None
-    if int(dati.get("formato") or 0) != FORMATO:
+    try:
+        formato = int(dati.get("formato") or 0)
+    except (TypeError, ValueError):
+        formato = 0
+    if formato != FORMATO:
         raise RuntimeError(
             f"backup in un formato che questa versione non conosce "
             f"({dati.get('formato')!r}, atteso {FORMATO})")
@@ -408,9 +437,20 @@ def ripristina(archivio: str, *, con_chiavi: bool = True,
     if not os.path.isfile(archivio):
         raise RuntimeError(f"archivio non trovato: {archivio}")
     destinazione_dati = _dati(installazione)
+    # Il `.env` di destinazione si decide PRIMA di estrarre qualunque cosa.
+    # Il segnaposto dell'installazione dice dove sta il suo `.env`, e se lo
+    # si copia prima di leggerlo il ripristino di un altro profilo scrive
+    # le chiavi nel `.env` di quello sbagliato.
+    env_target = _env_per(destinazione_dati)
     with zipfile.ZipFile(archivio) as z:
         manifesto = _manifesto(z)
-        nomi = [n for n in z.namelist() if n.startswith("dati/") and _sicuro(n)]
+        # `installazione.json` NON si ripristina: descrive questa
+        # installazione, non i dati. Copiarlo vorrebbe dire che i dati di
+        # B, ripristinati in B, si presentano come quelli di A — e da li'
+        # in poi ogni `.env` cercato e' quello di A.
+        nomi = [n for n in z.namelist()
+                if n.startswith("dati/") and _sicuro(n)
+                and os.path.basename(n) != SEGNAPOSTO]
         if not nomi:
             raise RuntimeError("l'archivio non contiene dati")
 
@@ -443,15 +483,23 @@ def ripristina(archivio: str, *, con_chiavi: bool = True,
                 shutil.copyfileobj(src, dst)
             scritti.append(os.path.basename(destinazione))
 
+        # Le chiavi si scrivono SOLO nel `.env` dell'installazione di
+        # destinazione. Prima c'era un ripiego su ENV_PATH: ripristinando
+        # un altro profilo senza `.env` proprio, le sue chiavi finivano
+        # nel `.env` di questa installazione — sovrascritte, e senza che
+        # nessuno lo sapesse.
         chiavi = False
+        chiavi_saltate = False
         if con_chiavi and "config/.env" in z.namelist():
-            env_target = _env_per(destinazione_dati) or ENV_PATH
-            with z.open("config/.env") as src:
-                dati_env = src.read()
-            os.makedirs(os.path.dirname(env_target) or ".", exist_ok=True)
-            with open(env_target, "wb") as dst:
-                dst.write(dati_env)
-            chiavi = True
+            if env_target:
+                with z.open("config/.env") as src:
+                    dati_env = src.read()
+                os.makedirs(os.path.dirname(env_target) or ".", exist_ok=True)
+                with open(env_target, "wb") as dst:
+                    dst.write(dati_env)
+                chiavi = True
+            else:
+                chiavi_saltate = True
 
     provenienza = manifesto.get("installazione") or {}
     return {
@@ -459,6 +507,7 @@ def ripristina(archivio: str, *, con_chiavi: bool = True,
         "file": scritti,
         "sicurezza": sicurezza["percorso"],
         "chiavi": chiavi,
+        "chiavi_saltate": chiavi_saltate,
         "versione": manifesto.get("versione") or "",
         "creato": manifesto.get("creato") or "",
         "dati": destinazione_dati,

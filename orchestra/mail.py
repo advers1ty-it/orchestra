@@ -58,7 +58,10 @@ CHIAVI = ("ORCHESTRA_MAIL_INDIRIZZO", "ORCHESTRA_MAIL_PASSWORD")
 # prime righe, e il resto e' rumore. Il contenuto completo di UN
 # messaggio e' un'altra cosa, e ha un tetto suo.
 MAX_MESSAGGI = 20
-MAX_CORPO = 6000
+# Quanto corpo si scarica per un messaggio. `RFC822` porterebbe a casa
+# anche l'allegato da 20 MB per leggere due righe; dieci messaggi cosi'
+# sono duecento megabyte per un'anteprima.
+LIMITE_ANTEPRIMA = 4096
 SECONDI = 30
 
 
@@ -144,22 +147,43 @@ def _imap(cfg: dict[str, Any]) -> imaplib.IMAP4_SSL:
 
     Il timeout e' obbligatorio: senza, un host che non risponde tiene
     fermo il turno finche' la rete non decide, e l'agente sembra morto.
+    Se il login fallisce la connessione si chiude: un socket aperto a
+    ogni tentativo con la password sbagliata e' un socket per volta
+    lasciato li'.
     """
+    con = None
     try:
         con = imaplib.IMAP4_SSL(cfg["imap_host"], cfg["imap_port"],
                                 timeout=SECONDI)
         con.login(cfg["indirizzo"], cfg["password"])
     except imaplib.IMAP4.error as e:
+        _chiudi(con)
         raise ErrorePosta(
             f"{cfg['imap_host']} ha rifiutato l'accesso a "
             f"{cfg['indirizzo']}: {_testo_errore(e)}. Se la password e' "
             "giusta, serve una password per le app (Gmail e Outlook non "
             "accettano quella dell'account).") from None
     except OSError as e:
+        _chiudi(con)
         raise ErrorePosta(
             f"non riesco a raggiungere {cfg['imap_host']}:"
             f"{cfg['imap_port']} ({e}). Controlla la rete e l'host.") from None
     return con
+
+
+def _nome_cartella(nome: str) -> str:
+    """Il nome della cartella come lo vuole il server.
+
+    `[Gmail]/Posta inviata` ha uno spazio: passato nudo, il server legge
+    due argomenti e risponde BAD. Le virgolette vanno messe, e i
+    caratteri interni che le romperebbero vanno protetti.
+    """
+    nome = (nome or "INBOX").strip() or "INBOX"
+    if nome.startswith('"') and nome.endswith('"') and len(nome) > 1:
+        return nome
+    if any(c in nome for c in ' ()"/'):
+        return '"' + nome.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return nome
 
 
 def _testo_errore(e: BaseException) -> str:
@@ -211,26 +235,58 @@ def _intestazione(msg: email.message.Message, nome: str) -> str:
         return str(valore).strip()
 
 
-def _corpo(msg: email.message.Message, limite: int = 800) -> str:
-    """Il testo del messaggio, preferendo la parte leggibile."""
-    testo = ""
-    if msg.is_multipart():
-        for parte in msg.walk():
-            if parte.get_content_maintype() == "multipart":
-                continue
-            if parte.get_content_type() == "text/plain":
-                testo = _decodifica(parte)
-                if testo.strip():
-                    break
-        if not testo.strip():
-            for parte in msg.walk():
-                if parte.get_content_type() == "text/html":
-                    testo = _decodifica(parte)
-                    break
-    else:
-        testo = _decodifica(msg)
-    testo = " ".join(testo.split())
-    return testo[:limite] + ("…" if len(testo) > limite else "")
+def _primo_letterale(pezzi: Any) -> bytes:
+    for pezzo in pezzi or []:
+        if isinstance(pezzo, tuple) and len(pezzo) >= 2 and pezzo[1]:
+            return pezzo[1]
+    return b""
+
+
+def _letterali(pezzi: Any) -> list[bytes]:
+    return [p[1] for p in (pezzi or [])
+            if isinstance(p, tuple) and len(p) >= 2 and p[1]]
+
+
+def _anteprima(con: Any, ident: bytes, msg: email.message.Message) -> str:
+    """Le prime righe del corpo, senza scaricare il messaggio intero.
+
+    Si chiede solo la prima parte (il testo) e al massimo
+    LIMITE_ANTEPRIMA byte. Un allegato dentro il messaggio non viene
+    nemmeno trasferito: e' la differenza fra leggere la posta e
+    scaricarsela tutta per guardare il mittente.
+    """
+    try:
+        # `is_multipart()` guarda il payload, che qui non c'e' (abbiamo
+        # solo l'intestazione): sarebbe sempre falso, e un messaggio con
+        # allegato verrebbe letto come corpo unico. La struttura si legge
+        # dal Content-Type.
+        if msg.get_content_maintype() == "multipart":
+            tip, pezzi = con.fetch(
+                ident,
+                f"(BODY.PEEK[1.MIME] BODY.PEEK[1]<0.{LIMITE_ANTEPRIMA}>)")
+            if tip != "OK":
+                return ""
+            letterali = _letterali(pezzi)
+            if len(letterali) < 2:
+                return ""
+            # Intestazione MIME + quei 4 KB: cosi' `get_payload(decode=True)`
+            # scioglie anche quoted-printable e base64.
+            parte = email.message_from_bytes(
+                letterali[0].rstrip() + b"\r\n\r\n" + letterali[1])
+        else:
+            tip, pezzi = con.fetch(
+                ident, f"(BODY.PEEK[TEXT]<0.{LIMITE_ANTEPRIMA}>)")
+            if tip != "OK":
+                return ""
+            parte = email.message_from_bytes(
+                msg.as_bytes().rstrip() + b"\r\n\r\n"
+                + _primo_letterale(pezzi))
+    except imaplib.IMAP4.error:
+        return ""
+    if parte.get_content_maintype() != "text":
+        return ""
+    testo = " ".join(_decodifica(parte).split())
+    return testo[:800] + ("…" if len(testo) > 800 else "")
 
 
 def _decodifica(parte: email.message.Message) -> str:
@@ -270,7 +326,7 @@ def leggi(*, cartella: str = "INBOX", quanti: int = 10,
 
     con = _imap(cfg)
     try:
-        tip, _dati = con.select(cartella or "INBOX", readonly=True)
+        tip, _dati = con.select(_nome_cartella(cartella), readonly=True)
         if tip != "OK":
             raise ErrorePosta(f"la cartella {cartella!r} non si apre.")
         try:
@@ -285,19 +341,15 @@ def leggi(*, cartella: str = "INBOX", quanti: int = 10,
         messaggi: list[dict[str, Any]] = []
         for ident in reversed(scelti):
             try:
-                tip, pezzi = con.fetch(ident, "(RFC822)")
+                tip, pezzi = con.fetch(ident, "(BODY.PEEK[HEADER])")
             except imaplib.IMAP4.error:
                 continue
             if tip != "OK":
                 continue
-            grezzo = b""
-            for pezzo in pezzi or []:
-                if isinstance(pezzo, tuple) and len(pezzo) >= 2:
-                    grezzo = pezzo[1] or b""
-                    break
-            if not grezzo:
+            intestazione = _primo_letterale(pezzi)
+            if not intestazione:
                 continue
-            msg = email.message_from_bytes(grezzo)
+            msg = email.message_from_bytes(intestazione)
             quando = _intestazione(msg, "Date")
             try:
                 quando = parsedate_to_datetime(quando).strftime(
@@ -309,7 +361,7 @@ def leggi(*, cartella: str = "INBOX", quanti: int = 10,
                 "a": _intestazione(msg, "To"),
                 "oggetto": _intestazione(msg, "Subject") or "(senza oggetto)",
                 "data": quando,
-                "anteprima": _corpo(msg),
+                "anteprima": _anteprima(con, ident, msg),
             })
         return messaggi
     finally:

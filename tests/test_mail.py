@@ -67,6 +67,7 @@ class FakeIMAP:
         self.timeout = timeout
         self.criterio = ""
         self.cartella = ""
+        self.richieste = []
         self.logout_chiamato = False
         FakeIMAP.istanze.append(self)
 
@@ -90,7 +91,16 @@ class FakeIMAP:
         return "OK", [b"1 2"]
 
     def fetch(self, ident, cosa):
-        return "OK", [(b"1 (RFC822 {123}", MESSAGGI[int(ident) - 1])]
+        self.richieste.append(cosa)
+        grezzo = MESSAGGI[int(ident) - 1]
+        intestazione, _, corpo = grezzo.partition(b"\r\n\r\n")
+        if "HEADER" in cosa:
+            return "OK", [(b"1 (BODY[HEADER] {1}", intestazione + b"\r\n\r\n")]
+        if "1.MIME" in cosa:
+            mime = b"Content-Type: text/plain; charset=utf-8\r\n"
+            return "OK", [(b"1 (BODY[1.MIME] {1}", mime),
+                           (b" BODY[1]<0> {2}", corpo)]
+        return "OK", [(b"1 (BODY[TEXT]<0> {1}", corpo)]
 
     def logout(self):
         self.logout_chiamato = True
@@ -208,6 +218,22 @@ check("ha aperto INBOX in sola lettura", istanza.cartella == "INBOX",
       istanza.cartella)
 check("la connessione e' stata chiusa", istanza.logout_chiamato)
 check("ha usato il timeout", istanza.timeout == mail_mod.SECONDI, istanza.timeout)
+check("chiede solo l'intestazione, non il messaggio intero",
+      any("BODY.PEEK[HEADER]" in c for c in istanza.richieste)
+      and not any("RFC822" in c for c in istanza.richieste),
+      str(istanza.richieste))
+check("l'anteprima si chiede a pezzi, non tutta",
+      any("<0." in c for c in istanza.richieste), str(istanza.richieste))
+
+# Una cartella con lo spazio va fra virgolette: `[Gmail]/Sent Mail` nudo
+# e' due argomenti per il server, e la risposta e' BAD.
+def leggi_cartella_con_spazio():
+    return mail_mod.leggi(quanti=1, cartella="[Gmail]/Sent Mail", env=env())
+
+con_server_finti(leggi_cartella_con_spazio)
+check("la cartella con spazio viene quotata",
+      FakeIMAP.istanze[-1].cartella == '"[Gmail]/Sent Mail"',
+      FakeIMAP.istanze[-1].cartella)
 
 
 def leggi_vuoto():
@@ -215,6 +241,42 @@ def leggi_vuoto():
     return mail_mod.leggi(quanti=5, env=env())
 
 check("casella senza messaggi: lista vuota", con_server_finti(leggi_vuoto) == [])
+
+print("[3b] messaggio con allegato: si legge il testo, non l'allegato")
+
+class FakeIMAPMultipart(FakeIMAP):
+    def fetch(self, ident, cosa):
+        self.richieste.append(cosa)
+        if "HEADER" in cosa:
+            return "OK", [(b"", (
+                b"From: X <x@example.com>\r\n"
+                b"Subject: Con allegato\r\n"
+                b"Date: Mon, 09 Nov 2026 10:00:00 +0100\r\n"
+                b"Content-Type: multipart/mixed; boundary=AAA\r\n\r\n"))]
+        if "1.MIME" in cosa:
+            return "OK", [
+                (b"", b"Content-Type: text/plain; charset=utf-8\r\n"
+                       b"Content-Transfer-Encoding: 8bit\r\n\r\n"),
+                (b"", b"il testo vero della mail"),
+            ]
+        raise AssertionError("ha chiesto il messaggio intero: " + cosa)
+
+
+def leggi_con_allegato():
+    FintoImaplib.IMAP4_SSL = FakeIMAPMultipart
+    return mail_mod.leggi(quanti=1, env=env())
+
+try:
+    _prima_classe = FintoImaplib.IMAP4_SSL
+    con_server_finti(leggi_con_allegato)
+    _uno = FakeIMAPMultipart.istanze[-1]
+    check("chiede la prima parte, non l'intero messaggio",
+          any("PEEK[1" in c for c in _uno.richieste), str(_uno.richieste))
+    check("l'anteprima e' il testo, non l'allegato",
+          _uno.richieste and "RFC822" not in "".join(_uno.richieste),
+          str(_uno.richieste))
+finally:
+    FintoImaplib.IMAP4_SSL = FakeIMAP
 
 print("[4] cartelle: i nomi come li chiama il server")
 nomi = con_server_finti(lambda: mail_mod.cartelle(env=env()))

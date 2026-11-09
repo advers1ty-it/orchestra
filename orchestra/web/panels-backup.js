@@ -59,6 +59,7 @@ async function caricaBackup() {
     return;
   }
   elenco.innerHTML = "";
+  const corrente = d.corrente || "";
   const installazioni = d.installazioni || [];
   if (!installazioni.length) {
     elenco.textContent = "Nessuna installazione trovata.";
@@ -157,11 +158,22 @@ async function caricaBackup() {
 
     const barra = document.createElement("div");
     barra.className = "backup-barra";
-    const ripristina = document.createElement("button");
-    ripristina.className = "ghost";
-    ripristina.textContent = "Ripristina";
-    ripristina.onclick = () => backupRipristina(a, ripristina);
-    barra.appendChild(ripristina);
+    if (corrente && a.dati === corrente) {
+      // Il ripristino dell'installazione in uso va fatto a server chiuso:
+      // le connessioni sqlite restano aperte, e sostituire i file sotto
+      // chi scrive e' peggio che non ripristinare.
+      const nota = document.createElement("span");
+      nota.className = "small dim";
+      nota.textContent = "installazione in uso: ferma Orchestra e usa "
+                       + "orchestra restore da terminale";
+      barra.appendChild(nota);
+    } else {
+      const ripristina = document.createElement("button");
+      ripristina.className = "ghost";
+      ripristina.textContent = "Ripristina";
+      ripristina.onclick = () => backupRipristina(a, ripristina);
+      barra.appendChild(ripristina);
+    }
     riga.appendChild(barra);
 
     archiviBox.appendChild(riga);

@@ -33,3 +33,4 @@ Puoi modificare questo file a mano: viene riletto da solo.
 - Fatto: ho verificato.  _sessione_  <!-- 2026-10-21 -->
 - Secondo turno in corso.  _sessione_  <!-- 2026-10-21 -->
 - ho finito  _sessione_  <!-- 2026-11-04 -->
+- Uso uno strumento.  _sessione_  <!-- 2026-11-09 -->

@@ -275,6 +275,69 @@ try:
         check("profilo sconosciuto segnalato", False)
     except bkp.InstallazioneSconosciuta as e:
         check("profilo sconosciuto segnalato", "--elenco" in str(e), str(e))
+
+    # Un percorso esistente non basta: altrimenti `--profilo D:\` zippava
+    # qualunque cartella (documenti compresi) e un ripristino ci scriveva
+    # dentro.
+    estranea = os.path.join(base, "documenti")
+    os.makedirs(estranea)
+    with open(os.path.join(estranea, "note.txt"), "w", encoding="utf-8") as f:
+        f.write("non sono dati di Orchestra")
+    try:
+        bkp.crea("", con_chiavi=False, installazione=estranea)
+        check("una cartella qualsiasi non si salva", False, estranea)
+    except bkp.InstallazioneSconosciuta as e:
+        check("una cartella qualsiasi non si salva", "cartella dati" in str(e), str(e))
+
+    # Le chiavi di un profilo non devono finire nel .env di un altro.
+    radice_a = os.path.join(base, "radice-a")
+    os.makedirs(os.path.join(radice_a, "orchestra"))
+    with open(os.path.join(radice_a, "orchestra", ".env"), "w",
+              encoding="utf-8") as f:
+        f.write("ORCHESTRA_PROVIDER=nous\n")
+    with open(os.path.join(prima_inst, dati_mod.SEGNAPOSTO), "w",
+              encoding="utf-8") as f:
+        json.dump({"percorso": radice_a, "versione": "0.5.90"}, f)
+    con_chiavi = bkp.crea("", con_chiavi=True, installazione=radice_a)
+    check("il backup del profilo prende il suo .env",
+          con_chiavi["con_chiavi"])
+    # Un .env nell'installazione in uso: serve a provare che il ripristino
+    # di un ALTRO profilo non lo tocca.
+    with open(bkp.ENV_PATH, "w", encoding="utf-8") as f:
+        f.write("ORCHESTRA_PROVIDER=mio\n")
+    with open(bkp.ENV_PATH, "r", encoding="utf-8") as f:
+        env_prima = f.read()
+    # Il ripristino va in una installazione DIVERSA dalla corrente e senza
+    # un .env proprio: li' le chiavi non hanno dove andare, e non devono
+    # finire in quelle di questa — e' il caso che riempiva il .env sbagliato.
+    chiavi = bkp.ripristina(con_chiavi["percorso"], con_chiavi=True,
+                            installazione="cccc33334444")
+    with open(bkp.ENV_PATH, "r", encoding="utf-8") as f:
+        env_dopo = f.read()
+    check("il .env dell'installazione in uso non viene toccato",
+          env_prima == env_dopo)
+    check("le chiavi saltate vengono dichiarate",
+          chiavi["chiavi"] is False and chiavi["chiavi_saltate"] is True,
+          str(chiavi))
+    check("il segnaposto dell'installazione non viene sovrascritto",
+          not os.path.isfile(os.path.join(vecchia_inst, dati_mod.SEGNAPOSTO)),
+          os.path.join(vecchia_inst, dati_mod.SEGNAPOSTO))
+    check("il profilo ripristinato resta quello di destinazione",
+          chiavi["profilo"] == vecchia_inst, chiavi["profilo"])
+    check("per id si trova l'installazione giusta",
+          bkp.crea("", con_chiavi=False,
+                   installazione="aaaa1111")["dati"] == prima_inst)
+
+    formato = os.path.join(base, "formato-strano.zip")
+    with zipfile.ZipFile(formato, "w") as z:
+        z.writestr("MANIFEST.json", '{"formato": "abc"}')
+        z.writestr("dati/memory.md", "x")
+    try:
+        bkp.ripristina(formato, con_chiavi=False)
+        check("formato non numerico rifiutato con un messaggio", False)
+    except RuntimeError as e:
+        check("formato non numerico rifiutato con un messaggio",
+              "formato" in str(e), str(e))
 finally:
     (dati_mod.base_dati, dati_mod.cartella_dati,
      bkp.cartella_dati, bkp.installazioni) = vecchi

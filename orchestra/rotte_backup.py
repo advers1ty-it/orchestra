@@ -12,6 +12,7 @@ nuovi.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from .rotte import rotta
@@ -74,6 +75,25 @@ class RotteBackup:
         if sessione is not None and getattr(sessione, "busy", False):
             self._json({"error": "c'e' un turno in corso: fermalo prima di "
                                  "ripristinare i dati"}, 409)
+            return
+        # L'installazione IN USO non si ripristina da qui. Il server tiene
+        # aperte le connessioni sqlite (storico le tiene per tutta la
+        # vita): sostituire i file sotto di lui lascia la app a scrivere
+        # nel file vecchio, e su Windows puo' anche rifiutarsi a meta'
+        # strada. Le altre installazioni non hanno nessuno che le tenga
+        # aperte, e si possono ripristinare.
+        try:
+            bersaglio = bkp._dati(profilo or None)
+        except bkp.InstallazioneSconosciuta as e:
+            self._json({"error": str(e)}, 400)
+            return
+        if os.path.abspath(bersaglio) == os.path.abspath(bkp.cartella_dati()):
+            self._json({"error":
+                       "questa e' l'installazione in uso: ferma Orchestra e "
+                       "ripristina da terminale con `python -m orchestra.cli "
+                       f"restore \"{archivio}\"`. A server acceso i database "
+                       "restano aperti, e il ripristino li sostituirebbe "
+                       "sotto chi ci sta scrivendo."}, 409)
             return
         try:
             esito = bkp.ripristina(

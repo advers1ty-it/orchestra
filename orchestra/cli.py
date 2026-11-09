@@ -704,6 +704,10 @@ def cmd_backup(args: argparse.Namespace) -> int:
 
     con_chiavi = not getattr(args, "senza_chiavi", False)
     if getattr(args, "tutte", False):
+        if (getattr(args, "out", "") or "").strip():
+            print("--out vale per una sola installazione: con --tutte ogni "
+                  "archivio va nella cartella backup della sua", file=sys.stderr)
+            return 2
         errori = 0
         for esito in bkp.crea_tutte(con_chiavi=con_chiavi):
             if esito["esito"] == "ok":
@@ -745,6 +749,9 @@ def cmd_restore(args: argparse.Namespace) -> int:
         print(f"l'archivio viene da: {esito['da']}")
     if esito["chiavi"]:
         print("ripristinato anche il .env (chiavi comprese)")
+    elif esito.get("chiavi_saltate"):
+        print("chiavi non ripristinate: quella installazione non ha un .env "
+              "dove scriverle, e non le si mette in quello di un'altra")
     if esito["sicurezza"]:
         print(f"prima di toccare: {esito['sicurezza']}")
     print("riavvia Orchestra: i dati nuovi si leggono all'avvio")
