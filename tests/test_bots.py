@@ -495,6 +495,15 @@ traccia = {"attivi": 0, "max": 0, "radici": {}}
 traccia_lock = threading.Lock()
 
 
+# Il via libera dei turni. Normalmente aperto (nessuno aspetta niente);
+# il blocco [10] lo tiene chiuso per avere due turni DAVVERO in volo
+# insieme: con il solo sonno da mezzo secondo, su una macchina lenta il
+# primo poteva finire prima che il secondo partisse, e il test diceva
+# "non in parallelo" su un codice giusto.
+VIA_TURNO = threading.Event()
+VIA_TURNO.set()
+
+
 class ProviderTraccia:
     """Risponde dopo mezzo secondo e registra chi stava lavorando.
 
@@ -522,6 +531,7 @@ class ProviderTraccia:
             radice = pr._root_sessione()
             with traccia_lock:
                 traccia["radici"][testo.split()[0]] = radice
+            VIA_TURNO.wait(timeout=10)
             time.sleep(0.5)
             return LLMResponse(content="fatto: " + testo[:40],
                                model=self.model)
@@ -633,6 +643,7 @@ app_sw.session = make_session_par("openrouter", "modello-sw")
 primo = app_sw.crea_bot(nome="PrimoSw")
 secondo = app_sw.crea_bot(nome="SecondoSw")
 
+VIA_TURNO.clear()
 app_sw.attiva_bot(primo["id"])
 app_sw.session.send("primo: lavoro lungo")
 time.sleep(0.1)
@@ -657,6 +668,12 @@ check("un secondo messaggio alla stessa sessione viene rifiutato",
 app_sw.attiva_bot(secondo["id"])
 app_sw.session.send("secondo: altro lavoro")
 check("anche il secondo parte", app_sw.session.busy)
+# Il primo turno e' ancora fermo dentro `chat`: si aspetta che ci sia
+# anche il secondo, poi si da' il via a entrambi.
+scadenza_attesa = time.time() + 10
+while time.time() < scadenza_attesa and traccia["max"] < 2:
+    time.sleep(0.02)
+VIA_TURNO.set()
 scadenza_sw = time.time() + 10
 while time.time() < scadenza_sw and (sess_primo.busy
                                      or app_sw.session.busy):
