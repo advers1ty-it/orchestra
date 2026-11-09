@@ -2180,8 +2180,16 @@ class OrchestraApp:
         # telefono non c'e' modo di aprirla, e "fatto, sta nella cartella"
         # e' una risposta che costringe a tornare al computer per vedere
         # se e' venuta bene.
-        return {"testo": self._telegram_ultima_risposta(sess),
-                "file": self._telegram_file_del_turno(inizio)}
+        esito: dict[str, Any] = {
+            "testo": self._telegram_ultima_risposta(sess),
+            "file": self._telegram_file_del_turno(inizio),
+        }
+        # Il ragionamento viaggia con l'esito solo se e' stato chiesto: a
+        # fine turno arriva come messaggio suo, prima della risposta, cosi'
+        # si legge senza doverlo acchiappare mentre scorre.
+        if stato.get("mostra_ragionamento"):
+            esito["ragionamento"] = stato.get("ragiona", "")
+        return esito
 
     def _telegram_file_del_turno(self, inizio: float) -> list[dict[str, Any]]:
         """I file allegabili scritti durante il turno.
@@ -2270,10 +2278,18 @@ class OrchestraApp:
         fermato. Chi chiama lo usa per decidere cosa scrivere in chat —
         e per non scrivere niente quando ha gia' risposto /stop.
         """
+        # Il ragionamento e' informazione in piu': si manda solo a chi l'ha
+        # chiesto con /reasoning. Nella chat normale e' rumore che allontana
+        # la risposta; quando un turno fa qualcosa di strano e' l'unica
+        # cosa che spiega perche'.
+        from . import telegram as tg
+
+        mostra = tg.ragionamento(int((bot or {}).get("id") or 0))
         stato: dict[str, Any] = {
             "testo": "", "ragiona": "", "tool": [], "giro": 0,
             "inizio": time.monotonic(), "annullato": False, "finito": False,
             "ultimo_evento": time.monotonic(),
+            "mostra_ragionamento": mostra,
         }
         scadenza = stato["inizio"] + self._telegram_attesa()
         for ev in eventi:
@@ -2317,7 +2333,8 @@ class OrchestraApp:
                 break
             if avanzamento is not None:
                 try:
-                    avanzamento(self._telegram_stato(bot, stato), azione)
+                    avanzamento(self._telegram_stato(bot, stato, mostra),
+                                azione)
                 except Exception:  # noqa: BLE001
                     # Un ponte che non riesce a dire come va non deve
                     # fermare il turno: la risposta conta piu' della
@@ -2349,8 +2366,15 @@ class OrchestraApp:
                     break
         return riga
 
-    def _telegram_stato(self, bot: dict[str, Any], stato: dict[str, Any]) -> str:
-        """Tre righe per dire che sta succedendo, non un log."""
+    def _telegram_stato(self, bot: dict[str, Any], stato: dict[str, Any],
+                        mostra_ragionamento: bool = False) -> str:
+        """Tre righe per dire che sta succedendo, non un log.
+
+        `mostra_ragionamento` e' `/reasoning`: spento, il pensiero compare
+        solo quando non c'e' ancora testo da mostrare (il caso di un turno
+        lungo che sembrerebbe fermo); acceso, compare sempre, accanto a
+        quello che l'agente sta scrivendo.
+        """
         secondi = int(time.monotonic() - stato["inizio"])
         prima = f"{bot.get('nome') or 'bot'} · {secondi}s"
         if stato["giro"]:
@@ -2361,7 +2385,7 @@ class OrchestraApp:
         testo = (stato["testo"] or "").strip()
         if testo:
             righe.append(_coda(testo, 400))
-        elif stato["ragiona"].strip():
+        if stato["ragiona"].strip() and (mostra_ragionamento or not testo):
             righe.append("pensa: " + _coda(stato["ragiona"].strip(), 400))
         return "\n".join(righe)
 
@@ -2418,7 +2442,37 @@ class OrchestraApp:
                     "cronologia di Orchestra.")
         if nome == "modello":
             return self._telegram_modello(b, argomento)
+        if nome in ("reasoning", "ragionamento"):
+            return self._telegram_ragionamento(b, argomento)
         return f"Comando /{nome} non riconosciuto. /aiuto per la lista."
+
+    def _telegram_ragionamento(self, bot: dict[str, Any],
+                               argomento: str) -> str:
+        """Accende o spegne il ragionamento in chat.
+
+        Senza argomento si comporta da interruttore, che e' quello che
+        serve dal telefono; on/off espliciti restano perche' uno script o
+        una scorciatoia devono poter dire lo stato voluto senza sapere
+        quale sia adesso.
+        """
+        from . import telegram as tg
+
+        valore = (argomento or "").strip().lower()
+        if valore in ("on", "si", "sì", "acceso", "mostra", "1"):
+            nuovo = True
+        elif valore in ("off", "no", "spento", "nascondi", "0"):
+            nuovo = False
+        elif not valore:
+            nuovo = not tg.ragionamento(bot["id"])
+        else:
+            return ("Uso: /reasoning per accenderlo o spegnerlo, oppure "
+                    "/reasoning on|off.")
+        if not tg.imposta_ragionamento(bot["id"], nuovo):
+            return ("Questo bot non e' collegato a Telegram: collega la chat "
+                    "dal pannello Bot, poi /reasoning funziona.")
+        return ("Ragionamento acceso: te lo mando a fine turno, e lo vedi "
+                "anche mentre lavoro." if nuovo
+                else "Ragionamento spento.")
 
     def telegram_tocco(self, bot_id: int, dati: str) -> str | dict[str, Any]:
         """Un pulsante premuto in chat.

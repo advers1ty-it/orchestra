@@ -114,7 +114,8 @@ MASSIMO_FILE = 20 * 1024 * 1024
 # I comandi che il ponte sa consegnare a chi gestisce la sessione: la
 # chat non entra nel merito, ma deve sapere cosa e' un comando suo e
 # cosa e' un errore di battitura.
-COMANDI_AGENTE = ("stato", "steer", "stop", "nuova", "modello")
+COMANDI_AGENTE = ("stato", "steer", "stop", "nuova", "modello",
+                  "reasoning", "ragionamento")
 
 # Il tetto del Bot API per un file in INVIO: oltre, Telegram risponde
 # 413 e il file non arriva. E' piu' alto di quello del download perche'
@@ -152,6 +153,9 @@ GUIDA = (
     "/modello - il modello in uso, e il menu per cambiarlo (prima il "
     "servizio, poi il modello: un tocco)\n"
     "/modello <nome> - cambia il modello scrivendone il nome\n"
+    "/reasoning (o /ragionamento) - mostra o nasconde il ragionamento "
+    "dell'agente: senza argomento accende e spegne, con on/off lo dice "
+    "esplicitamente\n"
     "/scollega - stacca questa chat\n"
     "/aiuto (o /guida) - questa lista\n\n"
     "Foto e documenti li leggo, i vocali li trascrivo se il motore "
@@ -254,6 +258,7 @@ CREATE TABLE IF NOT EXISTS telegram (
     username    TEXT NOT NULL DEFAULT '',
     chat_id     TEXT NOT NULL DEFAULT '',
     chat_nome   TEXT NOT NULL DEFAULT '',
+    ragionamento INTEGER NOT NULL DEFAULT 0,
     creato      REAL NOT NULL,
     aggiornato  REAL NOT NULL
 );
@@ -276,6 +281,14 @@ def _db() -> sqlite3.Connection:
                      "DEFAULT ''")
     except sqlite3.OperationalError:
         pass
+    # Stessa cosa per l'interruttore del ragionamento: chi ha gia' il
+    # database non lo ricrea di certo, e una colonna assente farebbe
+    # fallire ogni lettura dei collegamenti.
+    try:
+        conn.execute("ALTER TABLE telegram ADD COLUMN ragionamento INTEGER "
+                     "NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     return conn
 
@@ -287,6 +300,7 @@ def _riga(r: sqlite3.Row) -> dict[str, Any]:
         "username": r["username"] or "",
         "chat_id": r["chat_id"] or "",
         "chat_nome": r["chat_nome"] or "",
+        "ragionamento": bool(r["ragionamento"]),
     }
 
 
@@ -301,6 +315,36 @@ def token_di(bot_id: int | str) -> str:
         r = conn.execute("SELECT token FROM telegram WHERE bot_id = ?",
                          (int(bot_id),)).fetchone()
     return (r["token"] if r else "") or ""
+
+
+def ragionamento(bot_id: int | str) -> bool:
+    """Se il ragionamento dell'agente va mostrato in chat.
+
+    Falso e' il comportamento di sempre: in chat si vede cosa fa l'agente
+    e cosa risponde, non come ci e' arrivato. E' una scelta per bot e
+    resta scritta: chi la accende per capire un turno strano non deve
+    riaccenderla al messaggio dopo.
+    """
+    with _LOCK, _db() as conn:
+        r = conn.execute("SELECT ragionamento FROM telegram WHERE bot_id = ?",
+                         (int(bot_id),)).fetchone()
+    return bool(r and r["ragionamento"])
+
+
+def imposta_ragionamento(bot_id: int | str, acceso: bool) -> bool:
+    """Accende o spegne il ragionamento. False = chat non collegata.
+
+    False non e' un errore da nascondere: senza un collegamento non c'e'
+    una riga da aggiornare, e rispondere "fatto" lo stesso vorrebbe dire
+    promettere un'impostazione che al prossimo turno non c'e'.
+    """
+    with _LOCK, _db() as conn:
+        cur = conn.execute(
+            "UPDATE telegram SET ragionamento = ?, aggiornato = ? "
+            "WHERE bot_id = ?",
+            (1 if acceso else 0, time.time(), int(bot_id)))
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def chat_di(bot_id: int | str) -> tuple[str, str]:
@@ -758,7 +802,8 @@ class Api:
 
     def edit_message(self, chat_id: str | int, message_id: int,
                      testo: str, secondi: float = 15,
-                     markup: str | None = None) -> bool:
+                     markup: str | None = None,
+                     parse_mode: str | None = None) -> bool:
         """Riscrive un messaggio gia' mandato. False se non e' cambiato.
 
         "message is not modified" non e' un errore: arriva quando due
@@ -776,6 +821,8 @@ class Api:
         }
         if markup is not None:
             campi["reply_markup"] = markup
+        if parse_mode:
+            campi["parse_mode"] = parse_mode
         try:
             self.chiama("editMessageText", secondi=secondi, **campi)
         except ErroreTelegram as e:
@@ -825,13 +872,16 @@ class Api:
 
     def send_message(self, chat_id: str | int, testo: str,
                      secondi: float = 20,
-                     markup: str | None = None) -> dict[str, Any]:
+                     markup: str | None = None,
+                     parse_mode: str | None = None) -> dict[str, Any]:
         campi: dict[str, Any] = {
             "chat_id": str(chat_id), "text": testo,
             "disable_web_page_preview": "true",
         }
         if markup is not None:
             campi["reply_markup"] = markup
+        if parse_mode:
+            campi["parse_mode"] = parse_mode
         return self.chiama("sendMessage", secondi=secondi, **campi)
 
     def send_file(self, chat_id: str | int, nome: str, dati: bytes,
@@ -1028,6 +1078,121 @@ def dividi(testo: str, limite: int = MAX_TESTO) -> list[str]:
     return pezzi
 
 
+# ---- markdown -> HTML di Telegram ------------------------------------
+#
+# Il modello scrive in markdown: `**grassetto**`, `### titolo`, i blocchi
+# di codice. Telegram non lo interpreta — senza `parse_mode` quei segni
+# arrivano al telefono come caratteri, ed e' quello che si vedeva in chat
+# (`### 1. Controlla`, `**Ctrl + Maiusc + Esc**`).
+#
+# Si converte in HTML e non in MarkdownV2 di proposito: MarkdownV2
+# pretende che si escapi una dozzina di caratteri, e basta un underscore
+# in un nome di file per farsi rifiutare l'intero messaggio. L'HTML ha una
+# sola regola (`&`, `<`, `>`) e la conversione e' verificabile.
+_MD_FENCE = re.compile(r"```([A-Za-z0-9_+.-]*)\n?(.*?)```", re.S)
+_MD_TITOLO = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
+_MD_PUNTO = re.compile(r"^(\s*)[-*+]\s+")
+_MD_SEPARATORE = re.compile(r"^\s*([-*_])\1{2,}\s*$")
+_MD_CODICE = re.compile(r"`([^`\n]+)`")
+_MD_LINK = re.compile(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)")
+_MD_GRASSETTO = re.compile(r"\*\*(.+?)\*\*", re.S)
+_MD_BARRATO = re.compile(r"~~(.+?)~~", re.S)
+_MD_SOTTOLINEATO = re.compile(r"(?<![0-9A-Za-z])__(.+?)__(?![0-9A-Za-z])", re.S)
+_MD_CORSIVO = re.compile(r"(?<![*0-9A-Za-z])\*([^*\n]+)\*(?![*0-9A-Za-z])")
+_MD_ENFASI = re.compile(r"(?<![0-9A-Za-z])_([^_\n]+)_(?![0-9A-Za-z])")
+
+
+def _scappa(testo: str) -> str:
+    """Le tre cose che l'HTML di Telegram legge come codice."""
+    return (testo.replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
+def _in_linea(testo: str) -> str:
+    """Le marcature di una riga, con i pezzi di codice al riparo.
+
+    Il codice si sostituisce PRIMA con un segnaposto: dentro `a * b` un
+    asterisco non e' corsivo, e convertirne uno solo lascerebbe l'altro
+    in giro a rovinare il resto della riga.
+    """
+    codici: list[str] = []
+
+    def _codice(m):
+        codici.append("<code>" + m.group(1) + "</code>")
+        return f"\x00{len(codici) - 1}\x00"
+
+    testo = _MD_CODICE.sub(_codice, testo)
+    testo = _MD_LINK.sub(
+        lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', testo)
+    testo = _MD_GRASSETTO.sub(r"<b>\1</b>", testo)
+    testo = _MD_BARRATO.sub(r"<s>\1</s>", testo)
+    testo = _MD_SOTTOLINEATO.sub(r"<b>\1</b>", testo)
+    testo = _MD_CORSIVO.sub(r"<i>\1</i>", testo)
+    testo = _MD_ENFASI.sub(r"<i>\1</i>", testo)
+    for n, pezzo in enumerate(codici):
+        testo = testo.replace(f"\x00{n}\x00", pezzo)
+    return testo
+
+
+def _righe(blocco: str) -> str:
+    """Un pezzo di testo normale: prima le righe, poi le marcature."""
+    fuori = []
+    for riga in (blocco or "").replace("```", "").split("\n"):
+        riga = _scappa(riga)
+        titolo = _MD_TITOLO.match(riga)
+        if titolo:
+            fuori.append("<b>" + _in_linea(titolo.group(1)) + "</b>")
+            continue
+        if _MD_SEPARATORE.match(riga):
+            fuori.append("—————")
+            continue
+        fuori.append(_in_linea(_MD_PUNTO.sub(r"\1• ", riga)))
+    return "\n".join(fuori)
+
+
+def per_telegram(testo: str) -> str:
+    """Il testo da mandare, in HTML di Telegram.
+
+    I blocchi di codice si trattano a parte: dentro non si converte
+    niente, altrimenti un `**` in un sorgente diventerebbe grassetto e il
+    codice arriverebbe diverso da com'e' scritto.
+    """
+    parti: list[str] = []
+    ultimo = 0
+    for trovato in _MD_FENCE.finditer(testo or ""):
+        parti.append(_righe((testo or "")[ultimo:trovato.start()]))
+        lingua, corpo = trovato.group(1), trovato.group(2)
+        # La prima riga di un blocco senza lingua dichiarata e' spesso il
+        # nome della lingua (`python`): dentro <pre> e' solo rumore.
+        if not lingua and "\n" in corpo:
+            prima, resto = corpo.split("\n", 1)
+            if re.fullmatch(r"[A-Za-z0-9_+.-]{1,20}", prima.strip()):
+                corpo = resto
+        parti.append("<pre>" + _scappa(corpo.strip("\n")) + "</pre>")
+        ultimo = trovato.end()
+    parti.append(_righe((testo or "")[ultimo:]))
+    return "".join(parti)
+
+
+def semplice(testo: str) -> str:
+    """Il testo senza marcature: l'ultima risorsa se l'HTML e' rifiutato.
+
+    Un tag che Telegram non conosce fa 400 e il messaggio non parte: una
+    risposta brutta ma leggibile e' meglio di una risposta che non arriva,
+    perche' il lavoro e' stato fatto lo stesso.
+    """
+    fuori = []
+    for riga in (testo or "").split("\n"):
+        if _MD_SEPARATORE.match(riga):
+            fuori.append("—————")
+            continue
+        riga = _MD_TITOLO.sub(r"\1", riga)
+        riga = _MD_PUNTO.sub(r"\1• ", riga)
+        riga = riga.replace("**", "").replace("~~", "").replace("`", "")
+        fuori.append(riga)
+    return "\n".join(fuori)
+
+
 # ===================================================================
 #  Il ponte
 # ===================================================================
@@ -1214,6 +1379,35 @@ class Ponte:
         return gestiti
 
     # --- messaggi --------------------------------------------------
+    def _invia_testo(self, chat_id: str, testo: str,
+                     markup: str | None = None) -> dict[str, Any]:
+        """Manda un pezzo formattato, e ripiega se Telegram lo rifiuta.
+
+        Un tag sbagliato fa 400 e il messaggio non parte: in quel caso
+        parte lo stesso testo senza formattazione. Meglio brutto che perso.
+        """
+        try:
+            return self.api.send_message(chat_id, per_telegram(testo),
+                                         markup=markup, parse_mode="HTML")
+        except ErroreTelegram as e:
+            if e.codice != 400:
+                raise
+            return self.api.send_message(chat_id, semplice(testo),
+                                         markup=markup)
+
+    def _modifica_testo(self, chat_id: str, message_id: int, testo: str,
+                        markup: str | None = None) -> bool:
+        """Come `_invia_testo`, per un messaggio che si riscrive."""
+        try:
+            return self.api.edit_message(chat_id, message_id,
+                                         per_telegram(testo), markup=markup,
+                                         parse_mode="HTML")
+        except ErroreTelegram as e:
+            if e.codice != 400:
+                raise
+            return self.api.edit_message(chat_id, message_id,
+                                         semplice(testo), markup=markup)
+
     def _rispondi(self, chat_id: str, testo: str) -> None:
         """Manda la risposta a pezzi, e ritenta quando Telegram tentenna.
 
@@ -1226,7 +1420,7 @@ class Ponte:
         for pezzo in dividi(testo):
             for tentativo in range(3):
                 try:
-                    self.api.send_message(chat_id, pezzo)
+                    self._invia_testo(chat_id, pezzo)
                     break
                 except ErroreTelegram as e:
                     if not _ritentabile(e) or tentativo == 2:
@@ -1264,7 +1458,7 @@ class Ponte:
         for i, pezzo in enumerate(pezzi):
             ultimo = i == len(pezzi) - 1
             try:
-                inviato = self.api.send_message(
+                inviato = self._invia_testo(
                     chat_id, pezzo, markup=tastiera(righe) if ultimo else None)
             except ErroreTelegram as e:
                 self._log(f"telegram {self.nome}: modulo non inviato: {e}")
@@ -1359,9 +1553,9 @@ class Ponte:
             self._manda_modulo(chat_id, {"testo": testo, "tastiera": righe})
             return
         try:
-            self.api.edit_message(chat_id, message_id,
-                                  (testo or "Fatto.")[:MAX_TESTO],
-                                  markup=tastiera(righe))
+            self._modifica_testo(chat_id, message_id,
+                                 (testo or "Fatto.")[:MAX_TESTO],
+                                 markup=tastiera(righe))
         except ErroreTelegram as e:
             self._log(f"telegram {self.nome}: modulo non aggiornato: {e}")
 
@@ -1625,9 +1819,11 @@ class Ponte:
         # file}`. Una stringa resta valida — e' quello che torna un
         # chiamante che i file non li sa elencare.
         risposta = ""
+        ragionamento = ""
         prodotti: list[dict[str, Any]] = []
         if isinstance(esito, dict):
             risposta = str(esito.get("testo") or "").strip()
+            ragionamento = str(esito.get("ragionamento") or "").strip()
             prodotti = [f for f in (esito.get("file") or [])
                        if isinstance(f, dict)]
         else:
@@ -1636,6 +1832,11 @@ class Ponte:
             risposta = ("Il turno e' finito senza una risposta testuale. "
                         "Il lavoro puo' essere comunque stato fatto: "
                         "controlla nella finestra di Orchestra.")
+        # Prima il ragionamento, poi la risposta: cosi' l'ultima cosa in
+        # chat e' quello che conta, e chi l'ha acceso lo legge
+        # scorrendo all'indietro quando vuole.
+        if ragionamento:
+            self._rispondi(chat_id, "Ragionamento del turno:\n" + ragionamento)
         self._rispondi(chat_id, risposta)
         if prodotti:
             self._manda_file(chat_id, prodotti)
@@ -1671,8 +1872,9 @@ class Ponte:
         if not chat or not messaggio:
             return
         try:
-            self.api.edit_message(chat, messaggio, (testo or "Fatto.")[:MAX_TESTO],
-                                  markup=tastiera(None))
+            self._modifica_testo(chat, messaggio,
+                                 (testo or "Fatto.")[:MAX_TESTO],
+                                 markup=tastiera(None))
         except ErroreTelegram as e:
             self._log(f"telegram {self.nome}: modulo non chiuso: {e}")
 
@@ -1843,7 +2045,7 @@ class Ponte:
                 if ora - stato["inizio"] < PRIMO_AVVISO:
                     return
                 try:
-                    inviato = self.api.send_message(chat_id, testo)
+                    inviato = self._invia_testo(chat_id, testo)
                 except ErroreTelegram as e:
                     self._log(f"telegram {self.nome}: stato non inviato: {e}")
                     return
@@ -1857,7 +2059,7 @@ class Ponte:
             if testo == stato["testo"]:
                 return
             try:
-                self.api.edit_message(chat_id, stato["id"], testo)
+                self._modifica_testo(chat_id, stato["id"], testo)
             except ErroreTelegram as e:
                 self._log(f"telegram {self.nome}: stato non aggiornato: {e}")
             stato["ultimo"] = ora
@@ -1876,8 +2078,8 @@ class Ponte:
         pendenti = stato.get("pendenti") or []
         if pendenti and stato.get("azioni", 0) < MAX_AZIONI:
             try:
-                self.api.send_message(stato["chat"],
-                                      "\n".join(a[:200] for a in pendenti[:6]))
+                self._invia_testo(stato["chat"],
+                                  "\n".join(a[:200] for a in pendenti[:6]))
             except ErroreTelegram as e:
                 self._log(f"telegram {self.nome}: azione non inviata: {e}")
         stato["pendenti"] = []

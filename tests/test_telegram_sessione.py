@@ -1096,9 +1096,11 @@ class ApiInstabile:
     def __init__(self, codici):
         self.codici = list(codici)
         self.mandati = []
+        self.modi = []
 
-    def send_message(self, chat_id, testo, **_kw):
+    def send_message(self, chat_id, testo, **kw):
         self.mandati.append(testo)
+        self.modi.append(kw.get("parse_mode"))
         if self.codici:
             raise tg.ErroreTelegram("rifiutato", self.codici.pop(0))
         return {"ok": True}
@@ -1118,9 +1120,48 @@ check("dopo due rifiuti temporanei il messaggio parte",
 api400 = ApiInstabile([400])
 ponte400 = tg.Ponte(2, "Prova", api400, lambda *a, **k: "")
 ponte400._rispondi("42", "la risposta")
-check("un 400 invece non si ritenta", len(api400.mandati) == 1,
-      str(len(api400.mandati)))
+# Un 400 non e' temporaneo: si ritenta UNA volta, senza formattazione
+# (il caso vero e' "can't parse entities"), e poi si smette.
+check("un 400 fa un solo ripiego, senza ritentativi",
+      len(api400.mandati) == 2 and api400.modi == ["HTML", None],
+      str(api400.modi))
+check("e la seconda volta il testo arriva senza segni",
+      api400.mandati[-1] == "la risposta", cp(str(api400.mandati)))
 tg.RITENTA_ATTESA = attesa_vera
+
+print("\n[27] /reasoning: il ragionamento si accende dalla chat, e resta")
+# Il ragionamento non arrivava mai: il ponte teneva solo la coda dei tool e
+# del testo. Serve un interruttore, e serve che resti acceso: chi lo accende
+# per capire un turno strano non deve riaccenderlo al messaggio dopo.
+app_rag, sess_rag = app_finta()
+_token_rag = "123456789:" + "a" * 35
+tg.salva_token(bot["id"], _token_rag)
+esito_rag = app_rag.telegram_comando(bot["id"], "reasoning")
+check("senza argomento lo accende", "acceso" in esito_rag.lower(),
+      cp(esito_rag))
+check("e la scelta e' salvata", tg.ragionamento(bot["id"]) is True, "spento")
+esito_rag = app_rag.telegram_comando(bot["id"], "reasoning", "off")
+check("con off lo spegne", "spento" in esito_rag.lower()
+      and tg.ragionamento(bot["id"]) is False, cp(esito_rag))
+esito_rag = app_rag.telegram_comando(bot["id"], "ragionamento", "boh")
+check("un argomento che non e' on/off lo dice", "Uso:" in esito_rag,
+      cp(esito_rag))
+# Lo stato mostra il pensiero solo quando e' acceso: da spento e' rumore,
+# ma resta il caso del turno lungo che senza testo sembrerebbe fermo.
+stato_rag = {"inizio": time.monotonic(), "giro": 0, "tool": [],
+             "testo": "la risposta e' pronta",
+             "ragiona": "sto controllando i file"}
+check("spento: lo stato non mostra il ragionamento",
+      "sto controllando" not in app_rag._telegram_stato(bot, stato_rag),
+      cp(app_rag._telegram_stato(bot, stato_rag)))
+check("acceso: lo mostra accanto al testo",
+      "sto controllando" in app_rag._telegram_stato(bot, stato_rag, True),
+      cp(app_rag._telegram_stato(bot, stato_rag, True)))
+check("e senza testo lo mostra comunque",
+      "sto controllando" in app_rag._telegram_stato(
+          bot, dict(stato_rag, testo="")),
+      cp(app_rag._telegram_stato(bot, dict(stato_rag, testo=""))))
+tg.salva_token(bot["id"], "")
 
 print()
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")

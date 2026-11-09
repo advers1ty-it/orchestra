@@ -1064,6 +1064,75 @@ else:
           not isinstance(modello.sorgente, (str, bytes)),
           type(modello.sorgente).__name__)
 
+print("\n[27] il markdown diventa HTML: Telegram non lo interpreta da solo")
+# Il difetto visto in chat: `### 1. Controlla` e `**Ctrl + Maiusc + Esc**`
+# arrivavano al telefono come caratteri, perche' si mandava il testo del
+# modello senza `parse_mode`.
+check("il grassetto",
+      tg.per_telegram("Premi **Ctrl + Maiusc + Esc**")
+      == "Premi <b>Ctrl + Maiusc + Esc</b>",
+      cp(tg.per_telegram("Premi **Ctrl + Maiusc + Esc**")))
+check("i titoli perdono i cancelletti",
+      tg.per_telegram("### 1. Controlla i programmi")
+      == "<b>1. Controlla i programmi</b>",
+      cp(tg.per_telegram("### 1. Controlla i programmi")))
+check("gli elenchi hanno il punto",
+      tg.per_telegram("- uno\n* due") == "• uno\n• due",
+      cp(tg.per_telegram("- uno\n* due")))
+check("dentro un blocco di codice non si converte niente",
+      tg.per_telegram("```\nx = 1 < 2 && y ** 2\n```")
+      == "<pre>x = 1 &lt; 2 &amp;&amp; y ** 2</pre>",
+      cp(tg.per_telegram("```\nx = 1 < 2 && y ** 2\n```")))
+check("il codice in linea",
+      tg.per_telegram("usa `a < b` e `c > d`")
+      == "usa <code>a &lt; b</code> e <code>c &gt; d</code>",
+      cp(tg.per_telegram("usa `a < b` e `c > d`")))
+check("il corsivo con _ non tocca i nomi di file",
+      tg.per_telegram("_piano_, e il file mio_file.py")
+      == "<i>piano</i>, e il file mio_file.py",
+      cp(tg.per_telegram("_piano_, e il file mio_file.py")))
+check("i link",
+      tg.per_telegram("vedi [i documenti](https://example.com/a)")
+      == 'vedi <a href="https://example.com/a">i documenti</a>',
+      cp(tg.per_telegram("vedi [i documenti](https://example.com/a)")))
+check("la riga di separazione", tg.per_telegram("---") == "—————",
+      cp(tg.per_telegram("---")))
+check("il testo normale non cambia",
+      tg.per_telegram("Ciao, come va?") == "Ciao, come va?",
+      cp(tg.per_telegram("Ciao, come va?")))
+check("e il ripiego toglie i segni",
+      tg.semplice("### Titolo\n**forte** e `codice`") == "Titolo\nforte e codice",
+      cp(tg.semplice("### Titolo\n**forte** e `codice`")))
+
+
+class RifiutaHTML(FintoTelegram):
+    """Un Telegram che non accetta `parse_mode`: il 400 vero."""
+
+    def __call__(self, url, dati, secondi):
+        if isinstance(dati, dict) and dati.get("parse_mode"):
+            raise tg.ErroreTelegram("Bad Request: can't parse entities", 400)
+        return super().__call__(url, dati, secondi)
+
+
+finto_html = RifiutaHTML()
+api_html = tg.Api(TOKEN, trasporto=finto_html, scarica=finto_html.scarica,
+                  carica=finto_html.carica)
+ponte_html = tg.Ponte(31, "Prova", api_html, lambda *a, **k: "")
+ponte_html._rispondi("777", "### Titolo\n**forte**")
+check("se l'HTML viene rifiutato arriva lo stesso, senza segni",
+      finto_html.ultimo_inviato() == "Titolo\nforte",
+      cp(finto_html.ultimo_inviato()))
+
+print("\n[28] /reasoning: spento per default, e la scelta resta")
+tg.salva_token(9, TOKEN)
+check("di partenza e' spento", tg.ragionamento(9) is False, "acceso")
+check("si accende", tg.imposta_ragionamento(9, True) is True)
+check("e resta acceso", tg.ragionamento(9) is True, "spento")
+check("si spegne", tg.imposta_ragionamento(9, False) is True
+      and tg.ragionamento(9) is False)
+check("un bot senza collegamento non finge di averlo salvato",
+      tg.imposta_ragionamento(77, True) is False)
+
 print()
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
