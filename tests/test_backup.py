@@ -344,6 +344,18 @@ finally:
     if home_prima is not None:
         os.environ["ORCHESTRA_HOME"] = home_prima
 
+print("[10] con la cartella dati scelta a mano non si registra il percorso")
+casa10 = tempfile.mkdtemp(prefix="orch-home-")
+os.environ["ORCHESTRA_HOME"] = casa10
+try:
+    scritto = dati_mod.registra_installazione()
+    check("nessun segnaposto scritto con ORCHESTRA_HOME",
+          scritto is False
+          and not os.path.isfile(os.path.join(casa10, dati_mod.SEGNAPOSTO)),
+          str(scritto))
+finally:
+    os.environ.pop("ORCHESTRA_HOME", None)
+
 print(f"\n{_conta} check, {len(_falliti)} falliti")
 if _falliti:
     print("FALLITI: " + ", ".join(_falliti))

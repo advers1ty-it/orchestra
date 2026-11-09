@@ -239,6 +239,13 @@ def registra_installazione(radice: str = "") -> bool:
     (primo avvio, o installazione spostata), perche' un file riscritto a
     ogni avvio e' un file che entra nei backup senza motivo.
     """
+    if os.environ.get("ORCHESTRA_HOME"):
+        # Con la cartella dati scelta a mano, il percorso del codice NON
+        # dice da dove vengono questi dati: chiunque puo' avviare una
+        # copia di Orchestra e puntarla sui dati di un'altra. Scrivere
+        # quel percorso sarebbe una bugia che l'elenco mostrerebbe come
+        # vera, e su cui poi si deciderebbe quale `.env` usare.
+        return False
     cartella = cartella_dati()
     radice = os.path.abspath(radice or os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))))
