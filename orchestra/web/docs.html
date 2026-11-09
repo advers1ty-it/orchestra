@@ -176,6 +176,9 @@
 <h3>Permessi</h3>
 <p>Cosa è stato concesso all'agente e cosa no. Il pulsante <b>Prova il canale</b> fa comparire una domanda di prova: così scopri qui, senza spendere un token, se la finestra dei permessi funziona. Le cartelle di sistema non sono autorizzabili.</p>
 
+<h3>La posta</h3>
+<p>Nelle chiavi non c'è un campo per la casella: si configura nel <code>.env</code> con <code>ORCHESTRA_MAIL_INDIRIZZO</code> e <code>ORCHESTRA_MAIL_PASSWORD</code>. Il motivo è che la password per le app è un segreto come una chiave API, e il campo delle chiavi lo mostrerebbe in parte nella stessa lista. Il dettaglio dei server è in <a href="#tool">La posta</a>.</p>
+
 <h3>Diagnosi</h3>
 <p>Quattro controlli che girano dal server, con l'output sotto: <b>doctor</b> (configurazione e connessione), <b>model-list</b> (modelli supportati), <b>bench-show</b> (task del benchmark), <b>dipendenze</b> (cosa manca tra le dipendenze elencate in requirements.txt). È il primo posto dove guardare quando «non funziona niente».</p>
 
@@ -242,6 +245,18 @@
 <div class="nota"><b>Se hai fretta:</b> l'undo è la rete di sicurezza, non un backup. Per i lavori importanti, committa prima di far toccare i file all'agente.</div>
 </section>
 
+<section id="backup">
+<h2>Backup e ripristino</h2>
+<p>Memoria, cronologia, bot, lavori, collegamenti Telegram, budget e cron stanno in una cartella dati fuori dal progetto. Reinstallare Orchestra su un altro computer non li porta con sé: per questo esiste un comando che li mette in un archivio, e uno che li rimette.</p>
+<pre><code>python -m orchestra.cli backup                      # cartella dati/backup, con il .env
+python -m orchestra.cli backup --senza-chiavi       # solo i dati, nessun segreto
+python -m orchestra.cli restore percorso\del.zip    # rimette i dati
+</code></pre>
+<p>L'archivio contiene i file così come sono, più un manifesto con la versione che l'ha creato. I database non vengono copiati a mano: si usa il backup di sqlite, perché con il journal WAL il solo <code>.db</code> può non contenere le ultime scritture — e un backup incompleto si scopre al ripristino, cioè nel momento peggiore.</p>
+<p>Il ripristino <b>salva prima lo stato attuale</b> e poi sovrascrive: se l'archivio è quello sbagliato, il file di prima è nella stessa cartella <code>backup</code>. Un archivio che non ha il manifesto, o che contiene percorsi fuori dalla cartella dati, viene rifiutato invece di essere aperto «sperando che vada». Dopo un ripristino va riavviata Orchestra, perché i dati si leggono all'avvio.</p>
+<div class="nota"><b>Le chiavi:</b> con il <code>.env</code> dentro, l'archivio contiene le tue chiavi API. Serve per non doverle reinserire una per una su un computer nuovo, ma quel file va tenuto come un portachiavi: non condividerlo e non metterlo in un repository.</div>
+</section>
+
 <section id="progetti">
 <h2>Progetti</h2>
 <p>Un progetto non è un'etichetta: è la <b>cartella in cui l'agente scrive</b>, e quindi il confine di sicurezza. Il selettore «Attivo» nella barra laterale cambia subito la cartella; il pulsante <b>Gestione</b> serve ad aggiungerne altri (nome e percorso) o a toglierli.</p>
@@ -258,6 +273,11 @@
 <section id="tool">
 <h2>Cosa può fare l'agente</h2>
 <p>Legge e scrive file, cerca nel progetto, esegue comandi, naviga il web, genera immagini, apre un browser, ragiona su dati. Gli strumenti disponibili dipendono dal <b>profilo</b> scelto in Opzioni → Modello: <b>pieno</b> li dà tutti, <b>base</b> solo file, comandi e calcoli, <b>ricerca</b> aggiunge web e memoria, <b>skill</b> aggiunge le procedure salvate, <b>auto</b> decide in base a cosa scrivi.</p>
+
+<h3>La posta</h3>
+<p>L'agente può leggere la casella e mandare messaggi, con i protocolli che usano tutti: <b>IMAP</b> per leggere, <b>SMTP</b> per inviare. Non serve un servizio di invio: si collega alla casella che hai già (Gmail, Outlook, Libero, Virgilio, Aruba, Tiscali, iCloud, Yahoo, Fastmail, GMX, o un server tuo).</p>
+<p>La configurazione sta nel <code>.env</code>: <code>ORCHESTRA_MAIL_INDIRIZZO</code>, <code>ORCHESTRA_MAIL_PASSWORD</code> e, se il fornitore non è nell'elenco, <code>ORCHESTRA_MAIL_PROVIDER</code> oppure <code>ORCHESTRA_MAIL_IMAP_HOST</code> e <code>ORCHESTRA_MAIL_SMTP_HOST</code>. La password <b>non</b> è quella dell'account: Gmail e Outlook vogliono una <b>password per le app</b>, generata nelle impostazioni di sicurezza, che si revoca senza cambiare quella vera. Con la password normale il server risponde «autenticazione fallita» e sembra un errore di battitura.</p>
+<p>La lettura è in sola lettura, quindi non sposta i messaggi né li segna come letti. L'invio parte solo quando glielo chiedi: il messaggio, i destinatari e gli allegati sono quelli che hai indicato, e un allegato che non esiste ferma l'invio invece di mandare la mail senza il file.</p>
 
 <h3>La cartella di lavoro è un confine</h3>
 <p>Dentro il progetto l'agente lavora liberamente. Fuori, no: compare una domanda con quattro scelte — <b>Solo questa volta</b>, <b>Per questa sessione</b> (due ore), <b>Sempre</b>, <b>Mai</b>. Le cartelle di sistema non sono autorizzabili e vengono negate senza domanda. «Mai» resta ricordato e si revoca da Opzioni → Permessi.</p>

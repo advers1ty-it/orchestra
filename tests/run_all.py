@@ -39,6 +39,13 @@ SUITES = [
     ("resilienza", "test_resilience.py", True),
     ("orchestrazione", "test_orchestrazione.py", True),
     ("update", "test_update.py", True),
+    # Il backup non e' "lo zip esiste": e' che il database dentro sia
+    # consistente anche con il WAL, e che il ripristino rimetta i file
+    # senza uscire dalla cartella dati.
+    ("backup", "test_backup.py", True),
+    # Posta con server finti: preset, filtri IMAP e busta SMTP. Nessuna
+    # rete, nessuna password vera.
+    ("mail", "test_mail.py", True),
     ("shell", "test_shell.py", True),
     # I processi che restano vivi: avvio, lettura, stop, e i permessi che
     # non si aggirano passando dal background. La prova vera avvia un

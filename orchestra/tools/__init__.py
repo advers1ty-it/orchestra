@@ -66,6 +66,7 @@ from .memoria import tool_memoria  # noqa: E402
 from .web import tool_web_cerca, tool_web_leggi  # noqa: E402
 from .storico import tool_storico_cerca  # noqa: E402
 from .cron import tool_cron  # noqa: E402
+from .email import tool_email  # noqa: E402
 from .mcp import tool_mcp  # noqa: E402
 from .skill import (
     tool_skill_cerca,
@@ -332,8 +333,13 @@ _PROFILI: dict[str, set[str]] = {
 # costringe l'agente a indovinare proprio quando ha meno strumenti per
 # verificare, che e' il momento peggiore per indovinare.
 for _nomi_profilo in _PROFILI.values():
+    # `email` sta qui per la stessa ragione di `ask_user`: scrivere a una
+    # persona e' un modo di comunicare, non una capacita' di sistema da
+    # sbloccare salendo di profilo. Un profilo che la toglie costringe
+    # l'agente a dire "non posso leggere la posta" a chi gliel'ha chiesto.
     _nomi_profilo.update({"search_text", "find_files", "ask_user",
-                          "proponi_piano", "analisi_python", "run_tests"})
+                          "proponi_piano", "analisi_python", "run_tests",
+                          "email"})
 del _nomi_profilo
 
 
@@ -471,7 +477,7 @@ def default_registry() -> ToolRegistry:
                  tool_image_gen(), tool_image_edit(),
                  tool_computer_screenshot(), tool_computer_click(),
                  tool_computer_open(), tool_computer_type(),
-                 tool_mcp()):
+                 tool_mcp(), tool_email()):
         registry.registra(tool)
         registry.attiva(tool.name)
 

@@ -684,6 +684,39 @@ def cmd_goal_next(args: argparse.Namespace) -> int:
     return 0 if g.get("status") == "done" else 1
 
 
+def cmd_backup(args: argparse.Namespace) -> int:
+    from . import backup as bkp
+    try:
+        esito = bkp.crea(args.out or "",
+                         con_chiavi=not getattr(args, "senza_chiavi", False))
+    except Exception as e:  # noqa: BLE001 - un errore va detto, non tracciato
+        print(f"backup: {e}", file=sys.stderr)
+        return 1
+    print(f"backup scritto: {esito['percorso']}")
+    print(f"{esito['file']} file, {max(1, esito['byte'] // 1024)} KB")
+    if esito["con_chiavi"]:
+        print("contiene il .env: dentro ci sono le chiavi, tienilo al sicuro")
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    from . import backup as bkp
+    try:
+        esito = bkp.ripristina(args.archivio,
+                               con_chiavi=not getattr(args, "senza_chiavi", False))
+    except Exception as e:  # noqa: BLE001
+        print(f"ripristino: {e}", file=sys.stderr)
+        return 1
+    print(f"ripristinati {esito['ripristinati']} file"
+          + (f" da un backup della {esito['versione']}" if esito["versione"] else ""))
+    if esito["chiavi"]:
+        print("ripristinato anche il .env (chiavi comprese)")
+    if esito["sicurezza"]:
+        print(f"prima di toccare: {esito['sicurezza']}")
+    print("riavvia Orchestra: i dati nuovi si leggono all'avvio")
+    return 0
+
+
 def cmd_update(args: argparse.Namespace) -> int:
     from . import update as upd
     repo = getattr(args, "repo", None) or "advers1ty-it/orchestra"
@@ -856,6 +889,19 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--una-volta", action="store_true",
                     help="svuota la coda e esci, senza restare in attesa")
     sc.set_defaults(func=cmd_scheduler)
+
+    bk = sub.add_parser("backup", help="salva dati, memoria e chiavi in un archivio")
+    bk.add_argument("--out", default="",
+                    help="file .zip di destinazione (default: cartella dati/backup)")
+    bk.add_argument("--senza-chiavi", action="store_true",
+                    help="non includere il .env (l'archivio non contiene segreti)")
+    bk.set_defaults(func=cmd_backup)
+
+    rs = sub.add_parser("restore", help="rimette i dati da un archivio di backup")
+    rs.add_argument("archivio", help="il .zip creato da `orchestra backup`")
+    rs.add_argument("--senza-chiavi", action="store_true",
+                    help="non ripristinare il .env")
+    rs.set_defaults(func=cmd_restore)
 
     u = sub.add_parser("update", help="aggiorna l'app dall'ultima release GitHub")
     u.add_argument("--check", action="store_true",
