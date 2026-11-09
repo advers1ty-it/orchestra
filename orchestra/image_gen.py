@@ -839,6 +839,26 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
             "alternativa la skill `invokeai` genera in locale senza chiave."
             + (f" Trovate: {', '.join(configurati)}." if configurati else "")
         )
+    # Un provider chiesto e senza chiave non vuol dire "nessuna chiave": qui
+    # si dice quale manca e quale c'e'. Senza questa distinzione l'errore
+    # faceva concludere al modello che immagini e chiavi fossero fuori uso,
+    # e la risposta all'utente era "mancano le chiavi API" con OpenRouter
+    # configurato e funzionante.
+    if not chiave(scelto, env):
+        variabili = " o ".join(CHIAVI.get(scelto, ()))
+        altre = [p for p in MODELLI if chiave(p, env)]
+        nota = ""
+        if altre:
+            disponibili = " o ".join(
+                f"{CHIAVI.get(p, ('',))[0]} ({p})" for p in altre)
+            nota = (f" Al momento c'e' {disponibili}: richiama il tool senza "
+                    f"`provider` e uso quella.")
+        raise ImageGenError(
+            f"manca {variabili}, la chiave di {scelto}, che hai chiesto "
+            f"esplicitamente. Mettila nel pannello Opzioni (chiavi), oppure "
+            f"togli `provider` e lascia scegliere il provider configurato."
+            + nota
+        )
     if maschera and scelto != "openai":
         raise ImageGenError(
             "la maschera per l'inpainting la accetta solo OpenAI: Google e "

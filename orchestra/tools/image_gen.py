@@ -261,7 +261,9 @@ def tool_image_gen() -> Tool:
             "pass `zone`: rectangles or ellipses in pixels or percentages, "
             "and the tool builds the mask itself. Inpainting works only "
             "with OpenAI; with Google and OpenRouter the tool says so "
-            "instead of starting. With `elenco_modelli` it lists the "
+            "instead of starting. To keep an existing image pixel for "
+            "pixel (a poster whose price and text must not change), use "
+            "`image_edit` instead: this tool redraws. With `elenco_modelli` it lists the "
             "OpenRouter image models, so one can be picked with `modello`. "
             "It spends money or provider credit: use it when the user asks "
             "to create or transform an image, not to describe an "
@@ -307,8 +309,12 @@ def tool_image_gen() -> Tool:
                 "provider": {
                     "type": "string",
                     "enum": ["openai", "google", "openrouter"],
-                    "description": "Forces a provider. When omitted, the "
-                                   "one with a configured key is used.",
+                    "description": "Forces a provider. Omit it unless the "
+                                   "user asks for a specific service: the "
+                                   "provider whose key is configured is "
+                                   "picked automatically, and forcing one "
+                                   "without a key fails even when another "
+                                   "provider is ready to go.",
                 },
                 "modello": {
                     "type": "string",

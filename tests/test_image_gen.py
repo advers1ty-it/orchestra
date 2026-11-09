@@ -667,6 +667,21 @@ try:
               "3" in str(e) and "allegato:1" in str(e), str(e)[:140])
     att._ultime_immagini = []
 
+    # Chiedere un provider senza chiave non e' "nessuna chiave": l'errore
+    # dice quale manca e quale c'e', altrimenti il modello risponde
+    # "mancano le chiavi API" con OpenRouter configurato.
+    env_una = {"OPENROUTER_API_KEY": "sk-or-v1-finta",
+               "ORCHESTRA_PROVIDER": "openrouter"}
+    try:
+        ig.genera("una prova", provider="openai", env=env_una)
+        check("forzare un provider senza chiave lo dice", False, "nessun errore")
+    except ig.ImageGenError as e:
+        testo = str(e)
+        check("forzare un provider senza chiave dice quale manca",
+              "OPENAI_API_KEY" in testo, testo[:160])
+        check("e dice anche quale c'e'",
+              "OPENROUTER_API_KEY" in testo, testo[:200])
+
     # Tre foto a piena risoluzione in base64 sono peso che il modello non
     # usa e che si paga in token: prima di partire si accorcia il lato lungo.
     try:
