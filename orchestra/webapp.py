@@ -3693,6 +3693,7 @@ class Handler(Rotte, BaseHTTPRequestHandler):
         "panels-bench.js", "panels-opzioni.js", "panels-lavoro.js",
         "panels-skill.js", "panels-storia.js", "panels-shell.js",
         "panels-progetto.js", "panels-automazioni.js", "panels-bot.js",
+        "panels-backup.js",
         "modelpick.js", "main.js",
     )
 

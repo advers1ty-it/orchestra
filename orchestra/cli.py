@@ -686,13 +686,43 @@ def cmd_goal_next(args: argparse.Namespace) -> int:
 
 def cmd_backup(args: argparse.Namespace) -> int:
     from . import backup as bkp
+    from . import dati as dati_mod
+
+    # L'elenco esiste perche' ogni installazione ha una cartella dati con
+    # un nome che e' un hash: senza percorsi, "quale salvo" non e' una
+    # domanda a cui l'utente possa rispondere.
+    if getattr(args, "elenco", False):
+        for voce in dati_mod.installazioni():
+            segno = "*" if voce["corrente"] else " "
+            print(f"{segno} {voce['percorso'] or '(percorso non registrato)'}")
+            print(f"    id {voce['id']} | {voce['file']} file | "
+                  f"{max(1, voce['byte'] // 1024)} KB")
+            print(f"    dati: {voce['dati']}")
+            if voce.get("versione"):
+                print(f"    versione {voce['versione']}")
+        return 0
+
+    con_chiavi = not getattr(args, "senza_chiavi", False)
+    if getattr(args, "tutte", False):
+        errori = 0
+        for esito in bkp.crea_tutte(con_chiavi=con_chiavi):
+            if esito["esito"] == "ok":
+                print(f"ok   {esito['profilo']}: {esito['percorso']} "
+                      f"({max(1, esito['byte'] // 1024)} KB)")
+            else:
+                errori += 1
+                print(f"errore {esito['profilo']}: {esito['errore']}",
+                      file=sys.stderr)
+        return 1 if errori else 0
+
     try:
-        esito = bkp.crea(args.out or "",
-                         con_chiavi=not getattr(args, "senza_chiavi", False))
+        esito = bkp.crea(args.out or "", con_chiavi=con_chiavi,
+                         installazione=getattr(args, "profilo", "") or None)
     except Exception as e:  # noqa: BLE001 - un errore va detto, non tracciato
         print(f"backup: {e}", file=sys.stderr)
         return 1
     print(f"backup scritto: {esito['percorso']}")
+    print(f"installazione: {esito['profilo']}")
     print(f"{esito['file']} file, {max(1, esito['byte'] // 1024)} KB")
     if esito["con_chiavi"]:
         print("contiene il .env: dentro ci sono le chiavi, tienilo al sicuro")
@@ -702,13 +732,17 @@ def cmd_backup(args: argparse.Namespace) -> int:
 def cmd_restore(args: argparse.Namespace) -> int:
     from . import backup as bkp
     try:
-        esito = bkp.ripristina(args.archivio,
-                               con_chiavi=not getattr(args, "senza_chiavi", False))
+        esito = bkp.ripristina(
+            args.archivio,
+            con_chiavi=not getattr(args, "senza_chiavi", False),
+            installazione=getattr(args, "profilo", "") or None)
     except Exception as e:  # noqa: BLE001
         print(f"ripristino: {e}", file=sys.stderr)
         return 1
-    print(f"ripristinati {esito['ripristinati']} file"
+    print(f"ripristinati {esito['ripristinati']} file in {esito['profilo']}"
           + (f" da un backup della {esito['versione']}" if esito["versione"] else ""))
+    if esito.get("da"):
+        print(f"l'archivio viene da: {esito['da']}")
     if esito["chiavi"]:
         print("ripristinato anche il .env (chiavi comprese)")
     if esito["sicurezza"]:
@@ -895,12 +929,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="file .zip di destinazione (default: cartella dati/backup)")
     bk.add_argument("--senza-chiavi", action="store_true",
                     help="non includere il .env (l'archivio non contiene segreti)")
+    bk.add_argument("--elenco", action="store_true",
+                    help="elenca le installazioni con i loro percorsi, senza salvare")
+    bk.add_argument("--tutte", action="store_true",
+                    help="salva tutte le installazioni, un archivio per ciascuna")
+    bk.add_argument("--profilo", default="",
+                    help="quale installazione salvare: percorso, cartella dati o id")
     bk.set_defaults(func=cmd_backup)
 
     rs = sub.add_parser("restore", help="rimette i dati da un archivio di backup")
     rs.add_argument("archivio", help="il .zip creato da `orchestra backup`")
     rs.add_argument("--senza-chiavi", action="store_true",
                     help="non ripristinare il .env")
+    rs.add_argument("--profilo", default="",
+                    help="dove ripristinare (default: l'installazione corrente)")
     rs.set_defaults(func=cmd_restore)
 
     u = sub.add_parser("update", help="aggiorna l'app dall'ultima release GitHub")

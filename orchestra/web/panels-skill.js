@@ -569,6 +569,11 @@ function mostraSezione(nome) {
   if (nome === "remoto") caricaRemoto();
   if (nome === "autostart") caricaAutostart();
   if (nome === "benchmark") { /* il benchmark resta nel suo pannello */ }
+  // Il backup si carica quando lo apri: elencare installazioni e archivi
+  // all'avvio aggiungerebbe una richiesta (e una scansione di cartelle)
+  // a ogni apertura del pannello, anche quando si va solo a cambiare
+  // modello.
+  if (nome === "backup" && typeof caricaBackup === "function") caricaBackup();
 }
 
 function caricaRemoto() {

@@ -2132,3 +2132,17 @@ select:disabled {
 .bot-persona { display: flex; flex-direction: column; gap: 4px;
                margin-top: 12px; }
 .bot-persona textarea { width: 100%; resize: vertical; }
+
+/* ---- Backup: una riga per installazione, con il percorso in chiaro.
+   Il percorso e' la ragione per cui questo pannello esiste: la cartella
+   dati si chiama con un hash, e nessuno lo riconosce. ---- */
+.backup-elenco, .backup-archivi { display: flex; flex-direction: column;
+                                  gap: 8px; margin-top: 10px; }
+.backup-riga { border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+               border-radius: 8px; padding: 8px 10px;
+               display: flex; flex-direction: column; gap: 4px; }
+.backup-testa { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.backup-qui { font-size: 11px; padding: 1px 6px; border-radius: 999px;
+              background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.backup-dati { overflow-wrap: anywhere; }
+.backup-barra { display: flex; gap: 8px; margin-top: 4px; }

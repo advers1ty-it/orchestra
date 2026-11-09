@@ -178,6 +178,109 @@ try:
 except RuntimeError as e:
     check("home vuota segnalata", "niente da salvare" in str(e), str(e))
 
+print("[9] piu' installazioni: elenco per percorso, e scelta quale salvare")
+import json  # noqa: E402
+import orchestra.dati as dati_mod  # noqa: E402
+
+base = tempfile.mkdtemp(prefix="orch-base-")
+prima_inst = os.path.join(base, "aaaa1111")
+seconda_inst = os.path.join(base, "bbbb2222")
+os.makedirs(prima_inst)
+os.makedirs(seconda_inst)
+for cartella, percorso in ((prima_inst, r"C:\prova\a"),
+                           (seconda_inst, r"D:\orchestra")):
+    with open(os.path.join(cartella, "memory.md"), "w", encoding="utf-8") as f:
+        f.write("memoria di " + percorso + "\n")
+    with open(os.path.join(cartella, dati_mod.SEGNAPOSTO), "w", encoding="utf-8") as f:
+        json.dump({"percorso": percorso, "versione": "0.5.90",
+                   "creato": "2026-11-01T10:00:00"}, f)
+
+# Rumore accanto alle installazioni: succede davvero. Sotto
+# %LOCALAPPDATA%\orchestra ci finiscono una copia del codice, i test e un
+# Python — e "Salva tutti" non deve prenderli per installazioni.
+rumore_codice = os.path.join(base, "orchestra")
+rumore_moduli = os.path.join(base, "node_modules")
+os.makedirs(rumore_codice)
+os.makedirs(rumore_moduli)
+with open(os.path.join(rumore_codice, "budget_global.json"), "w", encoding="utf-8") as f:
+    f.write("{}")
+with open(os.path.join(rumore_moduli, "x.js"), "w", encoding="utf-8") as f:
+    f.write("// nulla")
+
+# Un'installazione vecchia, senza segnaposto: si riconosce dal nome
+# esadecimale e dai file di dati.
+vecchia_inst = os.path.join(base, "cccc33334444")
+os.makedirs(vecchia_inst)
+with open(os.path.join(vecchia_inst, "memory.md"), "w", encoding="utf-8") as f:
+    f.write("memoria vecchia\n")
+
+# Si sostituiscono le funzioni che scelgono la cartella dati: il test non
+# deve poter guardare (e meno che mai scrivere) i dati veri dell'utente.
+vecchi = (dati_mod.base_dati, dati_mod.cartella_dati,
+          bkp.cartella_dati, bkp.installazioni)
+# ORCHESTRA_HOME dice "questa e' l'unica installazione": finche' resta
+# impostata (le sezioni precedenti la usano) l'elenco non guarda le
+# cartelle sorelle, ed e' giusto cosi'.
+home_prima = os.environ.pop("ORCHESTRA_HOME", None)
+dati_mod.base_dati = lambda: base
+dati_mod.cartella_dati = lambda: seconda_inst
+bkp.cartella_dati = dati_mod.cartella_dati
+bkp.installazioni = dati_mod.installazioni
+try:
+    voci = dati_mod.installazioni()
+    check("il codice accanto non e' un'installazione",
+          all(v["id"] not in ("orchestra", "node_modules") for v in voci),
+          str([v["id"] for v in voci]))
+    check("un'installazione vecchia senza segnaposto viene riconosciuta",
+          any(v["id"] == "cccc33334444" for v in voci),
+          str([v["id"] for v in voci]))
+    check("la corrente viene per prima",
+          voci[0]["corrente"] and voci[0]["dati"] == seconda_inst, str(voci[0]))
+    check("trova tre installazioni", len(voci) == 3, str(len(voci)))
+    check("il percorso si legge dal segnaposto",
+          voci[0]["percorso"] == r"D:\orchestra", voci[0]["percorso"])
+    check("l'altra non e' segnata come corrente", not voci[1]["corrente"])
+    check("l'elenco misura i dati", voci[0]["file"] >= 1 and voci[0]["byte"] > 0,
+          str(voci[0]))
+
+    scelta = bkp.crea("", con_chiavi=False, installazione=r"C:\prova\a")
+    check("si sceglie per percorso", scelta["dati"] == prima_inst, scelta["dati"])
+    check("l'archivio sta nella cartella di quella installazione",
+          scelta["percorso"].startswith(os.path.join(prima_inst, "backup")),
+          scelta["percorso"])
+
+    esiti = bkp.crea_tutte(con_chiavi=False)
+    check("un archivio per installazione, e nessuna in piu'",
+          len(esiti) == 3 and all(e["esito"] == "ok" for e in esiti), str(esiti))
+
+    elenco_archivi = bkp.archivi()
+    check("gli archivi si elencano per profilo",
+          len(elenco_archivi) >= 4
+          and any("D:\\orchestra" in (a.get("profilo") or "")
+                  for a in elenco_archivi),
+          str([a.get("profilo") for a in elenco_archivi]))
+
+    os.remove(os.path.join(prima_inst, "memory.md"))
+    ripristino = bkp.ripristina(scelta["percorso"], con_chiavi=False,
+                                installazione=r"C:\prova\a")
+    check("si ripristina nell'installazione indicata",
+          ripristino["dati"] == prima_inst
+          and os.path.isfile(os.path.join(prima_inst, "memory.md")),
+          str(ripristino))
+    check("il ripristino dice da dove viene l'archivio",
+          "prova" in (ripristino.get("da") or ""), ripristino.get("da"))
+
+    try:
+        bkp.crea("", con_chiavi=False, installazione="non-esiste")
+        check("profilo sconosciuto segnalato", False)
+    except bkp.InstallazioneSconosciuta as e:
+        check("profilo sconosciuto segnalato", "--elenco" in str(e), str(e))
+finally:
+    (dati_mod.base_dati, dati_mod.cartella_dati,
+     bkp.cartella_dati, bkp.installazioni) = vecchi
+    if home_prima is not None:
+        os.environ["ORCHESTRA_HOME"] = home_prima
+
 print(f"\n{_conta} check, {len(_falliti)} falliti")
 if _falliti:
     print("FALLITI: " + ", ".join(_falliti))

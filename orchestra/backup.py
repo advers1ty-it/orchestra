@@ -1,10 +1,21 @@
 """Backup e ripristino dei dati di Orchestra.
 
-Cosa salva, e cosa no. Salva la cartella dati — cronologia, memoria,
-bot, lavori, collegamenti Telegram, budget, cron — e, se richiesto, il
-`.env` con le chiavi, che senza un backup vanno reinserite a mano una
-per una. Non salva il codice: quello si reinstalla, e copiarlo sopra
-un'altra versione sarebbe proprio il guasto da cui si sta scappando.
+Cosa salva, e cosa no. Salva la cartella dati di UN'INSTALLAZIONE —
+cronologia, memoria, bot, lavori, collegamenti Telegram, budget, cron —
+e, se richiesto, il `.env` con le chiavi. Non salva il codice: quello si
+reinstalla, e copiarlo sopra un'altra versione sarebbe proprio il guasto
+da cui si sta scappando.
+
+PIU' INSTALLAZIONI
+
+Orchestra tiene i dati separati per installazione, in una sottocartella
+per ciascuna: e' giusto, perche' due copie in due cartelle diverse non
+sono la stessa cosa. Ma l'hash di quella sottocartella non dice a quale
+percorso corrisponde, e chi ha l'installazione in AppData, una su D: e
+due server di prova non puo' scegliere "quale salvare" guardando un
+codice. Percio' ogni cartella dati porta un `installazione.json` con il
+percorso scritto dentro, e qui si puo' elencare, scegliere e salvare
+tutte le installazioni — per percorso, non per hash.
 
 Perche' i database non si copiano con `shutil.copy`. Con il journal WAL
 il `.db` da solo puo' non contenere le ultime scritture: la copia
@@ -21,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -29,7 +41,7 @@ import zipfile
 from typing import Any
 
 from . import __version__
-from .dati import cartella_dati, percorso
+from .dati import cartella_dati, installazioni
 from .percorsi import ENV_PATH
 
 # La versione del formato dell'archivio. Un archivio con un numero
@@ -43,6 +55,10 @@ FORMATO = 1
 JOURNAL = ("-wal", "-shm", "-journal")
 
 ESTENSIONI_DB = (".db", ".sqlite3")
+
+
+class InstallazioneSconosciuta(RuntimeError):
+    """Il profilo chiesto non e' una di quelle installazioni."""
 
 
 def _adesso() -> str:
@@ -66,14 +82,103 @@ def _copia_db(origine: str, destinazione: str) -> None:
         src.close()
 
 
-def elenco(con_chiavi: bool = True) -> list[dict[str, Any]]:
+# ---------------------------------------------------------------------------
+# Quale installazione
+# ---------------------------------------------------------------------------
+
+def _voce(percorso_dati: str) -> dict[str, Any]:
+    """La voce di `installazioni()` che corrisponde a questa cartella."""
+    cercata = os.path.abspath(percorso_dati)
+    for voce in installazioni():
+        if os.path.abspath(voce["dati"]) == cercata:
+            return voce
+    return {"id": os.path.basename(cercata.rstrip("\\/")), "dati": cercata,
+            "percorso": "", "corrente": False, "file": 0, "byte": 0,
+            "modificato": 0.0}
+
+
+def _dati(installazione: str | None) -> str:
+    """Da un id, un percorso o niente, alla cartella dati giusta.
+
+    Accetta il percorso dell'installazione (`D:\\orchestra`), il percorso
+    della cartella dati, o l'id della cartella: sono le tre cose che
+    l'utente ha sotto gli occhi, e chiedergli proprio l'unica che non
+    puo' ricordare (l'hash) sarebbe una domanda senza risposta.
+    """
+    scelta = str(installazione or "").strip()
+    if not scelta:
+        return cartella_dati()
+    if os.path.isdir(scelta):
+        return os.path.abspath(scelta)
+    normalizzata = os.path.normcase(os.path.abspath(scelta))
+    for voce in installazioni():
+        if os.path.normcase(voce["dati"]) == normalizzata:
+            return voce["dati"]
+        if os.path.normcase(os.path.abspath(voce["id"])) == normalizzata:
+            return voce["dati"]
+        if voce.get("percorso") and os.path.normcase(
+                os.path.abspath(voce["percorso"])) == normalizzata:
+            return voce["dati"]
+    raise InstallazioneSconosciuta(
+        f"installazione sconosciuta: {scelta}. Usa `orchestra backup --elenco` "
+        "per vedere quali ci sono, con i loro percorsi.")
+
+
+def _env_per(percorso_dati: str) -> str:
+    """Il `.env` di quella installazione, se si sa dov'e'.
+
+    Il `.env` sta nella cartella del codice, non in quella dei dati: per
+    una installazione diversa dalla corrente lo si ricava dal percorso
+    registrato. Se non c'e', si salva senza chiavi invece di prendere
+    per sbaglio quelle di un'altra installazione.
+    """
+    if os.path.abspath(percorso_dati) == os.path.abspath(cartella_dati()):
+        return ENV_PATH
+    voce = _voce(percorso_dati)
+    radice = str(voce.get("percorso") or "")
+    if not radice:
+        return ""
+    candidato = os.path.join(radice, "orchestra", ".env")
+    return candidato if os.path.isfile(candidato) else ""
+
+
+def _nome_sicuro(testo: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", testo).strip("-.")[:40] or "profilo"
+
+
+def _nome_libero(percorso: str) -> str:
+    """Un nome che non esiste ancora, con un contatore se serve.
+
+    Due backup nello stesso secondo ("Salva tutti" subito dopo "Salva
+    questa") scriverebbero lo STESSO file. Non e' solo un backup perso:
+    il ripristino apre l'archivio, poi crea il backup di sicurezza, e se
+    quel nome coincide con l'archivio che sta leggendo lo tronca mentre
+    lo legge — con l'archivio corrotto a meta' strada.
+    """
+    if not os.path.exists(percorso):
+        return percorso
+    radice, estensione = os.path.splitext(percorso)
+    for n in range(2, 1000):
+        candidato = f"{radice}-{n}{estensione}"
+        if not os.path.exists(candidato):
+            return candidato
+    return f"{radice}-{int(time.time())}{estensione}"
+
+
+# ---------------------------------------------------------------------------
+# Contenuto
+# ---------------------------------------------------------------------------
+
+def elenco(con_chiavi: bool = True,
+           installazione: str | None = None) -> list[dict[str, Any]]:
     """Cosa finirebbe nell'archivio. Non lo crea: lo elenca.
 
     Serve a poter dire all'utente cosa sta salvando prima di salvarlo, e
     a fare un controllo vero dopo. Una lista di file che esiste solo
-    dentro `crea` non la si puo' né mostrare né verificare.
+    dentro `crea` non la si puo' ne' mostrare ne' verificare.
     """
-    cartella = cartella_dati()
+    cartella = _dati(installazione)
+    env_file = _env_per(cartella) if con_chiavi else ""
     voci: list[dict[str, Any]] = []
     try:
         nomi = sorted(os.listdir(cartella))
@@ -90,31 +195,37 @@ def elenco(con_chiavi: bool = True) -> list[dict[str, Any]]:
         except OSError:
             byte = 0
         voci.append({"nome": nome, "byte": byte, "chiavi": False})
-    if con_chiavi and os.path.isfile(ENV_PATH):
+    if env_file and os.path.isfile(env_file):
         try:
-            byte = os.path.getsize(ENV_PATH)
+            byte = os.path.getsize(env_file)
         except OSError:
             byte = 0
         voci.append({"nome": ".env", "byte": byte, "chiavi": True})
     return voci
 
 
-def crea(destinazione: str = "", *, con_chiavi: bool = True) -> dict[str, Any]:
-    """Scrive un archivio con tutti i dati. Torna dove e cosa.
+def crea(destinazione: str = "", *, con_chiavi: bool = True,
+         installazione: str | None = None) -> dict[str, Any]:
+    """Scrive un archivio con i dati di un'installazione. Torna dove e cosa.
 
     La destinazione predefinita e' una cartella `backup` dentro la
-    cartella dati: un file creato dove capita (la cartella del progetto,
-    il Desktop) finisce nel primo `git add` o nella prima pulizia.
+    cartella dati di QUELL'installazione: un file creato dove capita (la
+    cartella del progetto, il Desktop) finisce nel primo `git add` o
+    nella prima pulizia.
     """
-    cartella = cartella_dati()
+    cartella = _dati(installazione)
+    voce = _voce(cartella)
+    env_file = _env_per(cartella) if con_chiavi else ""
     if not (destinazione or "").strip():
         base = os.path.join(cartella, "backup")
         os.makedirs(base, exist_ok=True)
-        destinazione = os.path.join(base, f"orchestra-{_adesso()}.zip")
+        etichetta = _nome_sicuro(os.path.basename(cartella.rstrip("\\/")))
+        destinazione = _nome_libero(
+            os.path.join(base, f"orchestra-{etichetta}-{_adesso()}.zip"))
     destinazione = os.path.abspath(os.path.expanduser(destinazione))
     os.makedirs(os.path.dirname(destinazione) or ".", exist_ok=True)
 
-    voci = elenco(con_chiavi)
+    voci = elenco(con_chiavi, installazione=cartella)
     if not voci:
         raise RuntimeError("non c'e' niente da salvare: la cartella dati e' vuota")
 
@@ -122,15 +233,20 @@ def crea(destinazione: str = "", *, con_chiavi: bool = True) -> dict[str, Any]:
         "formato": FORMATO,
         "versione": __version__,
         "creato": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "con_chiavi": bool(con_chiavi and os.path.isfile(ENV_PATH)),
+        "con_chiavi": bool(voci and any(v["chiavi"] for v in voci)),
+        "installazione": {
+            "id": voce.get("id") or "",
+            "dati": cartella,
+            "percorso": voce.get("percorso") or "",
+        },
         "file": [{"nome": v["nome"], "byte": v["byte"]} for v in voci],
     }
 
     with zipfile.ZipFile(destinazione, "w", zipfile.ZIP_DEFLATED) as z:
-        for voce in voci:
-            nome = voce["nome"]
-            if voce["chiavi"]:
-                z.write(ENV_PATH, "config/.env")
+        for voce_file in voci:
+            nome = voce_file["nome"]
+            if voce_file["chiavi"]:
+                z.write(env_file, "config/.env")
                 continue
             origine = os.path.join(cartella, nome)
             if _db(origine):
@@ -157,8 +273,101 @@ def crea(destinazione: str = "", *, con_chiavi: bool = True) -> dict[str, Any]:
         "byte": os.path.getsize(destinazione),
         "con_chiavi": manifesto["con_chiavi"],
         "creato": manifesto["creato"],
+        "installazione": voce.get("id") or os.path.basename(cartella),
+        "profilo": voce.get("percorso") or cartella,
+        "dati": cartella,
     }
 
+
+def crea_tutte(*, con_chiavi: bool = True) -> list[dict[str, Any]]:
+    """Un archivio per ogni installazione. Non si ferma alla prima che va male.
+
+    Un profilo che non si riesce a salvare (cartella illeggibile, disco
+    pieno) non deve impedire il salvataggio degli altri: si raccoglie
+    l'errore e si prosegue, e l'elenco finale dice quali sono andati e
+    quali no.
+    """
+    esiti: list[dict[str, Any]] = []
+    for voce in installazioni():
+        base = {"installazione": voce.get("id") or "",
+                "profilo": voce.get("percorso") or voce["dati"],
+                "dati": voce["dati"]}
+        try:
+            esito = crea("", con_chiavi=con_chiavi, installazione=voce["dati"])
+            esiti.append({**esito, "esito": "ok"})
+        except Exception as e:  # noqa: BLE001 - un profilo non ferma gli altri
+            esiti.append({**base, "esito": "errore", "errore": str(e)})
+    return esiti
+
+
+# ---------------------------------------------------------------------------
+# Archivi sul disco
+# ---------------------------------------------------------------------------
+
+def _info_archivio(percorso_archivio: str) -> dict[str, Any]:
+    info: dict[str, Any] = {
+        "percorso": percorso_archivio,
+        "nome": os.path.basename(percorso_archivio),
+        "versione": "",
+        "creato": "",
+        "con_chiavi": False,
+        "file": 0,
+    }
+    try:
+        info["byte"] = os.path.getsize(percorso_archivio)
+        info["modificato"] = os.path.getmtime(percorso_archivio)
+    except OSError:
+        info["byte"] = 0
+        info["modificato"] = 0
+    try:
+        with zipfile.ZipFile(percorso_archivio) as z:
+            manifesto = _manifesto(z)
+        info["versione"] = str(manifesto.get("versione") or "")
+        info["creato"] = str(manifesto.get("creato") or "")
+        info["con_chiavi"] = bool(manifesto.get("con_chiavi"))
+        info["file"] = len(manifesto.get("file") or [])
+    except Exception:  # noqa: BLE001 - un file rotto si elenca lo stesso
+        info["rotto"] = True
+    return info
+
+
+def archivi(installazione: str | None = None) -> list[dict[str, Any]]:
+    """Gli archivi presenti nelle cartelle `backup`, dal piu' recente.
+
+    Serve all'interfaccia: un ripristino si fa quasi sempre da un
+    archivio che e' gia' la', e elencarli evita di dover digitare un
+    percorso a mano.
+    """
+    voci = [{"id": _voce(_dati(installazione))["id"],
+             "dati": _dati(installazione),
+             "percorso": _voce(_dati(installazione)).get("percorso") or ""}] \
+        if installazione else installazioni()
+    risultati: list[dict[str, Any]] = []
+    for voce in voci:
+        cartella = os.path.join(voce["dati"], "backup")
+        try:
+            nomi = sorted(os.listdir(cartella))
+        except OSError:
+            continue
+        for nome in nomi:
+            if not nome.lower().endswith(".zip"):
+                continue
+            pieno = os.path.join(cartella, nome)
+            if not os.path.isfile(pieno):
+                continue
+            risultati.append({
+                **_info_archivio(pieno),
+                "installazione": voce.get("id") or "",
+                "profilo": voce.get("percorso") or voce["dati"],
+                "dati": voce["dati"],
+            })
+    risultati.sort(key=lambda a: -float(a.get("modificato") or 0))
+    return risultati
+
+
+# ---------------------------------------------------------------------------
+# Ripristino
+# ---------------------------------------------------------------------------
 
 def _manifesto(z: zipfile.ZipFile) -> dict[str, Any]:
     try:
@@ -184,17 +393,21 @@ def _sicuro(nome: str) -> bool:
     return bool(parti) and all(p not in ("", ".", "..") for p in parti)
 
 
-def ripristina(archivio: str, *, con_chiavi: bool = True) -> dict[str, Any]:
+def ripristina(archivio: str, *, con_chiavi: bool = True,
+               installazione: str | None = None) -> dict[str, Any]:
     """Rimette i dati di un archivio. Torna cosa ha scritto e la sicurezza.
 
-    Un ripristino sovrascrive: e' quello che significa. Per non
-    trasformare un archivio sbagliato in dati persi, prima si salva lo
-    stato attuale — se la sicurezza non si riesce a creare, non si
-    ripristina niente.
+    Si ripristina nella cartella dati indicata; senza indicazioni, in
+    quella corrente. NON si segue il percorso scritto nell'archivio: un
+    backup fatto su D: e riaperto qui non deve svuotare l'installazione
+    che sta girando solo perche' il nome coincide. Il percorso di
+    provenienza si legge nel risultato e nel MANIFEST, e chi vuole
+    ripristinare altrove lo dice.
     """
     archivio = os.path.abspath(os.path.expanduser(archivio))
     if not os.path.isfile(archivio):
         raise RuntimeError(f"archivio non trovato: {archivio}")
+    destinazione_dati = _dati(installazione)
     with zipfile.ZipFile(archivio) as z:
         manifesto = _manifesto(z)
         nomi = [n for n in z.namelist() if n.startswith("dati/") and _sicuro(n)]
@@ -202,19 +415,20 @@ def ripristina(archivio: str, *, con_chiavi: bool = True) -> dict[str, Any]:
             raise RuntimeError("l'archivio non contiene dati")
 
         # Backup di sicurezza PRIMA di toccare: se fallisce, si smette.
-        # Su una home vuota non c'e' niente da proteggere, e non e' un
-        # errore: e' il primo ripristino su un computer nuovo.
+        # Su una cartella dati vuota non c'e' niente da proteggere, e non
+        # e' un errore: e' il primo ripristino su un computer nuovo.
         try:
-            sicurezza = crea("", con_chiavi=bool(con_chiavi))
+            sicurezza = crea("", con_chiavi=bool(con_chiavi),
+                             installazione=destinazione_dati)
         except RuntimeError:
-            if elenco(con_chiavi=False):
+            if elenco(con_chiavi=False, installazione=destinazione_dati):
                 raise
             sicurezza = {"percorso": ""}
-        cartella = cartella_dati()
+
         scritti: list[str] = []
         for nome in nomi:
-            destinazione = os.path.join(cartella, nome[len("dati/"):])
-            os.makedirs(os.path.dirname(destinazione) or cartella,
+            destinazione = os.path.join(destinazione_dati, nome[len("dati/"):])
+            os.makedirs(os.path.dirname(destinazione) or destinazione_dati,
                         exist_ok=True)
             if _db(destinazione):
                 # I journal di un database vecchio non valgono per quello
@@ -231,12 +445,15 @@ def ripristina(archivio: str, *, con_chiavi: bool = True) -> dict[str, Any]:
 
         chiavi = False
         if con_chiavi and "config/.env" in z.namelist():
+            env_target = _env_per(destinazione_dati) or ENV_PATH
             with z.open("config/.env") as src:
-                dati = src.read()
-            with open(ENV_PATH, "wb") as dst:
-                dst.write(dati)
+                dati_env = src.read()
+            os.makedirs(os.path.dirname(env_target) or ".", exist_ok=True)
+            with open(env_target, "wb") as dst:
+                dst.write(dati_env)
             chiavi = True
 
+    provenienza = manifesto.get("installazione") or {}
     return {
         "ripristinati": len(scritti),
         "file": scritti,
@@ -244,16 +461,12 @@ def ripristina(archivio: str, *, con_chiavi: bool = True) -> dict[str, Any]:
         "chiavi": chiavi,
         "versione": manifesto.get("versione") or "",
         "creato": manifesto.get("creato") or "",
+        "dati": destinazione_dati,
+        "profilo": _voce(destinazione_dati).get("percorso") or destinazione_dati,
+        "da": str(provenienza.get("percorso") or provenienza.get("dati") or ""),
     }
 
 
-def posizione_predefinita() -> str:
+def posizione_predefinita(installazione: str | None = None) -> str:
     """Dove finisce un backup se non si dice altro. Solo per mostrarlo."""
-    return os.path.join(cartella_dati(), "backup")
-
-
-def _non_usato() -> str:
-    # `percorso` non serve piu' qui (si usa la cartella direttamente),
-    # ma l'import resta perche' e' l'unica funzione che garantisce che la
-    # cartella esista anche quando si chiede solo `elenco`.
-    return percorso("backup")
+    return os.path.join(_dati(installazione), "backup")

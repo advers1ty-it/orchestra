@@ -264,6 +264,7 @@
               <button id="opz-tab-autostart" class="opzioni-tab" data-sez="autostart">Avvio automatico</button>
               <button id="opz-tab-bot" class="opzioni-tab" data-sez="bot">Bot</button>
               <button id="opz-tab-benchmark" class="opzioni-tab" data-sez="benchmark">Benchmark</button>
+              <button id="opz-tab-backup" class="opzioni-tab" data-sez="backup">Backup</button>
             </nav>
 
       <div class="opzioni-pannelli">
@@ -649,6 +650,28 @@
             <span class="small dim">costa token reali; i modelli :free non costano nulla.</span>
           </div>
           <p class="opzioni-nota">Il benchmark gira in un pannello a parte, per non perdere lo stato delle Opzioni.</p>
+        </section>
+
+        <section id="opz-sez-backup" class="opz-sez" data-sez="backup" hidden>
+          <div class="opzioni-servizi-testa">
+            <b>Backup</b>
+            <span class="dim">memoria, cronologia, bot e chiavi, per ogni installazione.</span>
+          </div>
+          <p class="opzioni-nota">Ogni installazione di Orchestra ha la sua cartella dati:
+            quella in AppData, una copia su un altro disco, un server di prova. Qui le vedi
+            tutte con il percorso, perché l'identificativo della cartella non si ricorda
+            nessuno. «Salva tutti» fa un archivio per ciascuna.</p>
+          <div class="goal-bar-inner" style="margin-top:10px">
+            <label class="small"><input type="checkbox" id="backup-chiavi" checked> includi il .env (chiavi)</label>
+            <button id="backup-tutte" class="primary">Salva tutti</button>
+            <button id="backup-aggiorna" class="ghost">Aggiorna</button>
+          </div>
+          <div id="backup-elenco" class="backup-elenco"></div>
+          <div id="backup-esito" class="opzioni-nota" role="status"></div>
+          <h4 style="margin-top:16px">Archivi presenti</h4>
+          <p class="opzioni-nota">Un ripristino salva prima lo stato attuale, poi sovrascrive.
+            Dopo, riavvia Orchestra: i dati si leggono all'avvio.</p>
+          <div id="backup-archivi" class="backup-archivi"></div>
         </section>
 
       </div>

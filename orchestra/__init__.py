@@ -14,6 +14,16 @@ try:
 except Exception:
     _migrati = []
 
+# Il percorso di questa installazione, scritto nella sua cartella dati.
+# L'hash della cartella non dice a quale directory corrisponde, e senza
+# questo file l'elenco delle installazioni sarebbe un elenco di codici:
+# chi ha tre copie di Orchestra non potrebbe scegliere quale salvare.
+try:
+    from .dati import registra_installazione
+    registra_installazione()
+except Exception:
+    pass
+
 from .types import (
     LLMResponse,
     Message,
@@ -60,7 +70,7 @@ if _os.path.isdir(_tools_dir) and not _os.path.isfile(_tools_init):
 
 from .tools import SYSTEM_PROMPT, default_registry
 
-__version__ = "0.5.90"
+__version__ = "0.5.91"
 
 __all__ = [
     "LLMResponse", "Message", "Tool", "ToolCall", "ToolRegistry",

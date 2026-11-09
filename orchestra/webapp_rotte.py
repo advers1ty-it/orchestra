@@ -8,6 +8,7 @@ si sposta — da solo.
 from __future__ import annotations
 
 from .rotte_automazione import RotteAutomazione
+from .rotte_backup import RotteBackup
 from .rotte_chat import RotteChat
 from .rotte_modelli import RotteModelli
 from .rotte_progetti import RotteProgetti
@@ -17,6 +18,6 @@ from .rotte_storia import RotteStoria
 from .rotte_telegram import RotteTelegram
 
 
-class Rotte(RotteAutomazione, RotteChat, RotteModelli, RotteProgetti,
+class Rotte(RotteAutomazione, RotteBackup, RotteChat, RotteModelli, RotteProgetti,
             RotteSistema, RotteSkill, RotteStoria, RotteTelegram):
     """I gestori di tutte le rotte, composti per dominio."""
