@@ -1032,6 +1032,24 @@ def dividi(testo: str, limite: int = MAX_TESTO) -> list[str]:
 #  Il ponte
 # ===================================================================
 
+# Quanto si aspetta prima di ritentare un invio che Telegram ha
+# rifiutato per un motivo temporaneo. Corto di proposito: una risposta in
+# ritardo e' meglio di una persa, ma non deve diventare un minuto di
+# attesa davanti a un telefono.
+RITENTA_ATTESA = 1.0
+
+
+def _ritentabile(e: ErroreTelegram) -> bool:
+    """Un errore che passa da solo: rete, limite di frequenza, 5xx.
+
+    Un 400 "chat not found" non passa ritentando: ritentarlo tre volte
+    allunga solo la perdita e lascia credere che sia un problema di rete.
+    """
+    if e.codice is None:
+        return True
+    return int(e.codice) == 429 or 500 <= int(e.codice) < 600
+
+
 class Ponte:
     """Un bot di Orchestra, il suo token, e la chat che gli scrive.
 
@@ -1197,12 +1215,42 @@ class Ponte:
 
     # --- messaggi --------------------------------------------------
     def _rispondi(self, chat_id: str, testo: str) -> None:
+        """Manda la risposta a pezzi, e ritenta quando Telegram tentenna.
+
+        Un 429 (troppe richieste) o un 5xx non sono "il messaggio non si
+        manda": sono "adesso no". Senza ritentare, la risposta del turno
+        andava persa con una riga nel log e niente in chat — ed e' il
+        "poi non fa piu' niente" che si vede dal telefono, con il lavoro
+        che pero' nella finestra era stato fatto.
+        """
         for pezzo in dividi(testo):
-            try:
-                self.api.send_message(chat_id, pezzo)
-            except ErroreTelegram as e:
-                self._log(f"telegram {self.nome}: risposta non inviata: {e}")
-                return
+            for tentativo in range(3):
+                try:
+                    self.api.send_message(chat_id, pezzo)
+                    break
+                except ErroreTelegram as e:
+                    if not _ritentabile(e) or tentativo == 2:
+                        self._log(f"telegram {self.nome}: risposta non "
+                                  f"inviata: {e}")
+                        return
+                    time.sleep(RITENTA_ATTESA * (2 ** tentativo))
+
+    def recapita(self, testo: str,
+                 file: list[dict[str, Any]] | None = None) -> bool:
+        """Manda una risposta che il turno ha prodotto DOPO l'attesa.
+
+        La chat si rilegge adesso invece di tenerla da parte: se nel
+        frattempo e' stata scollegata o sostituita, un messaggio alla
+        vecchia sarebbe un messaggio a un numero sbagliato.
+        """
+        chat, _nome_chat = chat_di(self.bot_id)
+        if not chat or not (testo or "").strip():
+            return False
+        self.api.scrive(chat)
+        self._rispondi(chat, testo)
+        if file:
+            self._manda_file(chat, [f for f in file if isinstance(f, dict)])
+        return True
 
     def _invia_modulo(self, chat_id: str, testo: str,
                       righe: list | None) -> int:

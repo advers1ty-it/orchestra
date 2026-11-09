@@ -2039,10 +2039,16 @@ class OrchestraApp:
 
         ident = int(bot["id"])
         if ident == bots_mod.BASE_ID:
-            # L'agente principale e' la sessione della finestra: ce n'e'
-            # una sola, e collegarla a Telegram vuol dire scrivere nella
-            # stessa conversazione che si vede sul monitor.
-            sess = self.session
+            # L'agente principale, non "quello che la finestra sta
+            # guardando". `self.session` cambia quando si passa a un bot —
+            # e al riavvio torna com'era, perche' `ORCHESTRA_BOT` e'
+            # salvato. Con `self.session` e basta, un messaggio Telegram
+            # all'agente principale finiva dentro la conversazione di quel
+            # bot: la risposta si vedeva nella finestra (sul bot) e non
+            # arrivava nel posto giusto, e il `bot_id` di quella sessione
+            # diventava 0 — cosi' le domande del bot prendevano la chat
+            # Telegram dell'agente principale.
+            sess = getattr(self, "_sessione_principale", None) or self.session
             if sess is not None:
                 sess.bot_id = bots_mod.BASE_ID
             return sess
@@ -2153,11 +2159,23 @@ class OrchestraApp:
         if stato.get("annullato"):
             return "Turno interrotto."
         if not stato.get("finito"):
-            # Non e' un errore: e' un turno lungo. Dirlo e' meglio che
-            # inventare una risposta o lasciare l'utente senza niente.
-            return ("Sto ancora lavorando: il turno e' lungo e non e' "
-                    "finito. La risposta completa la trovi nella finestra "
-                    "di Orchestra.")
+            # Due casi diversi, e prima si trattavano allo stesso modo.
+            #
+            # Se la sessione e' gia' libera, il turno E' finito: l'`idle`
+            # si e' perso, ma la risposta c'e' ed e' quella che va mandata.
+            #
+            # Se sta ancora lavorando, dire "la risposta la trovi nella
+            # finestra" e' il bug visto dall'utente: dal telefono la
+            # finestra di solito e' chiusa, e la risposta restava li'. Si
+            # dice che sta lavorando — e la risposta si recapita da sola
+            # quando il turno finisce.
+            if sess.busy:
+                agente = getattr(sess, "agent", None)
+                quanti = len(getattr(getattr(agente, "state", None),
+                                     "messages", []) or [])
+                self._telegram_recapita_dopo(bot_id, sess, inizio, quanti)
+                return ("Sto ancora lavorando: il turno e' lungo. Ti mando "
+                        "la risposta qui appena ha finito.")
         # Anche i file: se il turno ha prodotto un PDF o un'immagine, dal
         # telefono non c'e' modo di aprirla, e "fatto, sta nella cartella"
         # e' una risposta che costringe a tornare al computer per vedere
@@ -2183,6 +2201,58 @@ class OrchestraApp:
             return tg.file_del_turno(root, inizio)
         except Exception:  # noqa: BLE001
             return []
+
+    def _telegram_recapita_dopo(self, bot_id: int, sess: Any,
+                                inizio: float, da_indice: int) -> None:
+        """Manda la risposta quando il turno finisce, anche se e' lungo.
+
+        Il ponte smette di guardare alla sua scadenza: da li' in poi non
+        puo' piu' sapere com'e' andata, ma il turno continua lo stesso. La
+        chat si rilegge al momento dell'invio: se nel frattempo e' stata
+        scollegata, non si manda niente invece di mandarlo alla chat
+        sbagliata.
+
+        `da_indice` e' dove cominciava il turno: cosi' la risposta e'
+        quella di QUESTO turno, e non quella che c'era gia' prima.
+        """
+        ponte = (getattr(self, "_telegram_ponti", None) or {}).get(int(bot_id))
+        if ponte is None:
+            return
+
+        def attendi() -> None:
+            # Un'ora e' abbondante per un turno che il ponte ha smesso di
+            # guardare; oltre, il thread si spegne da solo invece di
+            # restare appeso per sempre.
+            scadenza = time.monotonic() + 3600.0
+            while time.monotonic() < scadenza:
+                if not getattr(sess, "busy", False):
+                    break
+                time.sleep(0.5)
+            else:
+                return
+            # `busy` va a False nel `finally` del turno: un attimo di
+            # margine evita di leggere la conversazione mentre viene
+            # ancora scritta.
+            time.sleep(0.3)
+            agente = getattr(sess, "agent", None)
+            messaggi = list(getattr(getattr(agente, "state", None),
+                                    "messages", []) or [])
+            testo = ""
+            for m in reversed(messaggi[int(da_indice):]):
+                if (getattr(m, "role", "") == "assistant"
+                        and (getattr(m, "content", "") or "").strip()):
+                    testo = m.content.strip()
+                    break
+            if not testo:
+                return
+            try:
+                ponte.recapita(testo, self._telegram_file_del_turno(inizio))
+            except Exception as e:  # noqa: BLE001 - un recapito perso non
+                # deve far cadere l'ascoltatore
+                _log_telegram(f"risposta non recapitata: {e}")
+
+        threading.Thread(target=attendi, daemon=True,
+                         name=f"telegram-recapito-{bot_id}").start()
 
     def _telegram_ultima_risposta(self, sess: Any) -> str:
         for m in reversed(getattr(sess.agent.state, "messages", [])):

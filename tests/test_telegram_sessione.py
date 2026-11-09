@@ -990,6 +990,138 @@ check("con l'argomento che dice cosa sta facendo",
 check("e l'azione non si ripete a ogni evento dopo",
       len(azioni) == 1, cp(str(len(azioni))))
 
+print("\n[24] l'agente principale non e' quello che la finestra sta guardando")
+# Il difetto visto dall'utente: dopo un riavvio con un bot attivo
+# (ORCHESTRA_BOT e' salvato), un messaggio Telegram all'agente principale
+# finiva nella sessione di QUEL bot. La risposta si vedeva nella finestra,
+# sul bot, e in chat arrivava poco o niente.
+app_base = webapp.OrchestraApp.__new__(webapp.OrchestraApp)
+app_base.env = {}
+app_base._bots_runtime = {}
+sess_principale = SessioneFinta()
+sess_principale.bot_id = 0
+sess_bot = SessioneFinta()
+sess_bot.bot_id = 7
+app_base._sessione_principale = sess_principale
+app_base.session = sess_bot
+scelta = app_base._sessione_bot(bots_mod.agente_base())
+check("l'agente principale usa la sua sessione, non quella del bot attivo",
+      scelta is sess_principale, type(scelta).__name__)
+check("e non tocca il bot_id della sessione del bot",
+      sess_bot.bot_id == 7, str(sess_bot.bot_id))
+app_base.session = sess_principale
+app_base._sessione_principale = None
+check("senza bot attivo resta la sessione della finestra",
+      app_base._sessione_bot(bots_mod.agente_base()) is sess_principale,
+      "sessione sbagliata")
+
+print("\n[25] un turno piu' lungo dell'attesa: la risposta arriva lo stesso")
+# Il ponte smette di guardare alla scadenza, ma il turno continua. Prima
+# si rispondeva "la risposta la trovi nella finestra" — che dal telefono
+# vuol dire non riceverla mai, ed e' il "poi non fa piu' niente".
+
+
+class PonteRecapito:
+    attivo = True
+
+    def __init__(self):
+        self.ricevuti = []
+
+    def recapita(self, testo, file=None):
+        self.ricevuti.append((testo, file))
+        return True
+
+
+app_lungo, sess_lungo = app_finta()
+app_lungo._telegram_attesa = lambda: 0.5
+ponte_lungo = PonteRecapito()
+app_lungo._telegram_ponti = {bot["id"]: ponte_lungo}
+
+
+def send_lungo(testo, allegati=None):
+    sess_lungo.busy = True
+    sess_lungo.mandato = True
+    sess_lungo.agent.state.messages = [Messaggio("user", testo)]
+    return True
+
+
+sess_lungo.send = send_lungo
+esito_lungo = app_lungo.telegram_turno(bot["id"], "lavora a lungo", None, None)
+check("la chat dice che sta lavorando, non dove andare a cercarla",
+      isinstance(esito_lungo, str) and "ancora lavorando" in esito_lungo
+      and "finestra" not in esito_lungo, cp(esito_lungo))
+check("e non ha gia' recapitato niente", ponte_lungo.ricevuti == [],
+      str(ponte_lungo.ricevuti))
+# Il turno finisce DOPO che il ponte ha smesso di guardare.
+sess_lungo.agent.state.messages.append(Messaggio("assistant", "Ecco il risultato."))
+sess_lungo.busy = False
+for _ in range(40):
+    if ponte_lungo.ricevuti:
+        break
+    time.sleep(0.1)
+check("la risposta arriva in chat quando il turno finisce",
+      [t for t, _f in ponte_lungo.ricevuti] == ["Ecco il risultato."],
+      cp(str(ponte_lungo.ricevuti)))
+
+# Una risposta vecchia non deve essere spacciata per quella del turno: il
+# recapito guarda solo i messaggi nati dopo l'invio.
+app_vecchio, sess_vecchio = app_finta()
+app_vecchio._telegram_attesa = lambda: 0.4
+ponte_vecchio = PonteRecapito()
+app_vecchio._telegram_ponti = {bot["id"]: ponte_vecchio}
+
+
+def send_senza_risposta(testo, allegati=None):
+    sess_vecchio.busy = True
+    sess_vecchio.mandato = True
+    sess_vecchio.agent.state.messages = [
+        Messaggio("assistant", "risposta di ieri"),
+        Messaggio("user", testo)]
+    return True
+
+
+sess_vecchio.send = send_senza_risposta
+app_vecchio.telegram_turno(bot["id"], "nuovo lavoro", None, None)
+sess_vecchio.busy = False
+time.sleep(1.2)
+check("senza una risposta nuova non si ricicla quella di prima",
+      ponte_vecchio.ricevuti == [], cp(str(ponte_vecchio.ricevuti)))
+
+print("\n[26] un invio rifiutato per un motivo temporaneo si ritenta")
+# Un 429 o un 5xx non sono "il messaggio non si manda": sono "adesso no".
+# Prima la risposta si perdeva con una riga nel log e niente in chat.
+
+
+class ApiInstabile:
+    def __init__(self, codici):
+        self.codici = list(codici)
+        self.mandati = []
+
+    def send_message(self, chat_id, testo, **_kw):
+        self.mandati.append(testo)
+        if self.codici:
+            raise tg.ErroreTelegram("rifiutato", self.codici.pop(0))
+        return {"ok": True}
+
+    def scrive(self, chat_id):
+        return None
+
+
+attesa_vera = tg.RITENTA_ATTESA
+tg.RITENTA_ATTESA = 0.01
+api429 = ApiInstabile([429, 500])
+ponte429 = tg.Ponte(1, "Prova", api429, lambda *a, **k: "")
+ponte429._rispondi("42", "la risposta")
+check("dopo due rifiuti temporanei il messaggio parte",
+      api429.mandati == ["la risposta", "la risposta", "la risposta"],
+      str(len(api429.mandati)))
+api400 = ApiInstabile([400])
+ponte400 = tg.Ponte(2, "Prova", api400, lambda *a, **k: "")
+ponte400._rispondi("42", "la risposta")
+check("un 400 invece non si ritenta", len(api400.mandati) == 1,
+      str(len(api400.mandati)))
+tg.RITENTA_ATTESA = attesa_vera
+
 print()
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
