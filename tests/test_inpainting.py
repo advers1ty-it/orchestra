@@ -38,6 +38,14 @@ def check(nome, cond, dettaglio=""):
 
 TMP = tempfile.mkdtemp(prefix="orchestra-inpaint-")
 
+# Le chiavi: la maschera la accetta solo OpenAI, e in CI il `.env` finto
+# contiene una chiave OpenRouter e nessuna OpenAI. Senza un ambiente
+# deciso qui, il tool sceglieva OpenRouter e il test cadeva su una scelta
+# del provider che non ha niente a che vedere con l'inpainting.
+CHIAVI_FINTE = {"ORCHESTRA_IMAGE_PROVIDER": "", "OPENAI_API_KEY": "sk-test",
+                "GEMINI_API_KEY": "goog", "OPENROUTER_API_KEY": "or-key"}
+ig.ambiente = lambda: dict(CHIAVI_FINTE)
+
 from PIL import Image  # noqa: E402
 
 

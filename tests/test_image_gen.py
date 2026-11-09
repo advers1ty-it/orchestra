@@ -68,6 +68,15 @@ def _senza_marcatura(dati: bytes) -> bytes:
 
 TMP = tempfile.mkdtemp(prefix="orchestra-img-")
 
+# Le chiavi: questi test non devono dipendere ne' dal `.env` della macchina
+# ne' da quello che prepara la CI. In CI il file di ambiente finto contiene
+# una OPENROUTER_API_KEY e nessuna OPENAI: il tool sceglieva OpenRouter
+# mentre il finto rispondeva come Google, e sei controlli diventavano rossi
+# per un motivo che non e' il codice. Si finge qui un ambiente completo.
+CHIAVI_FINTE = {"ORCHESTRA_IMAGE_PROVIDER": "", "OPENAI_API_KEY": "sk-test",
+                "GEMINI_API_KEY": "goog", "OPENROUTER_API_KEY": "or-key"}
+ig.ambiente = lambda: dict(CHIAVI_FINTE)
+
 
 def env(**valori):
     """Un ambiente finto: solo le chiavi che il test dichiara."""
