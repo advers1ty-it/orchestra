@@ -163,7 +163,7 @@ def tool_image_gen() -> Tool:
     def handler(prompt: str = "", provider: str = "", modello: str = "",
                 dimensione: str = "", nome_file: str = "",
                 riferimento: str = "", riferimenti=None, maschera: str = "",
-                zone=None, morbido: int = 0,
+                zone=None, morbido: int = 0, risoluzione: str = "",
                 elenco_modelli: bool = False) -> ToolResult:
         if elenco_modelli:
             # L'elenco non costa nulla e non genera niente: e' il modo per
@@ -212,6 +212,7 @@ def tool_image_gen() -> Tool:
                 nome_file=nome_file,
                 riferimento=rifs or None,
                 maschera=mas,
+                risoluzione=risoluzione,
             )
         except (ig.ImageGenError, montaggio.MontaggioError) as e:
             return ToolResult(text=f"ERRORE: {e}")
@@ -263,7 +264,10 @@ def tool_image_gen() -> Tool:
             "with OpenAI; with Google and OpenRouter the tool says so "
             "instead of starting. To keep an existing image pixel for "
             "pixel (a poster whose price and text must not change), use "
-            "`image_edit` instead: this tool redraws. With `elenco_modelli` it lists the "
+            "`image_edit` instead: this tool redraws. For a print-sized "
+            "image pass `risoluzione` 2K or 4K: without it the model keeps "
+            "its own size, which is about 1K (Google and OpenRouter; OpenAI "
+            "uses `dimensione`). With `elenco_modelli` it lists the "
             "OpenRouter image models, so one can be picked with `modello`. "
             "It spends money or provider credit: use it when the user asks "
             "to create or transform an image, not to describe an "
@@ -328,6 +332,19 @@ def tool_image_gen() -> Tool:
                     "description": "OpenAI: 1024x1024, 1536x1024, 1024x1536 "
                                    "or auto. Google and OpenRouter: aspect "
                                    "ratios such as 1:1, 16:9.",
+                },
+                "risoluzione": {
+                    "type": "string",
+                    "enum": ["512", "1K", "1.5K", "2K", "4K"],
+                    "description": "Output size tier. 4K is what a printed "
+                                   "poster needs; the models default much "
+                                   "lower. Google and OpenRouter only: "
+                                   "OpenAI has no tiers, and there the "
+                                   "tool says so instead of spending. Not "
+                                   "every model declares it: one that "
+                                   "does not rejects the request and "
+                                   "names the parameter. A bigger tier "
+                                   "costs more.",
                 },
                 "nome_file": {
                     "type": "string",

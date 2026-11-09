@@ -125,6 +125,12 @@ ALIAS = {
     "or": "openrouter",
 }
 
+# I livelli di risoluzione che le API conoscono. Non sono pixel: ogni
+# provider li traduce nelle proprie misure, e per questo un "1K" non si
+# converte in una dimensione da mandare altrove. Google si ferma a 1K/2K/4K;
+# OpenRouter in piu' accetta 512 e 1.5K.
+RISOLUZIONI = ("512", "1K", "1.5K", "2K", "4K")
+
 _ESTENSIONI = {
     "image/png": "png",
     "image/jpeg": "jpg",
@@ -377,6 +383,38 @@ def _post_multipart(url: str, campi: dict, allegati: list[tuple],
     return _richiedi(req, provider)
 
 
+def _risoluzione(valore: str, provider: str) -> str:
+    """Il livello di risoluzione normalizzato, o "" se non c'e'.
+
+    Chiedere un livello a un provider che non ce l'ha e' un errore esplicito e
+    non un parametro buttato via: chi ha scritto `risoluzione="4K"` crede di
+    ricevere un'immagine da stampa, e un 1K silenzioso e' peggio di un no.
+    """
+    r = str(valore or "").strip().upper().replace(" ", "")
+    if r in ("", "AUTO"):
+        return ""
+    if r == "0.5K":
+        r = "512"
+    if r not in RISOLUZIONI:
+        raise ImageGenError(
+            f"risoluzione non riconosciuta: {valore!r}. I livelli sono "
+            f"{', '.join(RISOLUZIONI)}: 512 e' il piu' piccolo, 4K il piu' "
+            f"grande."
+        )
+    if provider == "openai":
+        raise ImageGenError(
+            "OpenAI non ha livelli di risoluzione: usa `dimensione` "
+            "(1024x1024, 1536x1024, 1024x1536). `risoluzione` vale per "
+            "Google e per OpenRouter."
+        )
+    if provider == "google" and r not in ("1K", "2K", "4K"):
+        raise ImageGenError(
+            f"Google accetta 1K, 2K o 4K, non {r}: il livello 512 e' solo di "
+            f"OpenRouter."
+        )
+    return r
+
+
 def _dimensione_openai(dimensione: str) -> str:
     """La dimensione solo se e' una che l'API accetta, altrimenti niente.
 
@@ -504,7 +542,8 @@ def _parte_immagine(parti: list) -> tuple[bytes, str] | None:
 
 def _genera_google(prompt: str, modello: str, dimensione: str,
                    env: dict[str, str],
-                   riferimenti: list[tuple[bytes, str]] | None = None
+                   riferimenti: list[tuple[bytes, str]] | None = None,
+                   risoluzione: str = ""
                    ) -> Immagine:
     token = chiave("google", env)
     if not token:
@@ -528,8 +567,16 @@ def _genera_google(prompt: str, modello: str, dimensione: str,
     # Le proporzioni, per i modelli che le accettano. Una dimensione in pixel
     # non si traduce: meglio non mandare niente che mandare un campo rifiutato.
     proporzioni = (dimensione or "").strip()
+    image_config: dict = {}
     if re.fullmatch(r"\d{1,2}:\d{1,2}", proporzioni):
-        corpo["generationConfig"] = {"imageConfig": {"aspectRatio": proporzioni}}
+        image_config["aspectRatio"] = proporzioni
+    if risoluzione:
+        # `imageSize` e' il nome che Google da' al livello (1K/2K/4K): senza,
+        # ogni modello resta alla sua misura predefinita, che per un poster
+        # da stampa e' troppo poca.
+        image_config["imageSize"] = risoluzione
+    if image_config:
+        corpo["generationConfig"] = {"imageConfig": image_config}
     intestazioni = {"x-goog-api-key": token}
     try:
         dati = _post_json(ENDPOINT["google"].format(modello=nome), corpo,
@@ -667,7 +714,8 @@ def _forma_openrouter(dimensione: str) -> dict:
 
 def _genera_openrouter(prompt: str, modello: str, dimensione: str,
                        env: dict[str, str],
-                       riferimenti: list[tuple[bytes, str]] | None = None
+                       riferimenti: list[tuple[bytes, str]] | None = None,
+                       risoluzione: str = ""
                        ) -> Immagine:
     token = chiave("openrouter", env)
     if not token:
@@ -681,6 +729,12 @@ def _genera_openrouter(prompt: str, modello: str, dimensione: str,
             or MODELLI["openrouter"])
     corpo: dict = {"model": nome, "prompt": prompt, "n": 1}
     corpo.update(_forma_openrouter(dimensione))
+    if risoluzione:
+        # `resolution` e' il livello ("1K", "2K", "4K"): OpenRouter lo
+        # traduce per il provider che serve la richiesta. Non tutti i modelli
+        # del catalogo lo dichiarano, e chi non lo accetta rifiuta la
+        # richiesta invece di ignorarla: il messaggio d'errore lo dira'.
+        corpo["resolution"] = risoluzione
     if riferimenti:
         # `input_references` e' una lista anche quando l'immagine e' una
         # sola: l'ordine conta, perche' il prompt nomina "la prima" e "le
@@ -785,7 +839,8 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
            dimensione: str = "", cartella: str | Path = "",
            nome_file: str = "", env: dict[str, str] | None = None,
            riferimento: tuple[bytes, str] | list[tuple[bytes, str]] | None = None,
-           maschera: tuple[bytes, str] | None = None) -> Immagine:
+           maschera: tuple[bytes, str] | None = None,
+           risoluzione: str = "") -> Immagine:
     """Genera un'immagine e la salva nella cartella indicata.
 
     `cartella` e' la base (di solito la root del progetto). L'immagine finisce
@@ -800,6 +855,11 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
     un endpoint `/images/edits`, Google lo stesso generateContent con le
     immagini fra le parti, OpenRouter `input_references`), ma il risultato e'
     lo stesso: un file in `immagini/`.
+
+    Con `risoluzione` si chiede un livello (1K, 2K, 4K) invece di una misura
+    in pixel: e' l'unico modo per avere un 4K vero dai modelli Google, che
+    altrimenti restano alla loro misura predefinita. OpenAI non ha livelli e
+    lo dice; Google non accetta 512.
 
     Con `maschera` (PNG, byte) la modifica e' limitata alle zone trasparenti
     della maschera: e' l'inpainting vero, non un "prova a non toccare il
@@ -868,15 +928,16 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
             "senza modello c'e' `image_edit`. Nessun credito e' stato "
             "speso."
         )
+    risoluzione = _risoluzione(risoluzione, scelto)
     if scelto == "openai":
         img = _genera_openai(testo, modello.strip(), dimensione, env,
                              riferimenti, maschera)
     elif scelto == "openrouter":
         img = _genera_openrouter(testo, modello.strip(), dimensione, env,
-                                 riferimenti)
+                                 riferimenti, risoluzione)
     else:
         img = _genera_google(testo, modello.strip(), dimensione, env,
-                             riferimenti)
+                             riferimenti, risoluzione)
 
     base = Path(cartella) if str(cartella or "").strip() else Path.cwd()
     destinazione = base / "immagini"

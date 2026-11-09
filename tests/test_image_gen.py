@@ -519,6 +519,75 @@ try:
     check("un tier di risoluzione non diventa un pixel fasullo",
           ig._forma_openrouter("2K") == {})
 
+    # Il livello va nel suo campo: `dimensione` resta il rapporto. Sono due
+    # cose diverse e mandare il tier dentro `aspect_ratio` era il modo per
+    # farsi rifiutare la richiesta.
+    print("\n[15] Livelli di risoluzione: 1K, 2K, 4K")
+    corpi_tier = []
+
+    def finto_tier(url, corpo_, testa, provider):
+        corpi_tier.append((provider, corpo_))
+        if provider == "openrouter":
+            return {"data": [{"b64_json": B64_PNG, "media_type": "image/png"}]}
+        return {"candidates": [{"content": {"parts": [
+            {"inlineData": {"mimeType": "image/png", "data": B64_PNG}}]}}]}
+
+    ig._post_json = finto_tier
+    ig.genera("un poster", provider="openrouter", cartella=TMP,
+              env=env(OPENROUTER_API_KEY="or-key"),
+              dimensione="2:3", risoluzione="2k")
+    corpo_r = corpi_tier[-1][1]
+    check("OpenRouter manda il livello", corpo_r.get("resolution") == "2K",
+          str(corpo_r)[:200])
+    check("e il rapporto resta un rapporto",
+          corpo_r.get("aspect_ratio") == "2:3", str(corpo_r)[:200])
+
+    ig.genera("un poster", provider="google", cartella=TMP,
+              env=env(GEMINI_API_KEY="goog"),
+              dimensione="16:9", risoluzione="4K")
+    config = (((corpi_tier[-1][1].get("generationConfig") or {})
+               .get("imageConfig")) or {})
+    check("Google manda imageSize", config.get("imageSize") == "4K", str(config))
+    check("insieme al rapporto", config.get("aspectRatio") == "16:9", str(config))
+
+    # Senza il parametro il campo non compare: un modello che non lo dichiara
+    # rifiuta la richiesta solo per la sua presenza.
+    ig.genera("un poster", provider="openrouter", cartella=TMP,
+              env=env(OPENROUTER_API_KEY="or-key"))
+    check("senza risoluzione non c'e' il campo",
+          "resolution" not in corpi_tier[-1][1], str(corpi_tier[-1][1])[:200])
+
+    # OpenAI non ha livelli: l'errore dice cosa usare e la richiesta non
+    # parte, perche' una generazione rifiutata si paga lo stesso.
+    prima_tier = len(corpi_tier)
+    try:
+        ig.genera("un poster", provider="openai", cartella=TMP,
+                  env=env(OPENAI_API_KEY="sk-test"), risoluzione="2K")
+        check("OpenAI con risoluzione lo dice", False, "nessun errore")
+    except ig.ImageGenError as e:
+        check("OpenAI con risoluzione lo dice", "dimensione" in str(e),
+              str(e)[:200])
+    check("e non spende niente", len(corpi_tier) == prima_tier,
+          f"{prima_tier} -> {len(corpi_tier)}")
+
+    for sbagliata in ("enorme", "8K"):
+        try:
+            ig.genera("x", provider="openrouter", cartella=TMP,
+                      env=env(OPENROUTER_API_KEY="or-key"),
+                      risoluzione=sbagliata)
+            check(f"'{sbagliata}' viene rifiutata", False, "nessun errore")
+        except ig.ImageGenError as e:
+            check(f"'{sbagliata}' viene rifiutata", "4K" in str(e), str(e)[:160])
+
+    try:
+        ig.genera("x", provider="google", cartella=TMP,
+                  env=env(GEMINI_API_KEY="goog"), risoluzione="512")
+        check("Google non accetta 512", False, "nessun errore")
+    except ig.ImageGenError as e:
+        check("Google non accetta 512", "1K" in str(e), str(e)[:160])
+
+    ig._post_json = finto_openrouter
+
     # Modifica: OpenRouter vuole un URL (http o data URL) dentro
     # `input_references`, non un file multipart.
     ig.genera("rendila invernale", provider="openrouter", cartella=TMP,
