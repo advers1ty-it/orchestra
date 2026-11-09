@@ -91,3 +91,6 @@ _interno/
 
 # Stato dei test che si ricrea a ogni run: non e verita da versionare.
 tests/_dati_test/*.db
+
+# Dati dei test: il segnaposto si riscrive a ogni corsa.
+tests/_dati_test/
