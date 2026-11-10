@@ -81,6 +81,33 @@ _ASSEGNAZIONE = re.compile(
 )
 
 
+# Credenziali dentro un COMANDO, dove non c'e' un `NOME=valore` da
+# riconoscere. Sono le forme che una scansione per parole chiave non
+# vede, ed e' il caso dell'articolo su Claude Code: la password resta
+# nel comando, e il comando resta nel file di configurazione. Un
+# comando come `mysql -p...` puo' finire nello storico anche quando
+# l'utente non ha mai scritto una variabile con un nome riconoscibile.
+#
+# Ogni schema ha `pre` (cio' che va tenuto) e `val` (il segreto); `post`
+# esiste solo per le URL, dove la chiocciola dopo la password e'
+# struttura e non segreto. Il `-p` generico non si tocca: mangerebbe
+# `-path` e altri flag innocui, quindi vale solo per i client mysql.
+_INLINE: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?i)(?P<pre>--password(?:=|\s+))(?P<val>\S+)"),
+    re.compile(r"(?i)(?P<pre>\bsshpass\s+-p\s*)(?P<val>\S+)"),
+    re.compile(r"(?i)(?P<pre>\bmysql(?:dump|admin|sh)?\b[^\n|;&]*?\s-p)(?P<val>[^\s-]\S*)"),
+    re.compile(r"(?i)(?P<pre>\b(?:PGPASSWORD|MYSQL_PWD|SSHPASS|REDISCLI_AUTH)=)(?P<val>\S+)"),
+    re.compile(r"(?i)(?P<pre>\b[a-z][a-z0-9+.-]*://[^/\s:@]+:)(?P<val>[^@\s/]+)(?P<post>@)"),
+)
+
+
+def _sostituisci_inline(m: re.Match[str]) -> str:
+    """Toglie il valore lasciando in piedi il comando e la sua forma."""
+    if SEGNAPOSTO in m.group("val"):
+        return m.group(0)
+    return m.group("pre") + SEGNAPOSTO + (m.groupdict().get("post") or "")
+
+
 def redigi(testo: str) -> str:
     """Il testo con i segreti riconoscibili sostituiti. Idempotente."""
     if not testo:
@@ -100,7 +127,10 @@ def redigi(testo: str) -> str:
             return m.group(0)
         return f"{m.group(1)}{sep}{SEGNAPOSTO}"
 
-    return _ASSEGNAZIONE.sub(sostituisci, fuori)
+    fuori = _ASSEGNAZIONE.sub(sostituisci, fuori)
+    for schema in _INLINE:
+        fuori = schema.sub(_sostituisci_inline, fuori)
+    return fuori
 
 
 def redigi_dati(dati: Any) -> Any:

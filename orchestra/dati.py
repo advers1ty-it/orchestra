@@ -73,12 +73,88 @@ def base_dati() -> str:
     return os.path.join(home, "." + NOME_APP)
 
 
+# Cartelle gia' controllate in questo processo: il controllo costa poco,
+# ma `cartella_dati()` viene chiamata a ogni apertura di database e non
+# serve ripetere ogni volta la risalita fino alla radice del repository.
+_PROTETTE: set[str] = set()
+
+
+def _radice_git(cartella: str) -> str | None:
+    """La radice del repository che contiene `cartella`, o None.
+
+    Si guarda `.git` come file oltre che come cartella: nei worktree git
+    lo scrive come file, e un controllo che accetta solo la cartella
+    direbbe "non e' un repository" proprio dove il lavoro isolato vive.
+    """
+    p = os.path.abspath(cartella)
+    while True:
+        if os.path.exists(os.path.join(p, ".git")):
+            return p
+        padre = os.path.dirname(p)
+        if padre == p:
+            return None
+        p = padre
+
+
+def _proteggi_cartella_dati(cartella: str) -> None:
+    """Impedisce che i dati di Orchestra finiscano in un repository.
+
+    La cartella normale (AppData, o ~/.orchestra) sta fuori da ogni
+    progetto. `ORCHESTRA_HOME` invece e' una scelta esplicita, e puo'
+    puntare dentro un repository: in quel caso basta un `git add -A`
+    perche' permessi, storico e chiavi finiscano in un commit. Non si
+    prova a indovinare se l'utente lo fara': si chiude la porta.
+
+    Dentro il repository si scrive un `.gitignore` con `*`: la cartella
+    resta utilizzabile, ma git non vede niente di quello che contiene.
+    Sulla radice del repository non si scrive: un `.gitignore` con `*`
+    li' ignorerebbe il progetto intero. In quel caso si rifiuta di
+    partire, a meno di `ORCHESTRA_HOME_FORZA=1`.
+    """
+    base = os.path.abspath(cartella)
+    if base in _PROTETTE:
+        return
+    repo = _radice_git(base)
+    if repo is None:
+        _PROTETTE.add(base)
+        return
+    if os.path.normcase(base) == os.path.normcase(repo):
+        if os.environ.get("ORCHESTRA_HOME_FORZA") == "1":
+            _PROTETTE.add(base)
+            return
+        raise RuntimeError(
+            "ORCHESTRA_HOME punta alla radice di un repository git "
+            f"({repo}). I dati di Orchestra (permessi, storico, chiavi, "
+            "backup) finirebbero nel progetto e potrebbero essere "
+            "committati. Scegli una cartella fuori dal repository, "
+            "oppure imposta ORCHESTRA_HOME_FORZA=1 se e' davvero quello "
+            "che vuoi."
+        )
+    ignora = os.path.join(base, ".gitignore")
+    try:
+        if os.path.exists(ignora):
+            with open(ignora, encoding="utf-8") as f:
+                testo = f.read()
+            if "*" not in testo.split():
+                with open(ignora, "a", encoding="utf-8") as f:
+                    f.write("\n*\n")
+        else:
+            with open(ignora, "w", encoding="utf-8") as f:
+                f.write("# Orchestra: dati locali, mai nel repository.\n*\n")
+    except OSError:
+        # Un disco che non collabora non deve impedire di lavorare: la
+        # cartella resta com'e', e il rischio e' quello di prima.
+        pass
+    _PROTETTE.add(base)
+
+
 def cartella_dati() -> str:
     """La cartella dove Orchestra scrive i propri dati. La crea se manca."""
     base = os.environ.get("ORCHESTRA_HOME")
     if not base:
         base = os.path.join(base_dati(), _hash_installazione())
     os.makedirs(base, exist_ok=True)
+    _proteggi_cartella_dati(base)
     return base
 
 

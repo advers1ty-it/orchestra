@@ -126,6 +126,36 @@ check("l'assegnazione non e' nel DB",
 check("il resto del testo e' rimasto",
       "questo e' tutto" in grezzo and "ho letto" in grezzo, grezzo[:200])
 
+print("\n[7] Credenziali inline nei comandi")
+inline = [
+    ("mysql -u root -pS3gr3t0! orchestra_db", "S3gr3t0!", "mysql"),
+    ("mysqldump -pP4ssw0rd db > dump.sql", "P4ssw0rd", "mysqldump"),
+    ("sshpass -p 'cavallo-bianco' ssh host", "cavallo-bianco", "sshpass"),
+    ("tool --password hunter2 --verbose", "hunter2", "tool"),
+    ("PGPASSWORD=abc psql -h db", "abc", "PGPASSWORD="),
+    ("postgres://utente:segreta@db.example/x", "segreta", "postgres://utente:"),
+]
+for testo, segreto, resta in inline:
+    out = redigi(testo)
+    check(f"sparisce: {segreto[:3]}…", segreto not in out, out)
+    check(f"  il comando resta: {resta}", resta in out, out)
+
+# I flag che iniziano per `-p` ma non sono password restano intatti:
+# un redattore che mangia `git log -p` viene spento.
+intatti_inline = [
+    "git log -p -- src/app.py",
+    "python -m pip install --upgrade pip",
+    "mysql --help",
+    "https://api.openai.com/v1/models",
+    "psql -h db -U utente",
+]
+for testo in intatti_inline:
+    check(f"intatto: {testo[:30]}", redigi(testo) == testo, redigi(testo))
+
+una = redigi("mysql -u root -pS3gr3t0! e sshpass -p x ssh host")
+due = redigi(una)
+check("inline idempotente", una == due, f"{una!r} != {due!r}")
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

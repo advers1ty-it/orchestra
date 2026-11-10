@@ -180,6 +180,10 @@ SUITES = [
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),
     ("permessi-persistenza", "test_permessi_persistenza.py", True),
+    # La cartella dati non deve poter finire in un repository: se
+    # ORCHESTRA_HOME punta dentro un progetto, si ignora da sola; sulla
+    # radice del repo Orchestra si ferma invece di ignorare il progetto.
+    ("cartella-dati", "test_cartella_dati.py", True),
     ("permesso-shell", "test_permesso_shell.py", True),
     # Il gate provato da solo non basta: qui si prova il percorso intero
     # (tool che chiede, evento che parte, risposta che torna). Era scritto

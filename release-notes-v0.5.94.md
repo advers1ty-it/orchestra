@@ -64,6 +64,28 @@ aveva un difetto che non si vedeva nel verdetto.
   catturava la riga successiva, e «Endorse with amendment» contava come
   «Endorse».
 
+## Sicurezza: i segreti restano fuori
+
+- La redazione riconosce anche le credenziali **dentro un comando**, dove
+  non c'e' un `NOME=valore` da intercettare: `mysql -p...`, `mysqldump
+  -p...`, `sshpass -p`, `--password`, `PGPASSWORD` corto e le URL
+  `schema://utente:password@host`. Sono le forme che una scansione per
+  parole chiave non vede, e finivano intatte nello storico e nelle tracce.
+- Il confronto con il caso Claude Code (il «non chiedere piu'» che salva
+  il comando intero in un file di progetto) ha confermato che il nostro
+  meccanismo non ha quel difetto: i permessi salvano percorsi risolti,
+  mai il testo del comando, e la cartella dati sta fuori dal progetto.
+  Restava il buco della redazione, ed e' chiuso.
+- Se `ORCHESTRA_HOME` punta **dentro** un repository, la cartella dati si
+  scrive un `.gitignore` con `*` e resta fuori da ogni `git add`. Sulla
+  radice del repository Orchestra si ferma e lo dice, perche' li' un `*`
+  ignorerebbe il progetto intero; `ORCHESTRA_HOME_FORZA=1` forza la
+  scelta.
+- `tests/_dati_test/nous_auth.json` era tracciato e conteneva un token
+  OAuth reale (ormai scaduto) di Nous Research: esce dal repository e
+  dagli archivi. Chi ha gia' scaricato una versione precedente lo ha
+  nella cronologia git: va revocato dal portale Nous.
+
 ## Verifiche
 
 `test_calendario_rubrica_office` 73 check (PDF riletto, tabella, append a
@@ -72,6 +94,8 @@ aveva un difetto che non si vedeva nel verdetto.
 `test_consiglio` 61 check con un provider finto (nessuna rete): brief ed
 etichette nei prompt, cervelli interi su tutti e dodici i seat, tavolo
 proposto, citazioni vere e inventate, matematica del verdetto, cap per il
-rischio di rovina. Verdi anche `test_rotte` 34 (135 rotte), `test_ui` 54,
+rischio di rovina. `test_redazione` 69 (incluse le credenziali inline) e
+`test_cartella_dati` 10 (cartella dentro il repo, radice rifiutata,
+override esplicito, nessun effetto fuori da git). Verdi anche `test_rotte` 34 (135 rotte), `test_ui` 54,
 `test_piano` 23, `test_file_tracciati` 3, e la CI su Ubuntu e Windows per
 entrambi i commit delle funzioni.
