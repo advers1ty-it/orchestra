@@ -248,7 +248,7 @@ check("cron è nel profilo pieno", "cron" in _PROFILI["pieno"])
 check("mcp è nel profilo pieno", "mcp" in _PROFILI["pieno"])
 check("calculate resta nel profilo skill", "calculate" in _PROFILI["skill"],
       "un profilo alto non deve togliere capacità")
-check("screenshot_view sta dove sta image_edit",
+check("screenshot_view sta dove sta immagine",
       all("screenshot_view" in _PROFILI[p] for p in ("base", "ricerca", "skill", "pieno")),
       str({p: "screenshot_view" in _PROFILI[p] for p in _PROFILI}))
 mancanti = set(r.all_names()) - _PROFILI["pieno"]
@@ -269,7 +269,7 @@ for testo, atteso, tool in (
     ("usa la skill del deploy per pubblicare", "skill", "skill_leggi"),
     ("cerca sul web quanto costa", "ricerca", "web_cerca"),
     ("sistema il bug in src/app.py", "base", "read_file"),
-    ("genera un'immagine di un gatto", "base", "image_gen"),
+    ("genera un'immagine di un gatto", "base", "immagine"),
 ):
     scelto = profilo_per_testo(testo)
     check(f"auto: {testo[:34]!r} -> {atteso}", scelto == atteso, scelto)

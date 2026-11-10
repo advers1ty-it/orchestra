@@ -569,15 +569,15 @@ out.snapshotScrollHeight = mainEl.scrollHeight;
   out.chatStessaIntatta = log.children.length === _nodiPrima;
 
   // --- REGRESSIONE 4: l'anteprima di un'immagine generata.
-  // `image_gen` manda l'immagine in `images` dentro tool_end, non nel
+  // `immagine` manda l'immagine in `images` dentro tool_end, non nel
   // testo: il testo resta leggibile e la UI deve mostrare il file. Se il
   // campo viene ignorato, l'utente legge un percorso e non vede niente.
   log.children = [];
   handle("turn_start", {});
   handle("assistant", {content:"", tool_calls:[
-    {id:"call_gen", name:"image_gen", args:{prompt:"un gatto"}},
+    {id:"call_gen", name:"immagine", args:{azione:"genera", prompt:"un gatto"}},
   ]});
-  handle("tool_end", {name:"image_gen", ok:true,
+  handle("tool_end", {name:"immagine", ok:true,
     result:"Immagine generata: immagini/gatto.png",
     id:"call_gen", images:["data:image/png;base64,QUJD"]});
   const anteprime = log.querySelectorAll(".tool-img");
@@ -594,9 +594,9 @@ out.snapshotScrollHeight = mainEl.scrollHeight;
   log.children = [];
   handle("turn_start", {});
   handle("assistant", {content:"", tool_calls:[
-    {id:"call_gen2", name:"image_gen", args:{prompt:"x"}},
+    {id:"call_gen2", name:"immagine", args:{azione:"genera", prompt:"x"}},
   ]});
-  handle("tool_end", {name:"image_gen", ok:true, result:"ok",
+  handle("tool_end", {name:"immagine", ok:true, result:"ok",
     id:"call_gen2", images:["https://esempio.invalid/a.png"]});
   out.anteprimeEsterne = log.querySelectorAll(".tool-img").length;
 

@@ -269,15 +269,17 @@ try:
 
     print("\n[9] Il tool: anteprima per la UI, nessuna immagine al modello")
     from orchestra.tools import image_gen as tool_mod
+    from orchestra.tools.immagine import tool_immagine
 
     tool_mod._root_progetto = lambda: Path(TMP)
-    tool = tool_mod.tool_image_gen()
+    tool = tool_immagine()
     ig._post_json = finto_openai
     # Il tool legge le chiavi dall'ambiente del processo: qui si mette solo
     # quella finta, e si toglie subito dopo.
     os.environ["OPENAI_API_KEY"] = "sk-test"
     try:
-        res = tool.handler(prompt="una montagna al tramonto")
+        res = tool.handler(azione="genera",
+                           prompt="una montagna al tramonto")
     finally:
         os.environ.pop("OPENAI_API_KEY", None)
     check("restituisce un ToolResult", isinstance(res, ToolResult), type(res))
@@ -426,8 +428,9 @@ try:
                 return LLMResponse(
                     content="",
                     tool_calls=[ToolCall(
-                        id="call_gen", name="image_gen",
-                        arguments='{"prompt":"rendila notturna",'
+                        id="call_gen", name="immagine",
+                        arguments='{"azione":"genera",'
+                                  '"prompt":"rendila notturna",'
                                   ' "riferimento":"ultimo"}')],
                     model="finto-1")
             return LLMResponse(content="Ecco l'immagine.", model="finto-1")
@@ -445,7 +448,8 @@ try:
         os.environ.pop("OPENAI_API_KEY", None)
     check("l'agente ricorda l'immagine allegata",
           att.ultima_immagine() == data_url, str(att.ultima_immagine())[:40])
-    fini = [d for k, d in eventi if k == "tool_end" and d.get("name") == "image_gen"]
+    fini = [d for k, d in eventi
+            if k == "tool_end" and d.get("name") == "immagine"]
     check("l'evento tool_end c'e'", len(fini) == 1, str(len(fini)))
     check("l'evento porta l'anteprima",
           bool(fini) and len(fini[0].get("images") or []) == 1,
@@ -873,11 +877,13 @@ try:
 
     print("\n[16] Il tool e' nel registro e in tutti i profili")
     reg = default_registry()
-    check("image_gen registrato", "image_gen" in reg, str(reg.all_names())[:200])
+    check("immagine registrato", "immagine" in reg,
+          str(reg.all_names())[:200])
     for profilo in ("base", "ricerca", "skill", "pieno"):
         reg2 = default_registry()
         applica_profilo(reg2, profilo)
-        check(f"attivo nel profilo {profilo}", "image_gen" in reg2.nomi_attivi(),
+        check(f"attivo nel profilo {profilo}",
+              "immagine" in reg2.nomi_attivi(),
               str(reg2.nomi_attivi()))
 finally:
     ig._post_json = originale

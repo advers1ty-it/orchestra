@@ -90,7 +90,7 @@ Il contratto è stato ricostruito facendolo parlare, perché **la validazione de
 
 **Cosa esce dalla macchina.** Il prompt, il contenuto dei file che l'agente legge, gli screenshot del browser e le immagini di riferimento vengono inviati al provider che hai configurato (OpenRouter, OpenAI, Google, Groq, NVIDIA o un endpoint locale) e sono soggetti alla sua informativa. Non vengono inviati ad altri. Le chiavi restano nel tuo `orchestra/.env`; lo storico dei turni resta in `storico.db` sulla tua macchina.
 
-**Immagini generate.** Ogni immagine prodotta da `image_gen` è marcata come contenuto sintetico: un chunk nei PNG e, per qualunque formato, un file `<nome>.ai.json` accanto all'immagine.
+**Immagini generate.** Ogni immagine prodotta da `immagine` con `azione="genera"` è marcata come contenuto sintetico: un chunk nei PNG e, per qualunque formato, un file `<nome>.ai.json` accanto all'immagine.
 
 **A cosa non serve.** Non è uno strumento per decidere sulle persone: non usarlo per selezione o valutazione del personale, ammissioni scolastiche, credito, assicurazioni, diagnosi o terapia, giustizia. Non è un prodotto certificato né una garanzia di risultato: è software gratuito, scritto da una persona, e il codice che genera va letto prima di usarlo in produzione.
 

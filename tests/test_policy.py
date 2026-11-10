@@ -53,7 +53,7 @@ def nome_tool(t):
 print("\n[1] Normalizzazione: quattro liste, niente sorprese")
 p = pol.normalizza({
     "tools": "read_file, RUN_SHELL, read_file",
-    "nega_tools": ["image_gen"],
+    "nega_tools": ["immagine"],
     "shell": "git, npm",
     "nega_shell": "rm -rf",
     "chiave_ignorata": ["x"],
@@ -62,7 +62,7 @@ check("i tool si normalizzano in minuscolo",
       p["tools"] == ["read_file", "run_shell"], str(p["tools"]))
 check("i duplicati spariscono", len(p["tools"]) == 2, str(p["tools"]))
 check("i tool vietati restano distinti",
-      p["nega_tools"] == ["image_gen"], str(p["nega_tools"]))
+      p["nega_tools"] == ["immagine"], str(p["nega_tools"]))
 check("la shell si legge dalla stringa",
       p["shell"] == ["git", "npm"], str(p["shell"]))
 check("nega_shell e' una lista", p["nega_shell"] == ["rm -rf"],
@@ -96,10 +96,10 @@ check("un tool spento dal profilo non torna acceso",
 # Il profilo ha gia' spento un tool; la policy non lo riaccende solo
 # perche' compare nella sua lista.
 r = default_registry()
-r.disattiva("image_gen")
-pol.applica_al_registro(r, {"tools": ["image_gen", "read_file"]})
+r.disattiva("immagine")
+pol.applica_al_registro(r, {"tools": ["immagine", "read_file"]})
 check("la policy non riaccende un tool spento dal profilo",
-      "image_gen" not in r.nomi_attivi() and "read_file" in r.nomi_attivi(),
+      "immagine" not in r.nomi_attivi() and "read_file" in r.nomi_attivi(),
       str(r.nomi_attivi()))
 
 print("\n[3] Shell: programmi ammessi e sostituzioni")

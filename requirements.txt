@@ -5,9 +5,9 @@
 # comunque: i tool del web lo dicono invece di morire.
 ddgs>=9.0
 
-# `Pillow` serve al montaggio deterministico delle immagini (`image_edit`:
-# testo, logo, ritaglio su una foto esistente). Senza, quel tool dice cosa
-# installare e `image_gen` continua a funzionare lo stesso.
+# `Pillow` serve al montaggio deterministico delle immagini (`immagine`,
+# azione "modifica": testo, logo, ritaglio su una foto esistente). Senza,
+# quel tool dice cosa installare e la generazione continua lo stesso.
 Pillow>=10.1
 
 # `pypdf` legge il testo dei PDF: un allegato PDF con testo costa zero

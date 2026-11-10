@@ -3,7 +3,7 @@
 Questo pacchetto raccoglie tutti i tool in moduli singoli:
 - read_file, write_file, edit_file, list_dir, run_shell, processo, calculate
 - memoria, web, storico, skill, browser, computer
-- image_gen (genera), image_edit (monta su una foto esistente)
+- immagine (genera con un modello, oppure monta su una foto esistente)
 
 default_registry() restituisce il registro completo con tutti i tool attivi.
 """
@@ -21,7 +21,7 @@ from __future__ import annotations
 # Prima in questo file c'era una `_root()` locale che restituiva
 # `Path(__file__).parent.parent`, cioe' `orchestra/`, e OMBREGGIAVA quella
 # di `_guard`. Tutti i tool che fanno `from . import _root` — screenshot,
-# browser, computer, image_gen — risolvevano i percorsi relativi DENTRO il
+# browser, computer, immagine — risolvevano i percorsi relativi DENTRO il
 # pacchetto: `screenshot_view("foto.png")` rispondeva "non trovo" su un
 # file che esisteva nella cartella di lavoro, e gli screenshot finivano
 # dentro l'installazione (in un `pip install`, dentro `site-packages`, che
@@ -68,6 +68,9 @@ from .storico import tool_storico_cerca  # noqa: E402
 from .cron import tool_cron  # noqa: E402
 from .email import tool_email  # noqa: E402
 from .telegram import tool_telegram  # noqa: E402
+from .calendario import tool_calendario  # noqa: E402
+from .rubrica import tool_rubrica  # noqa: E402
+from .office import tool_office  # noqa: E402
 from .mcp import tool_mcp  # noqa: E402
 from .skill import (
     tool_skill_cerca,
@@ -86,8 +89,7 @@ from .browser import (
     tool_browser_rete,  # noqa: E402
 )
 from .screenshot import tool_screenshot_view  # noqa: E402
-from .image_gen import tool_image_gen  # noqa: E402
-from .image_edit import tool_image_edit  # noqa: E402
+from .immagine import tool_immagine  # noqa: E402
 from .computer import (
     tool_computer_screenshot,
     tool_computer_click,
@@ -243,16 +245,20 @@ La shell:
 - Usa path relativi dentro il progetto: è più semplice e non fa scattare la domanda di permesso.
 - `run_shell` ASPETTA il comando e lo uccide al timeout. Per un comando che non finisce — un server di sviluppo, un watcher, un tunnel — usa `processo`: lo avvia, resta vivo fra una chiamata e l'altra, e `processo(azione="leggi")` ti dà le ultime righe del log. Se il comando muore subito te lo dice all'avvio con l'output: è lì che sta `EADDRINUSE` o il modulo mancante. Fermalo con `ferma` quando hai finito: un server lasciato acceso tiene occupata la porta, e il prossimo avvio fallisce senza dirti perché.
 
+Calendario, contatti, documenti:
+- `calendario` legge e scrive un file .ics: usalo per "cosa ho domani", per segnare una scadenza, per cercare un appuntamento. Se un giorno e' vuoto, dillo: non inventare eventi. I calendari remoti si aggiungono con `aggiungi_fonte` (link iCal) e si aggiornano con `sincronizza`: fino a quel momento la copia locale e' quella di prima, e un evento che viene da fuori non si cancella da qui — dillo, non fingere.
+- `rubrica` cerca un contatto per nome, email, telefono o azienda. Cercalo qui prima di chiedere "chi e'?" o di mandare una mail a un indirizzo che non ricordi con certezza.
+- `office` scrive un .docx, un .xlsx o un .pdf nuovo. Un foglio puo' avere piu' fogli (`fogli`), l'intestazione grassa e la prima riga bloccata, e una cella che comincia con `=` diventa una formula vera — ma i nomi sono quelli inglesi (`SUM`, `AVERAGE`), e in Excel si vedranno tradotti. Per aggiungere a un documento che esiste usa `azione="aggiungi"` (paragrafi in coda a un .docx, righe in coda al primo foglio di un .xlsx): non riscriverlo da zero, perderesti il resto. Un PDF non si aggiorna, si riscrive. Per LEGGERE un Office c'e' gia' `read_file`.
+
 Immagini:
-- Per aggiungere testo, un prezzo, un logo o una filigrana a una foto che l'utente ha allegato usa `image_edit`: incolla i file veri e disegna il testo vero, e i pixel che non tocca restano quelli dell'originale. Va bene anche per ritagliare e ridimensionare, e non costa niente.
-- Un logo o una foto col fondo bianco si incollano lo stesso: su `incolla` metti `scontorna: true` (con `tolleranza` se serve) e il fondo sparisce, lasciando il soggetto; `ombra` aggiunge l'ombra che evita l'effetto adesivo. Non mandare l'utente su remove.bg o Canva per uno sfondo uniforme: e' un lavoro che fai qui, in un colpo e senza spendere.
-- `image_gen` inventa o trasforma: un modello ridisegna tutto, quindi un logo torna con le lettere sbagliate e un prezzo con altre cifre. Non usarlo per un fotoritocco, e non promettere che terra' un logo o un testo che esistono gia'.
-- Quando invece la scena va RICOMPOSTA e non solo ritoccata — un poster da rifare col logo vero e la foto vera del prodotto — `image_gen` accetta `riferimenti`: la prima immagine e' la base, le altre sono i file veri, e il prompt li nomina per posizione ("il logo nella seconda"). Il testo esatto (prezzo, indirizzo, nome) si ridisegna poi con `image_edit` sopra il risultato: e' l'unico ordine che tiene insieme composizione e cifre. Se l'utente vuole una scena rifusa, incollare i file con `image_edit` non basta e si vede: restano rettangoli col fondo bianco sopra l'arte.
-- Un'immagine allegata in chat e' gia' raggiungibile come `ultimo` in entrambi i tool: non chiedere all'utente di salvarla o di passarti un percorso.
-- Per GUARDARE un'immagine che sta sul disco — una foto, un logo, uno screenshot — usa `screenshot_view` col suo percorso: `read_file` su un PNG non ti da' il contenuto, e un percorso non e' un'immagine. Fallo prima di montarci sopra un testo, invece di indovinare dove sono le cose.
+- `immagine` con `azione="modifica"` incolla i file veri — logo, testo, prezzo — su una foto: i pixel che non tocca restano quelli dell'originale, e non costa niente. E' la strada per un prezzo, un logo, una filigrana, un ritaglio, un ridimensionamento.
+- Un logo o una foto col fondo bianco si incollano lo stesso: su `incolla` metti `scontorna: true` (con `tolleranza` se serve) e il fondo sparisce, lasciando il soggetto; `ombra` aggiunge l'ombra che evita l'effetto adesivo. Non mandare l'utente su remove.bg o Canva per uno sfondo uniforme.
+- `immagine` con `azione="genera"` chiama un modello che ridisegna tutto: serve per inventare, per ricomporre una scena attorno ai file veri (`riferimenti`: il primo e' la base, gli altri si nominano per posizione) e per cambiare UNA zona (`zone`, solo OpenAI). Non usarlo per un fotoritocco, e non promettere che terra' un logo o un testo che esistono gia'.
+- L'ordine che tiene insieme composizione e cifre: `genera` ricompone la scena, poi `modifica` riscrive sopra il testo esatto. Se l'utente vuole una scena rifusa, incollare con `modifica` non basta e si vede: restano rettangoli col fondo bianco sopra l'arte.
+- Un'immagine allegata in chat e' gia' raggiungibile come `ultimo` (e `allegato:N` quando le foto sono piu' d'una): non chiedere all'utente di salvarla o di passarti un percorso.
+- Per GUARDARE un'immagine che sta sul disco — una foto, un logo, uno screenshot — usa `screenshot_view` col suo percorso: `read_file` su un PNG non ti da' il contenuto. Fallo prima di montarci sopra un testo, invece di indovinare dove sono le cose.
 - Se un montaggio non e' dove lo volevi, rifallo con coordinate diverse: le percentuali ("50%") evitano di dover conoscere i pixel, e il risultato dice sempre la dimensione finale.
-- Per cambiare **solo una zona** (togliere una scritta, sostituire un dettaglio) usa `image_gen` con `zone`: rettangolo o ellisse in percentuali, e la maschera la costruisce il tool. Il resto dell'immagine non viene ridisegnato. Funziona solo con OpenAI: con Google e OpenRouter il tool te lo dice senza spendere credito, e allora la zona la descrivi nel prompt.
-- Non mandare l'utente su Canva o Photoshop prima di aver provato `image_edit`. Se il montaggio non basta davvero (inpainting per regione, maschere), dillo in una riga e spiega cosa manca.
+- Non mandare l'utente su Canva o Photoshop prima di aver provato `immagine`. Se non basta davvero (inpainting per regione, maschere), dillo in una riga e spiega cosa manca.
 
 ---
 Cose che valgono in ogni conversazione. Non ripeterle se non servono. Per tutto il resto hai il tool `memoria`: cerca quello che ti serve invece di assumere di non saperlo.
@@ -297,13 +303,13 @@ _PROFILI: dict[str, set[str]] = {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
         "processo",
-        "image_gen", "image_edit", "screenshot_view",
+        "immagine", "screenshot_view",
     },
     "ricerca": {
         "read_file", "write_file", "edit_file", "list_dir", "calculate",
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
         "processo",
-        "skill_cerca", "skill_leggi", "image_gen", "image_edit",
+        "skill_cerca", "skill_leggi", "immagine",
         "screenshot_view",
     },
     "skill": {
@@ -311,7 +317,7 @@ _PROFILI: dict[str, set[str]] = {
         "memoria", "web_cerca", "web_leggi", "storico_cerca", "run_shell",
         "processo",
         "skill_cerca", "skill_leggi", "skill_genera", "skill_importa",
-        "image_gen", "image_edit", "screenshot_view",
+        "immagine", "screenshot_view",
     },
     "pieno": {
         "read_file", "write_file", "edit_file", "list_dir", "run_shell", "calculate",
@@ -321,7 +327,7 @@ _PROFILI: dict[str, set[str]] = {
         "browser_apri", "browser_render", "browser_screenshot",
         "browser_click", "browser_digita", "browser_attendi",
         "browser_console", "browser_rete",
-        "screenshot_view", "image_gen", "image_edit", "cron", "mcp",
+        "screenshot_view", "immagine", "cron", "mcp",
         "computer_screenshot", "computer_click", "computer_open", "computer_type",
     },
 }
@@ -347,9 +353,15 @@ for _nomi_profilo in _PROFILI.values():
     # prova che il ragionamento era giusto: senza, alla richiesta "mandami
     # le previsioni su Telegram" l'agente rispondeva "non posso inviarti
     # messaggi su Telegram" — mentre la risposta viaggiava su quel ponte.
+    # Stessa regola per calendario, rubrica e office: sono il modo in cui
+    # l'agente sa cosa hai in agenda, chi e' una persona e come si produce
+    # un documento. Toglierli a un profilo vuol dire far rispondere "non
+    # posso" a chi ha chiesto proprio quello — e un profilo non e' un
+    # livello di fiducia, e' un livello di capacita'.
     _nomi_profilo.update({"search_text", "find_files", "ask_user",
                           "proponi_piano", "analisi_python", "run_tests",
-                          "email", "telegram_invia"})
+                          "email", "telegram_invia", "calendario",
+                          "rubrica", "office"})
 del _nomi_profilo
 
 
@@ -484,10 +496,11 @@ def default_registry() -> ToolRegistry:
                  tool_browser_digita(), tool_browser_attendi(),
                  tool_browser_console(), tool_browser_rete(),
                  tool_screenshot_view(),
-                 tool_image_gen(), tool_image_edit(),
+                 tool_immagine(),
                  tool_computer_screenshot(), tool_computer_click(),
                  tool_computer_open(), tool_computer_type(),
-                 tool_mcp(), tool_email(), tool_telegram()):
+                 tool_mcp(), tool_email(), tool_telegram(),
+                 tool_calendario(), tool_rubrica(), tool_office()):
         registry.registra(tool)
         registry.attiva(tool.name)
 

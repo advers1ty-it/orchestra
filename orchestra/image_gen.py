@@ -925,7 +925,8 @@ def genera(prompt: str, *, provider: str = "", modello: str = "",
             "OpenRouter non hanno una modifica per regione. Usa "
             "provider=\"openai\" con OPENAI_API_KEY, oppure togli la "
             "maschera e descrivi la zona nel prompt. Per coprire qualcosa "
-            "senza modello c'e' `image_edit`. Nessun credito e' stato "
+            "senza modello c'e' `immagine` con azione \"modifica\". "
+            "Nessun credito e' stato "
             "speso."
         )
     risoluzione = _risoluzione(risoluzione, scelto)

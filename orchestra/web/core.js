@@ -541,7 +541,7 @@ on($("domanda-input"), "keydown", (e) => {
 
 
 // Anteprime di un tool: immagini che il tool ha prodotto (per esempio
-// image_gen). Non arrivano dentro `result` perché sono grandi e non sono
+// immagine). Non arrivano dentro `result` perché sono grandi e non sono
 // testo: viaggiano a parte in `images`, e qui diventano <img>.
 //
 // Solo data URL: un percorso del disco non è raggiungibile dal browser, e

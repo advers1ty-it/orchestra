@@ -128,7 +128,7 @@ def mime_immagine(dati: bytes) -> str:
 # Le ultime immagini allegate alla chat, per la modifica da parte dei tool.
 #
 # Perche' serve: un'immagine allegata vive nel messaggio come data URL, e il
-# tool `image_gen` non ha modo di leggere i messaggi. Senza questo ponte,
+# tool `immagine` non ha modo di leggere i messaggi. Senza questo ponte,
 # "modifica la foto che ti ho appena mandato" non avrebbe un'immagine da
 # modificare, e l'utente dovrebbe salvare il file e passare un percorso.
 #

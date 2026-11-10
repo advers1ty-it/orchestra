@@ -41,7 +41,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # lista minima che serve a Orchestra per fare il suo lavoro.
 ELEMENTARI = (
     ("ddgs", ">=9.0", "ricerca sul web senza chiave"),
-    ("Pillow", ">=10.1", "montaggio delle immagini (image_edit)"),
+    ("Pillow", ">=10.1", "montaggio delle immagini (immagine)"),
     ("pypdf", ">=5.0", "testo dei PDF"),
 )
 
@@ -58,7 +58,7 @@ MODULI = {
 # file e' letto anche da pip, che i commenti li ignora ma non li mostra.
 PERCHE = {
     "ddgs": "ricerca sul web senza chiave (web_cerca)",
-    "pillow": "montaggio delle immagini (image_edit)",
+    "pillow": "montaggio delle immagini (immagine)",
     "pypdf": "testo dei PDF (allegati e read_file)",
 }
 

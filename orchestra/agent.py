@@ -828,7 +828,7 @@ class Agent:
                 )
             immagini.extend(getattr(a, "immagini", []) or [])
 
-        # Il ponte per la modifica: `image_gen` non vede i messaggi, quindi
+        # Il ponte per la modifica: `immagine` non vede i messaggi, quindi
         # le immagini appena allegate restano raggiungibili da li'. Senza,
         # "modifica la foto che ti ho mandato" non avrebbe una foto.
         try:

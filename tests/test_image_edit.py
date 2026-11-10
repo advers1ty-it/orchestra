@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 from orchestra import montaggio as mo  # noqa: E402
 from orchestra.tools import applica_profilo, default_registry  # noqa: E402
 from orchestra.tools import image_edit as mod_edit  # noqa: E402
-from orchestra.tools.image_edit import tool_image_edit  # noqa: E402
+from orchestra.tools.immagine import tool_immagine  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -246,12 +246,18 @@ check("l'ombra scurisce appena sotto il soggetto",
       sum(sotto_ombra) < sum(sotto_pulito), f"{sotto_ombra} vs {sotto_pulito}")
 
 print("\n[12] Il tool: anteprima, profili, registro")
-tool = tool_image_edit()
-check("il nome e' image_edit", tool.name == "image_edit", tool.name)
-check("lo schema chiede le operazioni", "operazioni" in tool.schema["required"])
+tool = tool_immagine()
+check("il nome e' immagine", tool.name == "immagine", tool.name)
+check("lo schema chiede l'azione", tool.schema["required"] == ["azione"],
+      str(tool.schema["required"]))
+check("e offre le operazioni del montaggio",
+      "operazioni" in tool.schema["properties"])
+check("e i due gesti",
+      tool.schema["properties"]["azione"]["enum"] == ["genera", "modifica"],
+      str(tool.schema["properties"]["azione"]))
 # La root del test e' TMP: i percorsi si risolvono li'.
 os.environ["ORCHESTRA_ROOT"] = TMP
-esito = tool.handler(immagine="non-esiste.png",
+esito = tool.handler(azione="modifica", immagine="non-esiste.png",
                      operazioni=[{"tipo": "ridimensiona", "larghezza": 100}])
 check("un percorso mancante e' un errore leggibile",
       "ERRORE" in esito.text and "non trovo" in esito.text.lower(), esito.text[:160])
@@ -262,7 +268,7 @@ check("un percorso mancante e' un errore leggibile",
 # a TMP, o il test sporcherebbe il repository con `immagini/`.
 mod_edit._root_progetto = lambda: Path(TMP)
 Path(TMP, "foto.jpg").write_bytes(JPEG)
-esito2 = tool.handler(immagine="foto.jpg", operazioni=[
+esito2 = tool.handler(azione="modifica", immagine="foto.jpg", operazioni=[
     {"tipo": "testo", "testo": "DISPONIBILE", "x": "50%", "y": "50%",
      "dimensione": 40, "ancora": "mm"},
 ], nome_file="da-tool")
@@ -272,11 +278,11 @@ check("l'anteprima e' una data URL",
       str(esito2.anteprime[0]).startswith("data:image/"), str(esito2.anteprime[0])[:40])
 
 reg = default_registry()
-check("image_edit e' registrato", "image_edit" in reg.all_names())
+check("immagine e' registrato", "immagine" in reg.all_names())
 for profilo in ("base", "ricerca", "skill", "pieno"):
     reg2 = default_registry()
     applica_profilo(reg2, profilo)
-    check(f"attivo nel profilo {profilo}", "image_edit" in reg2.nomi_attivi(),
+    check(f"attivo nel profilo {profilo}", "immagine" in reg2.nomi_attivi(),
           str(sorted(reg2.nomi_attivi()))[:160])
 
 shutil.rmtree(TMP, ignore_errors=True)

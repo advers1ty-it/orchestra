@@ -154,7 +154,16 @@ def _xlsx(z: zipfile.ZipFile) -> str:
                                          for t in c.iter(_S + "t")))
                 else:
                     v = c.find(_S + "v")
-                    celle.append(v.text if v is not None and v.text else "")
+                    valore = v.text if v is not None and v.text else ""
+                    if not valore:
+                        # Una formula scritta da noi non ha il valore
+                        # calcolato (lo fa Excel aprendo il file): senza
+                        # questo ramo la cella sembrerebbe vuota, e chi
+                        # rilegge crederebbe di aver perso la formula.
+                        f = c.find(_S + "f")
+                        if f is not None and (f.text or "").strip():
+                            valore = "=" + f.text.strip()
+                    celle.append(valore)
             if any(x.strip() for x in celle):
                 righe.append(" | ".join(x.strip() for x in celle))
         titolo = nomi[i] if i < len(nomi) else f"Foglio {i + 1}"

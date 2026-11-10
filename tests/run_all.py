@@ -245,6 +245,16 @@ SUITES = [
     ("image-gen", "test_image_gen.py", True),
     ("image-edit", "test_image_edit.py", True),
     ("inpainting", "test_inpainting.py", True),
+    # Calendario, rubrica e scrittura Office: i tre pezzi che mancavano per
+    # l'uso quotidiano. Si provano sul giro intero — modulo, tool, e il file
+    # riletto dal lettore vero — perche' un .docx che si scrive e non si
+    # riapre non e' un documento.
+    ("calendario-rubrica-office",
+     "test_calendario_rubrica_office.py", True),
+    # La sincronizzazione con un calendario remoto: server finto in casa,
+    # ETag e 304 veri. Il pezzo che si sbaglia e' il protocollo, non la
+    # chiamata — e un errore di rete non deve svuotare l'agenda.
+    ("calendario-sync", "test_calendario_sync.py", True),
     ("e2e", "test_e2e.py", False),
 ]
 
