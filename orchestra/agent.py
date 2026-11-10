@@ -628,8 +628,10 @@ class Agent:
         righe = [
             "## Da dove arriva questo turno",
             f"Questo messaggio arriva da {canale}, non dalla finestra di "
-            "Orchestra: chi scrive ti legge da li' e non ha la finestra "
-            "davanti.",
+            "Orchestra: chi scrive ti legge da li', ma la macchina su cui "
+            "lavori resta la sua. Il computer dove e' installato Orchestra "
+            "E' il computer dell'utente: scrivere dal telefono non vuol dire "
+            "essere su un'altra macchina, e i tool agiscono su quella.",
         ]
         if self._ha_il_tool("telegram_invia"):
             righe.append(
