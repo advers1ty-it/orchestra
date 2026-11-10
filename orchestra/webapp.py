@@ -224,6 +224,16 @@ def _scegli_modello(scelta: str, modelli: list[str]) -> tuple[str, str]:
                  "Qualcuno: " + ", ".join(modelli[:10]) + ".")
 
 
+# L'indirizzo da cui arrivano gli aggiornamenti: lo stesso che usa il
+# launcher (`Orchestra.cmd`) e il comando `update` da riga di comando.
+REPO_AGGIORNAMENTO = "advers1ty-it/orchestra"
+
+# Quanto si aspetta prima di sostituire il processo: la risposta in chat
+# deve partire prima, ma non cosi' tanto che l'utente creda che non
+# succeda niente.
+RITARDO_RIAVVIO = 4.0
+
+
 class OrchestraApp:
     """Lo stato del server, condiviso fra i thread.
 
@@ -2538,11 +2548,160 @@ class OrchestraApp:
             sess.reset()
             return ("Nuova conversazione. La precedente resta nella "
                     "cronologia di Orchestra.")
+        if nome in ("aggiorna", "update"):
+            return self._telegram_aggiorna(bot_id, sess)
+        if nome in ("riavvia", "restart"):
+            return self._telegram_riavvia(sess)
         if nome == "modello":
             return self._telegram_modello(b, argomento)
         if nome in ("reasoning", "ragionamento"):
             return self._telegram_ragionamento(b, argomento)
         return f"Comando /{nome} non riconosciuto. /aiuto per la lista."
+
+    def _telegram_aggiorna(self, bot_id: int, sess: Any) -> str:
+        """Scarica l'ultima release e, se c'e', riavvia il server.
+
+        Gira nel thread del ponte: la chat resta zitta mentre scarica,
+        quindi si manda subito un messaggio a parte. Il riavvio parte da
+        un timer e non da qui, perche' la risposta con l'esito deve uscire
+        prima che il processo cambi.
+        """
+        if sess.busy:
+            return ("C'e' un turno in corso: /stop, poi /aggiorna. "
+                    "Sovrascrivere il codice mentre l'agente lo esegue "
+                    "lascerebbe un turno a meta'.")
+        if not self._prende_manutenzione():
+            return ("Un aggiornamento o un riavvio e' gia' in corso: "
+                    "aspetta che finisca.")
+        from . import update as update_mod
+
+        self._telegram_annuncia(bot_id, "Controllo le release e aggiorno...")
+        try:
+            esito = update_mod.aggiorna(REPO_AGGIORNAMENTO)
+        except Exception as e:  # noqa: BLE001 - UpdateError, rete, zip rotto
+            self._lascia_manutenzione()
+            return f"Aggiornamento non riuscito: {e}"
+        if not esito.get("aggiornato"):
+            self._lascia_manutenzione()
+            return (f"Gia' aggiornato: {esito.get('locale') or '?'}. "
+                    "Nessun riavvio.")
+        self._programma_riavvio()
+        return (f"Aggiornato {esito.get('locale')} -> {esito.get('remota')} "
+                f"({esito.get('file', 0)} file). Riavvio il server...")
+
+    def _telegram_riavvia(self, sess: Any) -> str:
+        """Riavvia il server, senza aggiornare niente."""
+        if sess.busy:
+            return ("C'e' un turno in corso: /stop, poi /riavvia. "
+                    "Un riavvio a meta' turno perde il lavoro.")
+        if not self._prende_manutenzione():
+            return ("Un aggiornamento o un riavvio e' gia' in corso: "
+                    "aspetta che finisca.")
+        self._programma_riavvio()
+        return ("Riavvio il server: torna tra qualche secondo, "
+                "la chat resta questa.")
+
+    def _telegram_annuncia(self, bot_id: int, testo: str) -> bool:
+        """Manda una riga in chat prima di un'operazione lunga.
+
+        La manda il ponte, che ha gia' la chat giusta: se il bot non e'
+        collegato non e' un errore, e l'operazione prosegue lo stesso.
+        """
+        ponte = (getattr(self, "_telegram_ponti", {}) or {}).get(int(bot_id))
+        if ponte is None:
+            return False
+        try:
+            return bool(ponte.recapita(testo))
+        except Exception:  # noqa: BLE001 - un annuncio perso non ferma l'update
+            return False
+
+    def _prende_manutenzione(self) -> bool:
+        """Una sola operazione per volta: update e riavvio si escludono."""
+        if getattr(self, "_manutenzione", False):
+            return False
+        self._manutenzione = True
+        return True
+
+    def _lascia_manutenzione(self) -> None:
+        self._manutenzione = False
+
+    def _programma_riavvio(self, secondi: float = RITARDO_RIAVVIO) -> None:
+        """Riavvia fra qualche secondo, non subito.
+
+        La risposta del comando parte dopo che questa funzione torna:
+        riavviare subito vorrebbe dire cambiare processo mentre il
+        messaggio con l'esito e' ancora per strada, e chi ha scritto dal
+        telefono non saprebbe com'e' andata.
+        """
+        timer = threading.Timer(max(0.5, float(secondi)), self._riavvio_ora)
+        timer.daemon = True
+        timer.start()
+
+    def _riavvio_ora(self) -> None:
+        """Chiude quello che tiene in piedi il processo, poi si sostituisce."""
+        from . import riavvio as riavvio_mod
+
+        self._chiudi_per_riavvio()
+        _log_telegram("riavvio: " + " ".join(riavvio_mod.comando_riavvio()))
+        try:
+            riavvio_mod.riavvia()
+        except Exception as e:  # noqa: BLE001 - se execv fallisce, restare vivi
+            _log_telegram(f"riavvio non riuscito: {type(e).__name__}: {e}")
+            self._lascia_manutenzione()
+            try:
+                self.telegram_sync()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _chiudi_per_riavvio(self) -> None:
+        """Ferma quello che non deve sopravvivere al cambio di processo.
+
+        Cron e obiettivi hanno un thread loro; i tool possono avere un
+        server o un comando vivo; il tunnel e' un processo figlio. Senza
+        questa chiusura il riavvio lascerebbe lavoro orfano e una porta
+        occupata, che al prossimo avvio sembra un guasto del programma.
+        """
+        for ponte in list((getattr(self, "_telegram_ponti", {}) or {}).values()):
+            try:
+                ponte.ferma(1.0)
+            except Exception:  # noqa: BLE001
+                pass
+        self._telegram_ponti = {}
+        try:
+            from . import cron as cron_mod
+
+            cron_mod.scheduler_stop()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from . import goal as goal_mod
+
+            goal_mod.scheduler_stop()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from .tools import processi
+
+            processi.ferma_tutti()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from . import mcp as mcp_mod
+
+            for sid in list(getattr(mcp_mod, "_connections", {})):
+                mcp_mod.disconnect(sid)
+        except Exception:  # noqa: BLE001
+            pass
+        proc = getattr(self, "_tunnel_proc", None)
+        if proc is not None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except Exception:  # noqa: BLE001
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
 
     def _telegram_ragionamento(self, bot: dict[str, Any],
                                argomento: str) -> str:

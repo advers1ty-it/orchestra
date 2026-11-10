@@ -115,7 +115,27 @@ MASSIMO_FILE = 20 * 1024 * 1024
 # chat non entra nel merito, ma deve sapere cosa e' un comando suo e
 # cosa e' un errore di battitura.
 COMANDI_AGENTE = ("stato", "steer", "stop", "nuova", "modello",
-                  "reasoning", "ragionamento")
+                  "reasoning", "ragionamento", "aggiorna", "update",
+                  "riavvia", "restart")
+
+# Il menu che Telegram mostra quando si preme "/". E' del BOT, non
+# dell'app: un bot usato prima con un'altra applicazione si porta dietro
+# i suoi comandi finche' qualcuno non li sostituisce. Orchestra non lo
+# faceva, quindi chi cambiava app trovava il menu vecchio — e sembrava
+# che quei comandi esistessero ancora.
+COMANDI_MENU = (
+    ("start", "Collega questa chat"),
+    ("aiuto", "La lista dei comandi"),
+    ("stato", "Modello, turno e collegamento"),
+    ("steer", "Guida il turno in corso"),
+    ("stop", "Ferma il turno"),
+    ("nuova", "Nuova conversazione"),
+    ("modello", "Scegli il modello"),
+    ("reasoning", "Mostra o nasconde il ragionamento"),
+    ("aggiorna", "Aggiorna e riavvia il server"),
+    ("riavvia", "Riavvia il server"),
+    ("scollega", "Stacca questa chat"),
+)
 
 # Il tetto del Bot API per un file in INVIO: oltre, Telegram risponde
 # 413 e il file non arriva. E' piu' alto di quello del download perche'
@@ -150,6 +170,8 @@ GUIDA = (
     "messaggio normale fa lo stesso)\n"
     "/stop - ferma il turno in corso\n"
     "/nuova - nuova conversazione\n"
+    "/aggiorna (o /update) - scarica l'ultima release e riavvia il server\n"
+    "/riavvia (o /restart) - riavvia il server senza aggiornare\n"
     "/modello - il modello in uso, e il menu per cambiarlo (prima il "
     "servizio, poi il modello: un tocco)\n"
     "/modello <nome> - cambia il modello scrivendone il nome\n"
@@ -843,6 +865,21 @@ class Api:
             raise
         return True
 
+    def set_my_commands(self, comandi: tuple[tuple[str, str], ...] | None = None,
+                        secondi: float = 20) -> bool:
+        """Scrive il menu degli slash sul bot.
+
+        `commands` e' una lista JSON, non un campo ripetuto: Telegram
+        vuole nome e descrizione insieme, e una stringa JSON e' l'unico
+        modo di mandarli in una chiamata sola.
+        """
+        voci = list(COMANDI_MENU if comandi is None else comandi)
+        risultato = self.chiama(
+            "setMyCommands", secondi=secondi,
+            commands=json.dumps([{"command": c, "description": d}
+                                 for c, d in voci], ensure_ascii=False))
+        return bool(risultato.get("ok"))
+
     def get_me(self, secondi: float = 15) -> dict[str, Any]:
         risultato = self.chiama("getMe", secondi=secondi)
         bot = risultato.get("result") or {}
@@ -1318,6 +1355,21 @@ class Ponte:
         t.join(timeout=secondi)
         return not t.is_alive()
 
+    def _allinea_comandi(self) -> None:
+        """Riallinea il menu degli slash a questo bot.
+
+        Non e' estetica: il menu vive sul bot, non nell'applicazione. Un
+        bot usato prima con un'altra app si porta dietro i suoi comandi, e
+        chi preme "/" li prova convinto che siano di Orchestra. Una
+        chiamata all'avvio e una quando una chat si collega bastano a non
+        lasciarlo indietro.
+        """
+        try:
+            self.api.set_my_commands()
+        except Exception as e:  # noqa: BLE001 - il menu non ferma il ponte
+            self._log(f"telegram {self.nome}: menu comandi non aggiornato: "
+                      f"{type(e).__name__}: {e}")
+
     def gira(self) -> None:
         try:
             self.api.senza_webhook()
@@ -1349,6 +1401,7 @@ class Ponte:
         attese vere.
         """
         if self._primo:
+            self._allinea_comandi()
             self._primo = False
             # L'arretrato non si rigioca: si prende l'ultimo
             # aggiornamento e si riparte da dopo.
@@ -1687,6 +1740,7 @@ class Ponte:
             return
         if argomento and codice_valido(self.bot_id, argomento):
             imposta_chat(self.bot_id, chat_id, chi)
+            self._allinea_comandi()
             self._rispondi(chat_id,
                            f"Collegato a {self.nome}.\n\n"
                            "Quello che scrivi qui arriva all'agente, con i "

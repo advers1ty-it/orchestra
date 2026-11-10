@@ -1173,6 +1173,140 @@ check("e senza testo lo mostra comunque",
 tg.salva_token(bot["id"], "")
 
 print()
+print("\n[28] /aggiorna e /riavvia: dal telefono, senza toccare il computer")
+# Il difetto da evitare e' aggiornare sotto i piedi di un turno in corso:
+# sovrascrivere il codice che l'agente sta eseguendo lascerebbe un turno
+# spezzato, e nessuno saprebbe piu' cosa era stato scritto. Poi il riavvio
+# non deve partire prima della risposta con l'esito.
+import orchestra.riavvio as riavvio_mod  # noqa: E402
+import orchestra.update as update_mod  # noqa: E402
+
+vero_aggiorna = update_mod.aggiorna
+aggiornamenti = []
+
+
+def aggiorna_finto(repo, token=None, root=None):
+    aggiornamenti.append(repo)
+    if getattr(aggiorna_finto, "errore", False):
+        raise update_mod.UpdateError("GitHub non raggiungibile")
+    return dict(getattr(aggiorna_finto, "esito",
+                        {"aggiornato": False, "locale": "0.5.95"}))
+
+
+update_mod.aggiorna = aggiorna_finto
+app_up, sess_up = app_finta()
+riavvii = []
+app_up._programma_riavvio = lambda secondi=webapp.RITARDO_RIAVVIO: \
+    riavvii.append(secondi)
+
+try:
+    sess_up.busy = True
+    esito = app_up.telegram_comando(bot["id"], "aggiorna")
+    check("a turno in corso /aggiorna rifiuta",
+          "turno in corso" in esito and "/stop" in esito, cp(esito))
+    check("e non scarica niente", aggiornamenti == [], str(aggiornamenti))
+    check("e non programma il riavvio", riavvii == [], str(riavvii))
+    sess_up.busy = False
+
+    aggiorna_finto.esito = {"aggiornato": False, "locale": "0.5.95"}
+    esito = app_up.telegram_comando(bot["id"], "update")
+    check("senza una release nuova non si riavvia",
+          "Gia' aggiornato" in esito and "0.5.95" in esito, cp(esito))
+    check("e il rifiuto non blocca i comandi dopo",
+          app_up._manutenzione is False, str(app_up._manutenzione))
+    check("l'update guarda l'ultima release",
+          aggiornamenti[:1] == [webapp.REPO_AGGIORNAMENTO],
+          str(aggiornamenti))
+
+    aggiorna_finto.esito = {"aggiornato": True, "locale": "0.5.95",
+                            "remota": "0.5.96", "file": 12}
+    esito = app_up.telegram_comando(bot["id"], "aggiorna")
+    check("quando c'e' l'aggiornamento lo dice",
+          "0.5.96" in esito and "12 file" in esito, cp(esito))
+    check("e programma il riavvio, invece di farlo subito",
+          riavvii == [webapp.RITARDO_RIAVVIO], str(riavvii))
+    check("la conferma parla di riavvio", "Riavvio" in esito, cp(esito))
+    check("e nel frattempo i comandi non si accavallano",
+          "gia' in corso" in app_up.telegram_comando(bot["id"], "restart"),
+          "manutenzione non bloccata")
+    app_up._lascia_manutenzione()
+
+    aggiorna_finto.errore = True
+    riavvii.clear()
+    esito = app_up.telegram_comando(bot["id"], "aggiorna")
+    check("un errore di rete non si spaccia per aggiornamento",
+          "non riuscito" in esito and "GitHub" in esito, cp(esito))
+    check("e non riavvia a meta'", riavvii == [], str(riavvii))
+    check("ne' lascia la manutenzione chiusa per sempre",
+          app_up._manutenzione is False, str(app_up._manutenzione))
+    aggiorna_finto.errore = False
+
+    riavvii.clear()
+    sess_up.busy = True
+    esito = app_up.telegram_comando(bot["id"], "restart")
+    check("a turno in corso /riavvia rifiuta",
+          "turno in corso" in esito and riavvii == [], cp(esito))
+    sess_up.busy = False
+    esito = app_up.telegram_comando(bot["id"], "riavvia")
+    check("a sessione ferma /riavvia riavvia",
+          "Riavvio" in esito and riavvii == [webapp.RITARDO_RIAVVIO],
+          cp(esito))
+    app_up._lascia_manutenzione()
+    riavvii.clear()
+    esito = app_up.telegram_comando(bot["id"], "restart")
+    check("e /restart e' lo stesso comando",
+          "Riavvio" in esito and riavvii == [webapp.RITARDO_RIAVVIO],
+          cp(esito))
+    app_up._lascia_manutenzione()
+
+    # Il timer vero: il riavvio arriva dopo, non mentre la risposta e'
+    # ancora per strada. Qui `_riavvio_ora` e' finto, perche' il resto del
+    # processo (execv) non e' una cosa da fare in un test.
+    app_timer, _sess_timer = app_finta()
+    eseguiti = []
+    app_timer._riavvio_ora = lambda: eseguiti.append("riavvio")
+    app_timer._programma_riavvio(0.05)
+    check("il riavvio non parte nello stesso istante", eseguiti == [],
+          str(eseguiti))
+    # Il minimo vero e' mezzo secondo: e' quello che lascia uscire la
+    # risposta del comando prima che il processo cambi.
+    time.sleep(1.0)
+    check("ma parte da solo dopo l'attesa", eseguiti == ["riavvio"],
+          str(eseguiti))
+
+    # Prima di execv si chiude quello che tiene in piedi il processo:
+    # in particolare i ponti Telegram, che senza questo resterebbero a
+    # scrivere su una chat mentre il processo cambia sotto di loro.
+    class PonteDaChiudere:
+        def __init__(self):
+            self.fermato = None
+
+        def ferma(self, secondi=3.0):
+            self.fermato = secondi
+
+    app_chiude, _sess_chiude = app_finta()
+    ponte_chiude = PonteDaChiudere()
+    app_chiude._telegram_ponti = {bot["id"]: ponte_chiude}
+    app_chiude._chiudi_per_riavvio()
+    check("chiudendo per il riavvio si ferma il ponte",
+          ponte_chiude.fermato is not None, str(ponte_chiude.fermato))
+    check("e il ponte non resta in elenco", app_chiude._telegram_ponti == {},
+          str(app_chiude._telegram_ponti))
+
+    ordine = []
+    app_ord, _sess_ord = app_finta()
+    app_ord._chiudi_per_riavvio = lambda: ordine.append("chiuso")
+    vero_riavvia = riavvio_mod.riavvia
+    riavvio_mod.riavvia = lambda argv=None: ordine.append("exec")
+    try:
+        app_ord._riavvio_ora()
+    finally:
+        riavvio_mod.riavvia = vero_riavvia
+    check("prima si chiude tutto, poi si sostituisce il processo",
+          ordine == ["chiuso", "exec"], str(ordine))
+finally:
+    update_mod.aggiorna = vero_aggiorna
+
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("falliti:", ", ".join(FAIL))

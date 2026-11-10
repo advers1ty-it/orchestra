@@ -236,6 +236,10 @@ SUITES = [
     # estraneo non faccia partire un turno.
     ("telegram", "test_telegram.py", True),
     ("telegram_sessione", "test_telegram_sessione.py", True),
+    # La riga con cui il server si rilancia: con l'avvio `-m` quella
+    # sbagliata esegue il file del modulo come script e il server non
+    # torna su — un difetto che si vede solo dal telefono, dopo l'update.
+    ("riavvio", "test_riavvio.py", True),
     ("qr", "test_qr.py", True),
     ("skill-tools", "test_skill_tools.py", True),
     # Era scritto e non girava: nel runner non c'era, e senza un

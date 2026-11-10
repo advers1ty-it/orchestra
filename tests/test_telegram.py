@@ -21,6 +21,7 @@ import os
 import sys
 import tempfile
 import threading
+import json
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -72,6 +73,10 @@ class FintoTelegram:
         # I file che il ponte manda passano da un trasporto multipart
         # separato, quindi si registrano a parte dalle chiamate JSON.
         self.file_inviati = []
+        # Il menu degli slash: `commands` e' una stringa JSON, e senza
+        # registrarla un ponte che lo scrive sembrerebbe identico a uno
+        # che non lo tocca.
+        self.menu = []
 
     def messaggio(self, chat_id, testo, nome="prova"):
         self.ultimo_id += 1
@@ -140,6 +145,9 @@ class FintoTelegram:
             dati = {}
         metodo = url.rsplit("/", 1)[-1]
         self.chiamate.append((metodo, dict(dati)))
+        if metodo == "setMyCommands":
+            self.menu.append(dict(dati))
+            return {"ok": True, "result": True}
         if metodo == "getMe":
             return {"ok": True, "result": {"id": 1, "username": "prova_bot",
                                            "first_name": "Prova"}}
@@ -361,7 +369,8 @@ finto.messaggio(555, "/aiuto")
 p.passo()
 aiuto = finto.ultimo_inviato()
 check("/aiuto elenca i comandi",
-      "/steer" in aiuto and "/stop" in aiuto and "/modello" in aiuto,
+      "/steer" in aiuto and "/stop" in aiuto and "/modello" in aiuto
+      and "/aggiorna" in aiuto and "/riavvia" in aiuto,
       aiuto[:80])
 check("e non costa un turno", chiamate == [], str(chiamate))
 finto.messaggio(999, "/stato")
@@ -396,11 +405,49 @@ check("/modello passa il nome",
 check("e la risposta di chi esegue torna in chat",
       "modello fatto" in finto.ultimo_inviato(),
       finto.ultimo_inviato()[:60])
+finto.messaggio(555, "/aggiorna")
+p.passo()
+check("/aggiorna arriva a chi sa eseguirlo",
+      visti[-1] == ("aggiorna", ""), str(visti))
+finto.messaggio(555, "/restart")
+p.passo()
+check("/restart arriva a chi sa eseguirlo",
+      visti[-1] == ("restart", ""), str(visti))
 finto.messaggio(555, "/pippo")
 p.passo()
 check("un comando sconosciuto lo dice",
       "non riconosciuto" in finto.ultimo_inviato(),
       finto.ultimo_inviato()[:60])
+
+print("\n[9b] il menu dei comandi: e' del bot, e Orchestra lo riscrive")
+# Il menu degli slash non vive nell'app: resta sul bot, quindi un bot
+# usato prima con un'altra applicazione mostra i comandi di quella. Chi
+# preme "/" li prova, e sembra che Orchestra sia rotta. Qui si guarda che
+# la lista venga scritta all'avvio e riscritta quando una chat si collega.
+finto = FintoTelegram()
+p, _chiamate = ponte(finto)
+tg.salva_token(7, TOKEN)
+tg.imposta_chat(7, "", "")
+p.passo()
+check("all'avvio il menu viene scritto", len(finto.menu) == 1,
+      str(len(finto.menu)))
+voci = json.loads((finto.menu[0].get("commands") if finto.menu else "[]"))
+nomi = [v.get("command") for v in voci]
+check("con i comandi di Orchestra, non quelli di un'altra app",
+      nomi == [c for c, _d in tg.COMANDI_MENU], str(nomi))
+check("nomi validi per Telegram: minuscole, senza barra, corti",
+      all(n and n == n.lower() and len(n) <= 32 and n.replace("_", "").isalnum()
+          for n in nomi), str(nomi))
+check("e ogni voce ha una descrizione",
+      all(len(str(v.get("description") or "")) >= 3 for v in voci), str(voci))
+codice = tg.nuovo_codice(7)["codice"]
+finto.messaggio(555, "/start " + codice)
+p.passo()
+check("e si riscrive quando una chat si collega", len(finto.menu) == 2,
+      str(len(finto.menu)))
+check("senza perdere le voci",
+      json.loads(finto.menu[-1].get("commands") or "[]") == voci,
+      str(finto.menu[-1]))
 
 print("\n[10] un ponte senza comandi non finge di averli")
 finto = FintoTelegram()
