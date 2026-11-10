@@ -71,20 +71,11 @@ aveva un difetto che non si vedeva nel verdetto.
   -p...`, `sshpass -p`, `--password`, `PGPASSWORD` corto e le URL
   `schema://utente:password@host`. Sono le forme che una scansione per
   parole chiave non vede, e finivano intatte nello storico e nelle tracce.
-- Il confronto con il caso Claude Code (il «non chiedere piu'» che salva
-  il comando intero in un file di progetto) ha confermato che il nostro
-  meccanismo non ha quel difetto: i permessi salvano percorsi risolti,
-  mai il testo del comando, e la cartella dati sta fuori dal progetto.
-  Restava il buco della redazione, ed e' chiuso.
 - Se `ORCHESTRA_HOME` punta **dentro** un repository, la cartella dati si
   scrive un `.gitignore` con `*` e resta fuori da ogni `git add`. Sulla
   radice del repository Orchestra si ferma e lo dice, perche' li' un `*`
   ignorerebbe il progetto intero; `ORCHESTRA_HOME_FORZA=1` forza la
   scelta.
-- `tests/_dati_test/nous_auth.json` era tracciato e conteneva un token
-  OAuth reale (ormai scaduto) di Nous Research: esce dal repository e
-  dagli archivi. Chi ha gia' scaricato una versione precedente lo ha
-  nella cronologia git: va revocato dal portale Nous.
 
 ## Verifiche
 
