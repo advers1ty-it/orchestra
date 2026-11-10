@@ -67,6 +67,7 @@ from .web import tool_web_cerca, tool_web_leggi  # noqa: E402
 from .storico import tool_storico_cerca  # noqa: E402
 from .cron import tool_cron  # noqa: E402
 from .email import tool_email  # noqa: E402
+from .telegram import tool_telegram  # noqa: E402
 from .mcp import tool_mcp  # noqa: E402
 from .skill import (
     tool_skill_cerca,
@@ -337,9 +338,13 @@ for _nomi_profilo in _PROFILI.values():
     # persona e' un modo di comunicare, non una capacita' di sistema da
     # sbloccare salendo di profilo. Un profilo che la toglie costringe
     # l'agente a dire "non posso leggere la posta" a chi gliel'ha chiesto.
+    # `telegram_invia` sta qui per la stessa ragione di `email`, e con la
+    # prova che il ragionamento era giusto: senza, alla richiesta "mandami
+    # le previsioni su Telegram" l'agente rispondeva "non posso inviarti
+    # messaggi su Telegram" — mentre la risposta viaggiava su quel ponte.
     _nomi_profilo.update({"search_text", "find_files", "ask_user",
                           "proponi_piano", "analisi_python", "run_tests",
-                          "email"})
+                          "email", "telegram_invia"})
 del _nomi_profilo
 
 
@@ -477,7 +482,7 @@ def default_registry() -> ToolRegistry:
                  tool_image_gen(), tool_image_edit(),
                  tool_computer_screenshot(), tool_computer_click(),
                  tool_computer_open(), tool_computer_type(),
-                 tool_mcp(), tool_email()):
+                 tool_mcp(), tool_email(), tool_telegram()):
         registry.registra(tool)
         registry.attiva(tool.name)
 

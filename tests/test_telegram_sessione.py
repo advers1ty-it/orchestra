@@ -116,6 +116,7 @@ class SessioneFinta:
         self.allegati = None
         self.eventi = []
         self.mandato = False
+        self.canale = ""
 
     def modello_in_uso(self):
         return self.modello
@@ -135,13 +136,14 @@ class SessioneFinta:
             raise RuntimeError("sessione occupata")
         self.resettata = True
 
-    def send(self, testo, allegati=None):
+    def send(self, testo, allegati=None, canale=""):
         if self.busy:
             return False
         self.busy = True
         self.mandato = True
         self.testo = testo
         self.allegati = allegati
+        self.canale = canale
         return True
 
 
@@ -306,11 +308,12 @@ sess.eventi = []
 testi = []
 
 
-def send_con_eventi(testo, allegati=None):
+def send_con_eventi(testo, allegati=None, canale=""):
     sess.busy = True
     sess.mandato = True
     sess.testo = testo
     sess.allegati = allegati
+    sess.canale = canale
     sess.agent.state.messages = [Messaggio("user", testo),
                                  Messaggio("assistant", "Ho letto i test.")]
     sess.eventi = [
@@ -332,6 +335,12 @@ def avanz(testo, azione=None):
 
 
 risposta = app.telegram_turno(bot["id"], "leggi i test", None, avanz)
+# Il turno deve dire alla sessione da dove arriva: senza, l'agente non ha
+# nessun modo di sapere che sta scrivendo su Telegram, e nega di esserci
+# mentre la risposta viaggia proprio su quel ponte.
+check("il turno dice alla sessione che arriva da Telegram",
+      str(getattr(sess, "canale", "")).startswith("Telegram"),
+      str(getattr(sess, "canale", "")))
 testi = [t for t, a in visti_stato if a is None]
 azioni_viste = [a for _t, a in visti_stato if a]
 # Il turno adesso torna anche i file prodotti (`{testo, file}`): il testo
@@ -521,7 +530,7 @@ print("\n[9] un turno fermato non produce una risposta finta")
 app, sess = app_finta()
 
 
-def send_fermato(testo, allegati=None):
+def send_fermato(testo, allegati=None, canale=""):
     sess.busy = True
     sess.mandato = True
     sess.eventi = [
@@ -548,7 +557,7 @@ print("\n[11] un turno che muore senza dire di aver finito")
 app, sess = app_finta()
 
 
-def send_muto(testo, allegati=None):
+def send_muto(testo, allegati=None, canale=""):
     # Nessun `idle`: la sessione si ferma e basta. Il ponte non deve
     # restare ad aspettare la scadenza da quindici minuti.
     sess.busy = True
@@ -576,7 +585,7 @@ app, sess = app_finta()
 ricevuti = []
 
 
-def send_allegati(testo, allegati=None):
+def send_allegati(testo, allegati=None, canale=""):
     ricevuti.append((testo, allegati))
     sess.busy = True
     sess.mandato = True
@@ -1038,7 +1047,7 @@ ponte_lungo = PonteRecapito()
 app_lungo._telegram_ponti = {bot["id"]: ponte_lungo}
 
 
-def send_lungo(testo, allegati=None):
+def send_lungo(testo, allegati=None, canale=""):
     sess_lungo.busy = True
     sess_lungo.mandato = True
     sess_lungo.agent.state.messages = [Messaggio("user", testo)]
@@ -1071,7 +1080,7 @@ ponte_vecchio = PonteRecapito()
 app_vecchio._telegram_ponti = {bot["id"]: ponte_vecchio}
 
 
-def send_senza_risposta(testo, allegati=None):
+def send_senza_risposta(testo, allegati=None, canale=""):
     sess_vecchio.busy = True
     sess_vecchio.mandato = True
     sess_vecchio.agent.state.messages = [

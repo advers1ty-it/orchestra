@@ -112,6 +112,26 @@ def _log_telegram(messaggio: str) -> None:
     print(f"[telegram] {messaggio}", file=sys.stderr, flush=True)
 
 
+def _canale_telegram(bot_id: int) -> str:
+    """Come si presenta il ponte a chi riceve il turno.
+
+    Il turno che arriva da Telegram e' identico a uno della finestra —
+    stessa sessione, stessi tool, stessa cronologia — e senza questa riga
+    l'agente non ha nessun modo di sapere dove sta scrivendo: e' il bug
+    per cui negava di essere su Telegram mentre ci stava rispondendo. Il
+    nome della chat serve perche' un utente puo' averne collegata una e
+    non ricordare quale.
+    """
+    from . import telegram as tg
+
+    try:
+        chat, nome = tg.chat_di(bot_id)
+    except Exception:  # noqa: BLE001 - il canale non fa cadere il turno
+        return "Telegram"
+    dove = nome or chat
+    return f"Telegram (chat «{dove}»)" if dove else "Telegram"
+
+
 def _coda(testo: str, quanti: int) -> str:
     """La fine di un testo, senza tagliare una parola a meta'.
 
@@ -2150,7 +2170,8 @@ class OrchestraApp:
         # il primo turno che passava di qui.
         eventi = sess.bridge.stream(timeout=0.4)
         try:
-            if not sess.send(testo, allegati=allegati or None):
+            if not sess.send(testo, allegati=allegati or None,
+                             canale=_canale_telegram(bot_id)):
                 return ("C'e' gia' un turno in corso su questo bot: rimanda "
                         "il messaggio quando ha finito.")
             stato = self._telegram_segui(sess, eventi, avanzamento, b)

@@ -1129,7 +1129,8 @@ class Session:
 
     def send(self, user_input: str, allegati: list | None = None,
              scope: str | None = None, bot_depth: int = 0,
-             root_isolata: str = "", proponi_merge: Any = None) -> bool:
+             root_isolata: str = "", proponi_merge: Any = None,
+             canale: str = "") -> bool:
         """Invia un messaggio all'agente. Non blocca.
 
         Restituisce False se la sessione e' gia' occupata: rifiutiamo il
@@ -1195,6 +1196,11 @@ class Session:
             # Session, e una sessione esegue un turno alla volta — quindi
             # non c'e' il caso in cui due turni si contendono il valore.
             self._bot_depth = max(0, int(bot_depth))
+            # Il canale vale per il turno che sta per partire, come la
+            # profondita' dei bot: una sessione esegue un turno alla volta,
+            # quindi non c'e' il caso in cui due turni se lo contendono.
+            # Vuoto = finestra: e' chi chiama dal ponte a dire il contrario.
+            self.agent.canale = (canale or "").strip()
             # La root isolata si lega al turno QUI, sotto lo stesso lock
             # che lo fa partire. Impostarla prima di `send` aprirebbe
             # una corsa con un turno dell'utente: se quello vincesse,

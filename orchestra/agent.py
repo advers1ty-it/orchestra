@@ -220,6 +220,12 @@ class Agent:
             self.provider = provider
             self.registry = registry
             self.system_prompt = system_prompt
+            # Da quale porta e' arrivato il turno in corso: vuoto per la
+            # finestra, "Telegram (chat ...)" per il ponte. Non e' un
+            # dettaglio di UI — e' l'unica cosa che permette all'agente di
+            # sapere dove sta scrivendo, perche' il turno Telegram e' lo
+            # stesso turno della finestra.
+            self.canale: str = ""
             # Il progetto su cui si lavora. Va sull'agente e non solo sulla
             # sessione perche' e' l'agente a dover cercare i fatti giusti:
             # la sessione etichetta quelli che nascono, l'agente deve
@@ -594,6 +600,44 @@ class Agent:
             return True
         return bool(attivi & {"skill_leggi", "skill_cerca"})
 
+    def _ha_il_tool(self, nome: str) -> bool:
+        """Vero se quel tool e' fra gli attivi di questo turno."""
+        try:
+            return nome in {t.name for t in self.registry.active}
+        except Exception:  # noqa: BLE001 - se non si sa, non si promette
+            return False
+
+    def _blocco_canale(self) -> str:
+        """Da quale porta e' arrivato questo turno, quando non e' la finestra.
+
+        Il messaggio che arriva dal ponte Telegram e' indistinguibile da
+        uno scritto nella finestra: `Session.send` fa la stessa cosa nei
+        due casi, stessa sessione e stessa cronologia. Senza questa riga
+        l'agente non ha nessun modo di saperlo, e alla richiesta "mandami
+        le previsioni su Telegram" risponde "non posso inviarti messaggi
+        su Telegram" — mentre la risposta viaggia proprio su quel ponte.
+        Non e' un'ipotesi: e' quello che e' successo davvero.
+
+        Vuoto per un turno normale. La finestra non ha bisogno di
+        presentarsi, e un blocco in piu' su ogni richiesta e' contesto
+        pagato a ogni token per non dire niente di nuovo.
+        """
+        canale = (getattr(self, "canale", "") or "").strip()
+        if not canale:
+            return ""
+        righe = [
+            "## Da dove arriva questo turno",
+            f"Questo messaggio arriva da {canale}, non dalla finestra di "
+            "Orchestra: chi scrive ti legge da li' e non ha la finestra "
+            "davanti.",
+        ]
+        if self._ha_il_tool("telegram_invia"):
+            righe.append(
+                "Se ti chiede di mandargli qualcosa piu' tardi o di tua "
+                "iniziativa, il tool `telegram_invia` scrive in quella "
+                "chat: non serve nessun token, il collegamento c'e' gia'.")
+        return "\n".join(righe) + "\n\n"
+
     def _aggiorna_prompt(self) -> None:
         """Riscrive il messaggio di sistema con le skill e il progetto.
 
@@ -654,7 +698,8 @@ class Agent:
                 "l'approvazione esegui esattamente quei passi, senza "
                 "allargarti. Se l'utente rifiuta, non insistere con lo "
                 "stesso piano: chiedi cosa cambiare o fermati.\n\n")
-        volatile = (blocco_piano + extra + progetto).strip()
+        canale = self._blocco_canale()
+        volatile = (blocco_piano + canale + extra + progetto).strip()
         # PERCHE' DUE MESSAGGI DI SISTEMA E NON UNO.
         #
         # Il primo blocco (regole, persona, memoria) e' il prefisso che i
