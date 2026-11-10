@@ -150,7 +150,8 @@ def tool_run_shell() -> Tool:
     else:
         desc += (" Careful: on Windows the separator is ' && ', ';' does not "
                  "work.")
-    desc += (" Paths outside the working directory are blocked.")
+    desc += (" Paths outside the working directory are blocked when they can "
+             "be recognized; this is a best-effort boundary, not an OS sandbox.")
 
     return Tool(
         name="run_shell",

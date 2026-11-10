@@ -22,6 +22,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from .segreti import rendi_privato, scrivi_privato
+
 PORTAL_BASE_URL = "https://portal.nousresearch.com"
 INFERENCE_DEFAULT = "https://inference-api.nousresearch.com/v1"
 CLIENT_ID = "orchestra"
@@ -81,6 +83,9 @@ def load_auth(env: dict[str, str] | None = None) -> tuple[dict[str, Any] | None,
         return None, p
     if not isinstance(data, dict) or not data.get("access_token"):
         return None, p
+    # Un file creato da una versione vecchia poteva essere 0644/0666: il
+    # token e' gia' li', e il primo carico lo mette a posto.
+    rendi_privato(p)
     return data, p
 
 
@@ -164,7 +169,7 @@ def _refresh(auth: dict[str, Any], path: Path) -> dict[str, Any]:
         auth["expires_at"] = (now + timedelta(seconds=3600)).isoformat()
     if payload.get("inference_base_url"):
         auth["inference_base_url"] = payload["inference_base_url"]
-    path.write_text(json.dumps(auth, indent=2, ensure_ascii=False), encoding="utf-8")
+    scrivi_privato(path, json.dumps(auth, indent=2, ensure_ascii=False))
     return auth
 
 
@@ -325,7 +330,7 @@ def complete_device_flow(device: dict[str, Any]) -> dict[str, Any]:
                 "obtained_at": now.isoformat(),
             }
             path = auth_file_path()
-            path.write_text(json.dumps(auth, indent=2, ensure_ascii=False), encoding="utf-8")
+            scrivi_privato(path, json.dumps(auth, indent=2, ensure_ascii=False))
             return auth
 
         error_code = ""

@@ -42,6 +42,11 @@ ESCAPES = [
     ("npmrc", "cat .npmrc"),
     ("config hermes", "cat ../../.config/hermes/config.yaml"),
 ]
+# La shell espande la variabile PRIMA di eseguire: il controllo deve
+# vedere lo stesso percorso che vedra' la shell. Si prova solo la forma
+# con un separatore dopo la variabile, per non bloccare `echo $HOME`.
+_var_home = "%USERPROFILE%" if os.name == "nt" else "$HOME"
+ESCAPES.append(("home via variabile", f"cat {_var_home}/Documenti/segreti.txt"))
 for label, cmd in ESCAPES:
     out = sh.handler(command=cmd)
     # Il blocco e' ancora garantito, ma il messaggio e' cambiato: ora
@@ -52,6 +57,21 @@ for label, cmd in ESCAPES:
     eseguito = "exit=" in out
     blocked = ("BLOCCATO" in out or "NON ESEGUITO" in out) and not eseguito
     check(f"bloccato: {label}", blocked, f"output={out[:90]}")
+
+print("\n[1b] Le variabili di percorso vengono espanse solo dove conta")
+from orchestra.tools._guard import _espandi_variabili  # noqa: E402
+
+if os.name == "nt":
+    _atteso = os.environ.get("USERPROFILE", "")
+    check("espande %USERPROFILE% in un percorso",
+          bool(_atteso) and _atteso in _espandi_variabili("%USERPROFILE%\\Documenti"))
+else:
+    _atteso = os.environ.get("HOME", "")
+    check("espande $HOME in un percorso",
+          bool(_atteso) and _atteso in _espandi_variabili("$HOME/Documenti"))
+check("echo $HOME resta com'e'",
+      _espandi_variabili("echo $HOME") == "echo $HOME",
+      _espandi_variabili("echo $HOME"))
 
 print("\n[2] i comandi legittimi devono passare")
 ALLOWED = [

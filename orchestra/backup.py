@@ -43,6 +43,7 @@ from typing import Any
 from . import __version__
 from .dati import SEGNAPOSTO, cartella_dati, installazioni
 from .percorsi import ENV_PATH
+from .segreti import rendi_privato, scrivi_privato_bytes
 
 # La versione del formato dell'archivio. Un archivio con un numero
 # diverso non si apre "sperando che vada": si dice che e' di un'altra
@@ -292,6 +293,9 @@ def crea(destinazione: str = "", *, con_chiavi: bool = True,
         z.writestr("MANIFEST.json",
                    json.dumps(manifesto, ensure_ascii=False, indent=2))
 
+    # Un archivio con le chiavi e' un segreto: va letto solo dall'utente.
+    rendi_privato(destinazione)
+
     return {
         "percorso": destinazione,
         "file": len(voci),
@@ -388,6 +392,22 @@ def archivi(installazione: str | None = None) -> list[dict[str, Any]]:
             })
     risultati.sort(key=lambda a: -float(a.get("modificato") or 0))
     return risultati
+
+
+def archivio_ammesso(percorso: str) -> bool:
+    """Vero se il percorso e' uno degli archivi elencati.
+
+    Il ripristino da web non deve accettare un percorso arbitrario: un
+    archivio confezionato altrove puo' sostituire `.env` e
+    `permessi.json`. Il CLI resta libero di ripristinare un file scelto a
+    mano; la UI no.
+    """
+    p = os.path.abspath(os.path.expanduser(percorso))
+    for voce in archivi():
+        ammesso = os.path.abspath(str(voce.get("percorso") or ""))
+        if ammesso and os.path.normcase(ammesso) == os.path.normcase(p):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -495,8 +515,7 @@ def ripristina(archivio: str, *, con_chiavi: bool = True,
                 with z.open("config/.env") as src:
                     dati_env = src.read()
                 os.makedirs(os.path.dirname(env_target) or ".", exist_ok=True)
-                with open(env_target, "wb") as dst:
-                    dst.write(dati_env)
+                scrivi_privato_bytes(env_target, dati_env)
                 chiavi = True
             else:
                 chiavi_saltate = True

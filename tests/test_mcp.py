@@ -179,7 +179,7 @@ mcp.add_server({"id": "finto", "name": "finto", "transport": "stdio",
                 "command": sys.executable, "args": [FAKE]})
 r = mcp.connect("finto", timeout=15)
 check("connessione stdio riuscita", r.get("ok"), str(r))
-check("due tool elencati", r.get("tools") == 2, str(r))
+check("almeno due tool elencati", r.get("tools") >= 2, str(r))
 check("una risorsa elencata", r.get("resources") == 1, str(r))
 check("un prompt elencato", r.get("prompts") == 1, str(r))
 check("il protocollo viene dal server", r.get("protocol") == "2024-11-05",
@@ -190,6 +190,13 @@ check("il tool arriva prefissato", "echo" in tools, str(sorted(tools)))
 echo = tools["echo"]["prefixed"]
 check("la chiamata risponde", "ECHO: ciao" in mcp.call_tool(echo, {"text": "ciao"}),
       mcp.call_tool(echo, {"text": "ciao"}))
+# Il server stdio non deve ricevere l'ambiente del padre: un server MCP
+# aggiunto per sbaglio non deve poter leggere le chiavi API.
+os.environ["CANARY_MCP"] = "segreto-del-padre"
+letto = mcp.call_tool(tools["env"]["prefixed"], {"nome": "CANARY_MCP"})
+check("il server stdio non vede i segreti del padre",
+      "segreto-del-padre" not in str(letto), repr(letto))
+del os.environ["CANARY_MCP"]
 check("la risorsa si legge",
       "contenuto della risorsa" in mcp.read_resource("file:///note.txt"),
       mcp.read_resource("file:///note.txt"))
@@ -321,6 +328,30 @@ check("trova la risposta con l'id giusto",
                                     "result": {"a": 1}},
       str(_risposta_da_sse(dati, 7)))
 check("un id assente non e' una risposta", _risposta_da_sse(dati, 8) is None)
+
+print("\n== il tool mcp non aggiunge un server stdio senza conferma ==")
+
+from orchestra.tools import _guard  # noqa: E402
+from orchestra.tools.mcp import tool_mcp  # noqa: E402
+
+t = tool_mcp()
+_guard.set_permission_gate(None)
+out = t.handler(azione="aggiungi", nome="gate-test", transport="stdio",
+                command=sys.executable, args=[FAKE])
+check("senza gate il server stdio viene rifiutato", "NON AGGIUNTO" in out, out)
+
+
+class GateFinto:
+    def chiedi_all_utente(self, *a, **k):
+        return True
+
+
+_guard.set_permission_gate(GateFinto())
+out = t.handler(azione="aggiungi", nome="gate-test", transport="stdio",
+                command=sys.executable, args=[FAKE])
+check("con il consenso il server viene aggiunto", "aggiunto" in out.lower(), out)
+mcp.remove_server("gate-test")
+_guard.set_permission_gate(None)
 
 SERVER_GIU.set()
 server.shutdown()

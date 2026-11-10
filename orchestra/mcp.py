@@ -28,6 +28,7 @@ import uuid
 from typing import Any
 
 from .dati import cartella_dati, percorso
+from .segreti import scrivi_privato
 from .mcp_trasporti import (
     PROTOCOLLO,
     ErroreMCP,
@@ -58,11 +59,10 @@ def _load_config() -> list[dict[str, Any]]:
 
 
 def _save_config(servers: list[dict[str, Any]]) -> None:
+    # Il file contiene anche gli `env` dei server: puo' contenere chiavi.
     cartella_dati()
-    tmp = _path() + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"servers": servers}, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, _path())
+    scrivi_privato(_path(), json.dumps({"servers": servers}, indent=2,
+                                      ensure_ascii=False))
 
 
 class Connessione:

@@ -65,6 +65,27 @@ def _esito(obj: Any) -> Any:
     return obj.get("result")
 
 
+def _env_minimo() -> dict[str, str]:
+    """Ambiente per un server MCP stdio, senza i segreti di Orchestra.
+
+    Prima si passava `dict(os.environ)`: un server MCP — anche uno
+    aggiunto per sbaglio dal modello — riceveva chiavi API, token e
+    password del processo. Un server MCP ha bisogno di PATH e poco
+    altro; quello che gli serve davvero lo dichiara nel suo `env`.
+    """
+    try:
+        from .tools._guard import _sandbox_env
+        return _sandbox_env()
+    except Exception:  # noqa: BLE001 - meglio un ambiente minimo che uno pieno
+        keep = ("PATH", "HOME", "USERPROFILE", "TMP", "TEMP", "LANG",
+                "LC_", "SYSTEMROOT", "COMSPEC", "WINDIR", "TERM")
+        return {
+            k: v for k, v in os.environ.items()
+            if k.upper().startswith(keep)
+            or k.upper() in {"USER", "LOGNAME", "SHELL", "PWD"}
+        }
+
+
 class Trasporto:
     """Interfaccia comune. `start` apre il canale, non fa l'handshake."""
 
@@ -108,7 +129,7 @@ class StdioTrasporto(Trasporto):
             cmd = [self.cfg.get("command")] + list(self.cfg.get("args") or [])
             if not cmd[0]:
                 raise ValueError("command mancante")
-            env = dict(os.environ)
+            env = _env_minimo()
             for k, v in (self.cfg.get("env") or {}).items():
                 env[str(k)] = str(v)
             cwd = self.cfg.get("cwd") or None

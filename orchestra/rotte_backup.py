@@ -71,6 +71,11 @@ class RotteBackup:
         if not archivio:
             self._json({"error": "manca l'archivio da ripristinare"}, 400)
             return
+        if not bkp.archivio_ammesso(archivio):
+            self._json({"error": "archivio non presente nell'elenco dei "
+                                 "backup: scegline uno dalla cartella backup"},
+                       400)
+            return
         sessione = getattr(self.app, "session", None)
         if sessione is not None and getattr(sessione, "busy", False):
             self._json({"error": "c'e' un turno in corso: fermalo prima di "
@@ -98,7 +103,7 @@ class RotteBackup:
         try:
             esito = bkp.ripristina(
                 archivio,
-                con_chiavi=bool(body.get("con_chiavi", True)),
+                con_chiavi=bool(body.get("con_chiavi", False)),
                 installazione=profilo or None,
             )
             self._json({"ok": True, **esito})

@@ -52,6 +52,7 @@ SUITES = [
     # http.server e ci parla.
     ("processo", "test_processo.py", True),
     ("sicurezza", "test_security.py", True),
+    ("segreti", "test_segreti.py", True),
     ("sessione", "test_session.py", True),
     # Dopo lo stop, l'agente deve poter tornare a lavorare. Il flag di
     # cancel restava acceso e ogni tool veniva annullato prima di partire.
@@ -111,6 +112,7 @@ SUITES = [
     # CSRF e forza bruta: una pagina di un altro sito non deve comandare
     # l'agente via 127.0.0.1, e il token remoto non si prova a indovinare.
     ("webapp-csrf", "test_webapp_csrf.py", True),
+    ("webapp-remoto", "test_webapp_remoto.py", True),
     ("webapp-modelli", "test_webapp_models.py", True),
     # Ogni import deve risolvere su un file tracciato: _guard.py ha
     # dimostrato che un file ignorato rompe solo le installazioni.
@@ -168,6 +170,7 @@ SUITES = [
     ("redazione", "test_redazione.py", True),
     # Il bordo HTTP: Origin, path traversal, rate limit, input storto.
     ("rotte-sicurezza", "test_rotte_sicurezza.py", True),
+    ("cron-sicurezza", "test_cron_sicurezza.py", True),
     # Prompt caching: i marcatori Anthropic e nessun campo estraneo
     # nell'adapter OpenAI-compatibile.
     ("cache-prompt", "test_prompt_cache.py", True),

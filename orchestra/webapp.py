@@ -55,6 +55,36 @@ CATALOGO_TTL_SECONDS = 15 * 60
 
 UI_PATH = os.path.join(HERE, "web", "index.html")
 
+# Header che un reverse proxy aggiunge quando inoltra una richiesta. La
+# loro presenza toglie fiducia all'IP: cloudflared parla al server da
+# 127.0.0.1, quindi senza questo controllo il tunnel pubblico passerebbe
+# come traffico locale.
+_HEADER_PROXY = ("CF-Connecting-IP", "CF-Ray", "X-Forwarded-For",
+                 "X-Real-IP", "Forwarded", "X-Forwarded-Proto")
+
+
+def _host_locale(valore: str) -> bool:
+    """Vero se l'header Host punta davvero a questo computer."""
+    h = (valore or "").strip().lower()
+    if not h:
+        return False
+    if h.startswith("["):
+        host = h.split("]", 1)[0] + "]"
+    else:
+        host = h.split(":", 1)[0]
+    return host.rstrip(".") in ("127.0.0.1", "localhost", "::1", "[::1]")
+
+
+def _da_proxy(headers: Any) -> bool:
+    """Vero se la richiesta e' passata da un reverse proxy."""
+    return any((headers.get(nome) or "").strip() for nome in _HEADER_PROXY)
+
+
+def _https_richiesta(headers: Any) -> bool:
+    """Vero se il client ci ha raggiunto in HTTPS (anche via proxy)."""
+    proto = (headers.get("X-Forwarded-Proto") or "").split(",", 1)[0]
+    return proto.strip().lower() == "https"
+
 
 def _prompt_base_con_memoria() -> str:
     """Il prompt di sistema senza identita', con le cose sempre vere.
@@ -324,8 +354,8 @@ class OrchestraApp:
             # rimuovi eventuale riga vuota/esistente
             righe = [r for r in righe if not r.strip().startswith("ORCHESTRA_REMOTE_TOKEN=")]
             righe.append(f"ORCHESTRA_REMOTE_TOKEN={tok}")
-            with open(ENV_PATH, "w", encoding="utf-8") as f:
-                f.write("\n".join(righe) + "\n")
+            from .segreti import scrivi_privato
+            scrivi_privato(ENV_PATH, "\n".join(righe) + "\n")
         except Exception:
             pass
         self.env["ORCHESTRA_REMOTE_TOKEN"] = tok
@@ -3949,8 +3979,8 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
 
     def _scrivi_stato_remoto(self, stato: dict[str, Any]) -> None:
         try:
-            with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as f:
-                json.dump(stato, f)
+            from .segreti import scrivi_privato
+            scrivi_privato(REMOTE_STATE_PATH, json.dumps(stato))
         except OSError:
             pass
 
@@ -4289,14 +4319,31 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                     "riprova": int(attesa) + 1}, 429)
         return True
 
+    def _nega_remoto(self, path: str) -> None:
+        """La risposta di chi non ha superato il gate remoto."""
+        if path.startswith("/api/"):
+            self._json({"error": "accesso non autorizzato"}, 401)
+        else:
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
     def _gate_remoto(self, path: str) -> bool:
         # Accesso remoto: se attivo e il client non e' localhost, serve
         # un token valido. Restituisce True se la richiesta puo' proseguire.
-        if not getattr(self.app, "remoto_attivo", False):
-            return True
         ip = (self.client_address[0] or "") if self.client_address else ""
-        if ip in ("127.0.0.1", "::1", "localhost"):
+        locale = ip in ("127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1")
+        host_ok = _host_locale(self.headers.get("Host") or "")
+        # Un proxy parla da loopback: la presenza di un header di inoltro
+        # basta a togliere la fiducia nell'IP. E anche in locale l'Host
+        # deve essere loopback, o una pagina su evil.com che risolve a
+        # 127.0.0.1 (DNS rebinding) comanda l'agente.
+        if locale and host_ok and not _da_proxy(self.headers):
             return True
+        if not getattr(self.app, "remoto_attivo", False):
+            self._nega_remoto(path)
+            return False
         tok = getattr(self.app, "token_remoto", "") or ""
 
         def _uguale(a: str, b: str) -> bool:
@@ -4316,13 +4363,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         if auth.startswith("Bearer ") and _uguale(auth[7:].strip(), tok):
             return True
         # non autorizzato: risposta
-        if path.startswith("/api/"):
-            self._json({"error": "accesso non autorizzato"}, 401)
-        else:
-            self.send_response(302)
-            self.send_header("Location", "/login")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
+        self._nega_remoto(path)
         return False
 
     # I parametri dell'ultima rotta (`/api/tracce/{id}` -> {"id": ...}).
@@ -4712,8 +4753,10 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             if tok and atteso and hmac.compare_digest(tok, atteso):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                _secure = "; Secure" if _https_richiesta(self.headers) else ""
                 self.send_header("Set-Cookie",
-                    f"orchestra_tok={urllib.parse.quote(tok)}; Path=/; HttpOnly; SameSite=Lax")
+                    f"orchestra_tok={urllib.parse.quote(tok)}; Path=/; HttpOnly; SameSite=Lax{_secure}")
                 self.send_header("Content-Length", "2")
                 self.end_headers()
                 self.wfile.write(b"{}")
@@ -4723,8 +4766,9 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         if path == "/api/logout":
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            _secure = "; Secure" if _https_richiesta(self.headers) else ""
             self.send_header("Set-Cookie",
-                "orchestra_tok=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+                f"orchestra_tok=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{_secure}")
             self.send_header("Content-Length", "2")
             self.end_headers()
             self.wfile.write(b"{}")
@@ -4904,8 +4948,8 @@ def _avvia_tunnel(port: int, app: Any) -> None:
                             with open(REMOTE_STATE_PATH, encoding="utf-8") as _f:
                                 st = _json.loads(_f.read())
                         st["tunnel_url"] = url
-                        with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as _f:
-                            _json.dump(st, _f)
+                        from .segreti import scrivi_privato as _scrivi_privato
+                        _scrivi_privato(REMOTE_STATE_PATH, _json.dumps(st))
                     except Exception:
                         pass
                     # QR code via servizio esterno (stampa URL)
@@ -4985,6 +5029,11 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
         if _domanda("Continuo? [s/N] ") != "s":
             raise SystemExit("annullato")
 
+    if remoto and not tunnel:
+        print("  ATTENZIONE: --remote parla HTTP in chiaro. Per usarlo da "
+              "fuori casa preferisci il tunnel (HTTPS) o una VPN.",
+              file=sys.stderr)
+
     app = OrchestraApp.create(remoto_attivo=remoto_attivo)
     Handler.app = app
     app.porta = port
@@ -5011,8 +5060,8 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
                       "url": f"http://{host}:{port}", "tunnel_url": "",
                       "token": app.token_remoto or "",
                       "mode": "tunnel" if tunnel else "remote"}
-            with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as _f:
-                _json.dump(_stato, _f)
+            from .segreti import scrivi_privato as _scrivi_privato
+            _scrivi_privato(REMOTE_STATE_PATH, _json.dumps(_stato))
         except Exception:
             pass
 
@@ -5025,8 +5074,8 @@ def serve(host: str = "127.0.0.1", port: int = 8737, *, open_browser: bool = Tru
             try:
                 import json as _json
                 _stato["tunnel_url"] = getattr(app, "tunnel_url", "") or ""
-                with open(REMOTE_STATE_PATH, "w", encoding="utf-8") as _f:
-                    _json.dump(_stato, _f)
+                from .segreti import scrivi_privato as _scrivi_privato
+                _scrivi_privato(REMOTE_STATE_PATH, _json.dumps(_stato))
             except Exception:
                 pass
 

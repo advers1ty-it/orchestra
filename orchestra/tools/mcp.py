@@ -52,6 +52,31 @@ def tool_mcp():
                 return "errore: command richiesto per stdio"
             if cfg["transport"] in ("http", "sse") and not cfg["url"]:
                 return f"errore: url richiesto per {cfg['transport']}"
+            if cfg["transport"] == "stdio":
+                # Un server stdio e' un processo locale: la policy della
+                # shell vale anche qui, e serve una conferma esplicita
+                # dell'utente. Senza, un bot senza `run_shell` poteva
+                # aggiungere un server e farsi eseguire un comando.
+                from .. import policy as policy_mod
+                from ._guard import _gate
+                comando = str(cfg.get("command") or "").strip()
+                argomenti = [str(a) for a in (cfg.get("args") or [])]
+                blocco = policy_mod.motivo_blocco(" ".join([comando] + argomenti))
+                if blocco:
+                    return f"NON AGGIUNTO: {blocco}"
+                gate = _gate()
+                if gate is None:
+                    return ("NON AGGIUNTO: un server MCP stdio esegue un "
+                            "programma locale; serve una conferma dell'utente.")
+                dettaglio = (f"{cfg['name']}: {comando} "
+                             f"{' '.join(argomenti)}")[:200]
+                # Il soggetto della domanda e' il server, non il percorso
+                # dell'eseguibile: un Python in Program Files non e' un
+                # file di sistema che il gate deve vietare a priori.
+                if not gate.chiedi_all_utente(str(cfg["name"]),
+                                              "eseguire un server MCP",
+                                              dettaglio):
+                    return "NON AGGIUNTO: permesso non concesso."
             c = add_server(cfg)
             return "aggiunto: " + json.dumps(c, ensure_ascii=False)
         if a in ("rimuovi", "remove", "delete"):

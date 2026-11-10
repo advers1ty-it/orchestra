@@ -86,6 +86,13 @@ with zipfile.ZipFile(archivio) as z:
           letto == "una risposta che deve sopravvivere", repr(letto))
     check("il manifesto dichiara la versione",
           b'"versione"' in z.read("MANIFEST.json"))
+check("l'archivio appena creato e' ammesso al ripristino web",
+      bkp.archivio_ammesso(archivio), archivio)
+estraneo = os.path.join(casa, "estraneo.zip")
+with zipfile.ZipFile(estraneo, "w") as z:
+    z.writestr("x.txt", "x")
+check("un archivio fuori elenco non e' ammesso",
+      not bkp.archivio_ammesso(estraneo), estraneo)
 
 print("[2] elenco: dice cosa salva, e non elenca i journal")
 voci = {v["nome"] for v in bkp.elenco(con_chiavi=False)}

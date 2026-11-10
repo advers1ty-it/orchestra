@@ -6,6 +6,7 @@ un server completo, ed e' voluto: un test che dipendesse dal server vero
 di qualcun altro non girerebbe offline.
 """
 import json
+import os
 import sys
 
 
@@ -20,6 +21,9 @@ TOOLS = [
                      "properties": {"text": {"type": "string"}}}},
     {"name": "crash", "description": "uccide il processo",
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "env", "description": "legge una variabile d'ambiente",
+     "inputSchema": {"type": "object",
+                     "properties": {"nome": {"type": "string"}}}},
 ]
 
 for line in sys.stdin:
@@ -67,10 +71,16 @@ for line in sys.stdin:
         args = params.get("arguments") or {}
         if nome == "crash":
             sys.exit(3)
-        send({"jsonrpc": "2.0", "id": rid, "result": {
-            "content": [{"type": "text", "text": "ECHO: " +
-                         str(args.get("text"))}],
-            "isError": False}})
+        if nome == "env":
+            send({"jsonrpc": "2.0", "id": rid, "result": {
+                "content": [{"type": "text",
+                             "text": os.environ.get(str(args.get("nome")), "")}],
+                "isError": False}})
+        else:
+            send({"jsonrpc": "2.0", "id": rid, "result": {
+                "content": [{"type": "text", "text": "ECHO: " +
+                             str(args.get("text"))}],
+                "isError": False}})
     elif rid is not None:
         send({"jsonrpc": "2.0", "id": rid,
               "error": {"code": -32601, "message": "metodo sconosciuto"}})

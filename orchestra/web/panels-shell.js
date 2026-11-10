@@ -846,6 +846,11 @@ async function _depsInstalla(nome, btn) {
     _depsApri();
   }
 }
+function _depsEsc(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
 async function _depsApri() {
   _depsChiudi();
   const data = await _depsStato();
@@ -862,13 +867,13 @@ async function _depsApri() {
   // trova un tool che dice "installa Pillow" e un pannello che non lo
   // nominava.
   let html = "<h3 style='margin:0 0 12px'>Dipendenze</h3>";
-  html += "<p style='font-size:12px;opacity:.7;margin:0 0 12px'>Python: " + (data.python || "?") + "</p>";
+  html += "<p style='font-size:12px;opacity:.7;margin:0 0 12px'>Python: " + _depsEsc(data.python || "?") + "</p>";
   for (const d of deps) {
     const ok = d.stato === "ok";
     html += "<div style='display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1)'>";
-    html += "<div><strong>" + d.nome + "</strong><br><span style='font-size:11px;opacity:.6'>" + (ok ? (d.versione || "ok") : "da installare") + " · " + (d.via || "") + (d.perche ? " · " + d.perche : "") + "</span></div>";
+    html += "<div><strong>" + _depsEsc(d.nome) + "</strong><br><span style='font-size:11px;opacity:.6'>" + (ok ? _depsEsc(d.versione || "ok") : "da installare") + " · " + _depsEsc(d.via || "") + (d.perche ? " · " + _depsEsc(d.perche) : "") + "</span></div>";
     if (!ok) {
-      html += "<button class='deps-install' data-nome='" + d.nome + "' style='padding:4px 10px;border-radius:6px;border:1px solid #555;background:transparent;color:inherit;cursor:pointer;font-size:12px'>Installa</button>";
+      html += "<button class='deps-install' data-nome='" + _depsEsc(d.nome) + "' style='padding:4px 10px;border-radius:6px;border:1px solid #555;background:transparent;color:inherit;cursor:pointer;font-size:12px'>Installa</button>";
     } else {
       html += "<span style='color:#4ade80;font-size:12px'>✓ ok</span>";
     }

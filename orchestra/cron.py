@@ -23,6 +23,7 @@ import uuid
 from typing import Any
 
 from .dati import cartella_dati, percorso
+from .segreti import scrivi_privato
 
 _SHORTCUTS = {
     "@reboot": None,
@@ -58,11 +59,10 @@ def _load() -> list[dict[str, Any]]:
 
 
 def _save(jobs: list[dict[str, Any]]) -> None:
+    # Un job shell puo' contenere un comando con un segreto: il file
+    # non deve essere leggibile da altri utenti.
     cartella_dati()
-    tmp = _path() + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(jobs, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, _path())
+    scrivi_privato(_path(), json.dumps(jobs, indent=2, ensure_ascii=False))
 
 
 def _lock() -> threading.Lock:
@@ -244,7 +244,29 @@ def get(job_id: str) -> dict[str, Any] | None:
     return None
 
 
-def _valida_azione(action_type: str, action: Any) -> None:
+def _blocco_comando(command: str, *, chiedi: bool = True) -> str | None:
+    """Il controllo di sicurezza per un comando di un job shell.
+
+    `chiedi=True` e' il percorso normale (tool e UI): policy, root, gate.
+    `chiedi=False` e' l'esecuzione dello scheduler, dove non c'e' nessuno
+    a cui chiedere: si applicano policy e confine senza aprire una
+    domanda da un thread di background.
+    """
+    if not (command or "").strip():
+        return "comando mancante"
+    if chiedi:
+        from .tools._guard import verifica_comando
+        return verifica_comando(command)
+    from . import policy as policy_mod
+    from .tools._guard import _check_shell_access
+    blocco = policy_mod.motivo_blocco(command)
+    if blocco:
+        return f"NON ESEGUITO: {blocco}"
+    return _check_shell_access(command)
+
+
+def _valida_azione(action_type: str, action: Any, *,
+                   controlla_comando: bool = True) -> None:
     if action_type not in ("goal", "shell"):
         raise ValueError("action_type deve essere 'goal' o 'shell'")
     if not isinstance(action, dict):
@@ -253,8 +275,13 @@ def _valida_azione(action_type: str, action: Any) -> None:
         if not (action.get("objective") or "").strip():
             raise ValueError("obiettivo mancante")
     elif action_type == "shell":
-        if not (action.get("command") or "").strip():
+        cmd = (action.get("command") or "").strip()
+        if not cmd:
             raise ValueError("comando mancante")
+        if controlla_comando:
+            blocco = _blocco_comando(cmd)
+            if blocco:
+                raise ValueError(blocco)
 
 
 def crea(nome: str, schedule: str, action_type: str, action: dict[str, Any],
@@ -291,6 +318,15 @@ def crea(nome: str, schedule: str, action_type: str, action: dict[str, Any],
 
 
 def aggiorna(job_id: str, **campi) -> dict[str, Any] | None:
+    # Il controllo del comando puo' fermarsi a chiedere il permesso: non
+    # va fatto con il lock dei job in mano, o un dialogo lento blocca
+    # anche lo scheduler.
+    if isinstance(campi.get("action"), dict):
+        _cmd = str(campi["action"].get("command") or "").strip()
+        if _cmd:
+            _blocco = _blocco_comando(_cmd)
+            if _blocco:
+                raise ValueError(_blocco)
     with _lock():
         jobs = _load()
         target = None
@@ -313,7 +349,8 @@ def aggiorna(job_id: str, **campi) -> dict[str, Any] | None:
             target["action"] = campi["action"]
         if "enabled" in campi and campi["enabled"] is not None:
             target["enabled"] = bool(campi["enabled"])
-        _valida_azione(target["action_type"], target["action"])
+        _valida_azione(target["action_type"], target["action"],
+                       controlla_comando=False)
         # ricalcola next_run
         if target.get("enabled"):
             if target["schedule"] == "@reboot":
@@ -389,11 +426,21 @@ def esegui_job(job_id: str, env=None) -> dict[str, Any]:
         elif job.get("action_type") == "shell":
             a = job.get("action") or {}
             cmd = (a.get("command") or "").strip()
-            cp = subprocess.run(cmd, shell=True, capture_output=True, text=True,
-                                timeout=int(a.get("timeout") or 300))
-            risultato = {"ok": cp.returncode == 0, "code": cp.returncode,
-                         "stdout": cp.stdout[-2000:], "stderr": cp.stderr[-2000:]}
-            out = (cp.stdout or "")[-500:] or (cp.stderr or "")[-500:]
+            # Un job creato da una versione vecchia puo' non essere mai
+            # passato dai controlli: si rifanno qui, senza gate (lo
+            # scheduler non ha un utente a cui chiedere).
+            blocco = _blocco_comando(cmd, chiedi=False)
+            if blocco:
+                risultato = {"ok": False, "error": blocco}
+                out = blocco
+            else:
+                from .tools._guard import _root, _sandbox_env
+                cp = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                                    timeout=int(a.get("timeout") or 300),
+                                    cwd=str(_root()), env=_sandbox_env())
+                risultato = {"ok": cp.returncode == 0, "code": cp.returncode,
+                             "stdout": cp.stdout[-2000:], "stderr": cp.stderr[-2000:]}
+                out = (cp.stdout or "")[-500:] or (cp.stderr or "")[-500:]
         else:
             risultato = {"ok": False, "error": "action_type sconosciuto"}
             out = "action_type sconosciuto"

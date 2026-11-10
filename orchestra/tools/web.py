@@ -80,6 +80,30 @@ def _rete_locale(host: str) -> bool:
     return False
 
 
+def _peer_pubblico(resp: Any) -> bool:
+    """Controlla l'indirizzo a cui la connessione e' finita DAVVERO.
+
+    `_rete_locale` risolve il nome prima della richiesta, ma urllib lo
+    risolve di nuovo quando apre il socket: un DNS che cambia risposta fra
+    i due momenti (rebinding) puo' portare a 127.0.0.1. Qui si guarda il
+    peer del socket dopo la connessione, prima di leggere il corpo.
+    Non e' una difesa completa — la richiesta e' gia' partita — ma toglie
+    all'attaccante la risposta, che e' quello che gli serve.
+    """
+    try:
+        sock = resp.fp.raw._sock
+        peer = str(sock.getpeername()[0]).split("%", 1)[0]
+        ip = ipaddress.ip_address(peer)
+    except Exception:  # noqa: BLE001
+        return True  # struttura diversa: vale il controllo DNS gia' fatto
+    if (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+        return False
+    if ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10"):
+        return False
+    return True
+
+
 class _RedirectPubblico(urllib.request.HTTPRedirectHandler):
     """Segue i redirect solo verso indirizzi pubblici.
 
@@ -260,6 +284,10 @@ def tool_web_leggi() -> Tool:
         opener = urllib.request.build_opener(_RedirectPubblico)
         try:
             with opener.open(req, timeout=25) as resp:
+                if not _peer_pubblico(resp):
+                    return ("La connessione e' finita su un indirizzo di "
+                            "rete locale: richiesta bloccata (possibile "
+                            "DNS rebinding).")
                 grezzo = resp.read(1_200_000).decode(
                     resp.headers.get_content_charset() or "utf-8", "replace")
                 finale = urljoin(u, resp.geturl())

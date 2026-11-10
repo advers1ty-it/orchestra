@@ -357,6 +357,35 @@ def _dentro_root(candidato: str) -> bool:
         return False
 
 
+def _espandi_variabili(command: str) -> str:
+    """Espande le variabili che la shell userebbe come PERCORSO.
+
+    `$HOME/Documenti` e `%USERPROFILE%\\Documenti` sono la stessa cosa di
+    un percorso assoluto, ma per un controllo che legge la stringa non lo
+    sono. Qui si sostituiscono solo quando la variabile e' seguita da un
+    separatore: `echo $HOME` resta `echo $HOME` (stampa una variabile, non
+    legge un file), mentre `cat $HOME/Documenti/segreti.txt` diventa un
+    percorso assoluto e viene fermato.
+
+    Resta un'approssimazione: non e' un parser della shell, e un percorso
+    costruito da un programma (`python -c`) non passa da qui.
+    """
+    import re
+
+    def _sostituisci(m):
+        nome = m.group(1) or m.group(2)
+        return os.environ.get(nome, m.group(0))
+
+    out = re.sub(r"\$env:([A-Za-z_][A-Za-z0-9_]*)(?=[\\/])",
+                 _sostituisci, command, flags=re.IGNORECASE)
+    out = re.sub(r"%([A-Za-z_][A-Za-z0-9_]*)%(?=[\\/])",
+                 _sostituisci, out)
+    out = re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}?"
+                 r"(?=[\\/])|\$([A-Za-z_][A-Za-z0-9_]*)(?=[\\/])",
+                 _sostituisci, out)
+    return out
+
+
 def _percorso_fuori(command: str) -> str:
     """Il percorso che il comando tocca ed esce dalla root, o "".
 
@@ -391,6 +420,7 @@ def _percorso_fuori(command: str) -> str:
     """
     import re
 
+    command = _espandi_variabili(command)
     low = command.lower()
 
     def come_windows(s: str) -> str:
@@ -494,6 +524,7 @@ def _check_shell_access(command: str) -> str | None:
     """
     import re
 
+    command = _espandi_variabili(command)
     low = command.lower()
 
     # 1) percorsi che escono dal root
