@@ -1259,9 +1259,13 @@
       <textarea id="council-decision" rows="4" style="width:100%" placeholder="La decisione da dibattere (con opzioni, numeri, vincoli, lean)..."></textarea>
       <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <label>Rounds: <select id="council-rounds"><option value="2">2</option><option value="3" selected>3</option></select></label>
+        <button id="council-consiglia" class="ghost" title="Il Chair legge la decisione e propone chi deve sedere">Consiglia tavolo</button>
+        <button id="council-tutti" class="ghost">Tutti</button>
+        <button id="council-default" class="ghost">Tavolo abituale</button>
         <button id="council-start" class="primary">Avvia consiglio</button>
         <button id="council-pdf" class="ghost">Scarica PDF</button>
         <span id="council-status" class="small dim"></span>
+        <div id="council-scelti" class="small dim" style="margin-top:6px"></div>
       </div>
       <div id="council-table" style="margin-top:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
       <pre id="council-log" style="margin-top:12px;max-height:30vh;overflow:auto;background:#0f1115;color:#e6e6e6;padding:8px;border-radius:6px;white-space:pre-wrap"></pre>

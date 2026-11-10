@@ -255,6 +255,10 @@ SUITES = [
     # ETag e 304 veri. Il pezzo che si sbaglia e' il protocollo, non la
     # chiamata — e un errore di rete non deve svuotare l'agenda.
     ("calendario-sync", "test_calendario_sync.py", True),
+    # Il consiglio, con un provider finto: la cosa da provare non e' il
+    # verdetto ma cosa arriva nel prompt di un seat — il brief e le
+    # etichette delle opzioni, che prima non c'erano.
+    ("consiglio", "test_consiglio.py", True),
     ("e2e", "test_e2e.py", False),
 ]
 

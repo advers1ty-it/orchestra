@@ -400,17 +400,43 @@ on("mcp-connect-all", "click", async () => {
   const log = document.getElementById('council-log');
   const verdict = document.getElementById('council-verdict');
   const table = document.getElementById('council-table');
+  const consigliaBtn = document.getElementById('council-consiglia');
+  const tuttiBtn = document.getElementById('council-tutti');
+  const defaultBtn = document.getElementById('council-default');
+  const sceltiEl = document.getElementById('council-scelti');
   if (!btn || !panel) return;
   btn.addEventListener('click', () => { panel.classList.remove('hidden'); loadRoster(); });
   if (close) close.addEventListener('click', () => panel.classList.add('hidden'));
   let roster = [];
   let timer = null;
+  // Chi siede lo decide l'utente: le card si cliccano, e il Chair puo'
+  // proporre un tavolo. Prima partivano sempre tutti e dodici.
+  let scelti = new Set();
+  let tavoloDefault = [];
+  let motivi = {};
   function loadRoster(){
     if (roster.length) { renderTable(); return; }
     fetch('/api/council/roster').then(r=>r.json()).then(d=>{
       roster = d.seats || [];
+      return fetch('/api/council/tavolo').then(r=>r.json()).catch(()=>({default:[]}));
+    }).then(t=>{
+      tavoloDefault = (t && t.default) || [];
+      scelti = new Set(tavoloDefault);
       renderTable();
     }).catch(()=>{});
+  }
+  function paint(){
+    roster.forEach(s=>{
+      const el = document.getElementById('cseat-'+s.key);
+      if (!el) return;
+      const on = scelti.has(s.key);
+      el.style.opacity = on ? '1' : '.35';
+      el.style.borderWidth = on ? '4px' : '2px';
+      if (motivi[s.key]) el.title = motivi[s.key];
+    });
+    if (sceltiEl) sceltiEl.textContent = scelti.size
+      ? ('Al tavolo: ' + roster.filter(s=>scelti.has(s.key)).map(s=>s.short).join(', '))
+      : 'Nessun seat scelto: il Chair decide chi siede';
   }
   function renderTable(){
     if (!table) return;
@@ -421,6 +447,13 @@ on("mcp-connect-all", "click", async () => {
       chip.id = 'cseat-'+s.key;
       chip.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:2px solid '+(s.color||'#888')+';border-radius:10px;transition:box-shadow .15s,transform .15s;background:rgba(255,255,255,.03)';
       chip.innerHTML = '<img src="/portraits/'+s.key+'-base.webp" alt="'+s.short+'" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid '+(s.color||'#888')+'" id="cimg-'+s.key+'"><div style="font-size:14px;font-weight:700">'+s.short+'</div><div style="font-size:11px;opacity:.75;text-align:center;line-height:1.2">'+s.pillar+'</div>';
+      chip.title = s.question || '';
+      chip.style.cursor = 'pointer';
+      chip.addEventListener('click', () => {
+        if (scelti.has(s.key)) { scelti.delete(s.key); delete motivi[s.key]; }
+        else { scelti.add(s.key); }
+        paint();
+      });
       table.appendChild(chip);
     });
     const chair = document.createElement('div');
@@ -428,6 +461,7 @@ on("mcp-connect-all", "click", async () => {
     chair.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border:2px dashed #bbb;border-radius:10px;background:rgba(255,255,255,.03)';
      chair.innerHTML = '<div style="width:80px;height:80px;border-radius:50%;background:#555;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px">CH</div><div style="font-size:14px;font-weight:700">Chair</div><div style="font-size:11px;opacity:.75">Sintesi</div>';
     table.appendChild(chair);
+    paint();
   }
   function highlight(current){
     roster.forEach(s=>{
@@ -468,10 +502,34 @@ on("mcp-connect-all", "click", async () => {
     log.textContent = '';
     verdict.textContent = '';
     highlight('');
-    const r = await fetch('/api/council/start', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:dec,rounds:parseInt(rounds.value||'3',10)})});
+    const corpo = {decision:dec, rounds:parseInt(rounds.value||'3',10)};
+    if (scelti.size) corpo.seats = Array.from(scelti);
+    const r = await fetch('/api/council/start', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)});
     const d = await r.json();
     if (d.error) { status.textContent = d.error; return; }
     poll();
+  });
+  if (consigliaBtn) consigliaBtn.addEventListener('click', async () => {
+    const dec = (decision.value||'').trim();
+    if (!dec) { status.textContent = 'inserisci una decisione'; return; }
+    consigliaBtn.disabled = true;
+    status.textContent = 'il Chair sceglie il tavolo...';
+    try {
+      const r = await fetch('/api/council/consiglia', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:dec})});
+      const d = await r.json();
+      if (d.error) { status.textContent = d.error; return; }
+      scelti = new Set(d.seats||[]);
+      motivi = d.why || {};
+      paint();
+      status.textContent = (d.note || 'tavolo proposto')
+        + (d.provider ? (' · ' + d.provider + (d.model ? '/' + d.model : '')) : '');
+    } finally { consigliaBtn.disabled = false; }
+  });
+  if (tuttiBtn) tuttiBtn.addEventListener('click', () => {
+    scelti = new Set(roster.map(s=>s.key)); motivi = {}; paint();
+  });
+  if (defaultBtn) defaultBtn.addEventListener('click', () => {
+    scelti = new Set(tavoloDefault); motivi = {}; paint();
   });
   if (pdfBtn) pdfBtn.addEventListener('click', () => { window.location.href = '/api/council/pdf'; });
 })();

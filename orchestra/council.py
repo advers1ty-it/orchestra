@@ -6,6 +6,7 @@ import json
 import os
 import re
 from datetime import datetime
+from functools import lru_cache
 from typing import Any, Callable
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +24,20 @@ def load_roster() -> list[dict[str, Any]]:
 def load_roster_raw() -> dict[str, Any]:
     with open(ROSTER_PATH, encoding='utf-8') as f:
         return json.load(f)
+
+
+def tavolo_default() -> list[str]:
+    """I seat del tavolo abituale, dalla configurazione del roster."""
+    raw = load_roster_raw()
+    validi = {s['key'] for s in raw.get('seats', [])}
+    default = [k for k in raw.get('default', []) if k in validi]
+    return default or sorted(validi)
+
+
+def modalita_tavolo() -> str:
+    """'ask' (il Chair propone), 'auto' (propone e parte), 'default'."""
+    modalita = str(load_roster_raw().get('board') or 'ask').lower()
+    return modalita if modalita in ('ask', 'auto', 'default') else 'ask'
 
 
 def _seat_by_key(key: str) -> dict[str, Any] | None:
@@ -49,28 +64,121 @@ def _agent_body(key: str) -> str:
     return txt.strip()
 
 
+# Tetto di sicurezza, non un budget da spendere: il cervello piu' grande
+# (Musk) con le cinque sezioni utili misura 90.574 caratteri. Prima
+# `frameworks` era tagliato a 14.000 e `positions` a 9.000 su file da
+# 25.000 e 15.700, e `principles.md` — le 28 regole con le citazioni —
+# non veniva mai iniettato: il seat parlava con meta' della sua memoria.
+# Qui nessuna sezione si salta e nessuna si tronca, finche' c'e' spazio.
+BRAIN_MAX_CHARS = 96_000
+BRAIN_SEZIONI = (
+    ('HOT SHEET', '_hot.md'),
+    ('PRINCIPLES', 'principles.md'),
+    ('FRAMEWORKS', 'frameworks.md'),
+    ('POSITIONS', 'positions.md'),
+    ('VOICE', 'voice.md'),
+)
+
+
+@lru_cache(maxsize=32)
 def _brain_text(slug: str) -> str:
     base = os.path.join(DATA_DIR, 'brains', slug)
-    hot = _read_text(os.path.join(base, '_hot.md')).strip()
-    fw = _read_text(os.path.join(base, 'frameworks.md')).strip()
-    pos = _read_text(os.path.join(base, 'positions.md')).strip()
-    fw = fw[:14000]
-    pos = pos[:9000]
-    parts = []
-    if hot:
-        parts.append('## HOT SHEET\n' + hot)
-    if fw:
-        parts.append('## FRAMEWORKS\n' + fw)
-    if pos:
-        parts.append('## POSITIONS\n' + pos)
-    return '\n\n'.join(parts)
+    parti, usati = [], 0
+    for titolo, nome in BRAIN_SEZIONI:
+        testo = _read_text(os.path.join(base, nome)).strip()
+        if not testo:
+            continue
+        if usati + len(testo) > BRAIN_MAX_CHARS:
+            resto = BRAIN_MAX_CHARS - usati
+            if resto < 4000:
+                break
+            tagliato = testo[:resto].rsplit('\n', 1)[0]
+            testo = (tagliato + '\n\n[sezione troncata: il cervello supera '
+                     'il tetto del prompt]')
+        parti.append(f'## {titolo}\n{testo}')
+        usati += len(testo)
+    return '\n\n'.join(parti)
+
+
+@lru_cache(maxsize=32)
+def _cervello_completo(slug: str) -> str:
+    """Tutti i file del cervello, per verificare le citazioni.
+
+    Per il prompt si iniettano cinque sezioni; per il controllo delle
+    citazioni serve TUTTO (anche stories e books), altrimenti una
+    citazione vera presa da li' verrebbe segnalata come inventata.
+    """
+    base = os.path.join(DATA_DIR, 'brains', slug)
+    try:
+        nomi = sorted(n for n in os.listdir(base) if n.endswith('.md'))
+    except OSError:
+        return ''
+    return '\n\n'.join(_read_text(os.path.join(base, n)) for n in nomi)
+
+
+def _riga_punteggi(options: list[dict[str, Any]]) -> str:
+    """La riga di forma «A n/10 · B n/10»: identica in tutti e tre i round."""
+    return ' · '.join(f'{o["id"]} n/10' for o in options)
+
+
+def _corpo_truthful(body: str) -> str:
+    """Riscrive la sezione «Your brain» dell'agent body.
+
+    Gli agent body arrivano dal progetto originale (Claude Code), dove il
+    seat aveva i tool per leggere la cartella del cervello. Qui il seat gira
+    con un registro di tool vuoto: il suo cervello gli viene iniettato nel
+    system prompt. Se lasciassimo «Read `_hot.md` first, every time» e il
+    percorso `.claude/skills/...`, il modello riceverebbe un ordine
+    impossibile — e la cosa peggiore non e' che fallisce: e' che puo'
+    rispondere «letto» e citare un percorso che non esiste.
+
+    La sezione si sostituisce in codice invece di correggere dodici file
+    copiati: un seat aggiunto domani con lo stesso template eredita la
+    correzione senza saperlo.
+    """
+    nuovo = (
+        '## Your brain\n\n'
+        'You have no tools and you read no files: your brain is already in '
+        'this message, in the `HOT SHEET`, `PRINCIPLES`, `FRAMEWORKS`, '
+        '`POSITIONS` and `VOICE` sections below. Use those. Never say you '
+        'read a file and never cite a path.\n\n'
+        'Cite every framework or rule you use with its source id, like '
+        '(Value Equation, S115). Quote only lines that appear verbatim in '
+        'the brain. Everything else is your reasoning, in your voice, '
+        'unquoted.'
+    )
+    return re.sub(r'## Your brain.*?(?=\n## )', nuovo + '\n\n', body,
+                  count=1, flags=re.S)
+
+
+def _brief_testo(options: list[dict[str, Any]], assumptions: list[str],
+                 summary: str, decision: str = '') -> str:
+    """Il brief in chiaro dentro il prompt di ogni seat.
+
+    Il brief esisteva solo come file (`brief.md`) e i prompt dicevano di
+    leggerlo. Ma i seat girano con `ToolRegistry()` vuoto: non potevano, e
+    nel round 1 non c'erano nemmeno le etichette delle opzioni — solo le
+    chiavi «A», «B», «C» da punteggiare. Un consiglio che dibatte e vota
+    opzioni che non sa nominare produce testo fluente e inutile: qui il
+    contenuto entra nel prompt, senza letture e senza percorsi.
+    """
+    righe = ['## La decisione e le opzioni sul tavolo', '']
+    if decision:
+        righe += [f'**Decisione (parole del founder):** {decision}', '']
+    righe += [f'**Brief del Chair:** {summary}', '', '**Opzioni:**']
+    for o in options:
+        righe.append(f'- **{o.get("id", "")}** — {o.get("label", "")}')
+    if assumptions:
+        righe += ['', '**Assunzioni del Chair sui numeri mancanti:**']
+        righe += [f'- {a}' for a in assumptions]
+    return '\n'.join(righe)
 
 
 def advisor_system_prompt(key: str) -> str:
     seat = _seat_by_key(key)
     if not seat:
         return ''
-    body = _agent_body(key)
+    body = _corpo_truthful(_agent_body(key))
     brain = _brain_text(seat['slug'])
     return (
         f'{body}\n\n'
@@ -230,6 +338,98 @@ def _ask_verdict(provider, system_prompt, user_prompt, max_tokens=3000, temp=0.5
     return text
 
 
+def consiglia_tavolo(decision: str, provider: Any = None,
+                     max_seats: int = 7) -> dict[str, Any]:
+    """Il Chair sceglie chi siede, come nel Roast Room originale.
+
+    Un tavolo fisso di dodici seat costa dodici pareri anche quando la
+    domanda riguarda solo il prezzo. Qui il Chair legge la decisione e
+    propone da due a sette seat, con una riga sul perche'. Il tavolo
+    tiene sempre un seat che guarda il downside (Buffett): un consiglio
+    senza chi dice «e se va male?» non e' un consiglio, e' un coro.
+    """
+    decision = (decision or '').strip()
+    if not decision:
+        raise ValueError('decisione vuota')
+    roster = load_roster()
+    validi = {s['key'] for s in roster}
+    provider = _ensure_provider(provider)
+    elenco = '\n'.join(
+        f'- {s["key"]}: {s["pillar"]} — {s["question"]}' for s in roster)
+    prompt = (
+        'CONSIGLIA IL TAVOLO. Sei il Chair del Roast Room: leggi la '
+        'decisione e scegli chi deve sedere al tavolo.\n\n'
+        f'Seat disponibili:\n{elenco}\n\n'
+        f'Decisione:\n{decision}\n\n'
+        'Regole: da 2 a 7 seat; almeno uno che guarda il downside '
+        '(buffett) e almeno uno che probabilmente dissente; nessun seat '
+        'fuori elenco. Produci SOLO JSON valido con:\n'
+        '{"seats": [{"key": "bezos", "why": "una riga"}], '
+        '"note": "una frase su cosa manca al tavolo"}\n\n'
+        'Rispondi solo JSON.'
+    )
+    testo = _ask(provider, CHAIR_SYSTEM, prompt, max_tokens=700, temp=0.3)
+    dati = _extract_json(testo) or {}
+    scelti: list[str] = []
+    motivi: dict[str, str] = {}
+    for voce in (dati.get('seats') or []):
+        key = voce.get('key') if isinstance(voce, dict) else str(voce or '')
+        key = (key or '').strip().lower()
+        if key in validi and key not in scelti:
+            scelti.append(key)
+            if isinstance(voce, dict):
+                motivi[key] = str(voce.get('why') or '')[:200]
+        if len(scelti) >= max_seats:
+            break
+    if 'buffett' in validi and 'buffett' not in scelti:
+        if len(scelti) >= max_seats and scelti:
+            motivi.pop(scelti.pop(), None)
+        scelti.append('buffett')
+    if not scelti:
+        scelti = tavolo_default()[:max_seats]
+    return {'seats': scelti, 'why': motivi,
+            'note': str(dati.get('note') or '')[:300]}
+
+
+_CITAZIONE = re.compile(
+    r'"([^"\n]{12,400})"\s*\(([A-Z]{1,3}\d{2,4})\)'
+    r'|“([^”\n]{12,400})”\s*\(([A-Z]{1,3}\d{2,4})\)'
+)
+
+
+def _normalizza(testo: str) -> str:
+    """Minuscolo e punteggiatura spaziata: due modi di scrivere la stessa frase."""
+    t = (testo or '').lower()
+    for a, b in (('’', "'"), ('‘', "'"), ('“', '"'), ('”', '"'),
+                 ('–', '-'), ('—', '-')):
+        t = t.replace(a, b)
+    t = re.sub(r'[^a-z0-9à-ÿ ]+', ' ', t)
+    return re.sub(r'\s+', ' ', t).strip()
+
+
+def verifica_citazioni(testo: str, slug: str) -> list[dict[str, Any]]:
+    """Ogni citazione con fonte deve esistere verbatim nel cervello.
+
+    Il prompt chiede «quote only verbatim lines, with the source id», ma
+    niente lo verificava: una citazione inventata con un id plausibile era
+    indistinguibile da una vera, e il verdetto la presentava come fondata
+    sulla fonte. Qui le due stringhe si confrontano normalizzate (minuscolo,
+    punteggiatura spaziata), che e' come i cervelli sono stati costruiti:
+    virgolette tipografiche e maiuscole non devono fare la differenza.
+    """
+    cervello = _normalizza(_cervello_completo(slug))
+    trovate: list[dict[str, Any]] = []
+    for m in _CITAZIONE.finditer(testo or ''):
+        citazione = (m.group(1) or m.group(3) or '').strip()
+        fonte = (m.group(2) or m.group(4) or '').strip()
+        trovate.append({
+            'citazione': citazione,
+            'fonte': fonte,
+            'trovata': bool(cervello) and _normalizza(citazione) in cervello,
+        })
+    return trovate
+
+
 def _risposta_finale(stato: Any) -> str:
     msgs = getattr(stato, 'messages', None) or []
     for m in reversed(msgs):
@@ -298,7 +498,10 @@ def _parse_door(text: str) -> str:
 
 
 def _parse_vote(text: str) -> str:
-    m = re.search(r'VOTE\s*:\s*(Endorse|Endorse with amendment|Dissent)', text or '', re.IGNORECASE)
+    # «Endorse with amendment» prima di «Endorse»: l'alternanza regex e'
+    # leftmost-first, e con l'ordine opposto un emendamento contava come
+    # un endorsamento — il conteggio dei voti non poteva mai dire «amend».
+    m = re.search(r'VOTE\s*:\s*(Endorse with amendment|Dissent|Endorse)', text or '', re.IGNORECASE)
     return (m.group(1) if m else '')
 
 
@@ -327,10 +530,12 @@ def _parse_moved(text: str) -> str:
 
 
 def _parse_amendment(text: str) -> str:
-    m = re.search(r'AMENDMENT OR DISSENT\s*:\s*(.+)', text or '', re.IGNORECASE | re.DOTALL)
-    if m:
-        return m.group(1).strip().split('\n')[0].strip()
-    return ''
+    # Una riga sola, non DOTALL: con `\s*` e DOTALL un emendamento vuoto
+    # («AMENDMENT OR DISSENT:» e niente) catturava la riga seguente, e un
+    # endorsamento pulito compariva nel verdetto come emendamento — cioe'
+    # il contrario di quello che il seat aveva votato.
+    m = re.search(r'AMENDMENT OR DISSENT\s*:[ \t]*([^\n]*)', text or '', re.IGNORECASE)
+    return m.group(1).strip() if m else ''
 
 
 def _parse_conditions(text: str) -> str:
@@ -349,13 +554,20 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
 
     roster = load_roster()
     key2seat = {s['key']: s for s in roster}
+    provider = _ensure_provider(provider)
     if seats is None:
+        # Il tavolo non e' «tutti»: dodici pareri costano dodici pareri
+        # anche quando la domanda ne merita quattro. Con `board: default`
+        # si usa il tavolo abituale; con `ask`/`auto` lo propone il Chair.
+        seats = (tavolo_default() if modalita_tavolo() == 'default'
+                 else consiglia_tavolo(decision, provider)['seats'])
+    if isinstance(seats, str):
+        seats = [s.strip() for s in seats.split(',') if s.strip()]
+    if any(k == 'all' for k in seats):
         seats = [s['key'] for s in roster]
     seats = [k for k in seats if k in key2seat]
     if not seats:
         raise ValueError('nessun seat valido')
-
-    provider = _ensure_provider(provider)
     base_dir = base_dir or os.getcwd()
     sessions_root = os.path.join(base_dir, 'sessions')
     os.makedirs(sessions_root, exist_ok=True)
@@ -363,6 +575,12 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
     stamp = datetime.now().strftime('%Y-%m-%d')
     session_dir = os.path.join(sessions_root, f'{stamp}-{slug}')
     os.makedirs(session_dir, exist_ok=True)
+    # Chi ha parlato davvero, scritto accanto alla sessione: un consiglio
+    # riprodotto con un altro modello non e' lo stesso consiglio.
+    with open(os.path.join(session_dir, 'provider.json'), 'w', encoding='utf-8') as f:
+        json.dump({'provider': getattr(provider, 'name', ''),
+                   'model': getattr(provider, 'model', '')}, f, ensure_ascii=False,
+                  indent=2)
 
     raw = load_roster_raw()
     raw_seats = {s['key']: s for s in raw.get('seats', [])}
@@ -398,6 +616,7 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
         weights[k] = {'weight': wt, 'reason': reason}
     assumptions = parsed0.get('assumptions') or []
     brief_summary = parsed0.get('brief') or decision
+    brief_seats = _brief_testo(options, assumptions, brief_summary, decision)
 
     # brief.md
     brief = (
@@ -453,19 +672,17 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
     r = 1
     _emit(on_event, 'round_start', round=r)
     cards = {}
-    opts_str = ' · '.join(f'{o["id"]} n/10' for o in options)
     for key in seats:
         seat = key2seat[key]
         prompt = (
-            f'REPO ROOT: {base_dir}\n'
             f'ROAST ROOM COUNCIL, ROUND 1 OF {rounds}: OPENING POSITION\n\n'
-            f'You hold the {seat["short"]} seat ({seat["pillar"]}). Read your brain _hot.md, then at most three more brain files that fit this decision.\n'
-            f'Read the brief: {session_dir}/brief.md\n\n'
+            f'You hold the {seat["short"]} seat ({seat["pillar"]}).\n\n'
+            f'{brief_seats}\n\n'
             f'Your weight on this decision: {weights[key]["weight"]}/3 ({weights[key]["reason"]}).\n\n'
             f'Answer in your seat\'s voice, plain text, under 350 words, in exactly this shape:\n\n'
             f'SEAT: {seat["short"]} ({seat["pillar"]})\n'
             f'STANCE: Strong yes | Yes | Conditional yes | No | Strong no (on the option you recommend)\n'
-            f'OPTION SCORES: { " · ".join(f"{o[chr(39)+chr(39)] if False else o["id"]} n/10" for o in options) }\n'
+            f'OPTION SCORES: {_riga_punteggi(options)}\n'
             f'PILLAR SCORE: n/10 ({seat["dimension"]}: the option you recommend, judged on your pillar alone)\n'
             f'CONFIDENCE: n/5\n'
             f'RUIN RISK: none | possible | likely\n'
@@ -478,9 +695,6 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
             f'QUESTION FOR THE FOUNDER: ...\n\n'
             f'Rules: argue from your pillar first. Use real numbers when the brief has them. Quote only verbatim lines from your brain, with the source id. Do not hedge.\n'
         )
-        # fix option scores placeholder
-        prompt = prompt.replace('OPTION SCORES: ' + ' · '.join(f'{o["id"]} n/10' for o in options),
-                               'OPTION SCORES: ' + ' · '.join(f'{o["id"]} n/10' for o in options))
         _emit(on_event, 'seat_start', round=r, seat=key, name=seat['short'])
         text = ask_seat(key, prompt)
         cards[key] = text
@@ -526,10 +740,9 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
         for key in seats:
             seat = key2seat[key]
             prompt = (
-                f'REPO ROOT: {base_dir}\n'
                 f'ROAST ROOM COUNCIL, ROUND 2 OF {rounds}: DEBATE\n\n'
-                f'You hold the {seat["short"]} seat. Read your brain _hot.md again and any brain file you need.\n'
-                f'Read: {session_dir}/brief.md and {session_dir}/round-1.md (every seat\'s card and the Chair\'s cruxes).\n\n'
+                f'You hold the {seat["short"]} seat.\n\n'
+                f'{brief_seats}\n\n'
                 f'THE CRUXES THE CHAIR SEES\n{cruxes_text_block}\n'
                 f'Decision:\n{decision}\n\n'
                 f'ROUND 1 CARDS:\n{r1_full}\n\n'
@@ -539,7 +752,7 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
                 f'I CONCEDE: the strongest point another seat made against you, and what it changes.\n'
                 f'ON THE CRUXES: your answer to each crux, one or two lines each.\n'
                 f'STANCE: ...\n'
-                f'OPTION SCORES: ' + ' · '.join(f'{o["id"]} n/10' for o in options) + '\n'
+                f'OPTION SCORES: {_riga_punteggi(options)}\n'
                 f'PILLAR SCORE: n/10\n'
                 f'CONFIDENCE: n/5\n'
                 f'RUIN RISK: none | possible | likely\n'
@@ -601,17 +814,16 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
         for key in seats:
             seat = key2seat[key]
             prompt = (
-                f'REPO ROOT: {base_dir}\n'
                 f'ROAST ROOM COUNCIL, ROUND 3 OF {rounds}: VOTE ON THE DRAFT RESOLUTION\n\n'
-                f'You hold the {seat["short"]} seat. You already argued two rounds; read only your _hot.md if you need it.\n'
-                f'Read: {session_dir}/brief.md, your own section of {session_dir}/round-2.md, and {session_dir}/draft-resolution.md.\n\n'
+                f'You hold the {seat["short"]} seat. You already argued two rounds.\n\n'
+                f'{brief_seats}\n\n'
                 f'Decision:\n{decision}\n\n'
                 f'YOUR ROUND 2 (context):\n{r2_full}\n\n'
                 f'Draft resolution:\n{draft_text_block}\n\n'
                 f'Answer in your seat\'s voice, under 150 words, in exactly this shape:\n'
                 f'SEAT: {seat["short"]}\n'
                 f'VOTE: Endorse | Endorse with amendment | Dissent\n'
-                f'OPTION SCORES: ' + ' · '.join(f'{o["id"]} n/10' for o in options) + ' (given the resolution\'s conditions)\n'
+                f'OPTION SCORES: {_riga_punteggi(options)} (given the resolution\'s conditions)\n'
                 f'FINAL SCORE: n/10 (your support for the draft resolution as written)\n'
                 f'FINAL PILLAR SCORE: n/10\n'
                 f'AMENDMENT OR DISSENT: one or two sentences (what to change, or why you dissent). Blank if you endorse.\n'
@@ -660,6 +872,16 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
             d = _parse_door(r1_cards[key])
             if d:
                 seat_data[key]['door'] = d
+        # Il round del voto non chiede CONFIDENCE: senza questo fallback la
+        # confidenza del consiglio era sempre il default 5/5, cioe' 10/10,
+        # per qualunque decisione. Si prende l'ultima dichiarata, dal round
+        # piu' recente che ce l'ha.
+        if seat_data[key]['confidence'] is None:
+            for rr in (2, 1):
+                c = _parse_confidence(cards_by_round.get(rr, {}).get(key, ''))
+                if c is not None:
+                    seat_data[key]['confidence'] = c
+                    break
 
     # option scores weighted
     option_weighted = {}
@@ -778,6 +1000,21 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
                               'adopted': 'endorse' in (seat_data[key]['vote'] or '').lower(),
                               'reason': ''})
 
+    # Citazioni: ogni «frase» (Sxxx) nei card deve stare verbatim nel
+    # cervello di quel seat. Si controlla sul testo integrale, non sul
+    # giudizio del Chair, perche' e' l'unica prova indipendente.
+    citazioni: list[dict[str, Any]] = []
+    for key in seats:
+        testi = '\n'.join(
+            cards_by_round.get(r, {}).get(key, '') for r in sorted(cards_by_round))
+        for c in verifica_citazioni(testi, key2seat[key]['slug']):
+            c['seat'] = key2seat[key]['short']
+            citazioni.append(c)
+    mancanti = [c for c in citazioni if not c['trovata']]
+    with open(os.path.join(session_dir, 'citazioni.json'), 'w', encoding='utf-8') as f:
+        json.dump({'controllate': len(citazioni), 'non_trovate': len(mancanti),
+                   'voci': citazioni}, f, ensure_ascii=False, indent=2)
+
     # Chair verdict (narrative) via agent
     _emit(on_event, 'chair_start')
     # Solo l'ultimo round (voti) nel prompt del verdict: cruxes/draft/scoring gia'
@@ -827,6 +1064,24 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
     if not verdict_text or verdict_text.startswith('[errore'):
         verdict_text = '# Verdict\n\n' + scoring_summary
 
+    # Il controllo si scrive nel verdetto, non solo nel JSON: chi legge il
+    # PDF deve sapere quante citazioni sono state confrontate col cervello.
+    blocco_cit = ''
+    if citazioni:
+        blocco_cit = (
+            f'\n\n## Citazioni verificate\n\n'
+            f'- {len(citazioni)} citazioni con fonte nei card: '
+            f'{len(citazioni) - len(mancanti)} verbatim nel cervello, '
+            f'{len(mancanti)} non trovate.')
+        for c in mancanti[:8]:
+            blocco_cit += (f'\n- **{c["seat"]}** ({c["fonte"]}): '
+                           f'«{c["citazione"][:160]}» non compare nel cervello')
+    fine = verdict_text.rfind('\n---')
+    if fine > 0:
+        verdict_text = verdict_text[:fine] + blocco_cit + verdict_text[fine:]
+    else:
+        verdict_text = verdict_text.rstrip() + blocco_cit + '\n'
+
     with open(os.path.join(session_dir, 'verdict.md'), 'w', encoding='utf-8') as f:
         f.write(verdict_text)
 
@@ -845,6 +1100,7 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
         'cheapest_test': draft.get('cheapest_test', ''),
         'revisit': '',
         'override_note': override_note,
+        'citazioni': {'controllate': len(citazioni), 'non_trovate': len(mancanti)},
     }
     with open(os.path.join(session_dir, 'verdict.json'), 'w', encoding='utf-8') as f:
         json.dump(verdict_json, f, ensure_ascii=False, indent=2)
@@ -858,6 +1114,10 @@ def run_council(decision, seats=None, rounds=3, provider=None, base_dir=None, on
         'verdict': verdict_text,
         'rounds': rounds,
         'seats': seats,
+        'provider': getattr(provider, 'name', ''),
+        'model': getattr(provider, 'model', ''),
+        'citazioni': {'controllate': len(citazioni), 'non_trovate': len(mancanti),
+                      'voci': citazioni},
         'options': options,
         'weights': weights,
         'scoring': {

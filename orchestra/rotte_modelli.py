@@ -286,6 +286,26 @@ class RotteModelli:
             return
         self._json(res)
 
+    @rotta("GET", "/api/council/tavolo")
+    def _r_get_council_tavolo(self, path: str, body: dict[str, Any],
+                              s: Any) -> None:
+        # Il tavolo abituale e la modalita' scelta nel roster: il pannello
+        # li usa per preselezionare i seat, senza indovinare.
+        self._json(self.app.council_tavolo())
+
+    @rotta("POST", "/api/council/consiglia")
+    def _r_post_council_consiglia(self, path: str, body: dict[str, Any],
+                                  s: Any) -> None:
+        body = body if isinstance(body, dict) else {}
+        decision = (body.get("decision") or "").strip()
+        if not decision:
+            self._json({"error": "scrivi la decisione prima di chiedere il tavolo"}, 400)
+            return
+        try:
+            self._json(self.app.consiglia_tavolo(decision))
+        except Exception as e:  # noqa: BLE001
+            self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+
     @rotta("POST", "/api/prova")
     def _r_post_prova(self, path: str, body: dict[str, Any],
                       s: Any) -> None:

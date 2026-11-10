@@ -60,7 +60,7 @@ Il contratto è stato ricostruito facendolo parlare, perché **la validazione de
 - **Benchmark onesto** — misura i modelli per categoria di compito con verifiche oggettive (niente LLM che giudicano LLM).
 - **Permessi** — file fuori dalla cartella di lavoro e automazioni richiedono conferma esplicita; senza canale di conferma, default = nega.
 - **Diagnostica** — `orchestra doctor`, pannello Diagnosi nella UI, docs integrate su `/docs`. Le **tracce** dei turni restano in `storico.db`: la sidebar le filtra per esito e per errori, e il dettaglio mostra gli argomenti e i risultati dei tool, non solo i nomi.
-- **Consiglio (Roast Room)** — pannello per far dibattere una decisione tra advisor in round, con verdict del chair e export PDF. L’idea e parte dell’interfaccia del tavolo sono ispirate al progetto open source “Roast Room” (citazione dovuta agli autori originali).
+- **Consiglio (Roast Room)** — pannello per far dibattere una decisione tra advisor in round, con verdict del chair e export PDF. Il Chair propone chi siede (e il tavolo si cambia cliccando le card), ogni seat riceve il brief con le opzioni per esteso, e il verdetto dichiara quante citazioni sono state confrontate col cervello: quelle non trovate finiscono in elenco. L’idea e parte dell’interfaccia del tavolo sono ispirate al progetto open source “Roast Room” (citazione dovuta agli autori originali).
 
 ## Struttura
 

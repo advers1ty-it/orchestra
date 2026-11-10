@@ -1316,7 +1316,8 @@ class OrchestraApp:
         self._council = {"running": True, "log": [], "verdict": "",
                          "session_dir": "", "started": __import__("time").time(),
                          "error": "", "rounds": rounds, "seats": seats or [],
-                         "current_round": 0, "current_seat": ""}
+                         "current_round": 0, "current_seat": "",
+                         "provider": "", "model": ""}
 
         def _log(kind, data):
             try:
@@ -1356,14 +1357,18 @@ class OrchestraApp:
         def worker():
             try:
                 from .council import run_council
+                prov, nome, modello = self._provider_consiglio()
                 r = run_council(
                     decision,
                     seats=seats,
                     rounds=rounds,
-                    provider=None,  # _ensure_provider sceglie un provider funzionante
+                    provider=prov,
                     base_dir=os.getcwd(),
                     on_event=_log,
                 )
+                self._council["provider"] = r.get("provider") or nome
+                self._council["model"] = r.get("model") or modello
+                self._council["seats"] = list(r.get("seats") or [])
                 self._council["verdict"] = r.get("verdict", "")
                 self._council["session_dir"] = r.get("session_dir", "")
                 self._council["log"].append("Verdict salvato in " + r.get("verdict_path", ""))
@@ -1388,7 +1393,49 @@ class OrchestraApp:
             "current_seat": self._council.get("current_seat", ""),
             "rounds": self._council.get("rounds", 0),
             "seats": list(self._council.get("seats", [])),
+            "provider": self._council.get("provider", ""),
+            "model": self._council.get("model", ""),
         }
+
+    def _provider_consiglio(self) -> tuple[Any, str, str]:
+        """Il provider che l'utente ha scelto, non uno indovinato.
+
+        Il consiglio costruiva il suo provider con una priorita' scritta a
+        mano (nvidia, groq, ...): se l'utente aveva selezionato un altro
+        servizio, il consiglio girava altrove e la spesa finiva su un'altra
+        chiave. Su un errore si restituisce `None`: `run_council` ha il suo
+        ripiego, e il pannello mostra quale provider ha poi usato.
+        """
+        try:
+            from .providers import build_provider
+
+            nome = (self.env.get("ORCHESTRA_PROVIDER") or "").strip()
+            modello = (self.env.get("ORCHESTRA_MODEL") or "").strip()
+            if not nome:
+                return None, "", ""
+            prov = build_provider(nome, model=modello,
+                                  env=load_env(ENV_PATH) | os.environ)
+            return prov, nome, modello or getattr(prov, "model", "")
+        except Exception:  # noqa: BLE001 - il consiglio ha un ripiego
+            return None, "", ""
+
+    def consiglia_tavolo(self, decision: str) -> dict[str, Any]:
+        """Il Chair propone chi siede, col provider dell'app."""
+        from .council import consiglia_tavolo
+
+        prov, nome, modello = self._provider_consiglio()
+        esito = consiglia_tavolo(decision, provider=prov)
+        esito["provider"], esito["model"] = nome, modello
+        return esito
+
+    @staticmethod
+    def council_tavolo() -> dict[str, Any]:
+        try:
+            from .council import modalita_tavolo, tavolo_default
+
+            return {"board": modalita_tavolo(), "default": tavolo_default()}
+        except Exception:  # noqa: BLE001 - il pannello ha un default in pagina
+            return {"board": "ask", "default": []}
 
     @staticmethod
     def council_roster() -> list[dict[str, Any]]:
