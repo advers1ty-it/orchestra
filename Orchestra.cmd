@@ -406,6 +406,14 @@ rem  ma e' una cosa che si legge meglio sapendola.
 :trova_python
 set "PY1="
 set "PY2="
+rem  Il 3.14 che installiamo noi, per percorso. `py` e `python` sono
+rem  selettori: un selettore che punta a un runtime portabile registrato ma
+rem  cancellato risponde "Unable to create process" e non avvia niente.
+rem  Il percorso invece o c'e' o non c'e', e si vede subito.
+for %%D in ("%LOCALAPPDATA%\Programs\Python\Python314" "C:\Python314" "%PROGRAMFILES%\Python314") do (
+  if not defined PY1 if exist "%%~D\python.exe" "%%~D\python.exe" -c "raise SystemExit(0 if __import__('sys').version_info[:2] == (3, 14) else 1)" >nul 2>&1 && set "PY1=%%~D\python.exe"
+)
+if defined PY1 exit /b 0
 py -3 -c "raise SystemExit(0 if __import__('sys').version_info[:2] > (3, 10) else 1)" >nul 2>&1
 if not errorlevel 1 set "PY1=py"
 if not errorlevel 1 set "PY2=-3"

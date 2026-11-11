@@ -20,8 +20,7 @@ la copia che invecchia.
 Solo `CERTIFICATE_VERIFY_FAILED` apre il discorso (con la proposta di
 riparare); se manca la rete il download fallirà e lo dirà lui. Dopo la
 riparazione si riprova, e se ancora non passa si prosegue lo stesso
-dichiarandolo, invece di bloccare un'installazione che .NET potrebbe
-riuscire a fare.
+dichiarandolo.
 
 ## Una riparazione sola
 
@@ -30,34 +29,23 @@ prima del download e il controllo dopo l'estrazione. `-generateSSTFromWU`
 scrive solo un file e non chiede permessi; `-addstore` tocca lo store di
 sistema, quindi si eleva **solo la seconda metà**.
 
-## Perché Python 3.12 (verificato, non ricordato)
+## Python 3.14, e sempre quello
 
-Il codice non richiede la 3.12: `pyproject.toml` dichiara `>=3.11`, la CI
-gira su 3.11, `Orchestra.cmd` accetta qualunque > 3.10. La preferenza
-per 3.12 nasce dal launcher (commit `56c54b9`: 3.12, poi 3.11, poi PATH)
-e il 3.15 era evitato per un motivo che non era il codice: era un
-**runtime portabile finito per sbaglio nel repo** (142 MB, tolti con
-`b8c34fa`), con il launcher `py` che puntava lì.
+L'installer ora installa **Python 3.14** (con winget, o con l'installer
+ufficiale se winget non c'è) e lo usa **per percorso completo**, come
+`%LOCALAPPDATA%\Programs\Python\Python314\python.exe`.
 
-Misurato adesso su quel runtime 3.15.0 (OpenSSL 3.5.9): `import
-orchestra` funziona e `certificati.py` risponde "1/1 a posto"; quello che
-non funziona è `python -m pip`, che muore all'import. E sulle dipendenze:
-Pillow 13 ha le ruote cp311→cp315, ctranslate2 4.9 arriva a cp315,
-`ddgs`/`pypdf`/`faster-whisper` sono ruote pure, mentre **onnxruntime
-1.31.1 si ferma a cp314** — quindi la trascrizione audio su 3.15 è
-rischiosa.
+Non si fida più di un `py` o `python` già presente, e il motivo è un
+guasto vero: quelli non sono interpreti, sono **selettori**. Il controllo
+poteva rispondere "va bene" e poi il selettore puntava a un'altra
+versione — e su un PC dove resta un runtime "portabile" registrato ma
+cancellato, l'installazione si fermava a metà dicendo che Python non
+c'era, dopo averlo trovato.
 
-Conclusione: 3.12 resta la scelta prudente (tutte le ruote ci sono), la
-3.14 è coperta da tutto, la 3.15 no finché onnxruntime non pubblica la
-ruota.
+Il launcher (`Orchestra.cmd`) cerca lo stesso 3.14, così l'app continua a
+girare con l'interprete con cui è stata installata.
 
-## Verifiche
-
-La sonda è stata estratta dal `.bat` vero ed eseguita in due harness:
-host vero → passa e va al download; host inesistente → salta la
-riparazione e prosegue. Etichette verificate (`tls_download`,
-`ripara_radici`), fine riga CRLF, nessuna riga con spazio iniziale
-rimasto. `tests/test_certificati.py` resta a 33 controlli verdi.
-
-Il ramo che chiede l'elevazione resta non esercitato: la macchina di
-sviluppo ha già lo store completo.
+E perché non il 3.15: lì manca la ruota di `onnxruntime`, che serve alla
+trascrizione audio. Sul 3.14 ci sono tutte. Se il 3.14 non riesce a
+installarsi, l'installer usa un Python esistente e **lo dice**, invece di
+chiudersi a metà: un'avvertenza chiara serve più di un'uscita silenziosa.

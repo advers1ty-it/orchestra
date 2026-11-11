@@ -12,44 +12,58 @@ echo.
 echo  === Installazione Orchestra ===
 echo.
 
-rem --- 1. Python ---
+rem --- 1. Python 3.14: quello che installiamo noi, con il percorso intero ---
+rem  Due guasti in uno, e vanno risolti insieme.
+rem
+rem  Il primo: `py` e `python` non sono un interprete, sono un selettore.
+rem  `py -3 --version` puo' rispondere di si' e poi `py` da solo scegliere
+rem  la versione predefinita, che su una macchina con un runtime portabile
+rem  registrato e' quella sbagliata: il controllo passa, l'installazione
+rem  muore dopo con "Unable to create process". E' successo davvero, ed e'
+rem  il "l'ha trovato e poi non lo trova piu'".
+rem
+rem  Il secondo: un Python che c'e' non e' un Python che funziona. Un 3.15
+rem  senza pip si lascia intervistare (versione, import) e poi non installa
+rem  niente. Quindi la versione non si indovina: la installiamo noi e la
+rem  usiamo con il percorso completo, che non dipende dal PATH.
+rem
+rem  Perche' 3.14 e non 3.15: sul 3.15 manca la ruota di onnxruntime (serve
+rem  alla trascrizione) e i runtime "portatili" li abbiamo gia' visti
+rem  rotti. Il 3.14 e' stato provato: import del pacchetto, webapp, CLI,
+rem  pip presente.
 set "PYEXE="
-for %%P in (python py python3) do (
-  if not defined PYEXE %%P --version >nul 2>&1 && set "PYEXE=%%P"
+call :cerca_python
+if defined PYEXE goto :python_ok
+echo  Python 3.14 non trovato. Provo a installarlo...
+winget install -e --id Python.Python.3.14 --silent --accept-package-agreements --accept-source-agreements
+call :cerca_python
+if defined PYEXE goto :python_ok
+echo  Winget non ha funzionato; scarico l'installer da python.org...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.14.10/python-3.14.10-amd64.exe' -OutFile '%TEMP%\python-setup.exe' -UseBasicParsing" 2>nul
+if exist "%TEMP%\python-setup.exe" (
+  echo  Installo Python 3.14 (qualche minuto)...
+  start /wait "" "%TEMP%\python-setup.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+  del "%TEMP%\python-setup.exe" >nul 2>&1
 )
-if not defined PYEXE (
-  for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312" "%LocalAppData%\Programs\Python\Python311" "C:\Python312" "C:\Python311" "C:\Program Files\Python312" "C:\Program Files\Python311") do (
-    if not defined PYEXE if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
-  )
-)
-if not defined PYEXE (
-  echo  Python non trovato. Provo a installarlo...
-  winget install -e --id Python.Python.3.12 --silent --accept-package-agreements --accept-source-agreements
-  set "PYEXE=py"
-  py -3 --version >nul 2>&1
-  if !errorlevel! neq 0 (
-    set "PYEXE=python"
-    python --version >nul 2>&1
-  )
-  if defined PYEXE python --version >nul 2>&1 || (
-    echo  Winget non ha funzionato; scarico l'installer da python.org...
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe' -OutFile '%TEMP%\python-setup.exe' -UseBasicParsing" 2>nul
-    if exist "%TEMP%\python-setup.exe" (
-      start /wait "" "%TEMP%\python-setup.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
-      del "%TEMP%\python-setup.exe" >nul 2>&1
-    )
-    set "PYEXE="
-    for %%D in ("%LOCALAPPDATA%\Programs\Python\Python312") do if exist "%%~D\python.exe" set "PYEXE=%%~D\python.exe"
-  )
-)
-if not defined PYEXE (
-  echo.
-  echo  [ERRORE] Installa Python 3.11 o superiore da https://www.python.org/downloads/
-  echo  e rilancia questo installer.
-  pause
-  exit /b 1
-)
-echo  [OK] Python presente.
+call :cerca_python
+if defined PYEXE goto :python_ok
+rem  Ultima risorsa: un interprete qualunque, ma con il percorso RISOLTO.
+rem  Meglio un'Orchestra che parte con un Python che non e' il nostro, che
+rem  un installer che si chiude a meta'.
+for /f "delims=" %%P in ('python -c "import sys;print(sys.executable)" 2^>nul') do set "PYEXE=%%P"
+if not defined PYEXE for /f "delims=" %%P in ('py -3 -c "import sys;print(sys.executable)" 2^>nul') do set "PYEXE=%%P"
+if not defined PYEXE for /f "delims=" %%P in ('python3 -c "import sys;print(sys.executable)" 2^>nul') do set "PYEXE=%%P"
+if not defined PYEXE goto :python_mancante
+echo  [AVVISO] uso un Python diverso da quello previsto: %PYEXE%
+goto :python_ok
+:python_mancante
+echo.
+echo  [ERRORE] Python 3.14 non installato e nessun altro Python utilizzabile.
+echo  Installa Python 3.14 da https://www.python.org/downloads/ e rilancia.
+pause
+exit /b 1
+:python_ok
+echo  [OK] Python: %PYEXE%
 
 rem --- 2. Cartella di installazione ---
 set "DESTDIR=%LOCALAPPDATA%\Orchestra"
@@ -190,6 +204,25 @@ call "%DESTDIR%\Avvia-Orchestra.bat"
 exit /b 0
 
 rem ===================================================================
+rem  Trova il Python 3.14 che installiamo noi, per percorso assoluto.
+rem  Non basta che risponda alla versione: un 3.15 senza pip passa questo
+rem  controllo e fallisce dopo, quando deve installare qualcosa. Quindi si
+rem  prova anche che `ssl` si importi, che e' l'unica cosa senza cui
+rem  Orchestra non parla con nessun provider.
+:cerca_python
+set "PYEXE="
+for %%D in ("%LOCALAPPDATA%\Programs\Python\Python314" "C:\Python314" "%PROGRAMFILES%\Python314") do (
+  if not defined PYEXE call :prova_python "%%~D\python.exe"
+)
+goto :eof
+
+:prova_python
+if not exist "%~1" goto :eof
+"%~1" -c "import sys,ssl;raise SystemExit(0 if sys.version_info[:2] == (3, 14) else 1)" >nul 2>&1
+if errorlevel 1 goto :eof
+set "PYEXE=%~1"
+goto :eof
+
 rem  La riparazione dei certificati sta in un posto solo: la usano la sonda
 rem  prima del download e il controllo dopo l'estrazione. Due copie degli
 rem  stessi due comandi sono due punti che possono divergere.
