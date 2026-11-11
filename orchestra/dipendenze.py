@@ -26,10 +26,21 @@ lo rispetta, e poi lo stato dice "da installare" su qualcosa che c'e' gia'.
 
 from __future__ import annotations
 
+import os
+import sys
+
+if __name__ == "__main__" and os.path.dirname(os.path.abspath(__file__)) in sys.path:
+    # Eseguito come file (l'installer lo chiama cosi', per non importare il
+    # pacchetto), la sua cartella e' in sys.path e copre la stdlib:
+    # `orchestra/types.py` oscura `types`, e `import re` dentro `enum` muore
+    # con "partially initialized module". Stessa riga di update.py, prima di
+    # qualsiasi altro import.
+    sys.path.remove(os.path.dirname(os.path.abspath(__file__)))
+
 import importlib.metadata
 import importlib.util
 import re
-import sys
+import subprocess
 from pathlib import Path
 
 # Dove sta `requirements.txt`: la root del progetto, cioe' la cartella che
@@ -219,3 +230,72 @@ def comando_installazione(nome: str) -> list[str] | None:
         if voce["nome"].lower().replace("_", "-") == chiave:
             return [sys.executable, "-m", "pip", "install", voce["pip"]]
     return None
+
+
+# --------------------------------------------------------------------------
+# riga di comando
+# --------------------------------------------------------------------------
+# Esiste per l'installer, e per una ragione sola: la lista delle dipendenze
+# non deve avere una seconda copia dentro un `.bat`. Con una copia, alla
+# prima dipendenza aggiunta una delle due resta indietro — ed e' esattamente
+# il difetto che questo modulo e' nato per chiudere (il pannello aveva la sua
+# lista scritta a mano e non vedeva Pillow e pypdf).
+#
+# Il formato di `--elenco` e' una riga per voce, campi separati da `|`:
+# cmd non ha un parser JSON, e un `for /f` con il delimitatore lo legge
+# senza aiuti e senza citazioni da indovinare.
+
+
+def _cli(argv: list[str]) -> int:
+    if "--elenco" in argv:
+        for voce in stato():
+            print("|".join((voce["nome"], voce["stato"], voce["via"],
+                            voce.get("perche") or "")))
+        return 0
+    if "--installa" in argv:
+        posizione = argv.index("--installa")
+        nomi = [n for n in argv[posizione + 1:] if not n.startswith("-")]
+        if not nomi:
+            print("indica cosa installare", file=sys.stderr)
+            return 2
+        errori = 0
+        for nome in nomi:
+            comando = comando_installazione(nome)
+            if comando is None:
+                print(f"{nome}: dipendenza sconosciuta", file=sys.stderr)
+                errori += 1
+                continue
+            try:
+                # winget scarica un installer, pip un wheel: due tempi
+                # diversi, e un timeout solo sarebbe sbagliato per uno dei
+                # due (lo stesso conto lo fa la rotta del pannello).
+                attesa = 600 if comando[0] == "winget" else 900
+                esito = subprocess.run(comando, text=True,
+                                       capture_output=True, timeout=attesa)
+            except subprocess.TimeoutExpired:
+                print(f"{nome}: timeout {attesa}s", file=sys.stderr)
+                errori += 1
+                continue
+            except Exception as e:  # noqa: BLE001
+                print(f"{nome}: {type(e).__name__}: {e}", file=sys.stderr)
+                errori += 1
+                continue
+            if esito.returncode == 0:
+                print(f"ok {nome}")
+                continue
+            print(f"errore {nome}: {comando[0]} ha risposto "
+                  f"{esito.returncode}", file=sys.stderr)
+            # Le ultime righe dicono il perche' (permessi, rete, nome
+            # sbagliato). Tutte sono rumore, nessuna lascia a mani vuote.
+            coda = ((esito.stdout or "") + (esito.stderr or ""))
+            for riga in coda.strip().splitlines()[-6:]:
+                print("  " + riga.rstrip(), file=sys.stderr)
+            errori += 1
+        return 1 if errori else 0
+    print("uso: dipendenze.py --elenco | --installa NOME [NOME ...]",
+          file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli(sys.argv[1:]))

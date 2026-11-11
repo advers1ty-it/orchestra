@@ -10,7 +10,7 @@ sotto-compiti ad altri agenti. Con interfaccia web in italiano.
 
 ## Per iniziare (senza essere esperti)
 
-1. Scarica il pacchetto tester e lancia `Installa-Orchestra.bat`
+1. Vai su **Releases** (l'ultima) e scarica solo `Installa-Orchestra.bat`:
    (non servono Git né account GitHub).
 2. All’avvio si apre il browser su `http://127.0.0.1:8737`.
 3. Il file `orchestra/.env` si crea da solo al primo avvio:
@@ -79,6 +79,7 @@ Il contratto è stato ricostruito facendolo parlare, perché **la validazione de
 | `providers.py` | Adapter provider OpenAI-compatibili |
 | `context.py` | Conteggio token e compaction |
 | `session.py` | Ponte loop sincrono / consumatori asincroni |
+| `certificati.py` | Radici di certificati che servono a Orchestra, e come si controllano |
 | `update.py` | Aggiornamento da release GitHub |
 | `webapp.py` | Server HTTP stdlib + SSE |
 | `web/` | Interfaccia HTML/CSS/JS puro, zero dipendenze |

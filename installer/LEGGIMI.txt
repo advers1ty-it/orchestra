@@ -8,9 +8,14 @@ in italiano e lui lo esegue usando file, web e altri strumenti.
 
 INSTALLAZIONE
 -------------
-1. Lancia Installa-Orchestra.bat e aspetta la fine (se manca Python,
-   te lo installa da solo).
-2. Alla fine si crea "Avvia Orchestra" sul Desktop: usalo ogni volta.
+1. Scarica Installa-Orchestra.bat dalla pagina Releases di GitHub: e' un
+   file solo, non serve scaricare l'archivio (l'installer lo prende da
+   se'). Non serve Git ne' un account GitHub.
+2. Lancialo e aspetta la fine. Se manca Python te lo installa da solo,
+   controlla che i certificati di Windows siano completi e ti chiede
+   quali funzioni aggiuntive vuoi (ricerca web, immagini, PDF, voce,
+   tunnel): Invio = tutte, 0 = nessuna.
+3. Alla fine si crea "Avvia Orchestra" sul Desktop: usalo ogni volta.
 
 PRIMO AVVIO
 -----------
@@ -34,5 +39,8 @@ SE QUALCOSA NON VA
 - L'app non risponde: riapri "Avvia Orchestra" e scegli Riavvia.
   Dettagli tecnici in orchestra.log e orchestra.err.log (il comando
   "Orchestra.cmd log" li mostra tutti e due).
+- Telegram risponde "rete non raggiungibile" o un errore di
+  certificato: sul computer mancano le radici di Windows. Rilancia
+  Installa-Orchestra.bat e rispondi S alla domanda sui certificati.
 - Per togliere tutto: cancella la cartella %LOCALAPPDATA%\Orchestra
   e il collegamento sul Desktop.

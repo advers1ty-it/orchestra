@@ -61,7 +61,7 @@ if _os.path.isdir(_tools_dir) and not _os.path.isfile(_tools_init):
 
 from .tools import SYSTEM_PROMPT, default_registry
 
-__version__ = "0.5.96"
+__version__ = "0.5.97"
 
 __all__ = [
     "LLMResponse", "Message", "Tool", "ToolCall", "ToolRegistry",
