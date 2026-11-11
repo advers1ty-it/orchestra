@@ -324,16 +324,39 @@ REM-PS:$tmp = Join-Path $env:TEMP ('orchestra-rel-' + [guid]::NewGuid().ToString
 REM-PS:Expand-Archive -Path $zip -DestinationPath $tmp -Force
 REM-PS:$root = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
 REM-PS:if (-not $root) { Write-Host '[ERRORE] Zip vuoto.'; exit 1 }
-REM-PS:$escludi = @('.env', 'token.txt', 'goals.json', 'budget_global.json', 'storico.db', 'memoria_indice.db', '__pycache__', '_ goals_fallback', '_dati_test')
-REM-PS:Get-ChildItem -Path $root.FullName -Force | ForEach-Object {
-REM-PS:  if ($escludi -contains $_.Name) { return }
-REM-PS:  $dst = Join-Path $Dest $_.Name
-REM-PS:  if ($_.PSIsContainer) {
-REM-PS:    if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
-REM-PS:    Copy-Item -Recurse -Force $_.FullName $dst
-REM-PS:  } else {
-REM-PS:    Copy-Item -Force $_.FullName $dst
+REM-PS:$escludiNomi = @('.env', 'token.txt', 'goals.json', 'budget_global.json',
+REM-PS:                  'storico.db', 'memoria_indice.db', 'permessi.json',
+REM-PS:                  'nous_auth.json', '.remote_state.json')
+REM-PS:$escludiEst = @('.db', '.db-wal', '.db-shm')
+REM-PS:$escludiCart = @('__pycache__', 'node_modules', 'sessions', 'tmp', 'plans',
+REM-PS:                 '.orchestra', '.git', '.freebuff', '_dati_test',
+REM-PS:                 '_dati_test_server', '_bench', '_prova', '_probe',
+REM-PS:                 '.cloud-attachments')
+REM-PS:$copiati = 0
+REM-PS:$saltati = 0
+REM-PS:#  Copia a unione: si sovrascrive il codice, non si cancella MAI una
+REM-PS:#  cartella, e i dati locali non si toccano a nessun livello.
+REM-PS:#  La regola vecchia guardava solo i nomi nella radice dell'archivio:
+REM-PS:#  `.env` sta dentro orchestra\, quindi la cartella veniva cancellata e
+REM-PS:#  con lei le chiavi. Rilanciare l'installer su un'installazione
+REM-PS:#  esistente deve aggiornare il codice, non azzerare il lavoro.
+REM-PS:foreach ($f in (Get-ChildItem -Path $root.FullName -Recurse -Force -File)) {
+REM-PS:  $rel = $f.FullName.Substring($root.FullName.Length).TrimStart('\')
+REM-PS:  $salta = $false
+REM-PS:  foreach ($parte in ($rel -split '\\')) {
+REM-PS:    if ($escludiCart -contains $parte) { $salta = $true }
 REM-PS:  }
+REM-PS:  if ($escludiNomi -contains $f.Name) { $salta = $true }
+REM-PS:  foreach ($est in $escludiEst) {
+REM-PS:    if ($f.Name.ToLower().EndsWith($est)) { $salta = $true }
+REM-PS:  }
+REM-PS:  if ($salta) { $saltati++; continue }
+REM-PS:  $dstFile = Join-Path $Dest $rel
+REM-PS:  $cartella = Split-Path $dstFile -Parent
+REM-PS:  if (-not (Test-Path $cartella)) { New-Item -ItemType Directory -Path $cartella -Force | Out-Null }
+REM-PS:  Copy-Item -Force $f.FullName $dstFile
+REM-PS:  $copiati++
 REM-PS:}
+REM-PS:Write-Host ('  ' + $copiati + ' file aggiornati, ' + $saltati + ' lasciati come erano')
 REM-PS:Remove-Item -Recurse -Force $tmp, $zip
 REM-PS:Write-Host '  file copiati.'

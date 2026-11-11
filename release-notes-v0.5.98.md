@@ -29,6 +29,19 @@ prima del download e il controllo dopo l'estrazione. `-generateSSTFromWU`
 scrive solo un file e non chiede permessi; `-addstore` tocca lo store di
 sistema, quindi si eleva **solo la seconda metà**.
 
+## Rilanciarlo non cancella niente
+
+Prima, rilanciare l'installer su un'installazione che esisteva gia'
+ricreava `orchestra/` da zero. Con lei spariva `.env`, cioe' le chiavi, e
+il passo dopo ne creava uno vuoto: l'app si apriva dicendo "chiave
+mancante" e sembrava rotta.
+
+Ora la copia unisce i file: sovrascrive il codice, non cancella mai una
+cartella e lascia stare `.env`, i database, il token di Telegram e le
+skill, a qualunque livello si trovino. Rilanciare l'installer su una
+copia gia' installata e' quindi un aggiornamento valido, ed e' anche il
+modo per passare a Python 3.14 senza reinstallare da zero.
+
 ## Python 3.14, e sempre quello
 
 L'installer ora installa **Python 3.14** (con winget, o con l'installer
