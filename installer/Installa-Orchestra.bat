@@ -59,6 +59,38 @@ echo  [OK] Cartella: %DESTDIR%
 rem --- 3. Download ultima release + estrazione ---
 rem Lo script PowerShell e' dentro questo stesso file (righe REM-PS:):
 rem lo si estrae in TEMP e lo si esegue, niente altri file da scaricare.
+rem  Prima del download: si riesce a fare un TLS verso GitHub? Il download
+rem  lo fa PowerShell, che spesso si salva da solo (recupera i certificati
+rem  che gli mancano via AIA, con una cache sua); Python no. Quindi si prova
+rem  con lo stesso Python che servira' poi: se e' lui a non fidarsi, il
+rem  passo 4 arriverebbe dopo un "Download fallito" che non spiega niente.
+rem
+rem  La sonda e' generica di proposito: chiede "questo TLS regge?", non
+rem  "c'e' la radice di Telegram". L'elenco delle radici che servono
+rem  all'app sta in orchestra/certificati.py, e li' resta: una seconda lista
+rem  scritta qui sarebbe la copia che invecchia.
+echo  Verifico la connessione sicura a GitHub...
+set "TLSPROBE=%TEMP%\orchestra-tls.txt"
+"%PYEXE%" -c "import ssl,socket;s=ssl.create_default_context().wrap_socket(socket.create_connection(('api.github.com',443),timeout=8),server_hostname='api.github.com');s.close()" >nul 2>"%TLSPROBE%"
+if not errorlevel 1 goto :tls_download
+rem  Solo l'errore di certificato merita questo discorso: se manca la rete,
+rem  il download fallira' e lo dira' lui.
+findstr /C:"CERTIFICATE_VERIFY_FAILED" "%TLSPROBE%" >nul 2>&1
+if errorlevel 1 goto :tls_download
+echo.
+echo  Python non si fida di github.com: i certificati di Windows sono
+echo  incompleti, ed e' il caso di un Windows appena installato. Le radici
+echo  si scaricano da Windows Update e si importano nello store di sistema:
+echo  serve il consenso di amministratore, Windows apre la sua finestra.
+set "RIP="
+set /p "RIP=Sistemo ora? [S/n] "
+if /i "%RIP%"=="n" goto :tls_download
+call :ripara_radici
+"%PYEXE%" -c "import ssl,socket;s=ssl.create_default_context().wrap_socket(socket.create_connection(('api.github.com',443),timeout=8),server_hostname='api.github.com');s.close()" >nul 2>"%TLSPROBE%"
+if not errorlevel 1 echo  [OK] certificati a posto.
+if errorlevel 1 echo  [AVVISO] ancora niente: provo lo stesso il download.
+:tls_download
+del "%TLSPROBE%" 2>nul
 echo  Scarico l'ultima versione da GitHub...
 set "PSSCRIPT=%TEMP%\orchestra-scarica.ps1"
 powershell -NoProfile -Command "(Get-Content '%~f0' | Where-Object { $_.StartsWith('REM-PS:') } | ForEach-Object { $_.Substring(7) }) | Set-Content '%PSSCRIPT%'"
@@ -102,7 +134,7 @@ set "RIP="
 set /p "RIP=Sistemo ora? [S/n] "
 if /i "%RIP%"=="n" goto :cert_manuale
 echo  Apro la finestra di amministratore...
-powershell -NoProfile -Command "Start-Process -FilePath '%PYEXE%' -ArgumentList '%CERT%','--ripara' -Verb RunAs -Wait"
+call :ripara_radici
 "%PYEXE%" "%CERT%"
 if not errorlevel 1 goto :cert_fatto
 :cert_manuale
@@ -158,6 +190,20 @@ call "%DESTDIR%\Avvia-Orchestra.bat"
 exit /b 0
 
 rem ===================================================================
+rem  La riparazione dei certificati sta in un posto solo: la usano la sonda
+rem  prima del download e il controllo dopo l'estrazione. Due copie degli
+rem  stessi due comandi sono due punti che possono divergere.
+rem
+rem  La prima meta' scrive solo un file e non chiede permessi; la seconda
+rem  tocca lo store di sistema e senza amministratore risponde "accesso
+rem  negato". Quindi si eleva solo la seconda.
+:ripara_radici
+set "SST=%TEMP%\orchestra-radici.sst"
+certutil -generateSSTFromWU "%SST%" >nul 2>&1
+powershell -NoProfile -Command "Start-Process -FilePath 'certutil' -ArgumentList '-addstore','-f','root','%SST%' -Verb RunAs -Wait"
+del "%SST%" 2>nul
+goto :eof
+
 rem  Dipendenze: leggere la lista e installare quello che si sceglie
 rem ===================================================================
 rem  Sotto il flusso principale e non dentro: cmd esegue le righe in
