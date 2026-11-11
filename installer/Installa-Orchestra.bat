@@ -259,20 +259,33 @@ echo  Funzioni aggiuntive (Orchestra parte comunque):
 for /l %%i in (1,1,%DN%) do call :dip_riga %%i
 echo.
 echo    0 - nessuna: restano disponibili dopo, in Opzioni, Dipendenze
+:dip_chiedi
 set "SCELTA="
-set /p "SCELTA=Cosa installo? Numeri separati da spazio, Invio = tutte: "
+set /p "SCELTA=Cosa installo? Numeri separati da spazio, 0 = nessuna, Invio = tutte: "
 if not defined SCELTA goto :dip_tutte
 if "%SCELTA%"=="0" goto :dip_fine
-rem  Virgole e punti e virgola si tolgono qui: accettare due separatori costa
+rem  Virgole e punti e virgola diventano spazi: accettare due separatori costa
 rem  una riga, rifiutare tutto l'input per una virgola non lo spiega nessuno.
-set "SCELTA=%SCELTA:,=%"
-set "SCELTA=%SCELTA:;=%"
+set "SCELTA=%SCELTA:,= %"
+set "SCELTA=%SCELTA:;= %"
+rem  Prima si controlla tutta la riga, poi si installa: un refuso non deve
+rem  lasciare meta' delle funzioni installate e meta' no, ne' far credere
+rem  di aver scelto tutto quando non e' stato scelto niente.
+set "NONVALIDO="
+for %%n in (%SCELTA%) do call :dip_valida %%n
+if defined NONVALIDO goto :dip_chiedi
 for %%n in (%SCELTA%) do call :dip_uno %%n
 goto :dip_fine
 
 :dip_tutte
 for /l %%i in (1,1,%DN%) do call :dip_uno %%i
 goto :dip_fine
+
+:dip_valida
+if not defined DEPN_%~1 echo  [%~1 non e' un numero della lista.]
+if not defined DEPN_%~1 echo  [Premi Invio per installarle tutte, 0 per nessuna.]
+if not defined DEPN_%~1 set "NONVALIDO=1"
+goto :eof
 
 :dip_riga
 echo    %~1 - !DEPN_%~1!: !DEPP_%~1!
