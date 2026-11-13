@@ -95,6 +95,29 @@ class LoopConfig:
     max_secondi_turno: float = 900.0
 
 
+def parametri_da_env(env) -> dict[str, Any]:
+    """`temperature` e `max_tokens` come li imposta l'utente.
+
+    Un posto solo, con gli stessi nomi della CLI
+    (`ORCHESTRA_TEMPERATURE`, `ORCHESTRA_MAX_TOKENS`): chi costruisce un
+    `LoopConfig` per conto suo — il goal, i figli della delega — li
+    passa con `**parametri_da_env(env)` invece di ricopiare i default.
+
+    Senza, quei percorsi restavano a 4096 qualunque cosa dicesse il
+    `.env`: con `reasoning: max` il tetto si esauriva dentro il
+    ragionamento e la risposta arrivava troncata anche dopo aver
+    alzato la variabile.
+    """
+    def _numero(chiave: str, default, cast):
+        try:
+            return cast(env.get(chiave, default))
+        except (TypeError, ValueError):
+            return default
+
+    return {"temperature": _numero("ORCHESTRA_TEMPERATURE", 0.7, float),
+            "max_tokens": _numero("ORCHESTRA_MAX_TOKENS", 4096, int)}
+
+
 @dataclass
 class AgentState:
     """Stato ispezionabile della run. Lo teniamo esplicito perché un

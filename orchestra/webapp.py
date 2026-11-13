@@ -3727,7 +3727,7 @@ class OrchestraApp:
                 except Exception:
                     modello = ""
 
-            from .agent import Agent, LoopConfig
+            from .agent import Agent, LoopConfig, parametri_da_env
             # Il tetto dei passi è quello del PADRE, non un numero fisso.
             # Prima era 16 hard-coded, e cambiavo le Opzioni del padre che
             # il figlio non se ne accorgeva: due numeri diversi per la
@@ -3756,8 +3756,11 @@ class OrchestraApp:
                 build_provider(nome_provider, model=modello, env=env_chiavi),
                 default_registry(),          # NUOVO: senza 'delega'
                 PROMPT_FIGLIO,
+                # Temperatura e tetto di output dalla configurazione
+                # dell'app: senza, il figlio restava a 4096 e
+                # ORCHESTRA_MAX_TOKENS non valeva nella delega.
                 LoopConfig(max_iterations=passi_figlio, context_limit=60_000,
-                           keep_recent=6),
+                           keep_recent=6, **parametri_da_env(self.env)),
                 # Il figlio NON e' piu' muto: i suoi eventi passano al
                 # bridge del padre con un tag `figlio`. Prima era
                 # `lambda: None`, e quando il figlio si incagliava sui

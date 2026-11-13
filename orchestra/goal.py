@@ -609,7 +609,7 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
         return "\n\n".join(last_output[-5:])
 
     try:
-        from .agent import Agent, LoopConfig
+        from .agent import Agent, LoopConfig, parametri_da_env
         from .tools import default_registry, applica_profilo, profilo_per_testo
         from .providers import build_provider, ProviderError
 
@@ -648,12 +648,16 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
         )
         if extra_prompt and extra_prompt.strip():
             prompt += "\n\nContesto extra:\n" + extra_prompt.strip()
+        # `**parametri_da_env` porta temperatura e tetto di output dalla
+        # configurazione: senza, un goal restava a 4096 e
+        # ORCHESTRA_MAX_TOKENS non valeva qui.
         agent = Agent(provider, reg, prompt, LoopConfig(
             max_iterations=int(goal["max_iterations"]),
             context_limit=int(env.get("ORCHESTRA_CONTEXT_LIMIT", "120000")),
             keep_recent=8,
             reasoning_level=env.get("ORCHESTRA_REASONING", None),
             tool_profile=profile,
+            **parametri_da_env(env),
         ), on_event=on_event)
         # Stessa catena manuale di CLI e web: primario + i ripieghi scelti
         # (ORCHESTRA_FALLBACK / ORCHESTRA_FALLBACK_MODELS). Senza, un goal
@@ -704,7 +708,7 @@ def _attacca_delega(reg: Any,
         from .delega import Delegatore
         from .types import Tool
         from .prompt_figlio import PROMPT_FIGLIO
-        from .agent import Agent, LoopConfig
+        from .agent import Agent, LoopConfig, parametri_da_env
         from .providers import build_provider
     except Exception:
         return False
@@ -742,7 +746,8 @@ def _attacca_delega(reg: Any,
                 default_registry(),
                 PROMPT_FIGLIO,
                 LoopConfig(max_iterations=passi_figlio,
-                           context_limit=60_000, keep_recent=6),
+                           context_limit=60_000, keep_recent=6,
+                           **parametri_da_env(env)),
                 on_event=lambda kind, data: None,
             )
             # Anche il figlio della delega: se il suo modello cade, i

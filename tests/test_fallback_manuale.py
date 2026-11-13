@@ -468,6 +468,53 @@ check("la entry non porta piu' parametri della chiamata",
               for attr in ("max_tokens", "temperature", "reasoning_level")),
       str(sorted(vars(voce))))
 
+# ------------------- il tetto vale anche per goal e figli della delega
+print("\n[11] Goal e figli della delega leggono lo stesso tetto")
+
+from orchestra.agent import parametri_da_env  # noqa: E402
+
+check("senza variabili: i default del LoopConfig",
+      parametri_da_env({}) == {"temperature": 0.7, "max_tokens": 4096},
+      str(parametri_da_env({})))
+check("con le variabili: i valori dell'utente",
+      parametri_da_env({"ORCHESTRA_MAX_TOKENS": "16384",
+                        "ORCHESTRA_TEMPERATURE": "0.2"})
+      == {"temperature": 0.2, "max_tokens": 16384})
+check("valori storti: si torna ai default invece di esplodere",
+      parametri_da_env({"ORCHESTRA_MAX_TOKENS": "boh",
+                        "ORCHESTRA_TEMPERATURE": ""})
+      == {"temperature": 0.7, "max_tokens": 4096},
+      str(parametri_da_env({"ORCHESTRA_MAX_TOKENS": "boh"})))
+
+# Il giro intero: il LoopConfig come lo costruisce il goal, fino ai
+# parametri con cui parte la chiamata.
+prov_goal = ProviderCheRegistra()
+ag_goal = Agent(prov_goal, default_registry(), "SYS",
+                LoopConfig(**parametri_da_env(
+                    {"ORCHESTRA_MAX_TOKENS": "16384",
+                     "ORCHESTRA_TEMPERATURE": "0.3"})))
+ag_goal._call_model_with_retry()
+kw_goal = prov_goal.visti[-1]
+check("il tetto arriva fino alla chiamata",
+      kw_goal.get("max_tokens") == 16384, str(kw_goal.get("max_tokens")))
+check("la temperatura arriva fino alla chiamata",
+      abs(float(kw_goal.get("temperature", -1)) - 0.3) < 1e-9,
+      str(kw_goal.get("temperature")))
+
+# E chi costruisce quei LoopConfig lo fa davvero: senza questa riga il
+# test sopra prova l'aiutante, non che goal e delega lo usino.
+sorgente_goal = open(os.path.join(radice, "orchestra", "goal.py"),
+                     encoding="utf-8").read()
+sorgente_webapp = open(os.path.join(radice, "orchestra", "webapp.py"),
+                       encoding="utf-8").read()
+check("goal.py lo usa per il goal e per il figlio",
+      sorgente_goal.count("**parametri_da_env(env)") == 2,
+      f"occorrenze: {sorgente_goal.count('**parametri_da_env(env)')}")
+check("webapp.py lo usa per il figlio della delega",
+      "**parametri_da_env(self.env)" in sorgente_webapp)
+check("la sessione web ha gia' il suo tetto dalla variabile",
+      'max_tokens=num("ORCHESTRA_MAX_TOKENS", 4096)' in sorgente_webapp)
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)
