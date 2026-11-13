@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 # pannello le espone come menu a tendina. Se comparissero anche nella
 # lista delle chiavi, ci sarebbero due modi per cambiarle e divergerebbero
 # senza che nessuno se ne accorga.
-SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL", "ORCHESTRA_REASONING", "ORCHESTRA_BUDGET", "ORCHESTRA_MAX_ITERS", "ORCHESTRA_CONTEXT_LIMIT", "ORCHESTRA_ROUTING")
+SOLO_SCRIVIBILI = ("ORCHESTRA_PROVIDER", "ORCHESTRA_MODEL", "ORCHESTRA_REASONING", "ORCHESTRA_BUDGET", "ORCHESTRA_MAX_ITERS", "ORCHESTRA_CONTEXT_LIMIT", "ORCHESTRA_ROUTING", "ORCHESTRA_FALLBACK", "ORCHESTRA_FALLBACK_MODELS")
 
 # Impostazioni che hanno gia' il loro campo in un'altra sezione del
 # pannello. Stanno qui e non nel frontend perche' questa e' l'unica lista
@@ -83,6 +83,11 @@ WRITABLE: dict[str, str] = {
     # chiave il salvataggio falliva in silenzio e il modello scelto
     # tornava a durare una richiesta sola.
     "ORCHESTRA_ROUTING": "Instradamento automatico (on/off)",
+    # Il fallback e' manuale: l'interruttore e la lista dei ripieghi si
+    # scelgono in Opzioni → Modello. Due righe per una schermata sola
+    # sarebbero due modi per cambiarla, e divergerebbero.
+    "ORCHESTRA_FALLBACK": "Fallback (on/off)",
+    "ORCHESTRA_FALLBACK_MODELS": "Modelli di fallback (provider/modello, max 3)",
     "ORCHESTRA_OLLAMA_URL": "Indirizzo Ollama",
     "ORCHESTRA_LMSTUDIO_URL": "Indirizzo LM Studio",
 }

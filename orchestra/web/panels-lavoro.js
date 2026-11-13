@@ -453,6 +453,7 @@ async function caricaOpzioni() {
     // resto del pannello. Se il server non risponde, la sezione resta
     // muta e Opzioni funziona lo stesso.
     caricaSkill();
+    caricaFallback();
 
     // provider e modello: due menu in alto, non due righe di chiavi
     disegnaProvider(d);

@@ -79,6 +79,11 @@ SUITES = [
     # dei fatti esisteva ma nessuno la chiamava, e senza un test che
     # copre il "chiama il provider e mette in memoria" il difetto
     # torna silenzioso — come e' tornato una volta.
+    # Il fallback manuale: la catena e' primario + i ripieghi scelti, e
+    # spenta e' il solo primario. La tabella automatica mandava i turni
+    # su servizi senza chiave e finiva in "Nessun provider disponibile"
+    # al posto dell'errore vero.
+    ("fallback-manuale", "test_fallback_manuale.py", True),
     ("memoria", "test_memoria.py", True),
     # I progetti: la cartella in cui si scrive, e il riconoscimento
     # dell'intento. Il test copre anche che il tool scriva DENTRO il

@@ -652,3 +652,152 @@ on($("side-mem-input"), "keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && memModal && !memModal.hidden) chiudiMemoria();
 });
+
+// ------------------------------------------------- fallback manuale
+// Prima la catena era automatica e costruita da una tabella di servizi
+// che chi usa Orchestra puo' non avere. Un 401 sul primario diventava
+// "nessun provider disponibile" dopo aver bussato a porte chiuse, e chi
+// usava un servizio fuori tabella (nous, google) non aveva ripieghi
+// affatto. Qui l'utente sceglie fino a tre modelli, su qualunque
+// servizio abbia una chiave; spento, la catena e' il solo modello in
+// uso e l'errore che arriva e' quello vero.
+const fbAttivo = $("opt-fallback");
+const fbLista = $("opt-fallback-lista");
+const fbMsg = $("opt-fallback-msg");
+const FB_POSTI = 3;
+
+function fbPosto(i, quale) {
+  return $("fb-" + quale + "-" + i);
+}
+
+function fbRiempiServizi(sel, servizi, scelto) {
+  if (!sel) return;
+  sel.replaceChildren();
+  sel.appendChild(new Option("\u2014", ""));
+  for (const p of servizi) {
+    sel.appendChild(new Option(NOME_PROVIDER[p] || p, p));
+  }
+  sel.value = servizi.includes(scelto) ? scelto : "";
+}
+
+async function fbCaricaModelli(i, prov, scelto) {
+  const sel = fbPosto(i, "model");
+  if (!sel) return;
+  sel.replaceChildren();
+  if (!prov) {
+    sel.appendChild(new Option("\u2014", ""));
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = true;
+  sel.appendChild(new Option("carico\u2026", ""));
+  try {
+    const r = await fetch("/api/modelli?provider=" + encodeURIComponent(prov));
+    const d = await r.json();
+    sel.replaceChildren();
+    if (!r.ok) {
+      sel.appendChild(new Option(d.error || "errore", ""));
+      return;
+    }
+    sel.appendChild(new Option("\u2014", ""));
+    // i gratuiti per primi, come nel resto dei menu modello
+    const lista = (d.modelli || []).slice().sort((a, b) =>
+      (a.free === b.free) ? a.id.localeCompare(b.id) : (a.free ? -1 : 1));
+    for (const m of lista) {
+      sel.appendChild(new Option(
+        m.short + (m.free ? " \u00b7 free" : ""), m.id));
+    }
+    if (scelto && lista.some((m) => m.id === scelto)) sel.value = scelto;
+    sel.disabled = false;
+  } catch (e) {
+    sel.replaceChildren();
+    sel.appendChild(new Option("connessione fallita", ""));
+  }
+}
+
+function fbStato() {
+  const ripieghi = [];
+  for (let i = 1; i <= FB_POSTI; i++) {
+    const sp = fbPosto(i, "prov"), sm = fbPosto(i, "model");
+    const prov = sp ? sp.value : "";
+    const mod = sm ? sm.value : "";
+    if (prov && mod) ripieghi.push({ provider: prov, model: mod });
+  }
+  return { attivo: !!(fbAttivo && fbAttivo.checked), ripieghi };
+}
+
+async function fbSalva() {
+  const corpo = fbStato();
+  if (fbMsg) { fbMsg.textContent = "salvo\u2026"; fbMsg.className = "small dim"; }
+  try {
+    const r = await fetch("/api/fallback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (fbMsg) {
+        fbMsg.textContent = d.error || ("errore " + r.status);
+        fbMsg.className = "small rosso";
+      }
+      // Il pannello torna a dire quello che il server ha davvero:
+      // un rifiuto lasciato a schermo come se fosse accettato e' il
+      // modo in cui si crede di avere un fallback che non c'e'.
+      await caricaFallback();
+      return;
+    }
+    if (fbMsg) {
+      fbMsg.textContent = d.avviso || "";
+      fbMsg.className = "small " + (d.avviso ? "giallo" : "verde");
+    }
+  } catch (e) {
+    if (fbMsg) {
+      fbMsg.textContent = "salvataggio fallito: " + e;
+      fbMsg.className = "small rosso";
+    }
+  }
+}
+
+async function caricaFallback() {
+  if (!fbAttivo) return;
+  let d = null;
+  try {
+    const r = await fetch("/api/fallback");
+    if (r.ok) d = await r.json();
+  } catch (e) { /* resta com'e' */ }
+  if (!d) return;
+  fbAttivo.checked = !!d.attivo;
+  if (fbLista) fbLista.hidden = !d.attivo;
+  const servizi = d.servizi || [];
+  const ripieghi = d.ripieghi || [];
+  for (let i = 1; i <= FB_POSTI; i++) {
+    const voce = ripieghi[i - 1] || { provider: "", model: "" };
+    const sp = fbPosto(i, "prov");
+    fbRiempiServizi(sp, servizi, voce.provider);
+    if (sp) sp.disabled = !d.attivo;
+    fbCaricaModelli(i, voce.provider, voce.model);
+    const sm = fbPosto(i, "model");
+    if (sm) sm.disabled = !d.attivo || !voce.provider;
+  }
+  if (fbMsg) { fbMsg.textContent = ""; fbMsg.className = "small dim"; }
+}
+
+on(fbAttivo, "change", async () => {
+  if (fbLista) fbLista.hidden = !fbAttivo.checked;
+  for (let i = 1; i <= FB_POSTI; i++) {
+    const sp = fbPosto(i, "prov"), sm = fbPosto(i, "model");
+    if (sp) sp.disabled = !fbAttivo.checked;
+    if (sm) sm.disabled = !fbAttivo.checked || !sp.value;
+  }
+  await fbSalva();
+});
+
+for (let i = 1; i <= FB_POSTI; i++) {
+  const sp = fbPosto(i, "prov");
+  on(sp, "change", async () => {
+    await fbCaricaModelli(i, sp.value, "");
+    await fbSalva();
+  });
+  on(fbPosto(i, "model"), "change", () => fbSalva());
+}

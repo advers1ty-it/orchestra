@@ -1095,7 +1095,7 @@ class OrchestraApp:
             )
 
         from .providers import build_provider
-        from .fallback import get_chain_for_provider, ChainEntry
+        from .fallback import catena_manuale, config_da_env
 
         env = ambiente(ENV_PATH)
         prov = build_provider(provider_name, model=model_id, env=env)
@@ -1124,22 +1124,17 @@ class OrchestraApp:
             if provider:
                 self.env["ORCHESTRA_PROVIDER"] = provider
                 _salva("ORCHESTRA_PROVIDER", provider)
-        # La catena di fallback va RICOSTRUITA sul nuovo modello. Senza,
-        # la prima entry continua a puntare al modello di prima: quello
-        # morto o inesistente viene chiamato per primo, risponde 404/410,
-        # e la catena consuma i passi sui provider sbagliati fino a
-        # finire con "Nessun provider disponibile" — mentre il modello
-        # nuovo non è mai stato provato per primo.
+        # La catena di fallback va RICOSTRUITA sul nuovo modello: il
+        # primario e' sempre quello appena scelto. E ora e' MANUALE —
+        # primario + i ripieghi dell'utente — invece della tabella di
+        # servizi altrui che faceva partire tentativi su provider senza
+        # chiave e finiva in "Nessun provider disponibile" al posto
+        # dell'errore vero.
         ag = self.session.agent
-        chain = get_chain_for_provider(provider_name, model_id)
-        if chain:
-            chain[0] = ChainEntry(
-                provider=provider_name,
-                model=model_id,
-                name=f"{provider_name}/{model_id}",
-            )
-            ag.fallback_chain = chain
-            ag._fallback_state = None  # si ricrea al primo uso, pulita
+        attivo, ripieghi = config_da_env(self.env)
+        ag.fallback_chain = catena_manuale(provider_name, model_id,
+                                           ripieghi, attivo=attivo)
+        ag._fallback_state = None  # si ricrea al primo uso, pulita
         # La finestra segue il modello: se cambia il modello e resta il
         # limite vecchio, un modello da 1M di token viene compattato a
         # 120k — e uno da 32k non viene compattato finché non è troppo
@@ -1485,6 +1480,38 @@ class OrchestraApp:
         except Exception:
             return []
 
+    def imposta_fallback(self, attivo: bool, ripieghi: list[tuple[str, str]]) -> str:
+        """Salva il fallback scelto a mano e ricostruisce la catena viva.
+
+        Ritorna "" se la scelta e' anche su disco, altrimenti il motivo:
+        come per il modello, un "salvato" che vale fino al riavvio e' una
+        bugia che si scopre tardi.
+        """
+        from . import keys as keys_mod
+        from .fallback import (MAX_RIPIEGHI, catena_manuale,
+                               stringa_da_ripieghi)
+
+        ripieghi = list(ripieghi)[:MAX_RIPIEGHI]
+        coppie = (("ORCHESTRA_FALLBACK", "on" if attivo else "off"),
+                  ("ORCHESTRA_FALLBACK_MODELS", stringa_da_ripieghi(ripieghi)))
+        avvisi: list[str] = []
+        for chiave, valore in coppie:
+            avviso = keys_mod.scrivi_o_avviso(ENV_PATH, chiave, valore)
+            if avviso:
+                avvisi.append(avviso)
+            self.env[chiave] = valore
+        sess = self.session
+        if sess is not None:
+            ag = sess.agent
+            prov = getattr(ag.provider, "name", "") or \
+                self.env.get("ORCHESTRA_PROVIDER", "")
+            modello = getattr(ag.provider, "model", "") or \
+                self.env.get("ORCHESTRA_MODEL", "")
+            ag.fallback_chain = catena_manuale(prov, modello, ripieghi,
+                                               attivo=attivo)
+            ag._fallback_state = None
+        return "; ".join(avvisi)
+
     @staticmethod
     def _make_session(provider_name: str, model: str, *,
                       persona: str = "", nome_bot: str = "") -> Session:
@@ -1553,7 +1580,7 @@ class OrchestraApp:
         # chiamata corta, e solo quando il contesto si riempie davvero.
         from .context import summarizer_llm
 
-        return Session(
+        sess = Session(
                     provider=_provider,
                     registry=default_registry(),
                     system_prompt=prompt_con_memoria,
@@ -1577,6 +1604,15 @@ class OrchestraApp:
                                                           tool_profile=_env.get("ORCHESTRA_TOOL_PROFILE") or None),
                     summarize=summarizer_llm(_provider),
                 )
+        # Anche alla nascita la catena e' quella scelta a mano: senza
+        # questo, riavviare il server rimetterebbe i ripieghi automatici
+        # che l'utente ha spento, e il difetto tornerebbe visibile solo
+        # dopo un riavvio.
+        from .fallback import catena_manuale, config_da_env
+        attivo, ripieghi = config_da_env(dict(_env) | os.environ)
+        sess.agent.fallback_chain = catena_manuale(
+            provider_name, model, ripieghi, attivo=attivo)
+        return sess
 
     # -- bot ----------------------------------------------------------------
 
@@ -3732,6 +3768,12 @@ class OrchestraApp:
                 on_event=lambda kind, data: sess.bridge.emit(
                     "figlio", {"tipo": kind, **(data or {})}),
             )
+            # Stessa catena manuale del padre: se il modello del figlio
+            # cade, i ripieghi sono quelli scelti in Opzioni → Modello,
+            # non una tabella di servizi che l'utente puo' non avere. Il
+            # primario resta il SUO modello (routing o forzato).
+            from .fallback import catena_per_agente
+            figlio.fallback_chain = catena_per_agente(figlio, self.env)
             # Il figlio sa su quale progetto lavora: e' lui che mette
             # il blocco del progetto nel prompt e che etichetta i
             # suoi fatti. Senza, il padre lavora sul sito del

@@ -314,6 +314,41 @@
                       <span id="opt-context-note" class="small dim"></span>
                       <span id="opt-provider-msg" class="small dim"></span>
                     </div>
+          <!-- Fallback MANUALE. Prima la catena si costruiva da una
+               tabella di servizi altrui: chi non aveva quelle chiavi
+               vedeva ogni errore finire in "Nessun provider
+               disponibile", e chi usava un servizio fuori tabella
+               (nous, google) non aveva ripieghi affatto. Qui si sceglie
+               fino a tre modelli, su qualunque servizio abbia una
+               chiave, e se l'interruttore e' spento la catena e' il
+               solo modello in uso. -->
+          <div class="opzioni-selezione">
+            <label>
+              <input id="opt-fallback" type="checkbox">
+              Fallback se il modello non risponde
+            </label>
+            <span id="opt-fallback-msg" class="small dim"></span>
+          </div>
+          <div class="opzioni-selezione" id="opt-fallback-lista" hidden>
+            <label>Ripiego 1
+              <span class="fb-coppia">
+                <select id="fb-prov-1" aria-label="servizio di ripiego 1"></select>
+                <select id="fb-model-1" aria-label="modello di ripiego 1"></select>
+              </span>
+            </label>
+            <label>Ripiego 2
+              <span class="fb-coppia">
+                <select id="fb-prov-2" aria-label="servizio di ripiego 2"></select>
+                <select id="fb-model-2" aria-label="modello di ripiego 2"></select>
+              </span>
+            </label>
+            <label>Ripiego 3
+              <span class="fb-coppia">
+                <select id="fb-prov-3" aria-label="servizio di ripiego 3"></select>
+                <select id="fb-model-3" aria-label="modello di ripiego 3"></select>
+              </span>
+            </label>
+          </div>
           <p class="opzioni-nota">La stessa scelta e' anche nei menu in
             alto, sopra la chat. Qui la trovi insieme a tutto il resto.</p>
         </section>

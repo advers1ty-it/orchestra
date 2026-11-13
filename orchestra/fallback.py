@@ -76,35 +76,11 @@ class FallbackState:
         return self.current is not None
 
 
-# Default fallback chains per primary provider
-# Ordered: primary first, then fallbacks
-DEFAULT_CHAINS: dict[str, list[ChainEntry]] = {
-    "openrouter": [
-        ChainEntry("openrouter", "", name="OpenRouter (auto)"),  # model will be filled by routing
-        ChainEntry("groq", "openai/gpt-oss-120b", name="Groq GPT-OSS"),
-        ChainEntry("nvidia", "nvidia/llama-3.1-nemotron-70b-instruct", name="NVIDIA Nemotron 70B"),
-        ChainEntry("together", "meta-llama/Llama-3.3-70B-Instruct-Turbo", name="Together Llama"),
-        ChainEntry("cerebras", "llama3.1-70b", name="Cerebras Llama"),
-    ],
-    "groq": [
-        ChainEntry("groq", "", name="Groq (auto)"),
-        ChainEntry("openrouter", "openai/gpt-oss-120b", name="OpenRouter GPT-OSS"),
-        ChainEntry("together", "meta-llama/Llama-3.3-70B-Instruct-Turbo", name="Together Llama"),
-    ],
-    "nvidia": [
-        ChainEntry("nvidia", "", name="NVIDIA (auto)"),
-        ChainEntry("groq", "openai/gpt-oss-120b", name="Groq GPT-OSS"),
-        ChainEntry("openrouter", "openai/gpt-oss-120b", name="OpenRouter GPT-OSS"),
-    ],
-    "together": [
-        ChainEntry("together", "", name="Together (auto)"),
-        ChainEntry("groq", "openai/gpt-oss-120b", name="Groq GPT-OSS"),
-        ChainEntry("openrouter", "openai/gpt-oss-120b", name="OpenRouter GPT-OSS"),
-    ],
-    # Local providers don't fall back (they're the last resort)
-    "ollama": [ChainEntry("ollama", "", name="Ollama (local)")],
-    "lmstudio": [ChainEntry("lmstudio", "", name="LM Studio (local)")],
-}
+# Qui c'era `DEFAULT_CHAINS`: una tabella di catene per provider con
+# ripieghi su servizi altrui (Groq, Together, Cerebras). Nomina servizi
+# che chi usa Orchestra puo' non avere, non conosce `nous`, e faceva
+# partire tentativi su provider senza chiave. Il fallback e' manuale:
+# vedi `catena_manuale` in fondo al file.
 
 
 def should_fallback(error: Exception) -> FallbackReason | None:
@@ -140,25 +116,84 @@ def should_fallback(error: Exception) -> FallbackReason | None:
     return None
 
 
-def get_chain_for_provider(primary: str, model: str = "", category: str = "") -> list[ChainEntry]:
-    """Get the fallback chain for a primary provider, with model filled in."""
-    base = DEFAULT_CHAINS.get(primary, [ChainEntry(primary, model or "")])
-    chain = []
-    for entry in base:
-        # Create a copy with the actual model if provided
-        e = ChainEntry(
-            provider=entry.provider,
-            model=model if entry.provider == primary and entry.model == "" else entry.model,
-            name=entry.name,
-            max_retries=entry.max_retries,
-            timeout=entry.timeout,
-            temperature=entry.temperature,
-            max_tokens=entry.max_tokens,
-            reasoning_level=entry.reasoning_level,
-            categories=entry.categories.copy(),
-        )
-        # Filter by category if specified
-        if e.categories and category and category not in e.categories:
+# ---------------------------------------------------------------------------
+# Fallback MANUALE
+#
+# La catena la decide l'utente: il modello in uso piu' i ripieghi che ha
+# scelto (al massimo tre), e nient'altro. Veniva da una tabella scritta a
+# mano, che nominava servizi che chi usa Orchestra puo' non avere
+# (Together, Cerebras) e non conosceva quelli che ha davvero (nous,
+# google). Misurato, non ipotizzato:
+#
+# - con `nous` come primario la catena restava di UN elemento — nessun
+#   ripiego, mai; l'errore del modello arrivava dritto all'utente;
+# - con OpenRouter come primario i tentativi si spendevano su Groq,
+#   Together e Cerebras, che senza chiave falliscono al `build_provider`,
+#   e il turno finiva con "Nessun provider disponibile" invece che con
+#   l'errore vero.
+#
+# Da qui in giu' la catena la decide l'utente e contiene solo cose che ha.
+MAX_RIPIEGHI = 3
+
+
+def ripieghi_da_stringa(valore: str) -> list[tuple[str, str]]:
+    """`provider/modello,provider/modello` -> [(provider, modello), ...]
+
+    Si divide sul PRIMO `/`: gli id veri ne contengono altri
+    (`openrouter/openai/gpt-oss-120b`), e dividere su tutti trasformerebbe
+    meta' degli id in nomi di provider.
+    """
+    out: list[tuple[str, str]] = []
+    for pezzo in (valore or "").split(","):
+        pezzo = pezzo.strip()
+        if not pezzo or "/" not in pezzo:
             continue
-        chain.append(e)
-    return chain
+        provider, modello = pezzo.split("/", 1)
+        provider, modello = provider.strip(), modello.strip()
+        if provider and modello:
+            out.append((provider, modello))
+    return out[:MAX_RIPIEGHI]
+
+
+def stringa_da_ripieghi(ripieghi) -> str:
+    """Il formato del `.env`: una riga, virgole, nessun a capo."""
+    return ",".join(f"{p}/{m}" for p, m in list(ripieghi)[:MAX_RIPIEGHI])
+
+
+def config_da_env(env) -> tuple[bool, list[tuple[str, str]]]:
+    """Stato del fallback come sta scritto nel `.env`."""
+    grezzo = str(env.get("ORCHESTRA_FALLBACK", "") or "").strip().lower()
+    return (grezzo in ("1", "on", "true", "si", "sì", "yes"),
+            ripieghi_da_stringa(env.get("ORCHESTRA_FALLBACK_MODELS", "")))
+
+
+def catena_manuale(provider: str, model: str, ripieghi,
+                   *, attivo: bool) -> list[ChainEntry]:
+    """Il modello in uso, piu' i ripieghi scelti a mano (max 3).
+
+    Con `attivo` spento la catena e' il SOLO primario: nessun provider
+    viene provato al posto suo, cosi' l'errore che arriva e' quello vero
+    del modello scelto. Un fallback che parte da solo su servizi non
+    configurati non e' un ripiego: e' un secondo guasto che nasconde il
+    primo.
+    """
+    catena = [ChainEntry(provider, model)]
+    if attivo:
+        catena.extend(ChainEntry(p, m) for p, m in list(ripieghi)[:MAX_RIPIEGHI])
+    return catena
+
+
+def catena_per_agente(agente, env) -> list[ChainEntry]:
+    """La catena manuale di un agente gia' costruito.
+
+    Un solo posto che legge la configurazione e un solo posto che la
+    trasforma in catena: CLI, web e goal la chiamano tutti qui. Il
+    provider dell'agente e' l'unica verita' su servizio e modello (il
+    percorso di cambio modello lo assegna prima di ricostruire la
+    catena), quindi non si passa un nome che potrebbe essere vecchio.
+    """
+    attivo, ripieghi = config_da_env(env)
+    prov = getattr(agente, "provider", None)
+    return catena_manuale(getattr(prov, "name", "") or "",
+                          getattr(prov, "model", "") or "",
+                          ripieghi, attivo=attivo)

@@ -655,6 +655,14 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
             reasoning_level=env.get("ORCHESTRA_REASONING", None),
             tool_profile=profile,
         ), on_event=on_event)
+        # Stessa catena manuale di CLI e web: primario + i ripieghi scelti
+        # (ORCHESTRA_FALLBACK / ORCHESTRA_FALLBACK_MODELS). Senza, un goal
+        # continuava a usare la tabella `DEFAULT_CHAINS`, che nomina
+        # servizi che chi usa Orchestra puo' non avere e non conosce
+        # `nous`: l'errore del modello arrivava dritto, o finiva in
+        # "Nessun provider disponibile" dopo tentativi a porte chiuse.
+        from .fallback import catena_per_agente
+        agent.fallback_chain = catena_per_agente(agent, env)
         state = agent.run(goal["objective"])
         if _cancelled():
             update(goal_id, status="cancelled", last_output=_testo())
@@ -729,7 +737,7 @@ def _attacca_delega(reg: Any,
             except Exception:
                 modello = ""
         try:
-            return Agent(
+            figlio = Agent(
                 build_provider(nome_provider, model=modello, env=env_chiavi),
                 default_registry(),
                 PROMPT_FIGLIO,
@@ -737,6 +745,13 @@ def _attacca_delega(reg: Any,
                            context_limit=60_000, keep_recent=6),
                 on_event=lambda kind, data: None,
             )
+            # Anche il figlio della delega: se il suo modello cade, i
+            # ripieghi sono quelli scelti, non la tabella di servizi
+            # altrui. Il primario resta il SUO modello, deciso dal
+            # routing o dal recupero.
+            from .fallback import catena_per_agente
+            figlio.fallback_chain = catena_per_agente(figlio, env)
+            return figlio
         except Exception:
             raise
 

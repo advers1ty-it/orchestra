@@ -2146,3 +2146,7 @@ select:disabled {
               background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .backup-dati { overflow-wrap: anywhere; }
 .backup-barra { display: flex; gap: 8px; margin-top: 4px; }
+
+/* ---------- fallback manuale: servizio + modello sulla stessa riga ---------- */
+.fb-coppia { display: flex; gap: 6px; width: 100%; }
+.fb-coppia select { flex: 1 1 0; min-width: 0; }

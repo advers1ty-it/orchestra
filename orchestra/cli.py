@@ -140,7 +140,19 @@ def _build_agent(env: dict[str, str], extra_prompt: str = "") -> Agent:
     istruzioni = _blocco_progetto()
     if istruzioni:
         prompt = f"{prompt}\n\n{istruzioni}"
-    return Agent(provider, reg, prompt, _config(env), on_event=_on_event)
+    agente = Agent(provider, reg, prompt, _config(env), on_event=_on_event)
+    # La catena di fallback e' la stessa della web UI: il modello in uso
+    # piu' i ripieghi scelti in Opzioni → Modello, al massimo tre. Spenta,
+    # resta il solo primario e l'errore che arriva e' quello vero.
+    #
+    # Prima veniva da `DEFAULT_CHAINS`, che nomina servizi che chi usa
+    # Orchestra puo' non avere (Together, Cerebras) e non conosce `nous`:
+    # con `nous` la catena era di un elemento, e con OpenRouter i turni
+    # finivano su provider senza chiave prima di arrendersi.
+    from .fallback import catena_per_agente
+
+    agente.fallback_chain = catena_per_agente(agente, env)
+    return agente
 
 
 def cmd_run(args: argparse.Namespace) -> int:

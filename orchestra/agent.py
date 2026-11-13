@@ -31,7 +31,7 @@ from .context import Summarizer, count_tokens, fit_context
 from .providers import ProviderError
 from .fallback import (
     ChainEntry, FallbackState, FallbackReason,
-    get_chain_for_provider, should_fallback
+    should_fallback
 )
 from .budget import budget_guard, BudgetLimits
 from . import piano as piano_mod
@@ -235,20 +235,23 @@ class Agent:
             self.summarize = summarize
             self.on_event = on_event or (lambda kind, data: None)
             self.state = AgentState(messages=[Message(role="system", content=system_prompt)])
-            # Fallback chain: if provider is a string, it's the primary provider name
-            # and we build the chain automatically. If it's a list, use as-is.
-            if fallback_chain is None and hasattr(provider, 'name'):
-                # Build default chain from provider name and model
-                provider_name = provider.name
-                model = getattr(provider, 'model', '')
-                self.fallback_chain = get_chain_for_provider(provider_name, model)
-                # Update first entry with actual provider instance
-                if self.fallback_chain:
-                    self.fallback_chain[0] = ChainEntry(
-                        provider=provider_name,
-                        model=model,
-                        name=f"{provider_name}/{model}",
-                    )
+            # Catena di fallback: se nessuno ne passa una, il SOLO
+            # primario. La catena con i ripieghi la impone chi la sa —
+            # web, CLI, goal, figlio della delega — con
+            # `catena_per_agente`.
+            #
+            # Prima qui si costruiva da `DEFAULT_CHAINS`, una tabella che
+            # nomina servizi che chi usa Orchestra puo' non avere (chi ha
+            # solo Nous si vedeva fallire ogni tentativo). In benchmarking
+            # e council era peggio che inutile: un ripiego su un altro
+            # provider attribuisce la risposta al modello sotto test —
+            # `RunResult` porta l'id misurato — quindi il numero
+            # descriverebbe un altro modello.
+            if fallback_chain is None:
+                self.fallback_chain = [ChainEntry(
+                    provider=str(getattr(provider, "name", "") or ""),
+                    model=str(getattr(provider, "model", "") or ""),
+                )]
             else:
                 self.fallback_chain = fallback_chain or []
             self._fallback_state: FallbackState | None = None

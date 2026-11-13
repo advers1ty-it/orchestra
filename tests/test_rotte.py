@@ -139,6 +139,8 @@ ATTESE = frozenset({
     "POST /api/risposta",
     "GET /api/routing",
     "POST /api/routing",
+    "GET /api/fallback",
+    "POST /api/fallback",
     "POST /api/scheduler/start",
     "GET /api/scheduler/status",
     "POST /api/scheduler/stop",
@@ -263,7 +265,7 @@ def main() -> int:
     from orchestra import webapp
     tabella = webapp.ROTTE
     presenti = {f"{r.metodo} {r.percorso}" for r in tabella.tutte()}
-    check("135 rotte", len(presenti) == 135, str(len(presenti)))
+    check("137 rotte", len(presenti) == 137, str(len(presenti)))
     check("nessuna rotta persa", not (ATTESE - presenti),
           str(sorted(ATTESE - presenti)))
     check("nessuna rotta in piu' non dichiarata", not (presenti - ATTESE),

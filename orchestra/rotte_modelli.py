@@ -29,6 +29,73 @@ class RotteModelli:
         self._json({"routing": bool(
             getattr(self.app.session, "_routing_attivo", False))})
 
+    @rotta("GET", "/api/fallback")
+    def _r_get_fallback(self, path: str, body: dict[str, Any],
+                        s: Any) -> None:
+        # Lo stato del fallback manuale, piu' i servizi fra cui scegliere.
+        #
+        # La lista dei servizi e' filtrata QUI e non nel .js: un ripiego
+        # su un provider senza chiave e' un tentativo che fallisce
+        # sempre, ed e' esattamente il difetto che questa schermata
+        # sostituisce. Una seconda copia di questa regola nel frontend
+        # sarebbe una seconda verita' da tenere allineata.
+        from .fallback import config_da_env
+        from .providers import KNOWN_PROVIDERS
+
+        attivo, ripieghi = config_da_env(self.app.env)
+        servizi: list[str] = []
+        for nome, (_, chiave_env, _) in KNOWN_PROVIDERS.items():
+            if not chiave_env:
+                # I motori locali non hanno chiave: contano solo se
+                # l'indirizzo e' configurato.
+                if self.app.env.get(f"ORCHESTRA_{nome.upper()}_URL"):
+                    servizi.append(nome)
+            elif self.app.env.get(chiave_env):
+                servizi.append(nome)
+        self._json({
+            "attivo": attivo,
+            "ripieghi": [{"provider": p, "model": m} for p, m in ripieghi],
+            "servizi": servizi,
+        })
+
+    @rotta("POST", "/api/fallback")
+    def _r_post_fallback(self, path: str, body: dict[str, Any],
+                         s: Any) -> None:
+        from .fallback import MAX_RIPIEGHI
+        from .providers import KNOWN_PROVIDERS
+
+        attivo = bool(body.get("attivo"))
+        grezzi = body.get("ripieghi") or []
+        if not isinstance(grezzi, list):
+            self._json({"error": "ripieghi deve essere una lista"}, 400)
+            return
+        if len(grezzi) > MAX_RIPIEGHI:
+            self._json({"error": f"massimo {MAX_RIPIEGHI} modelli di fallback"},
+                       400)
+            return
+        ripieghi: list[tuple[str, str]] = []
+        for voce in grezzi:
+            prov = str((voce or {}).get("provider") or "").strip()
+            mod = str((voce or {}).get("model") or "").strip()
+            if not prov and not mod:
+                continue          # riga lasciata vuota: non e' un errore
+            if prov not in KNOWN_PROVIDERS:
+                self._json({"error": f"servizio sconosciuto: {prov}"}, 400)
+                return
+            if not mod:
+                self._json({"error": f"modello mancante per {prov}"}, 400)
+                return
+            ripieghi.append((prov, mod))
+        avviso = self.app.imposta_fallback(attivo, ripieghi)
+        risposta: dict[str, Any] = {
+            "ok": True, "attivo": attivo,
+            "ripieghi": [{"provider": p, "model": m} for p, m in ripieghi],
+        }
+        if avviso:
+            risposta["avviso"] = ("Scelta applicata, ma non salvata per il "
+                                  f"prossimo avvio: {avviso}")
+        self._json(risposta)
+
     @rotta("GET", "/api/models")
     def _r_get_models(self, path: str, body: dict[str, Any],
                       s: Any) -> None:
