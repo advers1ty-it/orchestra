@@ -240,6 +240,11 @@ SUITES = [
     # rete, con un trasporto finto — quello che si prova e' che un
     # estraneo non faccia partire un turno.
     ("telegram", "test_telegram.py", True),
+    # I comandi del ponte che non sono chat: livello di reasoning (dal
+    # telefono non si poteva impostare), obiettivo e consiglio. Senza
+    # test, un comando che risponde "non riconosciuto" sembra un typo
+    # dell'utente.
+    ("telegram-comandi", "test_telegram_comandi.py", True),
     ("telegram_sessione", "test_telegram_sessione.py", True),
     # La riga con cui il server si rilancia: con l'avvio `-m` quella
     # sbagliata esegue il file del modulo come script e il server non

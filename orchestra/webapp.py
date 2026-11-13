@@ -2611,8 +2611,185 @@ class OrchestraApp:
         if nome == "modello":
             return self._telegram_modello(b, argomento)
         if nome in ("reasoning", "ragionamento"):
+            # Due cose diverse sotto lo stesso comando: con un LIVELLO
+            # (`/reasoning high`) si imposta quanto il modello ragiona;
+            # con on/off si accende o spegne il VEDERE il ragionamento in
+            # chat. Senza niente si aprono i pulsanti, perche' dal testo
+            # non si vede ne' quale sia lo stato ne' quali livelli esistano.
+            if (argomento or "").startswith("cb:"):
+                return self._telegram_modulo_ragionamento(
+                    b, sess, argomento[3:])
+            from .reasoning import livello_da_argomento
+
+            livello = livello_da_argomento(argomento)
+            if livello is not None:
+                return self._telegram_livello_reasoning(sess, livello)
+            if not (argomento or "").strip():
+                return self._telegram_modulo_ragionamento(b, sess, "")
             return self._telegram_ragionamento(b, argomento)
+        if nome == "obiettivo":
+            return self._telegram_obiettivo(argomento)
+        if nome == "consiglio":
+            return self._telegram_consiglio(argomento)
         return f"Comando /{nome} non riconosciuto. /aiuto per la lista."
+
+    def _telegram_livello_reasoning(self, sess: Any, livello: str) -> str:
+        """Imposta il livello di reasoning, e lo salva per i prossimi avvii.
+
+        Stesso schema di `/api/reasoning`: non si ricrea la sessione —
+        `config.reasoning_level` e' letto a ogni chiamata — e la scelta va
+        su disco, o durerebbe fino al riavvio successivo.
+        """
+        from . import keys as keys_mod
+
+        if sess.busy:
+            return ("C'e' un turno in corso: /stop, poi "
+                    "/reasoning <livello>.")
+        avviso = keys_mod.scrivi_o_avviso(ENV_PATH, "ORCHESTRA_REASONING",
+                                          livello)
+        self.env["ORCHESTRA_REASONING"] = livello
+        sess.agent.config.reasoning_level = livello or None
+        # La portata va detta qui e non solo nel modulo: il livello e' uno
+        # solo per Orchestra, mentre la vista in chat e' per bot — e chi
+        # legge "Reasoning: high" senza saperlo crede di aver cambiato
+        # solo questa chat.
+        testo = (f"Reasoning: {livello} — per tutte le sessioni, e resta "
+                 f"dopo il riavvio." if livello
+                 else "Reasoning: automatico (per categoria) — per tutte "
+                      "le sessioni, e resta dopo il riavvio.")
+        if avviso:
+            return (f"{testo} Applicato subito, ma non salvato per il "
+                    f"prossimo avvio: {avviso}")
+        return testo
+
+    def _telegram_obiettivo(self, argomento: str) -> str:
+        """Crea un obiettivo, o elenca quelli aperti.
+
+        `/obiettivo <testo>` fa partire il lavoro in autonomia, lo stesso
+        che fa il pannello Obiettivo: dal telefono e' l'unico modo per
+        avviare qualcosa che non sia un turno di chat.
+        """
+        from . import goal as goal_mod
+
+        testo = (argomento or "").strip()
+        if not testo:
+            voci = [g for g in goal_mod.list_goals()
+                    if (g.get("status") or "") not in ("done", "cancelled")]
+            if not voci:
+                return ("Nessun obiettivo aperto. "
+                        "/obiettivo <testo> per crearne uno.")
+            righe = []
+            for g in voci[:10]:
+                stato = g.get("status") or "?"
+                obiettivo = (g.get("objective") or "").strip().replace("\n", " ")
+                righe.append(f"· {stato} — {obiettivo[:70]}")
+            resto = (f"\n(e altri {len(voci) - 10})" if len(voci) > 10 else "")
+            return "Obiettivi aperti:\n" + "\n".join(righe) + resto
+        try:
+            gid = goal_mod.start_goal(testo, env=self.env, profile="auto")
+        except (RuntimeError, ValueError) as e:
+            return f"Obiettivo non avviato: {e}"
+        except Exception as e:  # noqa: BLE001 - provider, DB, disco
+            return f"Obiettivo non avviato: {type(e).__name__}: {e}"
+        return (f"Obiettivo avviato: {gid}.\nLo segui dal pannello "
+                "Obiettivo, in alto nella finestra.")
+
+    def _telegram_consiglio(self, argomento: str) -> str:
+        """Chiede al tavolo chi dovrebbe sedere, per una decisione.
+
+        E' il Chair, non il consiglio completo: propone i seat e il perche'
+        in una risposta corta, che e' quello che serve da telefono. Costa
+        una chiamata, e si dice quando non si puo' fare.
+        """
+        domanda = (argomento or "").strip()
+        if not domanda:
+            return ("Uso: /consiglio <decisione>. Ti dico chi metterei al "
+                    "tavolo e perche', in una riga.")
+        try:
+            esito = self.consiglia_tavolo(domanda)
+        except Exception as e:  # noqa: BLE001 - provider, roster, JSON
+            return f"Consiglio non disponibile: {type(e).__name__}: {e}"
+        sedie = esito.get("seats") or []
+        motivi = esito.get("why") or {}
+        righe = []
+        for chiave in sedie:
+            perche = str(motivi.get(chiave) or "").strip()
+            righe.append(f"· {chiave}" + (f" — {perche}" if perche else ""))
+        testo = (f"Tavolo per: {domanda[:140]}\n" + "\n".join(righe))
+        nota = str(esito.get("note") or "").strip()
+        if nota:
+            testo += f"\n\n{nota}"
+        return testo
+
+    def _telegram_modulo_ragionamento(self, b: dict[str, Any], sess: Any,
+                                      dati: str) -> str | dict[str, Any]:
+        """Il modulo a bottoni di `/ragionamento`.
+
+        Due scelte che sembrano una: il LIVELLO (quanto ragiona il modello)
+        e il VEDERE il ragionamento in chat (per questo bot). Scritte come
+        parole non si distinguono, e un interruttore senza stato non dice
+        com'e' adesso: qui il `✓` sta su quello che vale, e il livello
+        attuale si legge in cima. `callback_data` porta da solo cosa fare,
+        come nel modulo dei modelli: un messaggio rimasto in chat funziona
+        anche dopo un riavvio del server.
+        """
+        from . import telegram as tg
+        from .reasoning import REASONING_LEVELS
+
+        dati = (dati or "").strip()
+        if dati.startswith("g:"):
+            dati = dati[2:]
+        if dati == "x":
+            return {"testo": "Va bene: lascio com'e'."}
+        esito = ""
+        if dati.startswith("l:"):
+            voluto = dati[2:].strip().lower()
+            if voluto == "auto" or voluto in REASONING_LEVELS:
+                esito = self._telegram_livello_reasoning(
+                    sess, "" if voluto == "auto" else voluto)
+            else:
+                return "Modulo scaduto: riscrivi /ragionamento."
+        elif dati.startswith("v:"):
+            scelta = dati[2:].strip().lower()
+            if scelta not in ("on", "off"):
+                return "Modulo scaduto: riscrivi /ragionamento."
+            esito = self._telegram_ragionamento(b, scelta)
+        elif dati:
+            return "Modulo scaduto: riscrivi /ragionamento."
+
+        config = getattr(getattr(sess, "agent", None), "config", None)
+        livello = (getattr(config, "reasoning_level", None) or "")
+        mostra = bool(tg.ragionamento(b.get("id")))
+        righe: list[list[dict[str, str]]] = [[
+            {"testo": ("✓ " if mostra else "") + "Mostra in chat",
+             "dati": "g:v:on"},
+            {"testo": ("✓ " if not mostra else "") + "Nascondi",
+             "dati": "g:v:off"},
+        ]]
+        coppia: list[dict[str, str]] = []
+        for voce in ["auto"] + list(REASONING_LEVELS):
+            attivo = voce == (livello or "auto")
+            coppia.append({"testo": ("✓ " if attivo else "") + voce,
+                           "dati": f"g:l:{voce}"})
+            if len(coppia) == 2:
+                righe.append(coppia)
+                coppia = []
+        if coppia:
+            righe.append(coppia)
+        righe.append([{"testo": "Chiudi", "dati": "g:x"}])
+        # Due portate diverse nello stesso modulo, e vanno scritte: il
+        # livello e' una sola impostazione di Orchestra (la stessa del
+        # pannello, salvata nel .env), la vista e' di questo bot. Senza le
+        # parentesi sembrava che entrambe valessero solo per questa chat.
+        testo = [
+            f"Ragionamento: {livello or 'auto'} — tutte le sessioni",
+            f"In chat: {'acceso' if mostra else 'spento'} — solo questo bot",
+            "Il livello dice quanto pensa il modello; in chat, se il suo "
+            "ragionamento ti arriva.",
+        ]
+        if esito:
+            testo = [esito, ""] + testo
+        return {"testo": "\n".join(testo), "tastiera": righe}
 
     def _telegram_aggiorna(self, bot_id: int, sess: Any) -> str:
         """Scarica l'ultima release e, se c'e', riavvia il server.
@@ -2761,12 +2938,13 @@ class OrchestraApp:
 
     def _telegram_ragionamento(self, bot: dict[str, Any],
                                argomento: str) -> str:
-        """Accende o spegne il ragionamento in chat.
+        """Accende o spegne il MOSTRARE il ragionamento in chat.
 
-        Senza argomento si comporta da interruttore, che e' quello che
-        serve dal telefono; on/off espliciti restano perche' uno script o
-        una scorciatoia devono poter dire lo stato voluto senza sapere
-        quale sia adesso.
+        Non e' il livello: quello e' `_telegram_livello_reasoning`. Senza
+        argomento resta un interruttore per chi chiama la funzione, ma dal
+        ponte `/ragionamento` senza argomento apre il modulo a bottoni;
+        `on`/`off` espliciti restano perche' uno script deve poter dire lo
+        stato voluto senza sapere quale sia adesso.
         """
         from . import telegram as tg
 
@@ -2778,14 +2956,25 @@ class OrchestraApp:
         elif not valore:
             nuovo = not tg.ragionamento(bot["id"])
         else:
-            return ("Uso: /reasoning per accenderlo o spegnerlo, oppure "
-                    "/reasoning on|off.")
+            # Una parola che non e' ne' un interruttore ne' un livello: si
+            # dice cosa si puo' scrivere, altrimenti sembra rotto. I
+            # livelli si nominano qui perche' da quando si impostano
+            # davvero il vecchio messaggio da solo era a meta'.
+            from .reasoning import REASONING_LEVELS
+
+            return ("Uso: /reasoning per accenderlo o spegnerlo, "
+                    "/reasoning on|off per dirlo esplicito, oppure "
+                    "/reasoning <livello> per quanto ragiona: "
+                    f"{', '.join(REASONING_LEVELS)}, auto.")
         if not tg.imposta_ragionamento(bot["id"], nuovo):
             return ("Questo bot non e' collegato a Telegram: collega la chat "
                     "dal pannello Bot, poi /reasoning funziona.")
-        return ("Ragionamento acceso: te lo mando a fine turno, e lo vedi "
-                "anche mentre lavoro." if nuovo
-                else "Ragionamento spento.")
+        # "in questa chat" e' la portata vera: la vista e' per bot, il
+        # livello no, e confonderle e' facile quando si legge un solo
+        # messaggio.
+        return ("Ragionamento acceso in questa chat: te lo mando a fine "
+                "turno, e lo vedi anche mentre lavoro." if nuovo
+                else "Ragionamento spento in questa chat.")
 
     def telegram_tocco(self, bot_id: int, dati: str) -> str | dict[str, Any]:
         """Un pulsante premuto in chat.
@@ -2793,13 +2982,16 @@ class OrchestraApp:
         `callback_data` e' l'unico stato che sopravvive a un messaggio
         rimasto in chat per giorni, quindi ogni pulsante dice da solo cosa
         e': una scelta di permesso (`d:`), una risposta a una domanda
-        (`r:`) o un pezzo del menu dei modelli (`s:`, `p:`, `m:`).
+        (`r:`), il modulo del ragionamento (`g:`) o un pezzo del menu dei
+        modelli (`s:`, `p:`, `m:`).
         """
         dati = (dati or "").strip()
         if dati.startswith("d:"):
             return self._telegram_decisione(bot_id, dati)
         if dati.startswith("r:"):
             return self._telegram_risposta_pulsante(bot_id, dati)
+        if dati.startswith("g:"):
+            return self.telegram_comando(bot_id, "reasoning", "cb:" + dati)
         return self.telegram_comando(bot_id, "modello", "cb:" + dati)
 
     def _telegram_decisione(self, bot_id: int, dati: str) -> str:

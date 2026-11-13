@@ -7,6 +7,22 @@ If a provider/model doesn't support reasoning, returns empty payload (no 400).
 
 REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
+
+def livello_da_argomento(argomento: str) -> str | None:
+    """Il livello scritto in un comando, o None se non e' un livello.
+
+    Tre casi distinti, e vanno distinti: un livello da impostare
+    (`high`), il livello da togliere (`auto`, che torna stringa vuota),
+    e "questo non e' un livello" (None) — che nel ponte Telegram vuol
+    dire "allora e' il vecchio on/off del mostrare il ragionamento".
+    """
+    valore = (argomento or "").strip().lower()
+    if valore in ("auto", "default", "automatico"):
+        return ""
+    if valore in REASONING_LEVELS:
+        return valore
+    return None
+
 # Provider-specific reasoning configuration
 PROVIDER_REASONING = {
     "openrouter": {

@@ -1145,9 +1145,17 @@ print("\n[27] /reasoning: il ragionamento si accende dalla chat, e resta")
 app_rag, sess_rag = app_finta()
 _token_rag = "123456789:" + "a" * 35
 tg.salva_token(bot["id"], _token_rag)
+# Senza argomento non e' piu' un interruttore cieco: si apre il modulo coi
+# pulsanti (livello, e mostra/nascondi), che dice anche com'e' adesso. Un
+# tocco solo per cambiare, invece di indovinare lo stato per accoppiata.
 esito_rag = app_rag.telegram_comando(bot["id"], "reasoning")
-check("senza argomento lo accende", "acceso" in esito_rag.lower(),
+check("senza argomento arriva il modulo coi pulsanti",
+      isinstance(esito_rag, dict) and bool(esito_rag.get("tastiera")),
       cp(esito_rag))
+check("e il modulo non accende niente da solo",
+      tg.ragionamento(bot["id"]) is not True, "spento")
+esito_rag = app_rag.telegram_comando(bot["id"], "reasoning", "on")
+check("con on lo accende", "acceso" in esito_rag.lower(), cp(esito_rag))
 check("e la scelta e' salvata", tg.ragionamento(bot["id"]) is True, "spento")
 esito_rag = app_rag.telegram_comando(bot["id"], "reasoning", "off")
 check("con off lo spegne", "spento" in esito_rag.lower()

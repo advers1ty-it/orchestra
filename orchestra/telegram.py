@@ -115,8 +115,8 @@ MASSIMO_FILE = 20 * 1024 * 1024
 # chat non entra nel merito, ma deve sapere cosa e' un comando suo e
 # cosa e' un errore di battitura.
 COMANDI_AGENTE = ("stato", "steer", "stop", "nuova", "modello",
-                  "reasoning", "ragionamento", "aggiorna", "update",
-                  "riavvia", "restart")
+                  "reasoning", "ragionamento", "obiettivo", "consiglio",
+                  "aggiorna", "update", "riavvia", "restart")
 
 # Il menu che Telegram mostra quando si preme "/". E' del BOT, non
 # dell'app: un bot usato prima con un'altra applicazione si porta dietro
@@ -131,7 +131,9 @@ COMANDI_MENU = (
     ("stop", "Ferma il turno"),
     ("nuova", "Nuova conversazione"),
     ("modello", "Scegli il modello"),
-    ("reasoning", "Mostra o nasconde il ragionamento"),
+    ("reasoning", "Ragionamento: livello e mostra/nascondi"),
+    ("obiettivo", "Crea un obiettivo, o elenca quelli aperti"),
+    ("consiglio", "Chi mettere al tavolo per una decisione"),
     ("aggiorna", "Aggiorna e riavvia il server"),
     ("riavvia", "Riavvia il server"),
     ("scollega", "Stacca questa chat"),
@@ -175,9 +177,17 @@ GUIDA = (
     "/modello - il modello in uso, e il menu per cambiarlo (prima il "
     "servizio, poi il modello: un tocco)\n"
     "/modello <nome> - cambia il modello scrivendone il nome\n"
-    "/reasoning (o /ragionamento) - mostra o nasconde il ragionamento "
-    "dell'agente: senza argomento accende e spegne, con on/off lo dice "
-    "esplicitamente\n"
+    "/reasoning (o /ragionamento) - senza argomento apre i pulsanti: "
+    "livello e mostra/nascondi in chat, col segno su quello che vale "
+    "adesso. on/off lo dicono esplicitamente, senza aprire niente\n"
+    "/reasoning <livello> - quanto ragiona il modello: none, minimal, "
+    "low, medium, high, xhigh, max, oppure auto per lasciare decidere "
+    "a Orchestra. Vale per TUTTE le sessioni e resta dopo il riavvio "
+    "(la vista in chat, invece, e' solo di questo bot)\n"
+    "/obiettivo <testo> - avvia un obiettivo in autonomia (come il "
+    "pannello Obiettivo). Senza testo, elenca quelli aperti\n"
+    "/consiglio <decisione> - chi metterei al tavolo e perche', in una "
+    "riga per seat\n"
     "/scollega - stacca questa chat\n"
     "/aiuto (o /guida) - questa lista\n\n"
     "Foto e documenti li leggo, i vocali li trascrivo se il motore "
