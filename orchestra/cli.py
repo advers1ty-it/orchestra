@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 from . import __version__
-from .agent import Agent, LoopConfig
+from .agent import Agent, LoopConfig, valore_da_env
 from .providers import ambiente, KNOWN_PROVIDERS, NO_KEY_PROVIDERS, base_url_for, ProviderError, build_provider, load_env
 from .tools import SYSTEM_PROMPT, default_registry
 
@@ -45,17 +45,14 @@ def _env() -> dict[str, str]:
 
 
 def _config(env: dict[str, str]) -> LoopConfig:
+    # Precedenza (ambiente sopra il `.env`) e conversione stanno in un
+    # posto solo: `agent.valore_da_env`. Questa funzione ne aveva la sua
+    # copia, e la sessione web un'altra ancora.
     def num(key: str, default: int) -> int:
-        try:
-            return int(env.get(key, default))
-        except (TypeError, ValueError):
-            return default
+        return valore_da_env(env, key, default, int)
 
     def flt(key: str, default: float) -> float:
-        try:
-            return float(env.get(key, default))
-        except (TypeError, ValueError):
-            return default
+        return valore_da_env(env, key, default, float)
 
     return LoopConfig(
         max_iterations=num("ORCHESTRA_MAX_ITERATIONS", 20),

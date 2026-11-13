@@ -95,27 +95,51 @@ class LoopConfig:
     max_secondi_turno: float = 900.0
 
 
-def parametri_da_env(env) -> dict[str, Any]:
+def impostazioni(env: dict[str, str] | None = None) -> dict[str, str]:
+    """La configurazione effettiva: il `.env` sotto, l'ambiente sopra.
+
+    Un solo posto che decide la precedenza, e vale per tutti. L'ambiente
+    di sistema vince — come in `cli._env()` — perche' un valore esportato
+    per una sola esecuzione deve contare, mentre il `.env` resta la fonte
+    salvata dalle impostazioni.
+
+    Passare un dizionario gia' letto NON scavalca la regola: chi tiene
+    `self.env` (il server, letto all'avvio) altrimenti non vedrebbe una
+    variabile esportata dopo, e la stessa impostazione varrebbe in un
+    percorso e non in un altro.
+    """
+    if env is None:
+        from .providers import ambiente
+        return ambiente(ENV_PATH)
+    return {**env, **os.environ}
+
+
+def valore_da_env(env, chiave: str, default, cast):
+    """Un valore tipizzato dalle impostazioni, o il default se manca/storto.
+
+    `cast` e' `int` o `float`: un `ORCHESTRA_MAX_TOKENS=boh` deve tornare
+    al default, non far saltare l'avvio dell'agente.
+    """
+    try:
+        return cast(impostazioni(env).get(chiave, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def parametri_da_env(env=None) -> dict[str, Any]:
     """`temperature` e `max_tokens` come li imposta l'utente.
 
-    Un posto solo, con gli stessi nomi della CLI
-    (`ORCHESTRA_TEMPERATURE`, `ORCHESTRA_MAX_TOKENS`): chi costruisce un
-    `LoopConfig` per conto suo — il goal, i figli della delega — li
-    passa con `**parametri_da_env(env)` invece di ricopiare i default.
-
-    Senza, quei percorsi restavano a 4096 qualunque cosa dicesse il
-    `.env`: con `reasoning: max` il tetto si esauriva dentro il
-    ragionamento e la risposta arrivava troncata anche dopo aver
+    Chi costruisce un `LoopConfig` per conto suo — il goal, i figli della
+    delega — li passa con `**parametri_da_env(env)` invece di ricopiare
+    i default. Senza, quei percorsi restavano a 4096 qualunque cosa
+    dicesse il `.env`: con `reasoning: max` il tetto si esauriva dentro
+    il ragionamento e la risposta arrivava troncata anche dopo aver
     alzato la variabile.
     """
-    def _numero(chiave: str, default, cast):
-        try:
-            return cast(env.get(chiave, default))
-        except (TypeError, ValueError):
-            return default
-
-    return {"temperature": _numero("ORCHESTRA_TEMPERATURE", 0.7, float),
-            "max_tokens": _numero("ORCHESTRA_MAX_TOKENS", 4096, int)}
+    return {"temperature": valore_da_env(env, "ORCHESTRA_TEMPERATURE",
+                                       0.7, float),
+            "max_tokens": valore_da_env(env, "ORCHESTRA_MAX_TOKENS",
+                                        4096, int)}
 
 
 @dataclass

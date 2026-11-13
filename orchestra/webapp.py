@@ -36,7 +36,7 @@ from typing import Any
 import shutil
 
 from . import __version__
-from .agent import LoopConfig
+from .agent import LoopConfig, valore_da_env
 from .percorsi import ENV_PATH, HERE
 from .prompt_figlio import PROMPT_FIGLIO
 from .providers import (ProviderError, ambiente, build_provider,
@@ -1523,15 +1523,11 @@ class OrchestraApp:
         # resto del server, cosi' il riavvio non cancella niente.
         _env = load_env(ENV_PATH)
         def num(key: str, default: int) -> int:
-            # Il `.env` e' la fonte salvata (e' li' che scrivono le API
-            # delle impostazioni), ma una variabile esportata per questa
-            # esecuzione vince: e' la stessa precedenza di `cli._env()`,
-            # e senza `ORCHESTRA_MAX_TOKENS=8192 python -m orchestra.cli
-            # web` non avrebbe effetto proprio sul web.
-            try:
-                return int(os.environ.get(key) or _env.get(key, default))
-            except (TypeError, ValueError):
-                return default
+            # Precedenza e conversione stanno in un posto solo
+            # (`agent.valore_da_env`): il `.env` e' la fonte salvata,
+            # l'ambiente vince. Prima questa funzione aveva la sua copia
+            # della regola, e chi leggeva `self.env` ne aveva un'altra.
+            return valore_da_env(_env, key, default, int)
 
         # Solo il prompt di base: le skill le aggiunge l'Agent a ogni
         # turno, in Agent._aggiorna_prompt.

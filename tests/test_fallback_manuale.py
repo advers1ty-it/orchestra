@@ -515,6 +515,52 @@ check("webapp.py lo usa per il figlio della delega",
 check("la sessione web ha gia' il suo tetto dalla variabile",
       'max_tokens=num("ORCHESTRA_MAX_TOKENS", 4096)' in sorgente_webapp)
 
+# ------------------------- una sola regola: ambiente sopra, .env sotto
+print("\n[12] Precedenza unica per tutte le letture")
+
+from orchestra.agent import impostazioni, valore_da_env  # noqa: E402
+
+chiave = "ORCHESTRA_MAX_TOKENS"
+precedente = os.environ.get(chiave)
+try:
+    os.environ[chiave] = "2345"
+    check("l'ambiente vince su un dizionario gia' letto",
+          valore_da_env({chiave: "1000"}, chiave, 4096, int) == 2345,
+          str(valore_da_env({chiave: "1000"}, chiave, 4096, int)))
+    check("la CLI legge lo stesso valore",
+          cli_mod._config({chiave: "1000"}).max_tokens == 2345,
+          str(cli_mod._config({chiave: "1000"}).max_tokens))
+    check("la sessione web legge lo stesso valore",
+          webapp_mod.OrchestraApp._make_session(
+              "openrouter", "prova").agent.config.max_tokens == 2345)
+    check("e il figlio della delega web (che legge self.env) pure",
+          parametri_da_env({"ORCHESTRA_PROVIDER": "nous"})["max_tokens"] == 2345,
+          str(parametri_da_env({"ORCHESTRA_PROVIDER": "nous"})))
+finally:
+    if precedente is None:
+        os.environ.pop(chiave, None)
+    else:
+        os.environ[chiave] = precedente
+
+check("senza variabile vale il dizionario",
+      valore_da_env({chiave: "1000"}, chiave, 4096, int) == 1000,
+      str(valore_da_env({chiave: "1000"}, chiave, 4096, int)))
+check("impostazioni fonde dizionario e ambiente",
+      impostazioni({chiave: "1000"}).get(chiave) == "1000")
+check("valore storto -> default",
+      valore_da_env({chiave: "boh"}, chiave, 4096, int) == 4096)
+
+# Nessuno deve rifarsi la propria copia della regola: era il punto della
+# duplicazione (tre letture, due precedenze diverse).
+sorgente_cli = open(os.path.join(radice, "orchestra", "cli.py"),
+                    encoding="utf-8").read()
+check("la CLI non converte piu' da sola",
+      "valore_da_env(env, key, default, int)" in sorgente_cli
+      and "int(env.get(key, default))" not in sorgente_cli)
+check("la sessione web non rilegge os.environ per conto suo",
+      "valore_da_env(_env, key, default, int)" in sorgente_webapp
+      and "os.environ.get(key)" not in sorgente_webapp)
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)
