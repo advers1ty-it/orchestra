@@ -1496,8 +1496,13 @@ class OrchestraApp:
         # resto del server, cosi' il riavvio non cancella niente.
         _env = load_env(ENV_PATH)
         def num(key: str, default: int) -> int:
+            # Il `.env` e' la fonte salvata (e' li' che scrivono le API
+            # delle impostazioni), ma una variabile esportata per questa
+            # esecuzione vince: e' la stessa precedenza di `cli._env()`,
+            # e senza `ORCHESTRA_MAX_TOKENS=8192 python -m orchestra.cli
+            # web` non avrebbe effetto proprio sul web.
             try:
-                return int(_env.get(key, default))
+                return int(os.environ.get(key) or _env.get(key, default))
             except (TypeError, ValueError):
                 return default
 
@@ -1555,6 +1560,12 @@ class OrchestraApp:
                     config=LoopConfig(max_iterations=num("ORCHESTRA_MAX_ITERS", 20),
                                                           context_limit=num("ORCHESTRA_CONTEXT_LIMIT", 120_000),
                                                           keep_recent=8,
+                                                          # Il tetto di output vale per TUTTA la completion,
+                                                          # ragionamento compreso: a `reasoning: high` i 4096 di
+                                                          # default si esauriscono prima del testo, il provider
+                                                          # risponde finish_reason=length e la risposta arriva
+                                                          # troncata. Stessa variabile della CLI.
+                                                          max_tokens=num("ORCHESTRA_MAX_TOKENS", 4096),
                                                           # Senza questo, un turno web poteva
                                                           # restare appeso finche' il browser
                                                           # era aperto: il tetto vale anche
