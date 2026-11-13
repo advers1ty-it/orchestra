@@ -118,6 +118,31 @@ function seiInFondo() {
   return main.scrollHeight - main.scrollTop - main.clientHeight < 140;
 }
 
+// L'ultima posizione impostata da noi. Serve a distinguere il nostro
+// salto da un gesto dell'utente quando arriva l'evento di scroll: gli
+// eventi sono asincroni, e senza questo il salto di `tool_end` seguito
+// subito da un'altra riga sembrerebbe un gesto dell'utente e spegnerebbe
+// l'intento di seguire a meta' turno.
+let scrollVoluto = null;
+
+// Salto in fondo che non passa da `seiInFondo()`. Serve dove l'intento
+// e' gia' registrato (`seguiTurno`, `eraInFondoPrima`) e la posizione
+// attuale non lo dice piu': o il log e' stato appena svuotato e
+// ricostruito — e il browser ha clampato scrollTop a 0 — o e' cresciuto
+// oltre la soglia dei 140 px. In tutti e due i casi chiedere "sei in
+// fondo adesso?" risponde no, ed e' il motivo per cui la chat restava a
+// inizio conversazione o lasciava la risposta appena sotto il bordo.
+function vaiInFondo() {
+  // Non scrollare se l'utente sta selezionando testo nella chat: lo
+  // scroll forzato annulla la selezione e rende impossibile copiare.
+  try {
+    const sel = window.getSelection && window.getSelection();
+    if (sel && sel.toString().trim() && main.contains(sel.anchorNode)) return;
+  } catch (e) { /* ignora */ }
+  main.scrollTop = main.scrollHeight;
+  scrollVoluto = main.scrollTop;
+}
+
 // L'utente stava seguendo quando questo turno è partito. Registrato a
 // `turn_start` e consumato dal messaggio finale: un tool da 200 righe
 // fa scendere "in fondo" per qualche secondo, e il messaggio che arriva
@@ -134,15 +159,32 @@ let ultimaFirmaSnapshot = "";
 let sessioneSnapshot = null;
 
 function scrollDown() {
-  // Non scrollare se l'utente sta selezionando testo nella chat: lo
-  // scroll forzato annulla la selezione e rende impossibile copiare.
-  try {
-    const sel = window.getSelection && window.getSelection();
-    if (sel && sel.toString().trim() && main.contains(sel.anchorNode)) return;
-  } catch (e) { /* ignora */ }
   // solo se l'utente è già in fondo: scrollare mentre legge sopra è irritante
-  if (seiInFondo()) main.scrollTop = main.scrollHeight;
+  if (seiInFondo()) vaiInFondo();
 }
+
+// L'intento di seguire segue lo sguardo: chi risale a leggere mentre un
+// tool o un turno sta lavorando non deve essere riportato giu' a
+// `tool_end` o alla risposta finale, e chi torna in fondo deve tornare a
+// essere seguito (una risposta piu' alta della soglia lo strattonerebbe
+// altrimenti). Per questo non e' solo una scadenza: si riarma.
+function intentoSegui(attivo) {
+  seguiTurno = attivo;
+  Array.from(log.children).forEach((n) => {
+    if ("_segui" in n) n._segui = attivo;
+  });
+}
+
+on(main, "scroll", () => {
+  // Il salto che abbiamo fatto noi non e' un gesto dell'utente: il suo
+  // evento arriva dopo, con la stessa posizione, e va consumato una volta
+  // sola — altrimenti un ritorno in fondo alla stessa quota verrebbe
+  // scambiato per il nostro salto e l'intento non si riarmerebbe.
+  const nostro = main.scrollTop === scrollVoluto;
+  scrollVoluto = null;
+  if (nostro) return;
+  intentoSegui(seiInFondo());
+});
 
 // Gli snapshot contengono solo la conversazione server-side. Gli avvisi
 // mostrati dal client (es. cambio modello) vanno conservati al punto in cui
@@ -670,8 +712,10 @@ function avviaPollingFallback() {
           // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
           // ripristina lo scroll precedente (evita il salto in cima).
           // Su un'altra conversazione la posizione di prima non vale.
-          if (cambiaSessione) main.scrollTop = main.scrollHeight;
-          else if (eraInFondoPrima) scrollDown();
+          // Qui il fondo e' una decisione presa prima della ricostruzione:
+          // dopo non si puo' piu' dedurre (`log` svuotato ha portato
+          // scrollTop a 0).
+          if (cambiaSessione || eraInFondoPrima) vaiInFondo();
           else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
         }
       }
@@ -851,9 +895,9 @@ function handle(kind, d) {
       // Il primo snapshot inizializza la chat: mostra subito gli ultimi
       // messaggi. Gli aggiornamenti successivi conservano invece la lettura.
       // Su un'altra conversazione la posizione di prima non significa
-      // niente: si parte dal fondo anche li'.
-      if (eraPrimoSnapshot || cambiaSessione) main.scrollTop = main.scrollHeight;
-      else if (eraInFondoPrima) scrollDown();
+      // niente: si parte dal fondo anche li'. Come nel polling, il fondo
+      // e' deciso da cosa c'era PRIMA della ricostruzione.
+      if (eraPrimoSnapshot || cambiaSessione || eraInFondoPrima) vaiInFondo();
       else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
       break;
     }
@@ -940,7 +984,7 @@ function handle(kind, d) {
         // e `scrollDown` la lascia sotto. Questo è il "devo scrollare
         // io" segnalato in uso. Se l'utente era risalito a leggere, il
         // flag è falso e nessuno lo strattona.
-        if (seguiTurno) { seguiTurno = false; scrollDown(); }
+        if (seguiTurno) { seguiTurno = false; vaiInFondo(); }
       }
       (d.tool_calls || []).forEach((tc) => {
         // chiave basata sull'id del tool call: `tool_end` lo cerca cosi' e
@@ -976,7 +1020,9 @@ function handle(kind, d) {
         // "non sei in fondo" da qui in poi — risposta finale inclusa — e
         // toccherebbe scrollare a mano. Se aveva scrollato su da solo, il
         // flag è falso e nessuno lo disturba.
-        if (node._segui) scrollDown();
+        // Il fondo si imposta diretto: il risultato appena scritto ha gia'
+        // superato la soglia di `seiInFondo`, che da qui risponderebbe no.
+        if (node._segui) vaiInFondo();
       }
       break;
     }

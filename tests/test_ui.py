@@ -192,7 +192,11 @@ class El {
   // `innerHTML = ""` in un browser vero SVUOTA l'elemento. Il fake doveva
   // farlo: senza, showBanner e handle("reset") sembravano non funzionare,
   // e i test misuravano il mock invece del codice.
-  set innerHTML(v){ this._text=""; this.children=[]; }
+  // Svuotare `log` svuota anche `main`, che e' il contenitore che scrolla:
+  // il browser riporta la posizione a 0. E' la regola da cui nasce il
+  // "salto in cima a turno finito", quindi il fake la riproduce una volta
+  // qui invece di lasciarla aggiustare a mano da ogni test.
+  set innerHTML(v){ this._text=""; this.children=[]; if (this === log) main.scrollTop = 0; }
   get innerHTML(){ return this._text; }
   // `options` e `value` su un <select>: la UI imposta value per preselezionare
   // il modello corrente. Se il fake non li ha, quella riga diventa un no-op
@@ -533,6 +537,119 @@ out.snapshotScrollHeight = mainEl.scrollHeight;
   }).join(" -> ");
   out.pollingScrollTop = main.scrollTop;
 
+  // --- REGRESSIONE: il polling a turno finito non deve portare in cima.
+  // Lo snapshot di fine turno ricostruisce il DOM e svuota `log` (la
+  // posizione torna a 0, come nel browser): chi stava leggendo in fondo
+  // deve restare in fondo.
+  log.children = [];
+  ultimaFirmaSnapshot = "";
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 4500;          // in fondo: stava leggendo la risposta
+  globalThis.fetch = async (url) => ({
+    ok: true, status: 200,
+    json: async () => (url === "/api/models" ? {} : {
+      ready: true, busy: false, messages: [
+        {role: "user", content: "domanda finale"},
+        {role: "assistant", content: "risposta finale"},
+      ],
+    }),
+  });
+  await pollCallback();
+  out.pollingFineTurno = main.scrollTop;
+
+  // --- REGRESSIONE: una risposta piu' alta della soglia di `seiInFondo`
+  // (140 px) restava appena sotto il bordo. `seguiTurno` ricorda che
+  // l'utente seguiva all'inizio del turno, e lo riporta a fondo.
+  log.children = [];
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 4500;
+  handle("turn_start", {});
+  main.scrollHeight = 6000;       // la risposta ha allungato il log
+  handle("assistant", {content: "risposta finale lunga"});
+  out.rispostaFinale = main.scrollTop;
+
+  // --- REGRESSIONE: dopo un tool lungo la risposta successiva restava
+  // sotto il bordo. `_segui` ricorda se l'utente stava seguendo quando il
+  // tool e' partito, e il risultato lo riporta a fondo.
+  log.children = [];
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 4500;          // in fondo quando il tool parte
+  handle("assistant", {content: "", tool_calls: [
+    {id: "call_lungo", name: "read_file", args: {path: "a.txt"}},
+  ]});
+  main.scrollHeight = 6000;       // il risultato ha allungato il log
+  handle("tool_end", {name: "read_file", ok: true, result: "ok", id: "call_lungo"});
+  out.toolFineTurno = main.scrollTop;
+
+  // --- REGRESSIONE: se l'utente risale a leggere mentre il turno lavora,
+  // l'intento di seguire scade e la risposta non lo riporta giu'.
+  log.children = [];
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 4500;
+  vaiInFondo();                   // ultimo salto nostro: a fondo
+  handle("turn_start", {});
+  main.scrollHeight = 6000;       // nel frattempo il log e' cresciuto
+  main._on.scroll();              // evento del NOSTRO salto, arrivato dopo
+  out.seguitoDopoSaltoNostro = seguiTurno;
+  main.scrollTop = 1000;          // gesto dell'utente: risale a leggere
+  main._on.scroll();
+  out.seguitoDopoGestoUtente = seguiTurno;
+  handle("assistant", {content: "risposta mentre leggevo"});
+  out.turnoLettura = main.scrollTop;
+
+  // Stesso per un tool: `_segui` registrato a `tool_start` scade al gesto.
+  log.children = [];
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 4500;
+  handle("assistant", {content: "", tool_calls: [
+    {id: "call_lettura", name: "read_file", args: {path: "a.txt"}},
+  ]});
+  const cardLettura = log.querySelector(".tool");
+  out.toolSeguivaPrima = cardLettura._segui;
+  main.scrollTop = 1000;
+  main._on.scroll();
+  out.toolSeguivaDopo = cardLettura._segui;
+  main.scrollHeight = 6000;
+  handle("tool_end", {name: "read_file", ok: true, result: "ok", id: "call_lettura"});
+  out.toolLettura = main.scrollTop;
+
+  // --- REGRESSIONE: risalire e poi tornare in fondo riarma l'intento,
+  // cosi' una risposta piu' alta della soglia torna a seguire.
+  log.children = [];
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 4500;
+  handle("turn_start", {});        // sta seguendo
+  main.scrollTop = 1000;           // risale a leggere
+  main._on.scroll();
+  out.seguitoDopoRisalita = seguiTurno;
+  main.scrollTop = 5000;           // e torna in fondo
+  main._on.scroll();
+  out.seguitoDopoRitorno = seguiTurno;
+  main.scrollHeight = 6000;        // la risposta allunga il log
+  handle("assistant", {content: "risposta alta"});
+  out.rispostaDopoRitorno = main.scrollTop;
+
+  // --- REGRESSIONE: lo snapshot SSE che ricostruisce il log da zero deve
+  // lasciare in fondo chi stava leggendo in fondo.
+  log.children = [];
+  primoSnapshot = false;
+  sessioneSnapshot = 7;
+  ultimaFirmaSnapshot = "";
+  main.scrollHeight = 5000;
+  main.clientHeight = 600;
+  main.scrollTop = 4500;
+  handle("snapshot", {ready: true, sessione_id: 7, busy: false, messages: [
+    {role: "user", content: "domanda"},
+    {role: "assistant", content: "risposta finale"},
+  ]});
+  out.sseRicostruito = main.scrollTop;
+
   // --- REGRESSIONE 5: aprire una conversazione dalla cronologia deve
   // cambiare la chat. Il server manda `sessione_id` con ogni snapshot: due
   // chat diverse possono avere la STESSA firma (numero di messaggi e
@@ -663,6 +780,45 @@ check("il polling conserva l'ordine dell'avviso di sistema",
       str(res.get("pollingOrder")))
 check("il polling conserva la posizione di lettura",
       res.get("pollingScrollTop") == 1000, str(res.get("pollingScrollTop")))
+# --- REGRESSIONE: il polling a turno finito non porta in cima alla chat.
+# Lo snapshot di fine turno ricostruisce il DOM e svuota `log` (la
+# posizione torna a 0): chi stava leggendo in fondo deve restare in fondo.
+check("il polling a turno finito resta in fondo, non in cima",
+      res.get("pollingFineTurno") == 5000, str(res.get("pollingFineTurno")))
+# --- REGRESSIONE: una risposta piu' alta della soglia di `seiInFondo`
+# (140 px) restava appena sotto il bordo.
+check("la risposta finale arriva in fondo",
+      res.get("rispostaFinale") == 6000, str(res.get("rispostaFinale")))
+# --- REGRESSIONE: il risultato di un tool lungo lasciava la risposta
+# successiva sotto il bordo (`_segui` registra l'intento a tool_start).
+check("il risultato di un tool lungo torna a fondo",
+      res.get("toolFineTurno") == 6000, str(res.get("toolFineTurno")))
+# --- REGRESSIONE: scrollare su annulla l'intento di seguire. I salti a
+# fondo sono diretti, quindi senza questa scadenza l'utente veniva
+# riportato giu' mentre stava leggendo.
+check("il nostro salto a fondo non spegne l'intento di seguire",
+      res.get("seguitoDopoSaltoNostro") is True)
+check("scrollare su annulla l'intento di seguire il turno",
+      res.get("seguitoDopoGestoUtente") is False and res.get("turnoLettura") == 1000,
+      f"seguiTurno={res.get('seguitoDopoGestoUtente')}, "
+      f"scrollTop={res.get('turnoLettura')}")
+check("scrollare su annulla l'intento di seguire il tool",
+      res.get("toolSeguivaPrima") is True and
+      res.get("toolSeguivaDopo") is False and res.get("toolLettura") == 1000,
+      f"prima={res.get('toolSeguivaPrima')}, dopo={res.get('toolSeguivaDopo')}, "
+      f"scrollTop={res.get('toolLettura')}")
+# --- REGRESSIONE: tornare in fondo riarma l'intento, e una risposta
+# piu' alta della soglia torna a seguire.
+check("tornare in fondo riarma l'intento di seguire",
+      res.get("seguitoDopoRisalita") is False and
+      res.get("seguitoDopoRitorno") is True and
+      res.get("rispostaDopoRitorno") == 6000,
+      f"risalita={res.get('seguitoDopoRisalita')}, "
+      f"ritorno={res.get('seguitoDopoRitorno')}, "
+      f"scrollTop={res.get('rispostaDopoRitorno')}")
+# --- REGRESSIONE: lo snapshot SSE che ricostruisce il log da zero.
+check("lo snapshot SSE che ricostruisce resta in fondo",
+      res.get("sseRicostruito") == 5000, str(res.get("sseRicostruito")))
 check("due tool identici abbinati per id",
       res.get("abbinati") == "RISULTATO_UNO|RISULTATO_DUE #2",
       str(res.get("abbinati")))
