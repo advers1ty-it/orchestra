@@ -36,7 +36,7 @@ from typing import Any
 import shutil
 
 from . import __version__
-from .agent import LoopConfig, valore_da_env
+from .agent import LoopConfig, impostazioni, valore_da_env
 from .percorsi import ENV_PATH, HERE
 from .prompt_figlio import PROMPT_FIGLIO
 from .providers import (ProviderError, ambiente, build_provider,
@@ -1131,7 +1131,9 @@ class OrchestraApp:
         # chiave e finiva in "Nessun provider disponibile" al posto
         # dell'errore vero.
         ag = self.session.agent
-        attivo, ripieghi = config_da_env(self.env)
+        # `impostazioni` applica la precedenza (ambiente sopra `.env`):
+        # `self.env` da solo non vede una variabile esportata dopo l'avvio.
+        attivo, ripieghi = config_da_env(impostazioni(self.env))
         ag.fallback_chain = catena_manuale(provider_name, model_id,
                                            ripieghi, attivo=attivo)
         ag._fallback_state = None  # si ricrea al primo uso, pulita
@@ -1522,6 +1524,17 @@ class OrchestraApp:
         # e perdeva il salvataggio. Ora legge la stessa fonte che usa il
         # resto del server, cosi' il riavvio non cancella niente.
         _env = load_env(ENV_PATH)
+        # Le impostazioni con la precedenza gia' applicata (ambiente sopra
+        # `.env`). Nota bene: `os.environ` e' fuso qui una volta sola, non
+        # rifatto a mano in ogni punto che legge un valore.
+        _cfg = impostazioni(_env)
+
+        def _testo(chiave: str) -> str | None:
+            """Una impostazione testuale, o None se vuota. Cosi' una
+            variabile esportata vale anche per reasoning e profilo
+            strumenti, che prima leggevano `_env` liscio."""
+            return (_cfg.get(chiave) or "").strip() or None
+
         def num(key: str, default: int) -> int:
             # Precedenza e conversione stanno in un posto solo
             # (`agent.valore_da_env`): il `.env` e' la fonte salvata,
@@ -1596,8 +1609,8 @@ class OrchestraApp:
                                                           max_secondi_turno=num(
                                                               "ORCHESTRA_MAX_SECONDI_TURNO",
                                                               900),
-                                                          reasoning_level=_env.get("ORCHESTRA_REASONING") or None,
-                                                          tool_profile=_env.get("ORCHESTRA_TOOL_PROFILE") or None),
+                                                          reasoning_level=_testo("ORCHESTRA_REASONING"),
+                                                          tool_profile=_testo("ORCHESTRA_TOOL_PROFILE")),
                     summarize=summarizer_llm(_provider),
                 )
         # Anche alla nascita la catena e' quella scelta a mano: senza
@@ -1605,7 +1618,7 @@ class OrchestraApp:
         # che l'utente ha spento, e il difetto tornerebbe visibile solo
         # dopo un riavvio.
         from .fallback import catena_manuale, config_da_env
-        attivo, ripieghi = config_da_env(dict(_env) | os.environ)
+        attivo, ripieghi = config_da_env(_cfg)
         sess.agent.fallback_chain = catena_manuale(
             provider_name, model, ripieghi, attivo=attivo)
         return sess

@@ -561,6 +561,46 @@ check("la sessione web non rilegge os.environ per conto suo",
       "valore_da_env(_env, key, default, int)" in sorgente_webapp
       and "os.environ.get(key)" not in sorgente_webapp)
 
+# ------------------- reasoning e profilo strumenti: stessa precedenza
+print("\n[13] La sessione web legge tutto dal lettore unico")
+
+salvati = {k: os.environ.get(k) for k in ("ORCHESTRA_REASONING",
+                                         "ORCHESTRA_TOOL_PROFILE")}
+try:
+    os.environ["ORCHESTRA_REASONING"] = "low"
+    os.environ["ORCHESTRA_TOOL_PROFILE"] = "base"
+    sessione = webapp_mod.OrchestraApp._make_session("openrouter", "prova")
+    check("reasoning esportato: vince sul .env",
+          sessione.agent.config.reasoning_level == "low",
+          str(sessione.agent.config.reasoning_level))
+    check("profilo strumenti esportato: vince sul .env",
+          sessione.agent.config.tool_profile == "base",
+          str(sessione.agent.config.tool_profile))
+finally:
+    for k, v in salvati.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+sessione = webapp_mod.OrchestraApp._make_session("openrouter", "prova")
+atteso = (impostazioni().get("ORCHESTRA_REASONING") or "").strip() or None
+check("senza variabile: il valore del .env, letto come gli altri",
+      sessione.agent.config.reasoning_level == atteso,
+      f"{sessione.agent.config.reasoning_level!r} != {atteso!r}")
+
+# E il merge non si rifa' a mano da nessuna parte.
+sorgente_webapp2 = open(webapp_mod.__file__, encoding="utf-8").read()
+check("reasoning non legge piu' `_env` liscio",
+      '_env.get("ORCHESTRA_REASONING")' not in sorgente_webapp2)
+check("profilo strumenti non legge piu' `_env` liscio",
+      '_env.get("ORCHESTRA_TOOL_PROFILE")' not in sorgente_webapp2)
+check("il merge a mano per la catena e' sparito",
+      "dict(_env) | os.environ" not in sorgente_webapp2
+      and "config_da_env(_cfg)" in sorgente_webapp2)
+check("anche il cambio modello passa dalla precedenza unica",
+      "config_da_env(impostazioni(self.env))" in sorgente_webapp2)
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)
