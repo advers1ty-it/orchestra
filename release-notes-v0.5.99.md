@@ -112,6 +112,17 @@ alta segue chi è tornato giù.
 
 ## Note sull'aggiornamento
 
+Gli asset di questa release sono due:
+
+- `orchestra-0.5.99.zip` — il codice, con una sola cartella radice
+  (`orchestra-0.5.99/`), nel formato che l'updater accetta.
+- `Installa-Orchestra.bat` — l'installer per Windows. Legge
+  `releases/latest`, quindi si rilancia su un'installazione esistente per
+  aggiornarla: sovrascrive il codice e lascia stare `.env`, i database, il
+  token di Telegram e le skill.
+
+Poi, sul codice:
+
 - Il database dei collegamenti Telegram si migra da solo: la chat che era
   collegata diventa il primo elemento dell'elenco.
 - `DEFAULT_CHAINS` e la funzione che la leggeva sono state rimosse: un
