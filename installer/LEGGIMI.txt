@@ -44,3 +44,12 @@ SE QUALCOSA NON VA
   Installa-Orchestra.bat e rispondi S alla domanda sui certificati.
 - Per togliere tutto: cancella la cartella %LOCALAPPDATA%\Orchestra
   e il collegamento sul Desktop.
+
+LICENZA
+-------
+Orchestra e' software libero sotto GNU Affero GPL v3 o successiva
+(AGPL-3.0-or-later): puoi usarlo, studiarlo e ridistribuirlo gratis, e le
+versioni modificate restano libere allo stesso modo. Se lo offri come
+servizio in rete, chi lo usa deve poter ottenere il sorgente. Nessuna
+garanzia: e' software gratuito. Il testo completo e' nel file LICENSE
+dentro la cartella di installazione.

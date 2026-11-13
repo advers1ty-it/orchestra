@@ -248,6 +248,9 @@ SUITES = [
     # Piu' persone sullo stesso bot: prima il secondo /start staccava il
     # primo, e la persona di prima smetteva di ricevere risposte.
     ("telegram-multichat", "test_telegram_multichat.py", True),
+    # Il comando unico della release: la 0.5.99 e' uscita senza installer
+    # perche' "quali asset" era una cosa da ricordare.
+    ("rilascia", "test_rilascia.py", True),
     ("telegram_sessione", "test_telegram_sessione.py", True),
     # La riga con cui il server si rilancia: con l'avvio `-m` quella
     # sbagliata esegue il file del modulo come script e il server non

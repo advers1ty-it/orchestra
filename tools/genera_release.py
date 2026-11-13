@@ -18,6 +18,10 @@ puo' sbagliare di nuovo.
 
 Scrive `orchestra-<versione>.zip` nella cartella corrente e stampa il
 digest sha256 da confrontare con quello dell'asset caricato.
+
+`costruisci()` e' la parte che serve anche a `tools/rilascia.py`: la
+verifica del nome, della radice e della versione dentro l'archivio sta
+qui una volta sola, non in due posti che possono divergere.
 """
 
 from __future__ import annotations
@@ -39,11 +43,15 @@ def versione(root: str) -> str:
     return m.group(1)
 
 
-def main() -> int:
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ver = sys.argv[1] if len(sys.argv) > 1 else versione(root)
+def costruisci(root: str, ver: str, fuori: str | None = None) -> str:
+    """Lo zip di HEAD, e il controllo che sia quello che l'updater vuole.
+
+    Torna il percorso dell'archivio. Un archivio sbagliato e' un SystemExit
+    con scritto cosa non va: chi chiama non deve poterlo pubblicare per
+    sbaglio, quindi non c'e' un modo "restituisci comunque il file".
+    """
     prefisso = f"orchestra-{ver}/"
-    out = os.path.join(os.getcwd(), f"orchestra-{ver}.zip")
+    out = fuori or os.path.join(os.getcwd(), f"orchestra-{ver}.zip")
     if os.path.exists(out):
         os.remove(out)
     # `git archive` prende solo i file tracciati: niente dati locali,
@@ -54,16 +62,14 @@ def main() -> int:
          "-o", out, "HEAD"],
         cwd=root, capture_output=True, text=True)
     if r.returncode != 0:
-        print(r.stderr.strip() or "git archive fallito", file=sys.stderr)
-        return 1
+        raise SystemExit(r.stderr.strip() or "git archive fallito")
 
     with zipfile.ZipFile(out) as z:
         nomi = [n for n in z.namelist() if not n.endswith("/")]
         radici = {n.split("/")[0] for n in nomi}
     if radici != {f"orchestra-{ver}"}:
-        print(f"ERRORE: radici multiple nell'archivio: {sorted(radici)}",
-              file=sys.stderr)
-        return 1
+        raise SystemExit(f"ERRORE: radici multiple nell'archivio: "
+                         f"{sorted(radici)}")
     # La versione dentro l'archivio deve essere quella del nome: un asset
     # chiamato 0.5.70 che si presenta come 0.5.69 farebbe aggiornare per
     # sempre.
@@ -72,15 +78,25 @@ def main() -> int:
             testo = f.read().decode("utf-8")
     m = re.search(r"""__version__\s*=\s*["']([^"']+)["']""", testo)
     if not m or m.group(1) != ver:
-        print(f"ERRORE: dentro l'archivio c'e' la versione "
-              f"{m.group(1) if m else '?'}, non {ver}", file=sys.stderr)
-        return 1
+        raise SystemExit(f"ERRORE: dentro l'archivio c'e' la versione "
+                         f"{m.group(1) if m else '?'}, non {ver}")
+    return out
 
-    with open(out, "rb") as f:
-        digest = hashlib.sha256(f.read()).hexdigest()
-    print(f"{out}")
-    print(f"{len(nomi)} file, {os.path.getsize(out) // 1024} KB")
-    print(f"sha256:{digest}")
+
+def digest(percorso: str) -> str:
+    with open(percorso, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def main() -> int:
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ver = sys.argv[1] if len(sys.argv) > 1 else versione(root)
+    out = costruisci(root, ver)
+    with zipfile.ZipFile(out) as z:
+        quanti = len([n for n in z.namelist() if not n.endswith("/")])
+    print(out)
+    print(f"{quanti} file, {os.path.getsize(out) // 1024} KB")
+    print(f"sha256:{digest(out)}")
     return 0
 
 

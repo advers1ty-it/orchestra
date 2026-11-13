@@ -1,115 +1,241 @@
 # Orchestra
 
-Orchestratore agentico in Python puro (solo stdlib, zero dipendenze a runtime).
-Gratuito e aperto, sviluppato da una persona e non da un'azienda: nessun
-account da creare, nessun servizio da pagare oltre alle chiavi dei modelli
-che scegli.
-Gli dai un obiettivo in linguaggio naturale: lui pianifica, usa strumenti
-(file, shell, web, browser), verifica il risultato e — se serve — delega
-sotto-compiti ad altri agenti. Con interfaccia web in italiano.
+Un assistente AI che lavora **sul tuo computer**. Gli scrivi in italiano
+cosa vuoi ottenere, e lui lo fa: legge e scrive file, esegue comandi,
+cerca sul web, apre il browser, controlla il risultato. Se il lavoro è
+grande lo spezza in sotto-compiti e li porta avanti anche mentre non
+guardi.
 
-## Per iniziare (senza essere esperti)
+Tutto in locale, gratis, **senza account e senza abbonamenti**: l'unica
+spesa sono le chiamate al modello che scegli tu (e con un motore locale
+non spendi niente).
 
-1. Vai su **Releases** (l'ultima) e scarica solo `Installa-Orchestra.bat`:
-   (non servono Git né account GitHub).
-2. All’avvio si apre il browser su `http://127.0.0.1:8737`.
-3. Il file `orchestra/.env` si crea da solo al primo avvio:
-   aprilo e inserisci almeno una chiave API (es. OpenRouter),
-   oppure impostala dal pannello **Opzioni** nella UI.
-4. Scrivi un obiettivo nel pannello **Obiettivo** e premi Avvia.
-5. Gli aggiornamenti arrivano da soli a ogni avvio.
+Un progetto di **advers1ty-it**. Il codice è scritto a quattro mani con
+modelli di intelligenza artificiale — Claude, GPT e altri — e ogni
+modifica viene letta, provata e committata da una persona prima di finire
+in una release: nessuna riga arriva qui senza che qualcuno l'abbia capita.
 
-Dettagli per chi distribuisce in `installer/LEGGIMI.txt`.
+> Orchestra è un programma che gira solo sulla tua macchina: non esiste un
+> server nostro, nessuno riceve i tuoi dati, e puoi cancellare tutto
+> chiudendo la cartella.
 
-## Per sviluppatori
+---
 
-```bash
-python3 -m orchestra.cli doctor                    # verifica config e connessione
-python3 -m orchestra.cli chat                      # sessione interattiva
-python3 -m orchestra.cli web                       # interfaccia web (127.0.0.1:8737)
-python3 -m orchestra.cli run "il tuo compito"      # esegui e esci
-python3 -m orchestra.cli goal "obiettivo"          # obiettivo autonomo
-python3 -m orchestra.cli goals --pronti            # coda: cosa partirebbe
-python3 -m orchestra.cli goal-next                 # esegui il prossimo pronto
-python3 -m orchestra.cli scheduler --una-volta     # svuota la coda e esci
-python3 -m orchestra.cli update --check            # c'è un aggiornamento?
-python tests/run_all.py                            # suite completa (server acceso)
-```
+## Installazione (Windows, la via semplice)
 
-Configurazione in `orchestra/.env` (mai committato; vedi `.env.example`).
+1. Vai su **[Releases](https://github.com/advers1ty-it/orchestra/releases/latest)**
+   e scarica `Installa-Orchestra.bat`. Non servono Git né un account GitHub.
+2. Lancialo con un doppio clic. Se manca Python lo installa lui, controlla i
+   certificati di Windows e ti chiede quali funzioni aggiuntive vuoi
+   (ricerca web, immagini, PDF, voce, tunnel): Invio = tutte, `0` = nessuna.
+3. Sul Desktop compare **Avvia Orchestra**: usalo ogni volta che vuoi
+   partire. Si apre il browser su `http://127.0.0.1:8737`.
 
-### Un endpoint che non usiamo
+Se hai già installato Orchestra, rilanciare l'installer **aggiorna** senza
+toccare `orchestra/.env`, i database, il token di Telegram o le skill.
 
-`POST https://openrouter.ai/api/alpha/decisions` (OpenRouter, alpha) prende uno `state` e domande tipizzate: `noul` vuole `instructions` (stringa, lista o oggetto), `choice` vuole `criteria` come **oggetto**, `score` come **lista**; senza `type` la domanda passa, e `state` è obbligatorio. Orchestra non lo chiama: le decisioni del consiglio le ragiona in casa con i modelli dell'utente, e l'endpoint è alpha su un modello gratuito che il provider ha già ritirato una volta.
+## Il primo avvio in tre minuti
 
-Il contratto è stato ricostruito facendolo parlare, perché **la validazione dello schema avviene prima del rate limit**: `400` = schema sbagliato (e il messaggio dice quale campo), `429` = schema giusto fermato dal tetto. Così si mappa tutto senza consumare richieste. La forma della **risposta** invece non è mai stata vista, perché il tetto era raggiunto. La sonda che lo verificava (`tests/test_decisions_schema.py`) è stata tolta quando il modello è sparito: misurava un'API di terzi, non Orchestra.
+1. **Una chiave.** Nel pannello **Opzioni → Modello** incolla la chiave di
+   un provider (OpenRouter ha un piano gratuito con limiti, ed è il modo
+   più rapido per provare). In alternativa usa un motore locale come
+   Ollama e non serve nessuna chiave.
+2. **Un obiettivo.** Scrivi nel pannello **Obiettivo** qualcosa di
+   concreto — «leggi i file in questa cartella e scrivimi un indice» — e
+   premi **Avvia**. Lo vedi lavorare in tempo reale, e puoi fermarlo.
+3. **Guarda cosa ha fatto.** Il pulsante `Δ` mostra i file che ha
+   cambiato in quel turno, `↶` annulla l'ultima modifica.
+
+Da qui in poi è una chat: puoi parlargli, correggerlo mentre lavora
+(scrivendo durante un turno) o interromperlo con il pulsante di stop.
 
 ## Cosa sa fare
 
-- **Chat agentica** — conversa, chiama strumenti, mostra tool ed eventi in tempo reale, si può interrompere e resettare.
-- **Obiettivi autonomi** — lavori lunghi in background, persistenti su disco: sopravvivono al riavvio e si possono fermare da fuori.
-- **Piani e dipendenze** — un obiettivo parte solo quando le sue dipendenze sono `done`; i cicli vengono rifiutati; i contenitori `piano` si chiudono da soli a figli completati.
-- **Gate di accettazione** — un lavoro interrotto (max iterazioni, errori, budget) non viene mai archiviato come completato: diventa `failed` con il motivo, oppure viene ritentato fino a `max_attempts`. Criteri dichiarativi opzionali (es. “il file report.md deve esistere e contenere X”).
-- **Delega multi-agente** — il padre affida sotto-compiti a figli con contesto minimale; retry opzionale con modelli alternativi. Con `delega_multi` ne affida diversi **insieme**: tetto di concorrenza, una scadenza per tutto il gruppo (chi non finisce è `scaduto`, non `errore`) e un resoconto per figlio. I risultati restano separati: unirli è una decisione del padre, non un automatismo — come per i worktree. Vale anche negli obiettivi autonomi, dove però il retry con modelli alternativi resta sulla delega singola.
-- **Identità dell'agente principale** — nome e persona/istruzioni configurabili da Opzioni → Identità, senza dover creare un bot. Valgono quando non è attivo un bot e restano dopo le regole di sistema.
-- **Lavori durevoli** — la coda in background dei bot vive su SQLite: un riavvio non la perde, i lavori in attesa ripartono e quelli interrotti a metà si riprovano dal pannello invece di essere rieseguiti alla cieca.
-- **Checkout isolati** — un lavoro su un progetto git scrive in un worktree separato (`orchestra/lavoro-<id>`), non nella cartella che hai aperta: due bot non si sovrappongono e le modifiche non committate restano intatte. Se ha testato e funziona, il bot propone il merge con riepilogo e verifica; il pannello mostra il ramo, permette di scartare il checkout e di unire con **Unisci**, che rifiuta un progetto sporco e annulla i conflitti. Unire resta una scelta esplicita dell'utente.
-- **Bot** — identità salvate con modello, persona, progetto e conversazione propri. Puoi avviare un compito in background per ogni bot: bot diversi lavorano insieme, ognuno nella propria cartella, senza contendersi la sessione attiva. Si passano un compito anche con `bot_chiedi` solo se l'allowlist lo consente (profondità 1, nessun ciclo); lo stesso bot esegue un turno alla volta.
-- **Policy per bot** — quattro liste per bot: tool consentiti, tool vietati, shell consentita e shell vietata. La policy si applica dopo il profilo (restringe, non allarga), il divieto vince sull'allowlist e un figlio nato da `delega` la eredita. Con la shell in allowlist le sostituzioni `$(...)` e i backtick sono rifiutati anche dentro le virgolette doppie. È un limite in-process: non è una sandbox del sistema operativo.
-- **Coda automatica** — scheduler a singolo consumatore (CLI, API o bottone “Coda” nella UI), spento di default perché consuma token veri.
-- **Benchmark onesto** — misura i modelli per categoria di compito con verifiche oggettive (niente LLM che giudicano LLM).
-- **Permessi** — file fuori dalla cartella di lavoro e automazioni richiedono conferma esplicita; senza canale di conferma, default = nega.
-- **Diagnostica** — `orchestra doctor`, pannello Diagnosi nella UI, docs integrate su `/docs`. Le **tracce** dei turni restano in `storico.db`: la sidebar le filtra per esito e per errori, e il dettaglio mostra gli argomenti e i risultati dei tool, non solo i nomi.
-- **Consiglio (Roast Room)** — pannello per far dibattere una decisione tra advisor in round, con verdict del chair e export PDF. Il Chair propone chi siede (e il tavolo si cambia cliccando le card), ogni seat riceve il brief con le opzioni per esteso, e il verdetto dichiara quante citazioni sono state confrontate col cervello: quelle non trovate finiscono in elenco. L’idea e parte dell’interfaccia del tavolo sono ispirate al progetto open source “Roast Room” (citazione dovuta agli autori originali).
+**Chat agentica.** Conversa, usa gli strumenti, ti mostra cosa sta facendo
+mentre lo fa. Gli eventi, i tool e i loro argomenti sono visibili, non
+nascosti dietro una risposta.
 
-## Struttura
+**Obiettivi autonomi.** Un lavoro lungo parte in background, viene salvato
+su disco e sopravvive al riavvio del programma. Puoi chiuderlo, riaprirlo e
+ritrovarlo dov'era; fermarlo dall'esterno se sta sbagliando strada.
 
-| File | Cosa fa |
+**Piani e dipendenze.** Un obiettivo può aspettare che un altro sia finito
+prima di partire, e i giri viziosi vengono rifiutati invece di bloccare
+tutto.
+
+**Niente finti successi.** Se un lavoro si interrompe (troppe iterazioni,
+errori, tempo scaduto) non viene archiviato come «completato»: diventa un
+fallimento con il motivo, oppure viene ritentato. Puoi anche dichiarare
+dei criteri — «il file report.md deve esistere e contenere questa riga» —
+e il risultato viene verificato davvero.
+
+**Delega.** Per i lavori grandi Orchestra crea sotto-agenti con il minimo
+contesto necessario, e può lanciarne più di uno insieme. I risultati
+restano separati: unirli è una decisione del padre, non una magia.
+
+**Cartelle di lavoro isolate.** Quando un lavoro tocca un progetto git,
+Orchestra scrive in una copia separata (`orchestra/lavoro-<id>`), non nella
+cartella che hai aperta: due bot non si pestano i piedi e le tue modifiche
+non committate restano intatte. Se il lavoro passa i test, ti propone di
+unire — e unire resta una scelta tua.
+
+**Bot.** Identità separate, ognuna con il suo modello, le sue istruzioni, il
+suo progetto e la sua conversazione. Bot diversi lavorano insieme, ognuno
+nella propria cartella.
+
+**Telegram.** Puoi collegare un bot Telegram e scrivere a Orchestra dal
+telefono, con i permessi e gli strumenti di sempre. Più persone possono
+scrivere allo stesso bot, e chi comanda lo sa (vedi [sotto](#telegram-dal-telefono)).
+
+**Consiglio (Roast Room).** Una decisione importante può essere messa sul
+tavolo: più advisor la guardano da angolazioni diverse, in round, e alla
+fine c'è un verdetto con il parere del chair. L'idea e una parte
+dell'interfaccia vengono dal progetto open source *Roast Room*: merito agli
+autori originali.
+
+**Benchmark onesto.** Misura i modelli per tipo di compito con verifiche
+oggettive — niente modello che giudica un altro modello.
+
+**Permessi.** Leggere fuori dalla cartella di lavoro, eseguire comandi o
+avviare automazioni richiede una conferma esplicita. Se non c'è un canale
+per chiedertela, la risposta predefinita è **no**.
+
+**Diagnostica.** `orchestra doctor`, il pannello Diagnosi e la guida
+integrata su `/docs`. Lo storico dei turni resta in `storico.db`: puoi
+filtrare per esito, vedere gli errori e gli argomenti dei tool.
+
+## Telegram dal telefono
+
+In **Opzioni → Telegram** scegli il bot, incolla il token di
+[@BotFather](https://t.me/BotFather) e fai leggere il QR con il telefono:
+la chat resta collegata e da lì puoi lavorare senza il computer davanti.
+
+| Comando | Cosa fa |
 |---|---|
-| `agent.py` | Il loop agentico e le sue invarianti |
-| `goal.py` | Obiettivi persistenti, scheduler, retry |
-| `delega.py` / `recupero.py` | Sub-agenti e politiche di retry |
-| `bots.py` | Identità persistenti, sessioni separate e ponte fra bot |
-| `policy.py` | Policy per bot: tool e shell ammessi, applicata dopo il profilo |
-| `lavori.py` | Coda durevole su SQLite per i lavori in background |
-| `worktree.py` | Checkout git isolati per i lavori dei bot |
-| `identita.py` | Nome e persona dell'agente principale, senza creare un bot |
-| `accettazione.py` | Gate di completamento e criteri dichiarativi |
-| `tools/` | Pacchetto dei tool: `__init__.py` registro e profili, `_guard.py` le guardie condivise, un modulo per tool |
-| `providers.py` | Adapter provider OpenAI-compatibili |
-| `context.py` | Conteggio token e compaction |
-| `session.py` | Ponte loop sincrono / consumatori asincroni |
-| `certificati.py` | Radici di certificati che servono a Orchestra, e come si controllano |
-| `update.py` | Aggiornamento da release GitHub |
-| `webapp.py` | Server HTTP stdlib + SSE |
-| `web/` | Interfaccia HTML/CSS/JS puro, zero dipendenze |
-| `cli.py` | Tutti i comandi |
+| `/aiuto` | la lista dei comandi |
+| `/stato` | modello, turno in corso, chat collegate |
+| `/modello` | cambiare modello con i pulsanti |
+| `/ragionamento` | livello di ragionamento, e se vedere il suo pensiero in chat |
+| `/obiettivo <testo>` | avviare un obiettivo (senza testo: elenco degli aperti) |
+| `/consiglio <decisione>` | chi mettere al tavolo, e perché |
+| `/steer <testo>` | guidare il turno mentre lavora |
+| `/stop` | fermare il turno |
+| `/nuova` | ricominciare da una conversazione vuota |
+| `/aggiorna`, `/riavvia` | aggiornare o riavviare il server dal telefono |
+| `/scollega` | staccare questa chat |
+
+Più persone possono scrivere allo stesso bot (fino a cinque): ognuna si
+collega con il codice del pannello, riceve le risposte nella propria chat,
+e può essere revocata singolarmente dal pannello senza buttare fuori le
+altre. La conversazione però è una sola per bot: `/nuova` la azzera per
+tutti e `/stop` ferma il turno di chiunque stia lavorando — il bot te lo
+dice quando le chat sono più di una.
+
+## Modelli, provider, quanto spende
+
+- **Provider.** Funziona con qualunque servizio compatibile OpenAI:
+  OpenRouter, OpenAI, Google, Groq, NVIDIA, Nous e altri. Basta una chiave.
+- **In locale.** Con Ollama o un endpoint compatibile non esce niente dalla
+  tua macchina e non paghi niente.
+- **Ripieghi a mano.** Se un modello cade, puoi dire a Orchestra quali
+  altri provare (fino a tre, anche di servizi diversi). Spento, usa solo il
+  modello scelto: nessun ripiego a sorpresa, e nel benchmark nessun
+  risultato attribuito al modello sbagliato.
+- **Livello di ragionamento.** Da `auto` a `max`. Più alto = più pensa e
+  più costa.
+- **Tetto di risposta.** `ORCHESTRA_MAX_TOKENS` in `orchestra/.env`, o dal
+  pannello: alzalo se le risposte arrivano troncate.
+
+## Dati, privacy, sicurezza
+
+- Il server ascolta **solo su `127.0.0.1`** e non ha autenticazione: è
+  pensato per un computer tuo, a casa. Non esporlo su internet senza
+  proteggerlo.
+- Le chiavi API stanno in `orchestra/.env` sulla tua macchina, e non
+  vengono mai mandate da nessuna parte tranne al provider che hai scelto.
+- Lo storico dei turni è in `storico.db`, sempre sul tuo disco.
+- Quello che esce dal computer è solo ciò che serve al modello per
+  rispondere: il testo, i file che legge, gli screenshot del browser.
+- La sandbox dei file è una guardia sui percorsi, **non** un container: non
+  far eseguire all'agente comandi che non lanceresti tu. Le policy dei bot
+  restringono cosa può fare, ma girano nello stesso processo.
 
 ## Trasparenza (Reg. UE 2024/1689, AI Act)
 
-**Stai parlando con un'IA.** Orchestra è un assistente di intelligenza artificiale: le risposte e i file che scrive sono generati da un modello di terzi, e possono essere sbagliati. L'avviso è nella barra in alto e al primo avvio; le modifiche di ogni turno si vedono con il pulsante `Δ` e si annullano con `↶`.
+**Stai parlando con un'IA.** Le risposte e i file che Orchestra scrive sono
+generati da un modello di terzi e possono essere sbagliati, anche quando
+sembrano sicuri. L'avviso è nella barra in alto e al primo avvio; le
+modifiche di ogni turno si vedono con `Δ` e si annullano con `↶`.
 
-**Cosa esce dalla macchina.** Il prompt, il contenuto dei file che l'agente legge, gli screenshot del browser e le immagini di riferimento vengono inviati al provider che hai configurato (OpenRouter, OpenAI, Google, Groq, NVIDIA o un endpoint locale) e sono soggetti alla sua informativa. Non vengono inviati ad altri. Le chiavi restano nel tuo `orchestra/.env`; lo storico dei turni resta in `storico.db` sulla tua macchina.
+**I contenuti sintetici sono dichiarati.** Le immagini generate portano un
+metadato dentro il file e un `<nome>.ai.json` accanto, con generatore,
+provider, modello e data.
 
-**Immagini generate.** Ogni immagine prodotta da `immagine` con `azione="genera"` è marcata come contenuto sintetico: un chunk nei PNG e, per qualunque formato, un file `<nome>.ai.json` accanto all'immagine.
+**A cosa non serve.** Non è uno strumento per decidere sulle persone:
+niente selezione del personale, ammissioni, credito, assicurazioni,
+diagnosi o giustizia. Non è certificato e non garantisce un risultato: il
+codice che produce va letto e provato prima di usarlo davvero.
 
-**A cosa non serve.** Non è uno strumento per decidere sulle persone: non usarlo per selezione o valutazione del personale, ammissioni scolastiche, credito, assicurazioni, diagnosi o terapia, giustizia. Non è un prodotto certificato né una garanzia di risultato: è software gratuito, scritto da una persona, e il codice che genera va letto prima di usarlo in produzione.
+Il dettaglio — cosa esce dalla macchina, come si annulla, cosa non devi
+aspettarti — è in [`AI-ACT.md`](AI-ACT.md).
 
-Il dettaglio — cosa esce dalla macchina, come si annulla, a cosa non serve — è in [`AI-ACT.md`](AI-ACT.md).
+## Da sorgente (macOS, Linux, o se vuoi smanettare)
 
-## Sicurezza e limiti onesti
-
-- Il server ascolta solo su `127.0.0.1` e **non ha autenticazione**: è pensato per uso locale, singolo utente. Non esporlo su rete senza protezioni.
-- La sandbox dei file è una guardia sui percorsi, non un isolamento di processo: non far eseguire all’agente comandi che non lanceresti tu.
-- La policy dei bot restringe tool e comandi shell, ma resta in-process: un interprete consentito (per esempio `python`) può fare quello che sa fare. Non sostituisce un container.
-- Le chiavi API stanno solo nel tuo `.env` locale, mai nel repo.
-
-## Test
+Serve Python 3.11 o superiore.
 
 ```bash
-python tests/run_all.py
+git clone https://github.com/advers1ty-it/orchestra.git
+cd orchestra
+python -m orchestra.cli web            # interfaccia web su 127.0.0.1:8737
 ```
 
-La suite gira senza rete (l’e2e col provider vero si salta da solo senza chiave). Alcuni test vogliono il server acceso su `8737`. Dettagli e filosofia dei test nella documentazione integrata (`/docs`).
+Dalla riga di comando, senza aprire il browser:
 
-La stessa suite gira da sola su GitHub Actions (`.github/workflows/ci.yml`): a ogni push e a ogni pull request, su Ubuntu e Windows, senza chiavi vere — il server di test e la cartella dati se li crea `tests/run_all.py`. Una volta al giorno un job separato esegue l’e2e con la chiave vera dal secret `OPENROUTER_API_KEY`. Se il secret manca, l’e2e si salta e lo dice: non risulta verde.
+```bash
+python -m orchestra.cli doctor                 # controlla configurazione e connessione
+python -m orchestra.cli chat                   # sessione interattiva
+python -m orchestra.cli run "il tuo compito"    # esegui e esci
+python -m orchestra.cli goal "obiettivo"        # obiettivo autonomo
+python -m orchestra.cli goals --pronti          # cosa partirebbe adesso
+python -m orchestra.cli scheduler --una-volta   # svuota la coda e esci
+python -m orchestra.cli update --check          # c'è una versione nuova?
+```
+
+Le dipendenze facoltative (`ddgs` per la ricerca web, `Pillow` per le
+immagini, `pypdf` per i PDF) stanno in `requirements.txt`: senza, Orchestra
+funziona lo stesso e ti dice cosa manca quando serve.
+
+Per contribuire o capire com'è fatto: `python tests/run_all.py` esegue la
+suite completa. La stessa suite gira su GitHub Actions a ogni push, su
+Ubuntu e Windows, senza chiavi vere.
+
+## Licenza
+
+**GNU Affero General Public License v3.0 o successive** (AGPL-3.0-or-later).
+Il testo completo è in [`LICENSE`](LICENSE).
+
+In due righe: puoi usarlo, studiarlo, modificarlo e ridistribuirlo
+gratis — anche in azienda — a patto che le versioni modificate restino
+libere allo stesso modo. Se un giorno qualcuno offre Orchestra modificato
+come servizio in rete, deve rendere disponibile il codice sorgente a chi
+lo usa. Non ci sono garanzie: è software gratuito, e chi lo usa se ne
+prende la responsabilità.
+
+Il nome **Orchestra** e il marchio **advers1ty-it** non sono coperti dalla
+licenza: le versioni modificate non possono presentarsi come se fossero
+questo progetto.
+
+## Crediti e segnalazioni
+
+- Ideato e mantenuto da **advers1ty-it**, con l'aiuto di codice generato da
+  modelli di IA e rivisto prima di ogni rilascio.
+- L'idea del *Consiglio* e una parte della sua interfaccia vengono dal
+  progetto open source **Roast Room**.
+- Un ringraziamento a chi tiene in piedi Python, SQLite e le librerie
+  facoltative che Orchestra usa.
+
+Problemi, idee, richieste: apri una
+[issue](https://github.com/advers1ty-it/orchestra/issues). Se riguarda la
+sicurezza o un dato che non doveva uscire, scrivilo nel titolo: è la prima
+cosa che verrà letta. Non c'è un supporto garantito — questo è un progetto
+gratuito portato avanti nel tempo libero.

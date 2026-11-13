@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,10 @@ name = "orchestra"
 dynamic = ["version"]
 description = "Orchestratore agentico in Python puro"
 requires-python = ">=3.11"
+# AGPL-3.0-or-later: le versioni modificate restano libere allo stesso
+# modo, e chi offre Orchestra come servizio in rete deve dare il sorgente.
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 
 [project.scripts]
 orchestra = "orchestra.cli:main"

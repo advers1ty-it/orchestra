@@ -53,7 +53,8 @@ Orchestra scrive codice, non decide sulle persone. Non usarlo per:
 - qualunque decisione che produca effetti giuridici su una persona.
 
 Non è un prodotto certificato e non garantisce un risultato: è software
-gratuito, scritto da una persona. Il codice che genera va letto e provato
+gratuito, sviluppato da **advers1ty-it** con l'aiuto di strumenti di IA
+e rivisto prima di ogni rilascio. Il codice che genera va letto e provato
 prima di finire in produzione — come tutto il codice generato.
 
 ## Se qualcosa non va
