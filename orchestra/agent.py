@@ -1526,20 +1526,31 @@ class Agent:
                         # Il fallback sul metodo in blocco è dentro
                         # `chat_stream`, quindi un provider che non lo fa
                         # non rompe niente.
+                        # Temperatura e tetto di output vengono dalla
+                        # CONFIGURAZIONE dell'agente, non dalla entry.
+                        # La entry aveva i suoi (4096/0.7) e li usava al
+                        # posto della config: `ORCHESTRA_MAX_TOKENS` non
+                        # aveva effetto su nessuna chiamata, e con
+                        # `reasoning: max` i 4096 finivano dentro il
+                        # ragionamento lasciando la risposta troncata.
+                        # Due posti per lo stesso numero non sono un
+                        # doppione innocuo: uno dei due vince in
+                        # silenzio, e non e' quello che l'utente ha
+                        # impostato.
                         if hasattr(provider, "chat_stream"):
                             return provider.chat_stream(
                                 self.state.messages,
                                 self.registry.api_payload(),
-                                temperature=entry.temperature,
-                                max_tokens=entry.max_tokens,
+                                temperature=self.config.temperature,
+                                max_tokens=self.config.max_tokens,
                                 reasoning_level=self.config.reasoning_level,
                                 on_event=self._on_stream,
                             )
                         return provider.chat(
                             self.state.messages,
                             self.registry.api_payload(),
-                            temperature=entry.temperature,
-                            max_tokens=entry.max_tokens,
+                            temperature=self.config.temperature,
+                            max_tokens=self.config.max_tokens,
                             reasoning_level=self.config.reasoning_level,
                         )
                     except ProviderError as e:

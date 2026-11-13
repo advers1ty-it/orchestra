@@ -31,9 +31,10 @@ class ChainEntry:
     name: str = ""                    # display name
     max_retries: int = 3              # retries on this provider before falling back
     timeout: int = 120                # seconds
-    temperature: float = 0.7
-    max_tokens: int = 4096
-    reasoning_level: str | None = None
+    # Qui c'erano `temperature`, `max_tokens` e `reasoning_level` della
+    # entry, e il loop le usava al posto di `LoopConfig`: ORCHESTRA_MAX_TOKENS
+    # non aveva effetto su nessuna chiamata. La configurazione
+    # dell'agente e' l'unica fonte; una entry non porta parametri suoi.
     # Only try this entry if the request matches these categories
     # Empty = matches all categories
     categories: list[str] = field(default_factory=list)

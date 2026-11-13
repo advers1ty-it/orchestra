@@ -394,6 +394,80 @@ sorgente_webapp = open(webapp_mod.__file__, encoding="utf-8").read()
 check("il figlio della delega web prende la catena manuale",
       "figlio.fallback_chain = catena_per_agente(figlio" in sorgente_webapp)
 
+# -------------------------------- temperatura e tetto vengono dalla config
+print("\n[10] La chiamata usa la configurazione dell'agente")
+
+from orchestra import LLMResponse  # noqa: E402
+
+
+class ProviderCheRegistra:
+    """Registra i parametri con cui e' stato chiamato."""
+
+    name = "nous"
+    model = "meituan/longcat-2.5:free"
+
+    def __init__(self):
+        self.visti = []
+
+    def chat_stream(self, messaggi, tool=None, **kw):
+        self.visti.append(kw)
+        return LLMResponse(content="ok", model=self.model,
+                           prompt_tokens=1, completion_tokens=1)
+
+
+class ProviderSenzaStreaming:
+    """Come sopra, ma SENZA `chat_stream`: prende il ramo in blocco.
+
+    Non eredita: `hasattr(provider, "chat_stream")` guarda l'attributo,
+    quindi un `chat_stream = None` verrebbe chiamato e esploderebbe.
+    """
+
+    name = "nous"
+    model = "meituan/longcat-2.5:free"
+
+    def __init__(self):
+        self.visti = []
+
+    def chat(self, messaggi, tool=None, **kw):
+        self.visti.append(kw)
+        return LLMResponse(content="ok", model=self.model,
+                           prompt_tokens=1, completion_tokens=1)
+
+
+prov = ProviderCheRegistra()
+ag = Agent(prov, default_registry(), "SYS",
+           LoopConfig(max_tokens=12345, temperature=0.25, reasoning_level="max"))
+ag._call_model_with_retry()
+kw = prov.visti[-1]
+check("streaming: il tetto viene dalla config",
+      kw.get("max_tokens") == 12345, str(kw.get("max_tokens")))
+check("streaming: la temperatura viene dalla config",
+      abs(float(kw.get("temperature", -1)) - 0.25) < 1e-9,
+      str(kw.get("temperature")))
+check("streaming: il default 4096 della entry non arriva piu'",
+      kw.get("max_tokens") != 4096, str(kw.get("max_tokens")))
+check("streaming: il reasoning level viene dalla config",
+      kw.get("reasoning_level") == "max", str(kw.get("reasoning_level")))
+
+prov_blocco = ProviderSenzaStreaming()
+ag_blocco = Agent(prov_blocco, default_registry(), "SYS",
+                  LoopConfig(max_tokens=9000, temperature=0.1))
+ag_blocco._call_model_with_retry()
+kw_blocco = prov_blocco.visti[-1]
+check("senza streaming: stesso tetto dalla config",
+      kw_blocco.get("max_tokens") == 9000, str(kw_blocco.get("max_tokens")))
+check("senza streaming: stessa temperatura dalla config",
+      abs(float(kw_blocco.get("temperature", -1)) - 0.1) < 1e-9,
+      str(kw_blocco.get("temperature")))
+
+# La fonte unica vale solo se l'altra e' sparita: se la entry tornasse a
+# portare i suoi parametri, il doppione silenzioso tornerebbe con lei.
+voce = fb_mod.ChainEntry("nous", "m")
+check("la entry non porta piu' parametri della chiamata",
+      not any(hasattr(voce, attr)
+              for attr in ("max_tokens", "temperature", "reasoning_level")),
+      str(sorted(vars(voce))))
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)
