@@ -142,7 +142,7 @@ def _log_telegram(messaggio: str) -> None:
     print(f"[telegram] {messaggio}", file=sys.stderr, flush=True)
 
 
-def _canale_telegram(bot_id: int) -> str:
+def _canale_telegram(bot_id: int, chat: str = "") -> str:
     """Come si presenta il ponte a chi riceve il turno.
 
     Il turno che arriva da Telegram e' identico a uno della finestra —
@@ -150,16 +150,26 @@ def _canale_telegram(bot_id: int) -> str:
     l'agente non ha nessun modo di sapere dove sta scrivendo: e' il bug
     per cui negava di essere su Telegram mentre ci stava rispondendo. Il
     nome della chat serve perche' un utente puo' averne collegata una e
-    non ricordare quale.
+    non ricordare quale; con piu' persone sullo stesso bot, e' quello di
+    chi ha scritto il turno, altrimenti l'agente saluta la persona
+    sbagliata.
     """
     from . import telegram as tg
 
     try:
-        chat, nome = tg.chat_di(bot_id)
+        elenco = tg.chat_collegate(bot_id)
     except Exception:  # noqa: BLE001 - il canale non fa cadere il turno
         return "Telegram"
-    dove = nome or chat
-    return f"Telegram (chat «{dove}»)" if dove else "Telegram"
+    if not elenco:
+        return "Telegram"
+    voce = next((c for c in elenco if c.get("chat_id") == chat), None) \
+        or elenco[0]
+    dove = voce.get("nome") or voce.get("chat_id") or ""
+    if not dove:
+        return "Telegram"
+    altre = len(elenco) - 1
+    return (f"Telegram (chat «{dove}»" + (f", altre {altre} collegate"
+                                           if altre > 0 else "") + ")")
 
 
 def _coda(testo: str, quanti: int) -> str:
@@ -2313,8 +2323,12 @@ class OrchestraApp:
         # il primo turno che passava di qui.
         eventi = sess.bridge.stream(timeout=0.4)
         try:
+            ponte = (getattr(self, "_telegram_ponti", {}) or {}).get(
+                int(bot_id))
+            _chi_turno = getattr(ponte, "chat_turno", None)
+            dove = str(_chi_turno() or "") if callable(_chi_turno) else ""
             if not sess.send(testo, allegati=allegati or None,
-                             canale=_canale_telegram(bot_id)):
+                             canale=_canale_telegram(bot_id, dove)):
                 return ("C'e' gia' un turno in corso su questo bot: rimanda "
                         "il messaggio quando ha finito.")
             stato = self._telegram_segui(sess, eventi, avanzamento, b)
@@ -2561,7 +2575,8 @@ class OrchestraApp:
             return 900.0
 
     def telegram_comando(self, bot_id: int, nome: str,
-                         argomento: str = "") -> str | dict[str, Any]:
+                         argomento: str = "",
+                         chat: str = "") -> str | dict[str, Any]:
         """I comandi che si possono dare al bot dal telefono.
 
         Un comando non e' un turno: non costa token e non entra nella
@@ -2596,18 +2611,35 @@ class OrchestraApp:
             if not sess.busy:
                 return ("Nessun turno in corso. (Per staccare questa chat "
                         "dal bot: /scollega.)")
+            altre = self._telegram_altre_chat(bot_id)
             sess.cancel()
-            return "Ho chiesto di fermare il turno."
+            if not altre:
+                return "Ho chiesto di fermare il turno."
+            # Con piu' chat collegate la sessione e' una sola: fermare
+            # "il turno" vuol dire fermare quello di chiunque lo stia
+            # facendo, non solo il proprio. Dirlo e' l'unica cosa onesta.
+            return ("Ho chiesto di fermare il turno.\n\nLa sessione e' una "
+                    f"sola per tutte le {altre + 1} chat collegate: questo "
+                    "ferma il turno di chiunque lo stia facendo, non solo "
+                    "il tuo.")
         if nome == "nuova":
             if sess.busy:
                 return "C'e' un turno in corso: /stop, poi /nuova."
+            altre = self._telegram_altre_chat(bot_id)
             sess.reset()
+            if not altre:
+                return ("Nuova conversazione. La precedente resta nella "
+                        "cronologia di Orchestra.")
+            # Stesso motivo: azzerare qui azzera anche agli altri, e chi
+            # lo fa deve saperlo prima di premere invio.
             return ("Nuova conversazione. La precedente resta nella "
-                    "cronologia di Orchestra.")
+                    "cronologia di Orchestra.\n\nLa conversazione e' una "
+                    f"sola per tutte le {altre + 1} chat collegate: "
+                    "riparte da zero anche per loro.")
         if nome in ("aggiorna", "update"):
-            return self._telegram_aggiorna(bot_id, sess)
+            return self._telegram_aggiorna(bot_id, sess, chat)
         if nome in ("riavvia", "restart"):
-            return self._telegram_riavvia(sess)
+            return self._telegram_riavvia(sess, chat)
         if nome == "modello":
             return self._telegram_modello(b, argomento)
         if nome in ("reasoning", "ragionamento"):
@@ -2632,6 +2664,19 @@ class OrchestraApp:
         if nome == "consiglio":
             return self._telegram_consiglio(argomento)
         return f"Comando /{nome} non riconosciuto. /aiuto per la lista."
+
+    def _telegram_altre_chat(self, bot_id: int) -> int:
+        """Quante altre chat, oltre a quella che scrive, sono collegate.
+
+        0 (una sola chat, il caso di sempre) vuol dire "non c'e' nessun
+        altro da avvisare": i messaggi restano quelli di prima.
+        """
+        from . import telegram as tg
+
+        try:
+            return max(0, len(tg.chat_collegate(bot_id)) - 1)
+        except Exception:  # noqa: BLE001 - un conteggio non ferma il comando
+            return 0
 
     def _telegram_livello_reasoning(self, sess: Any, livello: str) -> str:
         """Imposta il livello di reasoning, e lo salva per i prossimi avvii.
@@ -2791,7 +2836,8 @@ class OrchestraApp:
             testo = [esito, ""] + testo
         return {"testo": "\n".join(testo), "tastiera": righe}
 
-    def _telegram_aggiorna(self, bot_id: int, sess: Any) -> str:
+    def _telegram_aggiorna(self, bot_id: int, sess: Any, chat: str = "") \
+            -> str:
         """Scarica l'ultima release e, se c'e', riavvia il server.
 
         Gira nel thread del ponte: la chat resta zitta mentre scarica,
@@ -2808,7 +2854,8 @@ class OrchestraApp:
                     "aspetta che finisca.")
         from . import update as update_mod
 
-        self._telegram_annuncia(bot_id, "Controllo le release e aggiorno...")
+        self._telegram_annuncia(bot_id, "Controllo le release e aggiorno...",
+                                chat)
         try:
             esito = update_mod.aggiorna(REPO_AGGIORNAMENTO)
         except Exception as e:  # noqa: BLE001 - UpdateError, rete, zip rotto
@@ -2822,7 +2869,7 @@ class OrchestraApp:
         return (f"Aggiornato {esito.get('locale')} -> {esito.get('remota')} "
                 f"({esito.get('file', 0)} file). Riavvio il server...")
 
-    def _telegram_riavvia(self, sess: Any) -> str:
+    def _telegram_riavvia(self, sess: Any, chat: str = "") -> str:
         """Riavvia il server, senza aggiornare niente."""
         if sess.busy:
             return ("C'e' un turno in corso: /stop, poi /riavvia. "
@@ -2834,17 +2881,21 @@ class OrchestraApp:
         return ("Riavvio il server: torna tra qualche secondo, "
                 "la chat resta questa.")
 
-    def _telegram_annuncia(self, bot_id: int, testo: str) -> bool:
+    def _telegram_annuncia(self, bot_id: int, testo: str,
+                           chat: str = "") -> bool:
         """Manda una riga in chat prima di un'operazione lunga.
 
         La manda il ponte, che ha gia' la chat giusta: se il bot non e'
-        collegato non e' un errore, e l'operazione prosegue lo stesso.
+        collegato non e' un errore, e l'operazione prosegue lo stesso. La
+        chat e' quella che ha dato il comando: fuori da un turno non c'e'
+        un "turno in corso" da cui ricavarla, e mandare l'annuncio alla
+        persona sbagliata e' peggio che non mandarlo.
         """
         ponte = (getattr(self, "_telegram_ponti", {}) or {}).get(int(bot_id))
         if ponte is None:
             return False
         try:
-            return bool(ponte.recapita(testo))
+            return bool(ponte.recapita(testo, chat=chat))
         except Exception:  # noqa: BLE001 - un annuncio perso non ferma l'update
             return False
 
@@ -3328,8 +3379,12 @@ class OrchestraApp:
             if tg.codice_in_corso(b["id"]):
                 righe.append("C'e' un codice di collegamento attivo "
                              "(vale dieci minuti).")
-            if tg.chat_di(b["id"])[0]:
-                righe.append("Chat Telegram collegata.")
+            elenco = tg.chat_collegate(b["id"])
+            if elenco:
+                nomi = ", ".join(c.get("nome") or c.get("chat_id") or "?"
+                                for c in elenco[:5])
+                righe.append(f"Chat Telegram collegate ({len(elenco)}): "
+                             f"{nomi}")
         except Exception:  # noqa: BLE001
             pass
         if getattr(sess.agent, "modalita_piano", False):
@@ -3650,8 +3705,8 @@ class OrchestraApp:
                 bid, nome, tg.Api(token),
                 (lambda testo, allegati=None, avanzamento=None, b=bid:
                  self.telegram_turno(b, testo, allegati, avanzamento)),
-                comandi=(lambda cmd, arg="", b=bid:
-                         self.telegram_comando(b, cmd, arg)),
+                comandi=(lambda cmd, arg="", chat="", b=bid:
+                         self.telegram_comando(b, cmd, arg, chat)),
                 # I pulsanti non sono tutti del menu dei modelli: qui si
                 # smista (permesso, risposta, menu), e la risposta scritta
                 # quando una domanda e' aperta arriva nella stessa chat.

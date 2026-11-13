@@ -245,6 +245,9 @@ SUITES = [
     # test, un comando che risponde "non riconosciuto" sembra un typo
     # dell'utente.
     ("telegram-comandi", "test_telegram_comandi.py", True),
+    # Piu' persone sullo stesso bot: prima il secondo /start staccava il
+    # primo, e la persona di prima smetteva di ricevere risposte.
+    ("telegram-multichat", "test_telegram_multichat.py", True),
     ("telegram_sessione", "test_telegram_sessione.py", True),
     # La riga con cui il server si rilancia: con l'avvio `-m` quella
     # sbagliata esegue il file del modulo come script e il server non

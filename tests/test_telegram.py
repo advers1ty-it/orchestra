@@ -77,6 +77,10 @@ class FintoTelegram:
         # registrarla un ponte che lo scrive sembrerebbe identico a uno
         # che non lo tocca.
         self.menu = []
+        # Le cancellazioni di menu: servono a togliere i comandi lasciati
+        # da un'altra app sullo stesso bot, che altrimenti vincono sul
+        # nostro quando sono su uno scope piu' specifico.
+        self.menu_cancellati = []
 
     def messaggio(self, chat_id, testo, nome="prova"):
         self.ultimo_id += 1
@@ -148,6 +152,9 @@ class FintoTelegram:
         if metodo == "setMyCommands":
             self.menu.append(dict(dati))
             return {"ok": True, "result": True}
+        if metodo == "deleteMyCommands":
+            self.menu_cancellati.append(dict(dati))
+            return {"ok": True, "result": True}
         if metodo == "getMe":
             return {"ok": True, "result": {"id": 1, "username": "prova_bot",
                                            "first_name": "Prova"}}
@@ -215,7 +222,10 @@ def ponte(finto, risposte=None, bot_id=7, comandi=None, turno=None,
 
 
 def comandi_finti(chiamate, risposte=None):
-    def comandi(nome, argomento=""):
+    # Il ponte passa anche la chat che ha dato il comando: con piu'
+    # persone sullo stesso bot, l'annuncio di /aggiorna deve arrivare a
+    # chi l'ha chiesto e non alla prima chat dell'elenco.
+    def comandi(nome, argomento="", chat=""):
         chiamate.append((nome, argomento))
         if risposte and nome in risposte:
             return risposte[nome]
@@ -427,7 +437,7 @@ print("\n[9b] il menu dei comandi: e' del bot, e Orchestra lo riscrive")
 finto = FintoTelegram()
 p, _chiamate = ponte(finto)
 tg.salva_token(7, TOKEN)
-tg.imposta_chat(7, "", "")
+tg.dimentica_chat(7)
 p.passo()
 check("all'avvio il menu viene scritto", len(finto.menu) == 1,
       str(len(finto.menu)))
@@ -448,6 +458,84 @@ check("e si riscrive quando una chat si collega", len(finto.menu) == 2,
 check("senza perdere le voci",
       json.loads(finto.menu[-1].get("commands") or "[]") == voci,
       str(finto.menu[-1]))
+
+# Il menu vive sul bot e Telegram lo tiene per scope: uno scope piu'
+# specifico (questo chat, tutti i privati) VINCE sul default. Scrivere il
+# nostro senza cancellare quelli lascerebbe in vista i comandi di prima,
+# che e' esattamente il caso "restano quelli di Hermes".
+check("il nostro menu dichiara lo scope default",
+      json.loads((finto.menu[0].get("scope") or "{}")) == {"type": "default"},
+      str(finto.menu[0].get("scope")))
+scope_cancellati = [json.loads(c["scope"]).get("type")
+                    for c in finto.menu_cancellati if c.get("scope")]
+check("prima cancella il menu di default, scoperto",
+      any("scope" not in c for c in finto.menu_cancellati),
+      str(finto.menu_cancellati))
+check("e anche gli scope che coprono il default",
+      "all_private_chats" in scope_cancellati
+      and "all_group_chats" in scope_cancellati, str(scope_cancellati))
+check("quando una chat si collega si cancella anche il suo scope",
+      any(str(c.get("scope") or "").find('"chat_id": 555') >= 0
+          for c in finto.menu_cancellati),
+      str([c.get("scope") for c in finto.menu_cancellati]))
+check("e il ponte sa di avere il menu a posto", p._menu_ok is True, "no")
+
+print("\n[9c] all'avvio il menu si allinea da solo, e se fallisce si ritenta")
+# Il difetto da non ripetere: il menu si scriveva al primo giro, e se
+# quella chiamata cadeva non si riprovava mai piu'. Chi riavviava il
+# server restava con i comandi vecchi finche' non ricreava il ponte.
+import threading  # noqa: E402
+import time as _time  # noqa: E402
+
+finto_avvio = FintoTelegram()
+api_avvio = tg.Api(TOKEN, trasporto=finto_avvio, scarica=finto_avvio.scarica,
+                   carica=finto_avvio.carica)
+p_avvio = tg.Ponte(12, "Prova", api_avvio, lambda *a, **k: "", attesa=0)
+check("prima di girare il menu non e' allineato", p_avvio._menu_ok is False,
+      "si")
+thread_avvio = threading.Thread(target=p_avvio.gira, daemon=True)
+thread_avvio.start()
+for _ in range(120):
+    if p_avvio._menu_ok:
+        break
+    _time.sleep(0.05)
+check("gira() scrive il menu senza aspettare un messaggio",
+      p_avvio._menu_ok is True and len(finto_avvio.menu) >= 1,
+      str(len(finto_avvio.menu)))
+p_avvio._fermo.set()
+thread_avvio.join(timeout=5)
+
+
+class ApiInstabile(FintoTelegram):
+    """Rifiuta `setMyCommands` le prime volte, come una rete appena sveglia."""
+
+    def __init__(self, rifiuti):
+        super().__init__()
+        self.rifiuti = rifiuti
+
+    def __call__(self, url, dati, secondi):
+        if (url.rsplit("/", 1)[-1] == "setMyCommands"
+                and isinstance(dati, dict) and self.rifiuti > 0):
+            self.rifiuti -= 1
+            raise tg.ErroreTelegram("rete non raggiungibile", 502)
+        return super().__call__(url, dati, secondi)
+
+
+instabile = ApiInstabile(2)
+api_instabile = tg.Api(TOKEN, trasporto=instabile,
+                       scarica=instabile.scarica, carica=instabile.carica)
+p_instabile = tg.Ponte(13, "Prova", api_instabile, lambda *a, **k: "",
+                       attesa=0)
+p_instabile._riallinea_menu()
+check("un tentativo caduto non viene spacciato per riuscito",
+      p_instabile._menu_ok is False, "si")
+p_instabile._riallinea_menu()
+check("e si ritenta al giro dopo", p_instabile._menu_ok is False
+      and instabile.rifiuti == 0, str(instabile.rifiuti))
+p_instabile._riallinea_menu()
+check("al terzo tentativo il menu e' scritto davvero",
+      p_instabile._menu_ok is True and len(instabile.menu) == 1,
+      str(len(instabile.menu)))
 
 print("\n[10] un ponte senza comandi non finge di averli")
 finto = FintoTelegram()
@@ -739,7 +827,7 @@ menu_modelli = {"testo": "Groq · 2 modelli",
 visti_menu = []
 
 
-def comandi_menu(nome, argomento=""):
+def comandi_menu(nome, argomento="", chat=""):
     visti_menu.append((nome, argomento))
     if argomento == "cb:s:groq":
         return menu_modelli

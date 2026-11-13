@@ -122,7 +122,17 @@ class RotteTelegram:
     @rotta("POST", "/api/telegram/scollega")
     def _r_post_telegram_scollega(self, path: str, body: dict[str, Any],
                                   s: Any) -> None:
-        """Toglie la chat, e il ponte si ferma: il codice resta."""
+        """Stacca UNA chat, o tutte se non se ne nomina una.
+
+        Con `chat_id` si revoca una persona sola e le altre continuano a
+        scrivere: e' il caso di un bot con piu' chat collegate. Senza,
+        stacca tutto — che resta il "togli il telefono da questo bot".
+
+        Una chat che non risulta collegata non e' un successo: rispondere
+        `ok` vorrebbe dire aver rimosso qualcosa che non c'era, e chi
+        clicca su un elenco vecchio crederebbe di aver revocato la
+        persona giusta.
+        """
         from . import bots as bots_mod
         from . import telegram as tg
 
@@ -130,5 +140,11 @@ class RotteTelegram:
         if not bot:
             self._json({"error": "bot sconosciuto"}, 404)
             return
-        tg.dimentica_chat(bot["id"])
-        self._json({"ok": True, "stato": tg.stato(bot["id"])})
+        chat = str(body.get("chat_id") or "").strip()
+        if chat and not tg.chat_collegata(bot["id"], chat):
+            self._json({"error": "questa chat non e' collegata a questo "
+                                 "bot: l'elenco e' cambiato, riaprilo"}, 404)
+            return
+        tg.dimentica_chat(bot["id"], chat or None)
+        self._json({"ok": True, "scollegata": chat,
+                    "stato": tg.stato(bot["id"])})

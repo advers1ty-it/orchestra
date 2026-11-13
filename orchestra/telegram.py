@@ -294,7 +294,23 @@ CREATE TABLE IF NOT EXISTS telegram (
     creato      REAL NOT NULL,
     aggiornato  REAL NOT NULL
 );
+
+-- Le chat collegate a un bot: prima era una colonna sola, quindi una
+-- persona per bot e ogni nuovo collegamento staccava il precedente.
+-- Qui sono righe: un bot puo' avere piu' persone, ognuna con la sua chat.
+CREATE TABLE IF NOT EXISTS telegram_chat (
+    bot_id      INTEGER NOT NULL,
+    chat_id     TEXT NOT NULL,
+    nome        TEXT NOT NULL DEFAULT '',
+    creato      REAL NOT NULL,
+    PRIMARY KEY (bot_id, chat_id)
+);
 """
+
+# Quante persone possono scrivere allo stesso bot. Cinque e' gia' un
+# gruppo di lavoro; il numero serve a fermare un collegamento impazzito o
+# un codice finito in un posto pubblico, non a mettere un limite a tre.
+MASSIMO_CHAT = 5
 
 
 def percorso_db() -> str:
@@ -321,6 +337,14 @@ def _db() -> sqlite3.Connection:
                      "NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+    # La chat che c'era nella riga diventa il primo elemento dell'elenco.
+    # Idempotente: la chiave e' (bot_id, chat_id), quindi il secondo avvio
+    # non duplica niente — e chi ha gia' il database non perde il
+    # collegamento che stava usando.
+    conn.execute(
+        "INSERT OR IGNORE INTO telegram_chat (bot_id, chat_id, nome, creato) "
+        "SELECT bot_id, chat_id, chat_nome, creato FROM telegram "
+        "WHERE chat_id <> ''")
     conn.commit()
     return conn
 
@@ -401,13 +425,22 @@ def stato(bot_id: int | str) -> dict[str, Any]:
                          (int(bot_id),)).fetchone()
     if not r:
         return {"bot_id": int(bot_id), "token": False, "collegato": False,
-                "chat": "", "username": ""}
+                "chat": "", "chat_quante": 0, "chats": [],
+                "username": ""}
     riga = _riga(r)
+    elenco = chat_collegate(bot_id)
+    nome = riga["chat_nome"] or riga["chat_id"]
+    if len(elenco) > 1:
+        # Una riga sola nel pannello, ma vera: con tre chat "Anna" e'
+        # mezza informazione, e il numero dice che ce ne sono altre.
+        nome = f"{nome} (+{len(elenco) - 1})"
     return {
         "bot_id": riga["bot_id"],
         "token": bool(riga["token"]),
-        "collegato": bool(riga["chat_id"]),
-        "chat": riga["chat_nome"] or riga["chat_id"],
+        "collegato": bool(elenco),
+        "chat": nome,
+        "chat_quante": len(elenco),
+        "chats": elenco,
         "username": riga["username"],
     }
 
@@ -453,23 +486,96 @@ def salva_token(bot_id: int | str, token: str) -> dict[str, Any]:
     return stato(bot_id)
 
 
+def chat_collegate(bot_id: int | str) -> list[dict[str, str]]:
+    """Tutte le chat collegate a questo bot, dalla prima collegata."""
+    with _LOCK, _db() as conn:
+        righe = conn.execute(
+            "SELECT chat_id, nome FROM telegram_chat WHERE bot_id = ? "
+            "ORDER BY creato, chat_id", (int(bot_id),)).fetchall()
+    return [{"chat_id": r["chat_id"] or "", "nome": r["nome"] or ""}
+            for r in righe]
+
+
+def chat_collegata(bot_id: int | str, chat_id: str | int) -> bool:
+    """Vero se QUESTA chat puo' scrivere a questo bot."""
+    with _LOCK, _db() as conn:
+        r = conn.execute(
+            "SELECT 1 FROM telegram_chat WHERE bot_id = ? AND chat_id = ?",
+            (int(bot_id), str(chat_id))).fetchone()
+    return bool(r)
+
+
+def _allinea_primaria(conn: sqlite3.Connection, bot_id: int) -> None:
+    """Tiene `telegram.chat_id` uguale alla prima chat dell'elenco.
+
+    La colonna resta perche' la usano il pannello e il recapito di
+    ripiego: con piu' chat collegate e' la "principale", e la verita'
+    sull'accesso e' nell'elenco.
+    """
+    r = conn.execute(
+        "SELECT chat_id, nome FROM telegram_chat WHERE bot_id = ? "
+        "ORDER BY creato, chat_id LIMIT 1", (bot_id,)).fetchone()
+    conn.execute("UPDATE telegram SET chat_id = ?, chat_nome = ?, "
+                 "aggiornato = ? WHERE bot_id = ?",
+                 ((r["chat_id"] or "") if r else "",
+                  (r["nome"] or "") if r else "", time.time(), bot_id))
+
+
 def imposta_chat(bot_id: int | str, chat_id: str | int,
                  nome: str = "") -> dict[str, Any]:
-    """Lega questa chat al bot. Una chat alla volta: la nuova sostituisce."""
+    """Lega questa chat al bot, senza staccare le altre.
+
+    Torna lo stato con `ok`: False quando l'elenco e' pieno, perche' il
+    ponte deve poterlo dire in chat invece di far finta di aver 
+    collegato qualcuno che non ricevera' niente.
+    """
+    bid = int(bot_id)
+    if not str(chat_id).strip():
+        # Una chat vuota non e' una chat: creerebbe una riga che fa
+        # risultare collegato un bot che non lo e'. Per staccare c'e'
+        # `dimentica_chat`.
+        return {**stato(bot_id), "ok": False,
+                "errore": "chat_id vuoto"}
     with _LOCK, _db() as conn:
-        conn.execute("UPDATE telegram SET chat_id = ?, chat_nome = ?, "
-                     "aggiornato = ? WHERE bot_id = ?",
-                     (str(chat_id), (nome or "").strip(), time.time(),
-                      int(bot_id)))
+        gia = conn.execute(
+            "SELECT 1 FROM telegram_chat WHERE bot_id = ? AND chat_id = ?",
+            (bid, str(chat_id))).fetchone()
+        if not gia:
+            quante = conn.execute(
+                "SELECT COUNT(*) AS n FROM telegram_chat WHERE bot_id = ?",
+                (bid,)).fetchone()["n"]
+            if int(quante) >= MASSIMO_CHAT:
+                # Niente scritture: si esce dal blocco e si dice di no.
+                return {"ok": False, "chat_quante": int(quante),
+                        "errore": f"Questo bot ha gia' {MASSIMO_CHAT} chat "
+                                  "collegate: /scollega da una di quelle, "
+                                  "poi riprova."}
+        conn.execute(
+            "INSERT INTO telegram_chat (bot_id, chat_id, nome, creato) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(bot_id, chat_id) DO UPDATE "
+            "SET nome = excluded.nome",
+            (bid, str(chat_id), (nome or "").strip(), time.time()))
+        _allinea_primaria(conn, bid)
         conn.commit()
-    return stato(bot_id)
+    return {**stato(bot_id), "ok": True}
 
 
-def dimentica_chat(bot_id: int | str) -> dict[str, Any]:
+def dimentica_chat(bot_id: int | str, chat_id: str | int | None = None) \
+        -> dict[str, Any]:
+    """Stacca una chat, o tutte se non se ne nomina una.
+
+    Il pannello stacca tutto (e' il suo interruttore); il ponte stacca solo
+    chi ha scritto `/scollega`, che altrimenti vorrebbe dire permetttere a
+    una persona di buttare fuori le altre.
+    """
+    bid = int(bot_id)
     with _LOCK, _db() as conn:
-        conn.execute("UPDATE telegram SET chat_id = '', chat_nome = '', "
-                     "aggiornato = ? WHERE bot_id = ?",
-                     (time.time(), int(bot_id)))
+        if chat_id is None:
+            conn.execute("DELETE FROM telegram_chat WHERE bot_id = ?", (bid,))
+        else:
+            conn.execute("DELETE FROM telegram_chat WHERE bot_id = ? "
+                         "AND chat_id = ?", (bid, str(chat_id)))
+        _allinea_primaria(conn, bid)
         conn.commit()
     return stato(bot_id)
 
@@ -876,18 +982,41 @@ class Api:
         return True
 
     def set_my_commands(self, comandi: tuple[tuple[str, str], ...] | None = None,
-                        secondi: float = 20) -> bool:
+                        secondi: float = 20,
+                        scope: dict[str, Any] | None = None) -> bool:
         """Scrive il menu degli slash sul bot.
 
         `commands` e' una lista JSON, non un campo ripetuto: Telegram
         vuole nome e descrizione insieme, e una stringa JSON e' l'unico
         modo di mandarli in una chiamata sola.
+
+        `scope` si manda sempre, esplicito: Telegram ha piu' scope (un
+        singolo chat, tutti i privati, i gruppi, gli amministratori) e
+        senza dirlo si scrive solo il `default`. Uno scope piu'
+        specifico — per esempio quello lasciato da un'altra app sullo
+        stesso bot — vince sul default, quindi "ho scritto il menu" non
+        vuol dire "il menu e' questo".
         """
         voci = list(COMANDI_MENU if comandi is None else comandi)
         risultato = self.chiama(
             "setMyCommands", secondi=secondi,
+            scope=json.dumps(scope or {"type": "default"}),
             commands=json.dumps([{"command": c, "description": d}
                                  for c, d in voci], ensure_ascii=False))
+        return bool(risultato.get("ok"))
+
+    def delete_my_commands(self, scope: dict[str, Any] | None = None,
+                           secondi: float = 20) -> bool:
+        """Cancella i comandi di uno scope (senza scope: il default).
+
+        Serve a togliere il menu di un'altra applicazione dallo stesso
+        bot: finche' quel menu esiste, chi preme "/" vede comandi che
+        questo bot non capisce.
+        """
+        campi: dict[str, Any] = {}
+        if scope is not None:
+            campi["scope"] = json.dumps(scope)
+        risultato = self.chiama("deleteMyCommands", secondi=secondi, **campi)
         return bool(risultato.get("ok"))
 
     def get_me(self, secondi: float = 15) -> dict[str, Any]:
@@ -1286,7 +1415,7 @@ class Ponte:
     """
 
     def __init__(self, bot_id: int, nome: str, api: Api, turno: Callable[..., Any],
-                 *, comandi: Callable[[str, str], str | dict[str, Any]]
+                 *, comandi: Callable[..., str | dict[str, Any]]
                  | None = None,
                  tocco: Callable[[str], str | dict[str, Any] | None] | None = None,
                  risposta: Callable[[str], str | None] | None = None,
@@ -1317,6 +1446,16 @@ class Ponte:
         self._album_lock = threading.Lock()
         self.fatti = 0
         self.ultimo_turno = 0.0
+        # La chat del turno in corso. Con piu' persone collegate allo
+        # stesso bot, la risposta che arriva DOPO l'attesa e le domande
+        # dell'agente devono andare a chi ha chiesto, non alla prima chat
+        # dell'elenco. Vuota fuori da un turno: li' non c'e' nessuno da
+        # preferire, e si usa la principale.
+        self._chat_turno = ""
+        # Il menu degli slash e' scritto e verificato? All'avvio si prova
+        # subito; se non riesce, si ritenta (vedi `_riallinea_menu`).
+        self._menu_ok = False
+        self._menu_prova = 0.0
 
     # --- ciclo -----------------------------------------------------
     def avvia(self) -> "Ponte":
@@ -1365,26 +1504,76 @@ class Ponte:
         t.join(timeout=secondi)
         return not t.is_alive()
 
-    def _allinea_comandi(self) -> None:
-        """Riallinea il menu degli slash a questo bot.
+    def _allinea_comandi(self) -> bool:
+        """Riallinea il menu degli slash a questo bot. True se ci e' riuscito.
 
-        Non e' estetica: il menu vive sul bot, non nell'applicazione. Un
-        bot usato prima con un'altra app si porta dietro i suoi comandi, e
-        chi preme "/" li prova convinto che siano di Orchestra. Una
-        chiamata all'avvio e una quando una chat si collega bastano a non
-        lasciarlo indietro.
+        Non e' estetica: il menu vive sul bot, non nell'applicazione, e
+        Telegram lo tiene per scope. Un bot usato prima con un'altra app
+        (Hermes e simili) si porta dietro i suoi comandi, e se li ha
+        scritti per un singolo chat o "tutti i privati" quelli VINCONO
+        sul default: scrivere il nostro senza cancellarli lascerebbe in
+        vista proprio i comandi vecchi. Percio' prima si cancellano tutti
+        gli scope che possono coprire il default, poi si scrive il nostro.
+
+        Torna False se qualcosa e' andato storto, cosi' chi chiama puo'
+        riprovare invece di considerare il menu allineato per sempre.
         """
+        ok = True
+        scope: list[dict[str, Any] | None] = [
+            None,  # il default
+            {"type": "all_private_chats"},
+            {"type": "all_group_chats"},
+        ]
+        for voce in chat_collegate(self.bot_id):
+            try:
+                ident = int(str(voce.get("chat_id") or "").strip())
+            except (TypeError, ValueError):
+                continue
+            scope.append({"type": "chat", "chat_id": ident})
+        for s in scope:
+            try:
+                self.api.delete_my_commands(s)
+            except Exception as e:  # noqa: BLE001 - il menu non ferma il ponte
+                ok = False
+                self._log(f"telegram {self.nome}: comandi vecchi non "
+                          f"cancellati ({s or 'default'}): "
+                          f"{type(e).__name__}: {e}")
         try:
-            self.api.set_my_commands()
-        except Exception as e:  # noqa: BLE001 - il menu non ferma il ponte
+            if not self.api.set_my_commands():
+                ok = False
+        except Exception as e:  # noqa: BLE001
+            ok = False
             self._log(f"telegram {self.nome}: menu comandi non aggiornato: "
                       f"{type(e).__name__}: {e}")
+        return ok
+
+    def _riallinea_menu(self) -> None:
+        """Prova a scrivere il menu, e ricorda com'e' andata.
+
+        Il tentativo viene ricordato nel tempo: un menu che non si riesce
+        a scrivere (rete appena sveglia, 409 perche' un altro processo sta
+        facendo polling) si ritenta, ma non a ogni giro di polling — che
+        vorrebbe dire una chiamata al secondo e un log pieno.
+        """
+        self._menu_prova = time.monotonic()
+        self._menu_ok = self._allinea_comandi()
 
     def gira(self) -> None:
         try:
             self.api.senza_webhook()
         except ErroreTelegram:
             pass
+        # Il menu si allinea QUI, non al primo messaggio: chi riavvia il
+        # server e apre Telegram deve vedere i comandi giusti subito, non
+        # dopo aver scritto qualcosa. Tre tentativi, perche' la prima
+        # chiamata dopo un avvio puo' cadere mentre la rete si sveglia.
+        for _tentativo in range(3):
+            if self._fermo.is_set():
+                return
+            self._riallinea_menu()
+            if self._menu_ok:
+                break
+            self._fermo.wait(2.0)
         while not self._fermo.is_set():
             try:
                 quanti = self.passo()
@@ -1411,7 +1600,8 @@ class Ponte:
         attese vere.
         """
         if self._primo:
-            self._allinea_comandi()
+            if not self._menu_ok:
+                self._riallinea_menu()
             self._primo = False
             # L'arretrato non si rigioca: si prende l'ultimo
             # aggiornamento e si riparte da dopo.
@@ -1439,6 +1629,10 @@ class Ponte:
             self._gestisci(messaggio)
             gestiti += 1
             self.fatti += 1
+        # Un menu che non si e' riusciti a scrivere si ritenta da solo,
+        # ma non a ogni giro: al massimo una volta al minuto.
+        if not self._menu_ok and time.monotonic() - self._menu_prova > 60:
+            self._riallinea_menu()
         return gestiti
 
     # --- messaggi --------------------------------------------------
@@ -1492,15 +1686,30 @@ class Ponte:
                         return
                     time.sleep(RITENTA_ATTESA * (2 ** tentativo))
 
+    def chat_turno(self) -> str:
+        """La chat che sta facendo il turno adesso, o vuota.
+
+        Fuori da un turno non c'e': chi chiama decide allora (la
+        principale, o quella che ha chiesto un comando).
+        """
+        return self._chat_turno
+
     def recapita(self, testo: str,
-                 file: list[dict[str, Any]] | None = None) -> bool:
+                 file: list[dict[str, Any]] | None = None,
+                 chat: str = "") -> bool:
         """Manda una risposta che il turno ha prodotto DOPO l'attesa.
 
         La chat si rilegge adesso invece di tenerla da parte: se nel
-        frattempo e' stata scollegata o sostituita, un messaggio alla
-        vecchia sarebbe un messaggio a un numero sbagliato.
+        frattempo e' stata scollegata, un messaggio alla vecchia sarebbe
+        un messaggio a un numero sbagliato. Prima si prova quella del
+        turno (`chat`, o l'ultima che ne ha fatto uno): con piu' persone
+        collegate, "la chat del bot" non basta piu'.
         """
-        chat, _nome_chat = chat_di(self.bot_id)
+        chat = (chat or "" ).strip() or self._chat_turno
+        if not chat:
+            chat, _nome_chat = chat_di(self.bot_id)
+        if chat and not chat_collegata(self.bot_id, chat):
+            return False
         if not chat or not (testo or "").strip():
             return False
         self.api.scrive(chat)
@@ -1547,8 +1756,14 @@ class Ponte:
         False se non c'e' una chat a cui chiedere: in quel caso la
         domanda resta nella finestra, come prima.
         """
-        chat, _nome = chat_di(self.bot_id)
+        # La domanda va a chi sta facendo il turno: se la mandassimo alla
+        # chat principale, con due persone collegate sarebbe una domanda
+        # posta a una persona che non ha chiesto niente, e l'altra
+        # resterebbe in attesa senza vedere i pulsanti.
+        chat = self._chat_turno
         if not chat:
+            chat, _nome = chat_di(self.bot_id)
+        if not chat or not chat_collegata(self.bot_id, chat):
             return False
         token = _token()
         if tipo == "permission_request":
@@ -1590,8 +1805,7 @@ class Ponte:
             message_id = 0
         if not chat_id:
             return
-        legata, _nome_chat = chat_di(self.bot_id)
-        if not legata or legata != chat_id:
+        if not chat_collegata(self.bot_id, chat_id):
             self.api.answer_callback(cb_id,
                                      "Questa chat non e' collegata a Orchestra.")
             return
@@ -1602,7 +1816,7 @@ class Ponte:
             if self.tocco is not None:
                 risposta = self.tocco(dati)
             else:
-                risposta = self.comandi("modello", f"cb:{dati}")
+                risposta = self.comandi("modello", f"cb:{dati}", chat_id)
         except Exception as e:  # noqa: BLE001
             risposta = (f"Errore nel modulo: {type(e).__name__}: {e}")
         self.api.answer_callback(cb_id)
@@ -1631,14 +1845,14 @@ class Ponte:
         allegato = allegato_da(messaggio)
         chi = (chat.get("username") or chat.get("first_name")
                or chat.get("title") or chat_id)
-        legata, _nome_chat = chat_di(self.bot_id)
+        collegata = chat_collegata(self.bot_id, chat_id)
 
         if testo.startswith("/"):
             comando, _, argomento = testo.partition(" ")
             comando = comando.split("@", 1)[0].lower()
             argomento = argomento.strip()
             if comando == "/start":
-                self._start(chat_id, chi, argomento, legata)
+                self._start(chat_id, chi, argomento)
                 return
             if comando in ("/aiuto", "/guida", "/help", "/comandi"):
                 self._rispondi(chat_id, GUIDA)
@@ -1648,21 +1862,27 @@ class Ponte:
             # fare altrimenti dal telefono. Staccare la chat si fa
             # apposta, con un comando che lo dice.
             if comando == "/scollega":
-                if legata and legata == chat_id:
-                    dimentica_chat(self.bot_id)
+                if collegata:
+                    # Stacca SOLO questa chat: con piu' persone sullo
+                    # stesso bot, un comando mandato da una non deve
+                    # buttare fuori le altre.
+                    esito = dimentica_chat(self.bot_id, chat_id)
+                    altre = int(esito.get("chat_quante") or 0)
+                    resto = (f" Restano {altre} chat collegate." if altre
+                             else "")
                     self._rispondi(chat_id, "Scollegato. Da adesso non "
-                                            "rispondo piu' qui.")
+                                            "rispondo piu' qui." + resto)
                 else:
                     self._rispondi(chat_id, "Questa chat non e' collegata "
                                             "a nessun bot di Orchestra.")
                 return
-            if not legata or legata != chat_id:
+            if not collegata:
                 self._rispondi(chat_id, _invito_collegare())
                 return
             self._comando(chat_id, comando, argomento)
             return
 
-        if not legata or legata != chat_id:
+        if not collegata:
             # Nessun turno, nessun tool, nessun costo: chi non ha il
             # codice riceve una spiegazione, non un agente.
             self._rispondi(chat_id, _invito_collegare())
@@ -1733,7 +1953,7 @@ class Ponte:
                                         "lista.")
             return
         try:
-            risposta = self.comandi(nome, argomento)
+            risposta = self.comandi(nome, argomento, chat_id)
         except Exception as e:  # noqa: BLE001
             risposta = f"Errore nel comando /{nome}: {type(e).__name__}: {e}"
         if isinstance(risposta, dict):
@@ -1741,22 +1961,32 @@ class Ponte:
             return
         self._rispondi(chat_id, risposta or "Fatto.")
 
-    def _start(self, chat_id: str, chi: str, argomento: str,
-               legata: str) -> None:
-        if legata and legata == chat_id:
+    def _start(self, chat_id: str, chi: str, argomento: str) -> None:
+        if chat_collegata(self.bot_id, chat_id):
             self._rispondi(chat_id, f"Sei gia' collegato a {self.nome}. "
                                     "Scrivi e ti rispondo, /aiuto per i "
                                     "comandi.")
             return
         if argomento and codice_valido(self.bot_id, argomento):
-            imposta_chat(self.bot_id, chat_id, chi)
-            self._allinea_comandi()
+            esito = imposta_chat(self.bot_id, chat_id, chi)
+            if not esito.get("ok", True):
+                self._rispondi(chat_id, str(esito.get("errore") or
+                                            "Non posso collegare un'altra "
+                                            "chat a questo bot."))
+                return
+            self._riallinea_menu()
+            quante = int(esito.get("chat_quante") or 1)
+            altri = (f"\n\nSu questo bot scrivono anche altre "
+                     f"{quante - 1} chat: la conversazione e' la stessa, "
+                     "e le risposte le riceve chi ha chiesto." if quante > 1
+                     else "")
             self._rispondi(chat_id,
                            f"Collegato a {self.nome}.\n\n"
                            "Quello che scrivi qui arriva all'agente, con i "
                            "suoi tool e i suoi permessi. Mentre lavora "
                            "puoi guidarlo scrivendo, e fermarlo con /stop. "
-                           "/aiuto per i comandi, /scollega per staccare.")
+                           "/aiuto per i comandi, /scollega per staccare."
+                           + altri)
             return
         # Codice assente, scaduto o sbagliato: si dice cosa fare, non se
         # esiste un codice.
@@ -1828,6 +2058,10 @@ class Ponte:
 
     def _esegui_turno(self, chat_id: str, testo: str,
                       allegati_rif: list[dict[str, Any]]) -> None:
+        # Da qui in poi, domande e risposte differite sanno a chi parlare.
+        # Un turno per volta (la sessione e' occupata finche' dura), quindi
+        # questa e' davvero la chat del turno in corso.
+        self._chat_turno = chat_id
         allegati: list[Any] = []
         richiesta = (testo or "").strip()
         testi: list[str] = []

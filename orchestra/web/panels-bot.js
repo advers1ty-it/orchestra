@@ -650,6 +650,55 @@ function tgElenca(voci) {
   if (voci.some((x) => String(x.bot_id) === attuale)) sel.value = attuale;
 }
 
+// L'elenco delle chat collegate, una riga per persona con la sua
+// revoca. "Scollega la chat" stacca tutte: con due persone sullo stesso
+// bot serve poter togliere quella che non deve piu' scrivere, senza
+// buttare fuori anche l'altra.
+function tgElencoChat(v) {
+  const box = $("tg-chat");
+  if (!box) return;
+  box.innerHTML = "";
+  const chats = ((v && v.chats) || [])
+    .filter((c) => c && (c.nome || c.chat_id));
+  if (!chats.length) return;
+  const titolo = document.createElement("div");
+  titolo.textContent = chats.length > 1
+    ? ("Chat collegate (" + chats.length + "):")
+    : "Chat collegata:";
+  box.appendChild(titolo);
+  for (const c of chats) {
+    const riga = document.createElement("div");
+    riga.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:4px";
+    const nome = document.createElement("span");
+    const etichetta = c.nome || String(c.chat_id);
+    nome.textContent = c.nome && c.chat_id && String(c.chat_id) !== c.nome
+      ? (etichetta + " (" + c.chat_id + ")")
+      : etichetta;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ghost";
+    b.textContent = "Revoca";
+    b.title = "Stacca solo questa chat";
+    b.addEventListener("click", () => revocaChatTelegram(c.chat_id));
+    riga.appendChild(nome);
+    riga.appendChild(b);
+    box.appendChild(riga);
+  }
+}
+
+async function revocaChatTelegram(chatId) {
+  const id = tgId();
+  if (id === null || Number.isNaN(id)) { tgNota("scegli un bot", true); return; }
+  try {
+    const d = await chiamaTelegram("/api/telegram/scollega",
+                                   { id: id, chat_id: String(chatId) });
+    if (d.error) { tgNota(d.error, true); return; }
+    await caricaTelegram();
+  } catch (e) {
+    tgNota("errore di rete: chat non revocata", true);
+  }
+}
+
 async function caricaTelegram() {
   const el = $("tg-stato");
   if (!el) return;
@@ -668,13 +717,22 @@ async function caricaTelegram() {
     if (!v) { tgNota("stato Telegram non disponibile", true); return; }
     if (!v.token) {
       tgNota("nessun token: incolla qui sotto quello di @BotFather");
+      tgElencoChat(null);
       return;
     }
     const pezzi = ["bot @" + (v.username || "?")];
-    pezzi.push(v.collegato ? ("chat collegata: " + v.chat)
-                           : "nessuna chat collegata");
+    // Piu' persone possono scrivere allo stesso bot: elencarle tutte,
+    // perche' "chat collegata: Anna (+1)" non dice chi e' l'altra.
+    const chats = (v.chats || [])
+      .map((c) => c.nome || c.chat_id).filter(Boolean);
+    pezzi.push(v.collegato
+      ? ((chats.length > 1
+          ? "chat collegate (" + chats.length + "): "
+          : "chat collegata: ") + chats.join(", "))
+      : "nessuna chat collegata");
     pezzi.push(v.attivo ? "in ascolto" : "non in ascolto");
     tgNota(pezzi.join(" · "));
+    tgElencoChat(v);
   } catch (e) {
     tgNota("non riesco a leggere lo stato Telegram", true);
   }
