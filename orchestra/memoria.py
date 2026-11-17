@@ -89,6 +89,54 @@ _RE_ALTA = re.compile(r"\s*\[alta\]\s*$", re.IGNORECASE)
 # La fonte resta nella sintassi `_origine_`, che e' gia' li'.
 _RE_PROGETTO = re.compile(r"\s*\[progetto:([^\]]*)\]\s*$", re.IGNORECASE)
 
+# Un fatto scritto come REGOLA vale domani come oggi, e deve stare in
+# `## Importanti`, che e' la sezione che entra nel prompt. In `## Fatti`
+# aspetta che qualcuno lo cerchi, e nessuno lo cerca: il caso vero e'
+# "usa solo il calendario di nova gestionale", salvato con un "Salvato in
+# memoria" e mai applicato al turno dopo.
+#
+# La lista e' corta di proposito. Una euristica larga riempirebbe
+# `## Importanti`, che ha un tetto di 1.000 caratteri: il fatto
+# importante vero uscirebbe dal prompt per fare posto a un fatto
+# qualunque. Le formule sono quelle con cui una persona scrive una
+# preferenza fissa, non quelle con cui descrive una cosa.
+_RE_REGOLA = (
+    re.compile(r"\b(?:da|d')\s*ora in poi\b", re.IGNORECASE),
+    re.compile(r"\busa(?:re|te)?\s+sempre\b", re.IGNORECASE),
+    # "solo" copre gia' "sempre e solo": una regola in piu' per una formula
+    # che ne contiene un'altra era solo un caso da mantenere.
+    re.compile(r"\b(?:solo|soltanto|unicamente)\b", re.IGNORECASE),
+    re.compile(r"\bnon\s+(?:usare|usiamo|fare|facciamo)\s+mai\b",
+               re.IGNORECASE),
+    re.compile(r"\bpreferisc[oi]\b", re.IGNORECASE),
+    re.compile(r"\bregola\s*:", re.IGNORECASE),
+)
+
+# Il marcatore che dice "importante per decisione dell'euristica, non
+# perche' qualcuno l'ha marcata". Sta in fondo alla riga, dopo il commento
+# con la data, e si riconosce ANCORATO alla fine: cosi' un `[auto]` che sta
+# dentro il testo di un fatto non viene ne' scambiato per marcatura ne'
+# mangiato leggendo. Lo stesso pattern riconosce e toglie.
+_RE_AUTO = re.compile(r"\s*\[auto\]\s*$", re.IGNORECASE)
+
+
+def sembra_regola(fatto: str) -> bool:
+    """Vero se il fatto e' scritto come una regola, non come un dato.
+
+    La differenza non e' stilistica: una regola che resta in `## Fatti`
+    non entra nel prompt, e il modello la ignora al turno dopo anche se
+    l'utente l'ha appena dettata. Il prezzo di promuovere un fatto che
+    non era una regola e' una riga in piu' nel prompt; il prezzo di non
+    promuoverne una e' una preferenza che non viene mai rispettata.
+
+    La scelta resta reversibile: chi scrive il file a mano puo' spostare
+    la riga in `## Fatti`, e `importante=True` continua a funzionare.
+    """
+    testo = (fatto or "").strip()
+    if not testo:
+        return False
+    return any(r.search(testo) for r in _RE_REGOLA)
+
 
 def _pulizia_riga(corpo: str) -> tuple[str, str, str]:
     """Toglie la marcatura da una riga di fatto. Torna (testo, fonte, progetto).
@@ -116,10 +164,121 @@ def _pulizia_riga(corpo: str) -> tuple[str, str, str]:
             fonte = (m2.group(0) or "").strip().strip("_").strip()
             testo = _RE_FONTE.sub("", testo)
         testo = _RE_ALTA.sub("", testo)
+        testo = _RE_AUTO.sub("", testo)
         testo = testo.strip()
         if testo == prima:
             break
     return testo, fonte, progetto
+
+
+def _marca_auto(riga: str) -> str:
+    """Aggiunge `[auto]` in fondo alla riga, se non c'e' gia'.
+
+    In fondo e non in mezzo alla coda: il marcatore si riconosce ancorato
+    alla fine, quindi un `[auto]` dentro il testo del fatto resta testo.
+    Una riga gia' marcata torna identica: la migrazione deve poter girare
+    due volte senza raddoppiare niente.
+    """
+    corpo = riga.rstrip("\r\n")
+    term = riga[len(corpo):]
+    if corpo.lower().endswith("[auto]"):
+        return riga
+    return corpo + "  [auto]" + term
+
+
+def sposta_regole(testo: str) -> tuple[str, int]:
+    """Porta in `## Importanti` le regole rimaste in `## Fatti`.
+
+    Perche' serve un passaggio e non basta `sembra_regola` in
+    `aggiungi`: le regole scritte PRIMA che il riconoscimento esistesse
+    sono gia' nel file, in `## Fatti`, e li' restano. Nessuno le riscrive
+    — e `## Fatti` non entra nel prompt: sono preferenze che l'utente ha
+    dettato, ha visto confermate con un "salvato", e che il modello non
+    legge mai piu'.
+
+    Si sposta la RIGA INTERA, marcatura compresa: data, fonte e
+    `[progetto:...]` sono l'unica traccia di quando e da dove il fatto e'
+    arrivato, e ricostruirli qui vorrebbe dire inventarli.
+
+    Se `## Importanti` non c'e' si crea in fondo. Una regola gia'
+    presente fra gli Importanti non si duplica.
+
+    Funzione pura (testo dentro, testo fuori) perche' il passaggio si
+    possa provare senza toccare un file vero.
+    """
+    righe = testo.splitlines(keepends=True)
+
+    def corpo(riga: str) -> str:
+        r = riga.strip()
+        if not r.startswith("-"):
+            return ""
+        return _pulizia_riga(r.lstrip("-").strip())[0]
+
+    sezione = ""
+    gia_importanti: set[str] = set()
+    for riga in righe:
+        r = riga.strip()
+        if r.startswith("## "):
+            sezione = r
+        elif sezione == "## Importanti":
+            c = corpo(riga)
+            if c:
+                gia_importanti.add(c)
+
+    tenute: list[str] = []
+    spostate: list[str] = []
+    sezione = ""
+    for riga in righe:
+        r = riga.strip()
+        if r.startswith("## "):
+            sezione = r
+            tenute.append(riga)
+            continue
+        if sezione != "## Importanti":
+            c = corpo(riga)
+            if c and sembra_regola(c) and c not in gia_importanti:
+                gia_importanti.add(c)
+                spostate.append(_marca_auto(
+                    riga if riga.endswith("\n") else riga + "\n"))
+                continue
+        tenute.append(riga)
+
+    if not spostate:
+        return testo, 0
+
+    # L'inserimento va in FONDO alla prima sezione Importanti: spostarle
+    # in cima cambierebbe l'ordine dei fatti gia' li', che e' l'ordine in
+    # cui sono stati detti.
+    fuori: list[str] = []
+    sezione = ""
+    inserite = False
+    i = 0
+    while i < len(tenute):
+        riga = tenute[i]
+        r = riga.strip()
+        if r.startswith("## "):
+            sezione = r
+            fuori.append(riga)
+            i += 1
+            if sezione == "## Importanti" and not inserite:
+                while i < len(tenute) \
+                        and not tenute[i].strip().startswith("## "):
+                    fuori.append(tenute[i])
+                    i += 1
+                if fuori and not fuori[-1].endswith("\n"):
+                    fuori[-1] = fuori[-1] + "\n"
+                fuori.extend(spostate)
+                inserite = True
+            continue
+        fuori.append(riga)
+        i += 1
+
+    if not inserite:
+        if fuori and not fuori[-1].endswith("\n"):
+            fuori[-1] = fuori[-1] + "\n"
+        fuori.append("\n## Importanti\n\n" + "".join(spostate))
+
+    return "".join(fuori), len(spostate)
 
 
 class Memoria:
@@ -142,6 +301,9 @@ class Memoria:
         self._visti: set[str] | None = None
         self._cache_fatti_chiave = None
         self._ultimo_mtime = 0.0
+        # Guardia della migrazione: `migra_regole` riscrive il file, e la
+        # riscrittura non deve far ripartire la migrazione.
+        self._migrando = False
         if not os.path.exists(self.percorso):
             self.scrivi_intestazione()
 
@@ -182,6 +344,16 @@ class Memoria:
                     self._visti = None
                     self._cache_fatti_chiave = None
                 except OSError:
+                    pass
+            # Le regole salvate prima che esistesse `sembra_regola` sono
+            # in `## Fatti` e li' restano: `## Fatti` non entra nel
+            # prompt. Il passaggio si fa qui e non a ogni `leggi` perche'
+            # qui il file e' appena stato riletto — se non e' cambiato
+            # non c'e' niente da spostare.
+            if self._cache:
+                try:
+                    self.migra_regole()
+                except Exception:  # noqa: BLE001 - la memoria non si perde
                     pass
 
     def leggi(self) -> str:
@@ -250,6 +422,38 @@ class Memoria:
             # resta "già visto" e non si può più riaggiungere.
             self._visti = None
             self._cache_fatti_chiave = None
+        # Un file scritto a mano, o incollato dal pannello, puo' portare
+        # regole in `## Fatti`: si spostano adesso, o restano fuori dal
+        # prompt fino al prossimo riavvio. Il controllo `_migrando` evita
+        # che la riscrittura della migrazione ne faccia partire un'altra.
+        if not self._migrando:
+            try:
+                self.migra_regole()
+            except Exception:  # noqa: BLE001 - il file e' gia' scritto
+                pass
+
+    def migra_regole(self) -> int:
+        """Sposta in `## Importanti` le regole rimaste in `## Fatti`.
+
+        Ritorna quante righe ha spostato. Zero e' il caso normale: il file
+        e' gia' a posto, o non c'era niente che `sembra_regola` riconoscesse.
+
+        Non solleva verso chi chiama: una migrazione fallita non deve
+        impedire di leggere la memoria, che e' il motivo per cui la si sta
+        leggendo.
+        """
+        with self._lock:
+            if self._migrando or not self._cache:
+                return 0
+            nuovo, quante = sposta_regole(self._cache)
+            if not quante:
+                return 0
+            self._migrando = True
+            try:
+                self.scrivi(nuovo)
+            finally:
+                self._migrando = False
+            return quante
 
     def aggiungi(self, fatto: str, origine: str = "",
                  importante: bool = False, progetto: str = "") -> bool:
@@ -276,6 +480,17 @@ class Memoria:
         if not fatto:
             return False
         progetto = (progetto or "").strip()
+        # Una regola va in `## Importanti` anche se nessuno l'ha marcata:
+        # e' l'unica sezione che entra nel prompt, e una preferenza fissa
+        # che resta in `## Fatti` non viene letta mai piu'.
+        #
+        # Chi l'ha decisa resta scritto nella riga: `[auto]` vuol dire
+        # "promossa dall'euristica", assente vuol dire "scelta a mano".
+        # Serve al taglio del prompt, dove una promozione automatica deve
+        # uscire prima di una regola che qualcuno ha scritto apposta.
+        regola = sembra_regola(fatto)
+        auto = regola and not bool(importante)
+        importante = bool(importante) or regola
         with self._lock:
             # Il confronto va fatto sui fatti PULITI, non sulle righe
             # grezze: una riga scritta da `aggiungi` porta dietro la data
@@ -297,7 +512,13 @@ class Memoria:
                 riga_nuova += f"  [progetto:{progetto}]"
             if origine:
                 riga_nuova += f"  _{origine}_"
-            riga_nuova += f"  <!-- {time.strftime('%Y-%m-%d')} -->\n"
+            riga_nuova += f"  <!-- {time.strftime('%Y-%m-%d')} -->"
+            # In fondo, dopo la data: il marcatore si riconosce ancorato
+            # alla fine, così un `[auto]` dentro il testo del fatto non
+            # viene mangiato leggendolo.
+            if auto:
+                riga_nuova += "  [auto]"
+            riga_nuova += "\n"
 
             sezione = "## Importanti" if importante else "## Fatti"
             testo = self.leggi()
@@ -305,7 +526,7 @@ class Memoria:
             # in FONDO: se è quella giusta si appende e basta; se non c'è
             # o è un'altra, si scrive l'intestazione e poi la riga. In
             # Markdown due sezioni con lo stesso nome sono valide, e
-            # `_fatti_della` le concatena nell'ordine.
+            # `importanti_con_origine` le legge tutte, nell'ordine.
             ultima_sezione = ""
             for riga_testo in reversed(testo.splitlines()):
                 if riga_testo.strip().startswith("## "):
@@ -318,35 +539,14 @@ class Memoria:
             return True
 
     def importanti(self) -> list[str]:
-        """I fatti della sezione `## Importanti`: quelli nel prompt."""
-        return self._fatti_della("## Importanti")
+        """I fatti della sezione `## Importanti`: quelli nel prompt.
 
-    def _fatti_della(self, sezione: str) -> list[str]:
-        """I fatti di UNA sezione, senza la marcatura."""
-        with self._lock:
-            testo = self.leggi()
-        if sezione not in testo:
-            return []
-        righe = testo.splitlines()
-        fuori = []
-        visti: set[str] = set()
-        i = 0
-        n = len(righe)
-        while i < n:
-            if righe[i].strip() == sezione:
-                i += 1
-                while i < n and not righe[i].strip().startswith("## "):
-                    r = righe[i].strip()
-                    if r.startswith("-"):
-                        corpo = r.lstrip("-").strip()
-                        corpo = _pulizia_riga(corpo)[0]
-                        if corpo and corpo not in visti:
-                            visti.add(corpo)
-                            fuori.append(corpo)
-                    i += 1
-                continue
-            i += 1
-        return fuori
+        Passa da `importanti_con_origine` invece di rileggere le righe a
+        modo suo: due lettori dello stesso file con due regole diverse
+        divergono al primo ritocco, e la divergenza si vede come un fatto
+        che sta nel prompt in un punto e non nell'altro.
+        """
+        return [testo for testo, _origine in self.importanti_con_origine()]
 
     def elimina(self, fatto: str) -> bool:
         with self._lock:
@@ -416,6 +616,36 @@ class Memoria:
                 # va buttato o il fatto modificato resta "gia' visto".
                 self._visti = None
             return fatto
+
+    def importanti_con_origine(self) -> list[tuple[str, str]]:
+        """I fatti di `## Importanti`, con chi li ha messi li'.
+
+        L'origine vale "mano" per un fatto che qualcuno ha marcato come
+        importante, "auto" per uno che ci e' finito perche' e' scritto
+        come regola (`sembra_regola`). La distinzione non e' curiosita':
+        quando lo spazio del prompt finisce, deve uscire una promozione
+        automatica, non una preferenza che qualcuno ha scritto e marcato
+        apposta.
+        """
+        with self._lock:
+            testo = self.leggi()
+        fuori: list[tuple[str, str]] = []
+        visti: set[str] = set()
+        sezione = ""
+        for riga in testo.splitlines():
+            r = riga.strip()
+            if r.startswith("## "):
+                sezione = r
+                continue
+            if sezione != "## Importanti" or not r.startswith("-"):
+                continue
+            corpo = _pulizia_riga(r.lstrip("-").strip())[0]
+            if not corpo or corpo in visti:
+                continue
+            visti.add(corpo)
+            auto = bool(_RE_AUTO.search(r))
+            fuori.append((corpo, "auto" if auto else "mano"))
+        return fuori
 
     def fatti(self) -> list[str]:
         """I fatti uno per uno, senza la marcatura.

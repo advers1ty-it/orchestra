@@ -301,6 +301,24 @@ class IndiceMemoria:
         return [r["testo"] for r in self._query(
             "SELECT testo FROM fatti WHERE importante = 1")]
 
+    def importanti_con_origine(self) -> list[tuple[str, str]]:
+        """Come `Memoria.importanti_con_origine`, letto dal file.
+
+        Dal file e non dall'indice: l'origine vive nel marcatore `[auto]`
+        della riga, e la colonna `importante` del database dice solo
+        "sta nel prompt", non da che parte e' arrivato. Chiedere al file
+        costa una lettura gia' in cache; indovinare dall'indice
+        vorrebbe dire perdere la distinzione proprio nel momento in cui
+        serve, cioe' quando lo spazio finisce.
+        """
+        metodo = getattr(self.sorgente, "importanti_con_origine", None)
+        if callable(metodo):
+            try:
+                return list(metodo())
+            except Exception:  # noqa: BLE001
+                pass
+        return [(testo, "mano") for testo in self.importanti()]
+
     def aggiungi(self, fatto: str, origine: str = "",
                  importante: bool = False,
                  scade_giorni: int | None = None,

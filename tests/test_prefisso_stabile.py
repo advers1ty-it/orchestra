@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 
 RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RADICE)
 
+from orchestra import memoria as memoria_mod  # noqa: E402
 from orchestra.session import Session, LoopConfig  # noqa: E402
+from orchestra.tools import memoria as tool_mem  # noqa: E402
 from orchestra.tools import default_registry  # noqa: E402
 from orchestra.types import LLMResponse, Message  # noqa: E402
 
@@ -92,7 +95,14 @@ check("il progetto NON e' nel prefisso", "progetto-di-prova" not in base,
 check("il prefisso e' ancora quello", base == "BASE-STABILE", base)
 
 
-print("\n[4] Senza skill e senza progetto il blocco volatile sparisce")
+print("\n[4] Senza skill, senza progetto e senza memoria il blocco volatile sparisce")
+# Il blocco volatile adesso porta anche la memoria (`## Importanti`):
+# "nessun volatile" vuol dire anche "memoria vuota". Senza questa riga il
+# controllo dipenderebbe dai fatti salvati sulla macchina di chi lancia la
+# suite, e passerebbe o fallirebbe a seconda della memoria di chi prova.
+_cartella_memoria = tempfile.mkdtemp(prefix="orch-prefisso-")
+tool_mem.memoria = lambda: memoria_mod.Memoria(
+    percorso=os.path.join(_cartella_memoria, "memory.md"))
 for nome in ("skill_cerca", "skill_leggi", "skill_genera", "skill_importa"):
     s.agent.registry.deactivate(nome)
 s.agent.progetto = ""

@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..memoria import memoria as _memoria_file
+from ..memoria import sembra_regola
 from ..memoria_indice import indice_memoria
 
 
@@ -49,20 +50,45 @@ from ..types import Tool
 TETTO_PROMPT = 1_000
 
 
-def fatti_importanti() -> list[str]:
-    """I fatti da iniettare sempre: quelli marcati `alta`.
+def _coppie_importanti() -> list[tuple[str, str]]:
+    """(testo, origine) dei fatti che vanno nel prompt, se si sa.
 
-    Non è una classifica di importanza decisa da noi: è una marcatura che
-    mette chi scrive il fatto. Se uno non l'ha marcato, non è che valga
-    meno — è che non va ripetuto a ogni turno.
+    L'origine serve a decidere CHI resta fuori quando lo spazio finisce.
+    Un backend che non la conosce (un plugin futuro) non deve rompere il
+    prompt: si ripiega sull'elenco nudo, trattato come scelto a mano.
     """
     try:
         m = memoria()
-    except Exception:
+        prova = getattr(m, "importanti_con_origine", None)
+        if callable(prova):
+            return list(prova())
+        return [(testo, "mano") for testo in m.importanti()]
+    except Exception:  # noqa: BLE001 - senza memoria il prompt resta
         return []
-    # separazione per posizione, non per marcatura: i fatti importanti
-    # stanno nella loro sezione del file
-    return m.importanti()
+
+
+def _righe_entro_tetto(elenco: list[str]) -> tuple[list[str], int]:
+    """Righe che entrano in TETTO_PROMPT, e quante restano fuori.
+
+    Si tiene un fatto INTERO: tagliare a meta' carattere lascia nel
+    prompt una regola mutilata, che il modello legge come completa.
+
+    E si continua dopo uno scarto: un fatto corto che viene dopo uno
+    lungo ci sta lo stesso, e fermarsi al primo che non entra perderebbe
+    roba che entrava.
+    """
+    righe: list[str] = []
+    usati = 0
+    fuori = 0
+    for testo in elenco:
+        riga = f"- {testo}"
+        costo = len(riga) + (1 if righe else 0)
+        if usati + costo > TETTO_PROMPT:
+            fuori += 1
+            continue
+        righe.append(riga)
+        usati += costo
+    return righe, fuori
 
 
 def blocco_prompt() -> str:
@@ -70,14 +96,53 @@ def blocco_prompt() -> str:
 
     Vuoto se non c'è niente marcato: una sezione "preferenze" vuota
     insegna al modello a parlare della memoria invece di usarla.
+
+    L'ordine e' una priorita': prima le regole marcate a mano, poi quelle
+    promosse dall'euristica. Quando lo spazio finisce deve uscire una
+    promozione automatica, non una preferenza che qualcuno ha scritto e
+    marcato apposta.
+
+    E il taglio si DICE. Prima il testo veniva troncato a 1.000
+    caratteri in silenzio: una regola vera spariva dal prompt e nessuno
+    lo sapeva — ne' il modello, che non cerca quello che non sa di
+    avere, ne' chi guarda il prompt e crede che quelle siano tutte le
+    regole. La riga di avviso sta FUORI dal tetto: serve proprio a dire
+    che il tetto ha tagliato, e tagliarla sarebbe il difetto di prima.
     """
-    importanti = fatti_importanti()
-    if not importanti:
+    coppie = _coppie_importanti()
+    if not coppie:
         return ""
-    testo = "\n".join(f"- {f}" for f in importanti)
-    if len(testo) > TETTO_PROMPT:
-        testo = testo[:TETTO_PROMPT] + "\n- [altri fatti: cerca nella memoria]"
-    return testo
+    mano = [testo for testo, origine in coppie if origine != "auto"]
+    auto = [testo for testo, origine in coppie if origine == "auto"]
+    righe, fuori = _righe_entro_tetto(mano + auto)
+    if fuori:
+        righe.append(
+            f"- [altre {fuori} regole fuori da questo elenco: sono in "
+            f"memoria, cercale con `memoria` (azione \"cerca\")]")
+    return "\n".join(righe)
+
+
+INTRO_PROMPT = (
+    "Cose che valgono in ogni conversazione. Non ripeterle se non "
+    "servono. Per tutto il resto hai il tool `memoria`: cerca quello che "
+    "ti serve invece di assumere di non saperlo."
+)
+
+
+def blocco_prompt_completo() -> str:
+    """Il blocco memoria con la sua introduzione, o ''.
+
+    L'introduzione sta qui e non nel prompt di base perche' i fatti e
+    l'introduzione devono viaggiare INSIEME: un prompt che spiega come
+    usare la memoria quando la memoria non c'e' e' una riga in piu' che
+    non serve a niente. E il blocco viene ricalcolato a ogni turno
+    (vedi `Agent._aggiorna_prompt`), quindi una regola salvata durante
+    la sessione entra dal messaggio successivo, senza riavviare.
+    """
+    fatti = blocco_prompt()
+    if not fatti:
+        return ""
+    return f"## Cose che valgono sempre (memoria)\n\n{INTRO_PROMPT}\n\n{fatti}"
 
 
 def tool_memoria() -> Tool:
@@ -183,12 +248,19 @@ def tool_memoria() -> Tool:
             except Exception:  # noqa: BLE001
                 progetto = ""
         m = memoria()
-        alta = priorita.strip().lower() == "alta"
+        # Una regola vale anche se il modello non ha pensato a marcarla:
+        # `Memoria.aggiungi` la promuove da sola, e qui lo si dice, cosi'
+        # chi legge dal telefono sa che da ora vale davvero.
+        regola = sembra_regola(fatto)
+        alta = priorita.strip().lower() == "alta" or regola
         nuovo = m.aggiungi(fatto, origine="agente", importante=alta,
                            progetto=progetto)
         if not nuovo:
             return f"Era già in memoria: {fatto}"
-        return ("Ricordato" + (" (priorità alta)" if alta else "")
+        coda = (" (priorità alta: è una regola, resta nel prompt)"
+                if alta and regola
+                else " (priorità alta)" if alta else "")
+        return ("Ricordato" + coda
                 + (f" [progetto: {progetto}]" if progetto else "")
                 + f": {fatto}")
 

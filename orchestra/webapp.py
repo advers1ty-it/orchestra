@@ -86,8 +86,15 @@ def _https_richiesta(headers: Any) -> bool:
     return proto.strip().lower() == "https"
 
 
-def _prompt_base_con_memoria() -> str:
-    """Il prompt di sistema senza identita', con le cose sempre vere.
+def _prompt_base() -> str:
+    """Il prompt di sistema stabile: regole e istruzioni del progetto.
+
+    NON contiene la memoria. `## Importanti` la mette l'Agent a ogni
+    turno, nel blocco volatile (vedi `Agent._aggiorna_prompt`): prima
+    stava qui, e questo prompt si costruisce una volta sola, alla
+    creazione della sessione. Una regola salvata dopo non entrava piu'
+    finche' la sessione non veniva ricostruita — su un bot acceso da
+    giorni, cioe' mai.
 
     Sta fuori dalla classe perche' serve sia a costruire una sessione sia
     ad aggiornare l'identita' di una sessione viva: nel secondo caso non
@@ -95,7 +102,6 @@ def _prompt_base_con_memoria() -> str:
     punto di partenza va ricomposto allo stesso modo.
     """
     from .istruzioni_progetto import blocco_prompt as blocco_progetto
-    from .tools.memoria import blocco_prompt
 
     prompt = SYSTEM_PROMPT
     # Le istruzioni del repository (AGENTS.md, CLAUDE.md, ...) stanno tra
@@ -104,16 +110,6 @@ def _prompt_base_con_memoria() -> str:
     istruzioni = blocco_progetto()
     if istruzioni:
         prompt = f"{prompt}\n\n{istruzioni}"
-    importanti = blocco_prompt()
-    if importanti:
-        prompt = (
-            f"{prompt}\n\n"
-            f"---\n"
-            f"Cose che valgono in ogni conversazione. Non ripeterle "
-            f"se non servono. Per tutto il resto hai il tool "
-            f"`memoria`: cerca quello che ti serve invece di "
-            f"assumere di non saperlo.\n\n"
-            f"{importanti}")
     return prompt
 
 
@@ -1567,18 +1563,14 @@ class OrchestraApp:
         # Chiamare un metodo dell'app da qui faceva saltare ogni avvio
         # con NameError, presentato come un crash in create() — che e'
         # dove guardavo, e non dove era.
-        # Nel system prompt entra SOLO il poco che deve essere vero
-        # sempre — la sezione `## Importanti`. Il resto lo cerca l'agente
-        # col tool `memoria`.
-        #
-        # Il motivo è il costo: iniettare la memoria intera la paga a ogni
-        # turno, e il prezzo cresce con quanto ricordi. Dopo qualche mese
-        # di uso avvelena il contesto di ogni richiesta, comprese quelle
-        # che non c'entrano niente con quello che c'è salvato. Il tool
-        # costa solo quando si usa.
+        # Qui si costruisce solo il PREFISSO: regole e istruzioni del
+        # progetto. La memoria (`## Importanti`) e le skill le aggiunge
+        # l'Agent a ogni turno, in `_aggiorna_prompt`: cosi' una regola
+        # dettata a chat aperta vale dal messaggio dopo, e il prefisso
+        # resta lo stesso (la cache dei provider continua a colpire).
         from . import identita as identita_mod
 
-        prompt_con_memoria = _prompt_base_con_memoria()
+        prompt_con_memoria = _prompt_base()
         # La persona di un bot viene DOPO le regole, non al posto loro:
         # il bot ha un carattere e un compito, ma resta un agente di
         # Orchestra, con i suoi confini e i suoi divieti. Lo stesso vale
@@ -2146,7 +2138,7 @@ class OrchestraApp:
             target = getattr(self, "_sessione_principale", None)
         if target is not None:
             nuovo = identita_mod.componi_prompt(
-                _prompt_base_con_memoria(), dati["nome"], dati["persona"])
+                _prompt_base(), dati["nome"], dati["persona"])
             try:
                 target.agent.system_prompt = nuovo
                 target.agent._aggiorna_prompt()

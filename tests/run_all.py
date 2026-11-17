@@ -265,6 +265,13 @@ SUITES = [
     # del computer. Ora la risposta si legge dal turno in corso e, se non
     # c'e', si spiega cosa e' successo.
     ("telegram-errori", "test_telegram_errori.py", True),
+    # La memoria importante era cucita nel prompt alla creazione della
+    # sessione: una regola dettata a chat aperta non entrava piu', e un
+    # fatto scritto come regola restava in `## Fatti` (che non entra nel
+    # prompt). Qui si prova che si rilegge a ogni turno, che una regola
+    # va in `## Importanti`, e che il prompt manda a cercare prima di
+    # agire.
+    ("memoria-prompt", "test_memoria_prompt.py", True),
     # I comandi del ponte che non sono chat: livello di reasoning (dal
     # telefono non si poteva impostare), obiettivo e consiglio. Senza
     # test, un comando che risponde "non riconosciuto" sembra un typo

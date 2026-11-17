@@ -48,9 +48,9 @@ check("il blocco dice da dove viene", "AGENTS.md" in blocco, blocco[:120])
 check("il blocco e' dopo le regole di sicurezza",
       "vincono le regole di sicurezza" in blocco.lower(), blocco[:300])
 check("il prompt di sistema lo include",
-      "make test" in webapp._prompt_base_con_memoria())
+      "make test" in webapp._prompt_base())
 check("e le regole di Orchestra restano davanti",
-      webapp._prompt_base_con_memoria().startswith(SYSTEM_PROMPT))
+      webapp._prompt_base().startswith(SYSTEM_PROMPT))
 
 
 print("\n[3] CLAUDE.md arriva dopo, senza duplicare lo stesso testo")

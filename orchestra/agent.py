@@ -764,8 +764,25 @@ class Agent:
                 "l'approvazione esegui esattamente quei passi, senza "
                 "allargarti. Se l'utente rifiuta, non insistere con lo "
                 "stesso piano: chiedi cosa cambiare o fermati.\n\n")
+        # La memoria importante si rilegge a OGNI turno, non una volta
+        # alla creazione della sessione: una regola salvata mentre la
+        # chat e' aperta deve valere dal messaggio dopo. Prima il blocco
+        # era cucito nel prompt stabile all'avvio, e una sessione viva da
+        # giorni (il bot) non la vedeva mai.
+        #
+        # Sta nel blocco volatile, non nel prefisso: leggere il file a
+        # ogni turno e riscrivere il prefisso invaliderebbe la cache dei
+        # provider a ogni messaggio, che e' il costo che il prefisso
+        # stabile esiste per evitare. Il volatile cambia gia' con le
+        # skill, quindi costa zero.
+        try:
+            from .tools.memoria import blocco_prompt_completo
+
+            memoria = blocco_prompt_completo()
+        except Exception:  # noqa: BLE001 - senza memoria il prompt resta
+            memoria = ""
         canale = self._blocco_canale()
-        volatile = (blocco_piano + canale + extra + progetto).strip()
+        volatile = (blocco_piano + canale + memoria + extra + progetto).strip()
         # PERCHE' DUE MESSAGGI DI SISTEMA E NON UNO.
         #
         # Il primo blocco (regole, persona, memoria) e' il prefisso che i
