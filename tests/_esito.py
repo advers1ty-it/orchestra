@@ -22,9 +22,19 @@ anche QUALE. Un test che non parte e' un fallimento, ma un fallimento
 diverso: e va detto.
 """
 
+import locale
 import os
+import signal
 import subprocess
 import sys
+import tempfile
+
+# La codifica con cui le suite scrivono su Windows: quella della console, non
+# UTF-8. Decodificare come UTF-8 un "e'" accentato scritto in cp1252 lo
+# trasforma in U+FFFD, e stampare quel carattere sulla console cp1252 fa
+# morire il runner mentre riporta l'output di una suite — cioe' il posto
+# peggiore in cui puo' morire.
+CODIFICA = locale.getencoding()
 
 # Esiti possibili di una suite.
 OK = "OK"
@@ -32,6 +42,7 @@ FALLITO = "FALLITO"          # il test e' partito e ha trovato un difetto
 NON_PARTITO = "NON PARTITO"  # mai partito: import rotto, raccolto dei nomi
 CRASH = "CRASH"              # partito e morto con un'eccezione
 NON_AVVENUTO = "NON AVVENUTO"  # la corsa non e' stata possibile (API esterna)
+SCADUTO = "SCADUTO"          # non ha finito entro il tempo: nessun verdetto
 
 # I sintomi di un test che non ha mai iniziato a lavorare.
 #
@@ -211,20 +222,88 @@ def _elenco_falliti(stdout):
     return ""
 
 
-def esegui(script, cwd=None, env=None, timeout=1800):
+# Quanto tempo ha una suite prima di essere dichiarata scaduta.
+#
+# Non e' un obiettivo: e' il punto in cui "sta lavorando" smette di essere
+# una spiegazione plausibile. Le suite normali finiscono in pochi secondi;
+# quelle che avviano un server, un browser o un processo possono metterci
+# minuti. Oltre, il silenzio e' quasi sempre un'attesa che non finira' mai:
+# un server che non risponde, un canale che aspetta un evento che nessuno
+# manda. Le suite MCP e permessi si impuntavano proprio cosi'.
+SCADENZA = 300
+
+
+def _chiudi_albero(proc) -> None:
+    """Uccide la suite E i processi che ha avviato.
+
+    Fermare il solo figlio diretto lascerebbe vivi i server e i processi
+    che il test ha avviato: restano in ascolto su una porta, e la corsa
+    dopo fallisce per "indirizzo gia' in uso" — un difetto che sembra del
+    codice e invece e' un residuo della corsa prima.
+    """
+    if os.name == "nt":
+        # taskkill /T scende l'albero: su Windows non c'e' un gruppo di
+        # processi da segnalare come su POSIX.
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=20)
+            return
+        except Exception:  # noqa: BLE001 - resta il kill diretto
+            pass
+    else:
+        # start_new_session mette la suite in un gruppo suo: killpg prende
+        # anche i nipoti.
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        proc.kill()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def esegui(script, cwd=None, env=None, timeout=SCADENZA):
     """Esegue una suite e classifica l'esito.
 
-    Il timeout e' esplicito perche' un test che si blocca non e' un test
-    che passa: e' un test che non dice niente. Senza timeout il runner
-    resta appeso per sempre e non dice niente nemmeno lui.
+    Il timeout e' per suite, non per la corsa: una suite che si blocca non
+    e' un test che passa, e' un test che non dice niente — e senza un
+    limite il runner resta appeso con lei, e non dice niente nemmeno lui.
+    Con il limite la corsa finisce sempre, e il riepilogo dice QUALI suite
+    sono scadute.
+
+    Scaduta non e' ne' FALLITO ne' CRASH: non c'e' nessun verdetto sul
+    codice, c'e' solo un'attesa. Ma non e' nemmeno un verde: il codice che
+    copre non e' stato verificato.
     """
-    try:
-        r = subprocess.run([sys.executable, script], cwd=cwd, env=env,
-                           capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return Esito(CRASH, -1, "", "",
-                    f"timeout dopo {timeout}s: non ha finito",
-                    os.path.basename(script))
-    esito = classifica(r.returncode, r.stdout, r.stderr)
+    extra = {}
+    if os.name != "nt":
+        extra["start_new_session"] = True
+    # Su file e non su tubi: quello che la suite ha stampato prima di
+    # bloccarsi e' l'unica traccia di DOVE si e' fermata, e un tubo letto a
+    # meta' da `communicate` non si rilegge quando la lettura e' scaduta.
+    with tempfile.TemporaryFile() as _out, tempfile.TemporaryFile() as _err:
+        proc = subprocess.Popen([sys.executable, script], cwd=cwd, env=env,
+                                stdout=_out, stderr=_err, **extra)
+        scaduta = False
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _chiudi_albero(proc)
+            try:
+                proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                pass
+            scaduta = True
+        _out.seek(0)
+        out = _out.read().decode(CODIFICA, "backslashreplace")
+        _err.seek(0)
+        err = _err.read().decode(CODIFICA, "backslashreplace")
+    if scaduta:
+        return Esito(SCADUTO, -1, out, err,
+                     f"scaduta dopo {timeout}s: non ha finito",
+                     os.path.basename(script))
+    esito = classifica(proc.returncode, out, err)
     esito.nome = os.path.basename(script)
     return esito

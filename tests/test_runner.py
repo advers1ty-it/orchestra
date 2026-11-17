@@ -30,13 +30,15 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 from _esito import (  # noqa: E402
-    OK, FALLITO, NON_PARTITO, CRASH, NON_AVVENUTO, classifica,
+    OK, FALLITO, NON_PARTITO, CRASH, NON_AVVENUTO, SCADUTO, CODIFICA,
+    classifica, esegui,
 )
 
 PASS, FAIL = [], []
@@ -272,6 +274,73 @@ with open(os.path.join(D3, "test_pericoloso.py"), "w", encoding="utf-8") as f:
 controlla(D3)
 check("il file non e' stato eseguito", not os.path.exists(marcatore),
       "il controllo ha eseguito il test: fa danni")
+
+print("\n[10] Una suite che non finisce e' SCADUTA, e la corsa va avanti")
+# Il difetto vero: le suite che avviano server (MCP, permessi) aspettavano
+# un evento che nessuno mandava, e il runner restava appeso con loro — il
+# giro completo non e' mai stato verificato. Qui una suite che dorme davvero,
+# con un tetto di 2s: deve tornare, dire che e' scaduta, e tenere quello che
+# aveva gia' stampato, che e' l'unica traccia di dove si e' fermata.
+lenta = os.path.join(D, "lenta.py")
+with open(lenta, "w", encoding="utf-8") as f:
+    # il flush e' quello che farebbe una suite vera: quello che scrive
+    # prima di bloccarsi e' su file, e li' lo si ritrova.
+    f.write("import time\n"
+            "print('  OK   partito', flush=True)\n"
+            "time.sleep(60)\n")
+t0 = time.time()
+es = esegui(lenta, timeout=2)
+durata = time.time() - t0
+check("e' SCADUTA", es.stato == SCADUTO, es.stato)
+check("e lo dice con il tempo", "scaduta" in (es.dettaglio or ""),
+      str(es.dettaglio))
+check("NON e' un crash e non e' rosso",
+      es.stato not in (CRASH, FALLITO), es.stato)
+check("non ha aspettato i 60s", durata < 30, f"{durata:.1f}s")
+check("tiene quello che aveva stampato", "partito" in (es.stdout or ""),
+      repr((es.stdout or "")[:120]))
+
+print("\n[10b] L'output di una suite torna indietro com'era")
+# La suite scrive con la codifica della console. Decodificarlo come UTF-8
+# trasformava "perche'" accentato in U+FFFD, e stamparlo faceva morire il
+# runner a meta' corsa — mentre riportava un output che non aveva nemmeno
+# il diritto di giudicare.
+accentata = os.path.join(D, "accentata.py")
+with open(accentata, "w", encoding="utf-8") as f:
+    f.write("import sys\n"
+            "sys.stdout.reconfigure(encoding=%r)\n" % CODIFICA +
+            "print('perch\u00e9', flush=True)\n")
+es = esegui(accentata)
+check("l'accento sopravvive al giro", "perch\u00e9" in (es.stdout or ""),
+      repr((es.stdout or "")[:120]))
+
+print("\n[10c] Una suite scaduta non lascia figli vivi")
+# Il server orfano che occupa la porta: la suite avvia un figlio (e lui e'
+# un nipote del runner), poi si blocca. Se la morte arrivasse solo al figlio
+# diretto, il nipote resterebbe vivo — e un server vivo su una porta fa
+# fallire la corsa dopo per "indirizzo gia' in uso", che sembra un difetto
+# del codice. Il figlio lo dice scrivendo un marcatore se sopravvive.
+marcatore = os.path.join(D, "sopravvissuto.txt")
+con_figlio = os.path.join(D, "con_figlio.py")
+figlio = ("import time\n"
+          "time.sleep(3)\n"
+          "open(%r, 'w').write('vivo')\n" % marcatore)
+with open(con_figlio, "w", encoding="utf-8") as f:
+    f.write("import subprocess, sys, time\n"
+            "figlio = %r\n" % figlio +
+            "subprocess.Popen([sys.executable, '-c', figlio])\n"
+            "print('figlio avviato', flush=True)\n"
+            "time.sleep(60)\n")
+es = esegui(con_figlio, timeout=2)
+check("la suite con un figlio e' scaduta", es.stato == SCADUTO, es.stato)
+check("e il figlio era partito davvero",
+      "figlio avviato" in (es.stdout or ""), repr((es.stdout or "")[:120]))
+# 3s del figlio piu' il tempo di accorgersene: se fosse vivo avrebbe gia'
+# scritto. Aspettare meno renderebbe il controllo muto, non severo.
+time.sleep(5)
+check("il figlio non e' sopravvissuto alla suite",
+      not os.path.exists(marcatore),
+      "il nipote della suite scaduta e' ancora vivo: resta in ascolto")
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

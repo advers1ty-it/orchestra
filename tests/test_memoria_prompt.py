@@ -41,11 +41,16 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, HERE)
 
 from orchestra import memoria as memoria_mod            # noqa: E402
+from orchestra import memoria_indice as memoria_indice_mod  # noqa: E402
 from orchestra import webapp as webapp_mod              # noqa: E402
 from orchestra.session import LoopConfig, Session       # noqa: E402
 from orchestra.tools import SYSTEM_PROMPT, default_registry  # noqa: E402
 from orchestra.tools import memoria as tool_mem         # noqa: E402
 from orchestra.types import LLMResponse, Message        # noqa: E402
+
+# La funzione vera, prima che i test la sostituiscano: serve alla
+# sezione [6], che deve provare il percorso di produzione.
+MEMORIA_VERA = tool_mem.memoria
 
 PASS, FAIL = [], []
 
@@ -364,6 +369,88 @@ check("e fuori restano proprio le promozioni automatiche",
           if origine == "mano")
       and any(t not in presenti for t, origine in coppie.items()
               if origine == "auto"))
+
+# ---------------------------------------------------------------------------
+print("\n[6] Con l'indice FTS attivo, che e' il percorso vero in produzione")
+
+
+def memoria_indiciata(contenuto: str | None = None):
+    """La memoria come la vede l'agente: `indice_memoria()` sopra il file.
+
+    Le altre sezioni iniettano un `Memoria` a mano; in produzione
+    `tools.memoria.memoria()` passa da qui, e un test che non ci passa
+    non dice niente su quello che gira davvero.
+    """
+    cartella = tempfile.mkdtemp(prefix="orch-indice-")
+    percorso = os.path.join(cartella, "memory.md")
+    if contenuto is not None:
+        with open(percorso, "w", encoding="utf-8") as f:
+            f.write(contenuto)
+    sorgente = memoria_mod.Memoria(percorso=percorso)
+    indice = memoria_indice_mod.IndiceMemoria(
+        sorgente=sorgente,
+        percorso=os.path.join(cartella, "memoria_indice.db"))
+    tool_mem.memoria = MEMORIA_VERA
+    tool_mem.indice_memoria = lambda: indice
+    return sorgente, indice
+
+
+_sorgente, indice = memoria_indiciata()
+check("il tool passa dall'indice, non dal file",
+      tool_mem.memoria() is indice)
+
+# Il fatto entra dal tool, come in produzione: handler -> indice -> file.
+tool_mem.tool_memoria().handler(azione="aggiungi", fatto=REGOLA)
+check("l'indice dice la stessa cosa del prompt, non 'nessuna regola'",
+      REGOLA in indice.importanti(), str(indice.importanti())[:200])
+check("l'origine letta dall'indice e' 'auto'",
+      dict(indice.importanti_con_origine()).get(REGOLA) == "auto",
+      str(indice.importanti_con_origine())[:220])
+check("e la regola e' nel blocco del prompt",
+      REGOLA in tool_mem.blocco_prompt(), tool_mem.blocco_prompt()[:220])
+
+_sorgente2, indice2 = memoria_indiciata()
+for f in AUTO_FATTI:
+    indice2.aggiungi(f, origine="agente")
+indice2.aggiungi(MANO_FATTO, importante=True, origine="agente")
+
+blocco = tool_mem.blocco_prompt()
+righe = blocco.splitlines()
+avvisi = [r for r in righe if "fuori da questo elenco" in r]
+fatti = [r for r in righe if r not in avvisi]
+check("la regola scritta a mano resta e viene prima delle promosse",
+      MANO_FATTO in blocco and AUTO_FATTI[0] in blocco
+      and blocco.index(MANO_FATTO) < blocco.index(AUTO_FATTI[0]),
+      blocco[:320])
+check("l'avviso di taglio c'e' e il conto e' quello dei fatti che mancano",
+      bool(avvisi) and int(re.search(r"altre (\d+) regole", avvisi[0]).group(1))
+      == len(indice2.importanti_con_origine()) - len(fatti),
+      f"avviso {avvisi}, fatti {len(fatti)}")
+
+# Un memory.md vecchio, con l'indice: la migrazione deve avvenire al primo
+# giro, quando la produzione costruisce l'indice sopra il file.
+vecchia_src, _vecchia_idx = memoria_indiciata(VECCHIO)
+check("all'avvio con l'indice, il file vecchio viene migrato",
+      "gestionale" in " ".join(vecchia_src.importanti()),
+      str(vecchia_src.importanti())[:200])
+
+
+# Un backend registrato che non conosce l'origine (l'interfaccia
+# documentata chiede solo leggi/scrivici/elimina): il blocco non deve
+# sparire, si legge l'elenco nudo e si tratta come scelto a mano.
+class BackendSenzaOrigine:
+    def importanti(self):
+        return ["Lavora su Windows"]
+
+    def importanti_con_origine(self):
+        raise RuntimeError("backend vecchio")
+
+
+tool_mem.memoria = lambda: BackendSenzaOrigine()
+check("un backend senza origine non fa sparire il blocco",
+      "Lavora su Windows" in tool_mem.blocco_prompt(),
+      tool_mem.blocco_prompt()[:200])
+tool_mem.memoria = MEMORIA_VERA
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

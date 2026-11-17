@@ -59,10 +59,14 @@ def _coppie_importanti() -> list[tuple[str, str]]:
     """
     try:
         m = memoria()
-        prova = getattr(m, "importanti_con_origine", None)
-        if callable(prova):
-            return list(prova())
-        return [(testo, "mano") for testo in m.importanti()]
+        # Il ripiego vive qui e non in ogni backend: se il metodo manca o
+        # fallisce si legge l'elenco nudo e si tratta tutto come scelto a
+        # mano. Due memorie che dicono cose diverse sarebbero peggio di
+        # una che non distingue.
+        try:
+            return list(m.importanti_con_origine())
+        except Exception:  # noqa: BLE001 - backend senza il metodo
+            return [(testo, "mano") for testo in m.importanti()]
     except Exception:  # noqa: BLE001 - senza memoria il prompt resta
         return []
 
@@ -249,17 +253,22 @@ def tool_memoria() -> Tool:
                 progetto = ""
         m = memoria()
         # Una regola vale anche se il modello non ha pensato a marcarla:
-        # `Memoria.aggiungi` la promuove da sola, e qui lo si dice, cosi'
-        # chi legge dal telefono sa che da ora vale davvero.
+        # la promuove `Memoria.aggiungi`, che lascia anche il marcatore
+        # `[auto]` nella riga.
+        #
+        # Qui `importante` si passa SOLO se l'ha chiesto chi scrive: con
+        # `importante=True` il file non ha piu' modo di distinguere una
+        # scelta a mano da una promozione, e nel taglio del prompt la
+        # prima sarebbe finita dietro la seconda.
         regola = sembra_regola(fatto)
-        alta = priorita.strip().lower() == "alta" or regola
-        nuovo = m.aggiungi(fatto, origine="agente", importante=alta,
+        esplicita = priorita.strip().lower() == "alta"
+        nuovo = m.aggiungi(fatto, origine="agente", importante=esplicita,
                            progetto=progetto)
         if not nuovo:
             return f"Era già in memoria: {fatto}"
         coda = (" (priorità alta: è una regola, resta nel prompt)"
-                if alta and regola
-                else " (priorità alta)" if alta else "")
+                if regola
+                else " (priorità alta)" if esplicita else "")
         return ("Ricordato" + coda
                 + (f" [progetto: {progetto}]" if progetto else "")
                 + f": {fatto}")

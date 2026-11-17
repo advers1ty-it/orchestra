@@ -306,18 +306,13 @@ class IndiceMemoria:
 
         Dal file e non dall'indice: l'origine vive nel marcatore `[auto]`
         della riga, e la colonna `importante` del database dice solo
-        "sta nel prompt", non da che parte e' arrivato. Chiedere al file
-        costa una lettura gia' in cache; indovinare dall'indice
-        vorrebbe dire perdere la distinzione proprio nel momento in cui
-        serve, cioe' quando lo spazio finisce.
+        "sta nel prompt", non da che parte e' arrivato.
+
+        Nessun ripiego qui: chi legge (`_coppie_importanti`) sa gia' cosa
+        fare se questa chiamata manca o fallisce, e due ripieghi per lo
+        stesso caso sono due comportamenti da tenere allineati.
         """
-        metodo = getattr(self.sorgente, "importanti_con_origine", None)
-        if callable(metodo):
-            try:
-                return list(metodo())
-            except Exception:  # noqa: BLE001
-                pass
-        return [(testo, "mano") for testo in self.importanti()]
+        return list(self.sorgente.importanti_con_origine())
 
     def aggiungi(self, fatto: str, origine: str = "",
                  importante: bool = False,
@@ -331,13 +326,25 @@ class IndiceMemoria:
         fatto = " ".join((fatto or "").split()).strip()
         if not fatto:
             return False
+        from .memoria import sembra_regola
+
         nuovo = self.sorgente.aggiungi(fatto, origine=origine,
                                        importante=importante,
                                        progetto=progetto)
         if nuovo:
+            # L'indice deve dire quello che il file ha GIA' deciso:
+            # `Memoria.aggiungi` promuove da sola una regola, ma la colonna
+            # `importante` restava a 0 — e `importanti()` legge il DB.
+            # Risultato: il pannello diceva "nessuna regola" mentre il
+            # prompt le mostrava tutte, due memorie diverse nella stessa
+            # installazione. Si indicizza la decisione effettiva, senza
+            # toccare `importante` per il file: e' quello che fa scrivere
+            # (o no) il marcatore `[auto]`.
+            db_importante = bool(importante) or sembra_regola(fatto)
             with self._lock:
-                self._inserisci(fatto, importante=importante, origine=origine,
-                                scade_giorni=scade_giorni, progetto=progetto)
+                self._inserisci(fatto, importante=db_importante,
+                                origine=origine, scade_giorni=scade_giorni,
+                                progetto=progetto)
                 self._conn.commit()
             # il file è cambiato: al prossimo ricostruisci_se_cambiato il
             # fatto c'è già e l'indice resta allineato

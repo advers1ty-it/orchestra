@@ -99,12 +99,22 @@ s = Session(provider=SoloTool(), registry=_registro(), system_prompt="SYS",
             config=LoopConfig(max_iterations=8))
 
 s.send("primo")
-# il cancel deve arrivare a META' turno: aspetto che il turno sia partito
-time.sleep(0.12)
-s.cancel()
+# Il cancel deve arrivare a META' turno, cioe' dopo che almeno un tool e'
+# girato. Un `time.sleep(0.12)` fisso era una scommessa: su una macchina
+# carica il primo giro (prompt, memoria, primo chat) puo' durare piu' della
+# pausa, il cancel arriva PRIMA del primo tool, e il test accusa il codice
+# di un difetto che non c'e' (chiamate=0). `wait(0.02)` dice anche quando
+# il turno e' finito: se e' finito senza tool, aspettare non serve.
+fine = time.time() + 10
+while not chiamate and time.time() < fine and not s.wait(timeout=0.02):
+    pass
+check("il primo turno esegue un tool prima del cancel", bool(chiamate),
+      f"chiamate={len(chiamate)}")
+# Se a questo punto il turno fosse gia' finito il cancel non proverebbe
+# niente, e va detto invece di contarlo come verde.
+check("il cancel arriva a turno in corso", s.cancel())
 s.wait(timeout=10)
 prima = len(chiamate)
-check("il primo turno esegue i tool", prima > 0, f"chiamate={prima}")
 
 # e si riparte: questo e' il momento in cui il bug fa male
 s.send("secondo")
@@ -182,8 +192,10 @@ class ChiedeFuori:
 s2 = Session(provider=ChiedeFuori(), registry=reg2, system_prompt="SYS",
              config=LoopConfig(max_iterations=8))
 s2.send("primo")
-time.sleep(0.12)
-s2.cancel()
+# La premessa e' la stessa: il cancel deve cogliere il turno in corso. Qui
+# non serve aspettare il gate, perche' il difetto si vede dopo — sul turno
+# che riparte — e il gate che chiede e' proprio il controllo finale.
+check("il cancel arriva a turno in corso anche qui", s2.cancel())
 s2.wait(timeout=10)
 
 domande.clear()

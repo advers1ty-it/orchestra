@@ -33,6 +33,7 @@ os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from orchestra import providers as providers_mod  # noqa: E402
 from orchestra import rotte_chat  # noqa: E402
 from orchestra import webapp  # noqa: E402
 from orchestra.tools import default_registry  # noqa: E402
@@ -166,12 +167,42 @@ try:
           "root:" not in corpo_testo(corpo), corpo_testo(corpo)[:120])
 
     print("\n[5b] Le rotte di automazione e modelli rispondono, senza 500")
-    for percorso in ("/api/cron/jobs", "/api/cron/scheduler/status",
-                     "/api/modelli", "/api/skill"):
-        stato, corpo, _ = chiama(percorso)
-        check(f"GET {percorso}: niente 500", stato != 500, f"{stato}")
-        check(f"GET {percorso}: 200 con JSON", stato == 200 and bool(corpo),
-              f"{stato} {corpo_testo(corpo)[:80]}")
+
+    # `/api/modelli` non legge una cache: chiede al provider l'elenco dei
+    # modelli (`Catalog.fetch`), cioe' una richiesta di rete vera. In un
+    # giro lungo puo' impiegare piu' del timeout del client, e la suite
+    # moriva con "TimeoutError: timed out" su una rotta che col codice non
+    # c'entrava.
+    #
+    # Si finge il confine che va in rete — il provider — e non il
+    # catalogo: cosi' la rotta, il catalogo e il formato dei modelli
+    # restano quelli veri. Fingere il catalogo costringeva a imitarne
+    # `models`, `.info.*`, `scores` e `free()`: accoppiato alla rotta, e
+    # rotto appena la rotta legge un campo in piu'.
+    class _ProviderFinto:
+        def _list_models_raw(self):
+            # la forma grezza che l'API del provider manda
+            usi.append(1)
+            return [{"id": "prova/modello"}]
+
+    usi: list[int] = []
+
+    vero_build = providers_mod.build_provider
+    providers_mod.build_provider = lambda *a, **k: _ProviderFinto()
+    try:
+        for percorso in ("/api/cron/jobs", "/api/cron/scheduler/status",
+                         "/api/modelli", "/api/skill"):
+            stato, corpo, _ = chiama(percorso)
+            check(f"GET {percorso}: niente 500", stato != 500, f"{stato}")
+            check(f"GET {percorso}: 200 con JSON",
+                  stato == 200 and bool(corpo),
+                  f"{stato} {corpo_testo(corpo)[:80]}")
+    finally:
+        providers_mod.build_provider = vero_build
+    # Se un giorno la rotta smettesse di passare da `Catalog.fetch`, il
+    # finto non verrebbe usato e il test tornerebbe a dipendere dalla
+    # rete senza dirlo: qui si pretende che il finto sia stato toccato.
+    check("i modelli arrivano dal provider finto, non dalla rete", bool(usi))
 
     print("\n[5c] Il tetto di tempo si imposta dall'UI e si legge indietro")
     stato, corpo, _ = chiama("/api/tempo-turno", metodo="POST",

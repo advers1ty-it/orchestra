@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from _esito import (  # noqa: E402
-    OK, FALLITO, NON_PARTITO, CRASH, NON_AVVENUTO, esegui,
+    OK, FALLITO, NON_PARTITO, CRASH, NON_AVVENUTO, SCADUTO, esegui,
 )
 from _sanita import controlla as controlla_import  # noqa: E402
 from _server import avvia as avvia_server  # noqa: E402
@@ -30,6 +30,25 @@ from _server import avvia as avvia_server  # noqa: E402
 os.environ.setdefault("ORCHESTRA_HOME", os.path.join(HERE, "_dati_test"))
 os.makedirs(os.environ["ORCHESTRA_HOME"], exist_ok=True)
 
+# Tempo massimo per UNA suite. Senza, una suite che aspetta un evento che
+# non arriva (i server MCP e il canale dei permessi) tiene appesa la corsa
+# intera, e il giro completo non e' mai stato verificato: si fermava a
+# meta' e non diceva nemmeno quale suite lo stava bloccando.
+#
+# Si alza con ORCHESTRA_SUITE_TIMEOUT per una macchina lenta. Non e' un
+# interruttore per far passare una suite bloccata: una suite scaduta resta
+# un fallimento, e il riepilogo la nomina.
+SCADENZA_SUITE = int(os.environ.get("ORCHESTRA_SUITE_TIMEOUT", "300"))
+
+# Il runner riporta l'output delle suite: un carattere che la console non sa
+# rappresentare non deve ucciderlo a meta' corsa. Il `backslashreplace` sta
+# sul flusso di uscita, non sulla decodifica, cosi' il testo leggibile resta
+# leggibile e solo il byte storto diventa una sequenza.
+for _flusso in (sys.stdout, sys.stderr):
+    try:
+        _flusso.reconfigure(errors="backslashreplace")
+    except Exception:  # noqa: BLE001 - un flusso non riconfigurabile va bene
+        pass
 SUITES = [
     ("offline", "test_offline.py", True),
     # I due tool che leggono la struttura e girano i test: analisi_python
@@ -379,7 +398,8 @@ if server is None:
           "non saranno verdi.\n")
 else:
     print(f"  server di test su {server.porta} "
-          f"(home: {server.home})\n")
+          f"(home: {server.home})")
+print(f"  ogni suite ha {SCADENZA_SUITE}s, poi si dichiara scaduta\n")
 
 ambiente = dict(os.environ)
 if server is not None:
@@ -389,7 +409,7 @@ try:
     for name, script, required in SUITES:
         print(f"\n{'='*66}\n>>> {name.upper()}\n{'='*66}")
         esito = esegui(os.path.join(HERE, script), cwd=os.path.dirname(HERE),
-                       env=ambiente)
+                       env=ambiente, timeout=SCADENZA_SUITE)
         # L'output del test si rivede: e' la prova, non un riassunto.
         sys.stdout.write(esito.stdout or "")
         if esito.stderr:
@@ -408,6 +428,7 @@ failed = []
 mai_partiti = []
 crashati = []
 non_avvenuti = []
+scadute = []
 for name, esito, required in results:
     if esito.stato == OK:
         print(f"  PASS  {name}")
@@ -429,6 +450,13 @@ for name, esito, required in results:
     elif esito.stato == CRASH:
         print(f"  CRASH  {name} — {esito.dettaglio}")
         crashati.append(name)
+        failed.append(name)
+    elif esito.stato == SCADUTO:
+        # Non ha finito: nessun verdetto sul codice, ma nessuna verifica
+        # nemmeno. E' un fallimento del giro, e va detto per nome — altrimenti
+        # una suite che si impunta sembra una suite che passa.
+        print(f"  SCADUTA  {name} — {esito.dettaglio}")
+        scadute.append(name)
         failed.append(name)
     else:
         # Un exit non-zero e' un fallimento, sempre. Prima c'era un
@@ -456,6 +484,12 @@ if crashati:
     print(f"\n{len(crashati)} suite sono morte con un'eccezione: "
           f"{', '.join(crashati)}")
     print("Non hanno dato nessun verdetto: nessuna asserzione e' arrivata in fondo.")
+if scadute:
+    print(f"\n{len(scadute)} suite sono scadute dopo {SCADENZA_SUITE}s: "
+          f"{', '.join(scadute)}")
+    print("Non hanno finito, quindi non hanno dato nessun verdetto: il codice")
+    print("che coprono non e' stato verificato. Il tetto si alza se la suite")
+    print("e' onesta ma lenta; se e' bloccata, il difetto e' li' da trovare.")
 if non_avvenuti:
     # La concordanza: "una suite non e' potuta avvenire", "due suite non
     # sono potute avvenire". Il numero davanti a "suite" non basta da
