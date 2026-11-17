@@ -160,6 +160,7 @@ ATTESE = frozenset({
     "GET /api/stream",
     "POST /api/stt/install",
     "GET /api/stt/status",
+    "GET /api/suggerimenti",
     "POST /api/system",
     "GET /api/tools/profile",
     "GET /api/telegram",
@@ -265,7 +266,9 @@ def main() -> int:
     from orchestra import webapp
     tabella = webapp.ROTTE
     presenti = {f"{r.metodo} {r.percorso}" for r in tabella.tutte()}
-    check("137 rotte", len(presenti) == 137, str(len(presenti)))
+    # Il conteggio non si controlla a parte: se l'insieme e' uguale ad
+    # ATTESE, la lunghezza e' gia' quella. Un "137 rotte" da aggiornare a
+    # mano a ogni rotta nuova era solo un secondo posto da sbagliare.
     check("nessuna rotta persa", not (ATTESE - presenti),
           str(sorted(ATTESE - presenti)))
     check("nessuna rotta in piu' non dichiarata", not (presenti - ATTESE),

@@ -146,5 +146,12 @@ class RotteTelegram:
                                  "bot: l'elenco e' cambiato, riaprilo"}, 404)
             return
         tg.dimentica_chat(bot["id"], chat or None)
+        # I prompt dei consigli sono roba della chat: staccarla li deve
+        # portare via. Senza `chat_id` si stacca tutto il bot, e il ponte
+        # e' di quel bot solo: le voci che tiene sono tutte sue.
+        ponte = (getattr(self, "_telegram_ponti", None) or {}).get(
+            int(bot["id"]))
+        if ponte is not None:
+            ponte.dimentica_suggerimenti(chat or None)
         self._json({"ok": True, "scollegata": chat,
                     "stato": tg.stato(bot["id"])})

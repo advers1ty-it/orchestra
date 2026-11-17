@@ -84,6 +84,50 @@ check("lo script esterno ha defer", " defer" in html,
 check("un solo script esterno", len(scripts) == 1 and scripts[0] == "/app.js",
       str(scripts))
 
+print("\n[1b] La cache del service worker non resta indietro")
+# CSS, icone e manifest sono serviti cache-first: se il nome della cache non
+# cambia, il browser continua a usare la copia vecchia e la pagina sembra
+# rotta al primo reload dopo un aggiornamento — e' successo davvero, con i
+# pulsanti di fine turno arrivati senza stile. Il nome porta il digest degli
+# asset statici dichiarati in SHELL; qui si ricalcola. Se qualcuno tocca
+# app.css e non alza la cache, questo controllo e' rosso.
+import hashlib  # noqa: E402
+
+with open(os.path.join(WEB, "sw.js"), encoding="utf-8") as _fh:
+    _sw = _fh.read()
+_m_cache = re.search(r'const CACHE = "([^"]+)"', _sw)
+_m_shell = re.search(r"const SHELL = \[(.*?)\];", _sw, re.S)
+check("sw.js dichiara la cache e la shell",
+      bool(_m_cache) and bool(_m_shell), _sw[:120])
+_nomi = re.findall(r'"([^"]+)"', _m_shell.group(1)) if _m_shell else []
+# Gli asset cache-first: tutto cio' che non e' HTML o JS, che sono invece
+# network-first (li' il nome della cache non c'entra).
+_statici = [n.lstrip("/") for n in _nomi
+            if not (n == "/" or n.endswith(".js") or n.endswith(".html"))]
+check("gli asset cache-first dichiarati esistono",
+      all(os.path.exists(os.path.join(WEB, n)) for n in _statici), str(_statici))
+# Il digest si calcola sui BYTE, ma per i file di testo con gli a capo
+# normalizzati: git converte CRLF/LF al checkout, e senza normalizzare lo
+# stesso app.css darebbe due digest diversi su Windows e su Linux — cioe'
+# il test sarebbe rosso su CI e verde in locale, il peggior modo di
+# sbagliare. I binari (le PNG) si hashan crudi: i byte sono gli stessi
+# ovunque, e "normalizzarli" vorrebbe dire toccare dati che non sono testo.
+_TESTUALI = (".css", ".svg", ".webmanifest", ".json", ".txt")
+_h = hashlib.sha256()
+for _n in _statici:
+    _p = os.path.join(WEB, _n)
+    if os.path.exists(_p):
+        with open(_p, "rb") as _f:
+            _dati = _f.read()
+        if _n.endswith(_TESTUALI):
+            _dati = _dati.replace(b"\r\n", b"\n")
+        _h.update(_n.encode("utf-8") + b"\0" + _dati + b"\0")
+_attesa = "orchestra-shell-" + _h.hexdigest()[:8]
+check("la cache e' quella degli asset di adesso",
+      bool(_m_cache) and _m_cache.group(1) == _attesa,
+      f"sw.js dice {_m_cache.group(1) if _m_cache else '?'} — "
+      f"metti {_attesa} in CACHE")
+
 # ---------------------------------------------------------------- esecuzione
 # L'HTML dichiara un solo script (/app.js, assemblato dal server), ma
 # i sorgenti restano tre file su disco. Li leggiamo nell'ordine con cui il

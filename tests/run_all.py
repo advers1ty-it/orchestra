@@ -182,6 +182,9 @@ SUITES = [
     ("cdp", "test_cdp.py", True),
     # Il riepilogo di fine turno: esito leggibile, file accorpati, costo.
     ("riepilogo", "test_riepilogo.py", True),
+    # I pulsanti di fine turno: prompt gia' scritti con i file veri e i
+    # test che li coprono, mai un prompt generico.
+    ("suggerimenti", "test_suggerimenti.py", True),
     # Marcatura dei contenuti sintetici (AI Act, art. 50): il PNG porta
     # il chunk, ogni formato porta il sidecar, e il file non si rompe.
     ("marcatura", "test_marcatura.py", True),

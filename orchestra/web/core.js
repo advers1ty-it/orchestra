@@ -215,8 +215,86 @@ function ripristinaNodiClient(nodi) {
   });
 }
 
+// ---- suggerimenti di fine turno ---------------------------------------
+// A turno finito il server propone tre o quattro mosse, ognuna con il
+// prompt gia' scritto: cosa puo' essersi rotto (con i file toccati e i test
+// che li coprono), la revisione del diff, il commit, e cosa resta aperto.
+// Premere un pulsante COMPILA il campo: non parte niente, perche' quel
+// prompt va riletto — e spesso corretto — prima di mandarlo.
+// Il turno appena finito ha gia' i suoi pulsanti? Serve a non chiedere due
+// volte la stessa cosa quando la fine del turno arriva da due strade (SSE e
+// polling), e a non far ricomparire i pulsanti a chi ne ha appena premuto
+// uno. Torna falso appena parte un turno nuovo.
+let suggerimentiFatto = false;
+let suggerimentiInCorso = false;
+
+function suggerimentiNascondi() {
+  const box = $("suggerimenti");
+  if (!box) return;
+  box.innerHTML = "";
+  box.hidden = true;
+}
+
+function suggerimentiMostra(lista) {
+  const box = $("suggerimenti");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!Array.isArray(lista) || !lista.length) { box.hidden = true; return; }
+  lista.forEach((p) => {
+    if (!p || !p.prompt) return;
+    const b = el("button", "suggerimento", p.titolo || "…");
+    b.type = "button";
+    // Il prompt intero nel tooltip: si vede cosa stai per mettere nel campo
+    // prima di premerlo, senza doverlo prima premere.
+    b.title = p.prompt;
+    b.onclick = () => {
+      // Se il campo ha gia' del testo non lo si butta: si accoda dopo una
+      // riga vuota. Chi ha scritto mezza frase e preme per errore non deve
+      // perderla.
+      const gia = input.value.trim();
+      input.value = gia ? gia + "\n\n" + p.prompt : p.prompt;
+      if (typeof autoGrow === "function") autoGrow();
+      input.focus();
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+      suggerimentiNascondi();
+    };
+    box.appendChild(b);
+  });
+  box.hidden = false;
+}
+
+async function suggerimentiCarica() {
+  // `suggerimentiFatto` e' la parte che evita la richiesta DOPPIA: se la
+  // fine di questo turno e' gia' stata servita, non si torna al server.
+  if (!ready || busy || suggerimentiFatto || suggerimentiInCorso) return;
+  suggerimentiInCorso = true;
+  try {
+    const r = await fetch("/api/suggerimenti");
+    if (!r.ok) { suggerimentiNascondi(); return; }
+    const j = await r.json();
+    // Nel frattempo puo' essere ripartito un turno: in quel caso i
+    // pulsanti non servono piu' e coprirebbero la steer bar.
+    if (busy) return;
+    suggerimentiFatto = true;
+    suggerimentiMostra(j.proposte || []);
+  } catch (e) {
+    suggerimentiNascondi();
+  } finally {
+    suggerimentiInCorso = false;
+  }
+}
+
 function setBusy(v) {
+  const eraOccupato = busy;
   busy = v;
+  // Mentre l'agente lavora i pulsanti di fine turno non c'entrano niente:
+  // sono la risposta al turno PRECEDENTE, e il turno nuovo avra' i suoi.
+  if (v) { suggerimentiNascondi(); suggerimentiFatto = false; }
+  // La fine del turno non arriva solo da `idle`: se il SSE e' morto e la
+  // UI sta leggendo /api/state, l'unico segnale e' questo, busy che torna
+  // falso. Si caricano qui e solo in polling — col SSE vivo lo fa `idle`,
+  // e caricare anche qui sarebbe una richiesta doppia per lo stesso turno.
+  if (!v && eraOccupato && pollingTimer) suggerimentiCarica();
   dot.className = "dot" + (v ? " busy" : " ok");
   input.disabled = !ready || v;
   btnSend.disabled = !ready || v;
@@ -939,6 +1017,7 @@ function handle(kind, d) {
       // quindi `scrollDown` (che controlla "sei in fondo adesso") lo
       // salta, e la risposta resta sotto. Il flag sopravvive ai tool.
       seguiTurno = seiInFondo();
+      suggerimentiNascondi();
       break;
     case "user_message":
       addText("user", d.text);
@@ -1189,6 +1268,10 @@ function handle(kind, d) {
       break;
     case "idle":
       setBusy(false);
+      // E' qui e non su `riepilogo` perche' `idle` arriva sempre, anche
+      // quando il riepilogo non si e' potuto costruire: un turno finito
+      // senza pulsanti lascerebbe l'utente senza la cosa piu' utile.
+      suggerimentiCarica();
       // A fine turno arrivano i totali: la barra del contesto si
       // aggiorna qui, non solo al reload della pagina.
       if (typeof d.total_tokens === "number") renderStats(d);

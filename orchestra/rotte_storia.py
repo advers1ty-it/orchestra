@@ -9,6 +9,7 @@ che le serve; la tabella e il dispatch stanno in `rotte.py` e in
 
 from __future__ import annotations
 
+import os
 import urllib.parse
 from typing import Any
 
@@ -48,6 +49,28 @@ class RotteStoria:
         from . import riepilogo
 
         self._json({"riepilogo": riepilogo.ultimo()})
+
+    @rotta("GET", "/api/suggerimenti")
+    def _r_get_suggerimenti(self, path: str, body: dict[str, Any],
+                            s: Any) -> None:
+        # I pulsanti di fine turno: le mosse che servono adesso, con il
+        # prompt gia' scritto. Si calcolano qui e non alla fine del turno
+        # perche' il git del progetto cambia anche fra un turno e l'altro,
+        # e un pulsante "commit" deve sapere cosa c'e' adesso.
+        from . import riepilogo as _rie
+        from . import suggerimenti as _sug
+
+        radice = ""
+        nome = self.app._progetto_attivo()
+        if nome:
+            try:
+                from . import progetti as _pr
+
+                radice = _pr.percorso_di(nome) or ""
+            except Exception:  # noqa: BLE001
+                radice = ""
+        self._json({"proposte": _sug.proposte(
+            _rie.ultimo(), radice=radice or os.getcwd())})
 
     @rotta("GET", "/api/diff")
     def _r_get_diff(self, path: str, body: dict[str, Any],

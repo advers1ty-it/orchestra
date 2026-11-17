@@ -1333,6 +1333,345 @@ try:
 finally:
     update_mod.aggiorna = vero_aggiorna
 
+print("\n[29] i consigli di fine turno: pulsanti facoltativi, e un tocco fa il turno")
+# Due difetti da prevenire: pulsanti che arrivano anche a chi non li vuole
+# (devono essere facoltativi e non rubare il posto alla risposta), e un
+# tocco che non fa niente. Il tocco deve far partire lo stesso testo che si
+# sarebbe potuto scrivere, e i pulsanti sparire da quel messaggio — o si
+# preme due volte e partono due turni.
+
+
+class ApiConsigli:
+    def __init__(self):
+        self.messaggi = []      # (testo, markup)
+        self.tastiere = []      # (message_id, markup) di edit_reply_markup
+        self.callback = []
+
+    def send_message(self, chat_id, testo, **kw):
+        self.messaggi.append((testo, kw.get("markup")))
+        return {"ok": True, "result": {"message_id": len(self.messaggi)}}
+
+    def edit_reply_markup(self, chat_id, message_id, markup=None, **kw):
+        self.tastiere.append((int(message_id), markup))
+        return True
+
+    def answer_callback(self, cb_id, testo=""):
+        self.callback.append(testo)
+        return True
+
+    def scrive(self, chat_id):
+        return None
+
+
+chat_cons = "555000111"
+collegata = tg.imposta_chat(bot["id"], chat_cons, "prove")
+check("la chat di prova e' collegata", collegata.get("ok", True) is not False,
+      str(collegata))
+turni_cons = []
+api_cons = ApiConsigli()
+proposte_finte = [
+    {"id": "verifica", "titolo": "Controlla cosa puo' essersi rotto",
+     "prompt": "guarda i file del turno"},
+    {"id": "seguito", "titolo": "Cosa resta aperto",
+     "prompt": "proponi tre follow-up"},
+]
+ponte_cons = tg.Ponte(
+    bot["id"], "Prova", api_cons,
+    (lambda testo, allegati=None, avanzamento=None:
+     turni_cons.append(testo) or "fatto"),
+    proposte=lambda: list(proposte_finte))
+
+check("i consigli si attaccano a una risposta",
+      ponte_cons.suggerimenti(chat_cons, 7) is True, str(api_cons.tastiere))
+check("e non occupano un messaggio in piu'", api_cons.messaggi == [],
+      str(api_cons.messaggi))
+messaggio_cons, markup_cons = api_cons.tastiere[-1]
+check("la tastiera va sul messaggio della risposta", messaggio_cons == 7,
+      str(messaggio_cons))
+check("e porta un pulsante per consiglio",
+      bool(markup_cons) and str(markup_cons).count("sg:") == len(proposte_finte),
+      str(markup_cons))
+check("i titoli si vedono", "Controlla cosa" in str(markup_cons),
+      str(markup_cons)[:160])
+# Il limite di Telegram e' 64 byte per `callback_data`: il prompt non ci
+# starebbe. Se qualcuno ce lo mette, o lo tronca, il tocco manda meta'
+# richiesta.
+check("il pulsante non porta il prompt: sarebbe troncato",
+      "guarda i file" not in str(markup_cons), str(markup_cons)[:160])
+
+# Premuto: parte lo stesso testo che si sarebbe potuto scrivere.
+prima_tastiere = len(api_cons.tastiere)
+ponte_cons._pulsante({"data": "sg:0", "id": "cb-1",
+                      "message": {"message_id": 7,
+                                  "chat": {"id": chat_cons}}})
+check("il tocco avvia il turno con quel prompt",
+      ponte_cons.aspetta(5) and turni_cons[:1] == ["guarda i file del turno"],
+      str(turni_cons))
+scelta = api_cons.tastiere[prima_tastiere]
+check("la tastiera si toglie da quel messaggio", scelta[0] == 7,
+      str(scelta))
+check("senza riscrivere il testo della risposta",
+      "inline_keyboard" in str(scelta[1]) and "sg:" not in str(scelta[1]),
+      str(scelta[1]))
+# Il turno fatto da un consiglio e' un turno come gli altri: la sua risposta
+# riceve i suoi consigli, attaccati a lei.
+check("un turno fatto da un consiglio riceve i suoi consigli",
+      bool(api_cons.tastiere) and "sg:" in str(api_cons.tastiere[-1][1]),
+      str(api_cons.tastiere[-1:]))
+
+# Indice che non esiste piu' (messaggio vecchio di un turno precedente):
+# si dice, e non parte niente.
+prima_scaduto = len(turni_cons)
+ponte_cons._pulsante({"data": "sg:9", "id": "cb-2",
+                      "message": {"message_id": 4,
+                                  "chat": {"id": chat_cons}}})
+check("un consiglio scaduto non avvia un turno",
+      len(turni_cons) == prima_scaduto, str(turni_cons))
+check("e lo dice invece di tacere",
+      bool(api_cons.callback) and "scaduto" in api_cons.callback[-1].lower(),
+      str(api_cons.callback))
+
+# Con un turno gia' in corso non ne parte un secondo, e il testo non si
+# perde: viene scritto in chat cosi' si puo' rimandare.
+finto = threading.Thread(target=lambda: time.sleep(0.4), daemon=True)
+finto.start()
+ponte_cons._turno_thread = finto
+api_cons.messaggi.clear()
+ponte_cons.suggerimenti(chat_cons, 9)
+prima_busy = len(turni_cons)
+ponte_cons._pulsante({"data": "sg:0", "id": "cb-3",
+                      "message": {"message_id": 9,
+                                  "chat": {"id": chat_cons}}})
+check("col turno in corso non ne parte un altro",
+      len(turni_cons) == prima_busy, str(turni_cons))
+check("e il prompt viene detto in chat, non perso",
+      any("guarda i file del turno" in t for t, _m in api_cons.messaggi),
+      str(api_cons.messaggi))
+ponte_cons.aspetta(5)
+
+# Facoltativi davvero: senza proposta non si manda nessun messaggio.
+api_senza = ApiConsigli()
+ponte_senza = tg.Ponte(bot["id"], "Prova", api_senza, lambda *a, **k: "")
+check("senza proposte non si attacca niente",
+      ponte_senza.suggerimenti(chat_cons, 5) is False
+      and api_senza.tastiere == [] and api_senza.messaggi == [],
+      str(api_senza.tastiere))
+ponte_vuoto = tg.Ponte(bot["id"], "Prova", api_senza, lambda *a, **k: "",
+                       proposte=lambda: [])
+check("nemmeno con una lista vuota",
+      ponte_vuoto.suggerimenti(chat_cons, 5) is False
+      and api_senza.tastiere == [], str(api_senza.tastiere))
+# Senza un messaggio a cui attaccarsi non si manda un messaggio nuovo: era
+# proprio il difetto da togliere.
+prima_senza_id = len(api_cons.messaggi)
+check("senza messaggio non si manda un messaggio nuovo",
+      ponte_cons.suggerimenti(chat_cons, 0) is False
+      and len(api_cons.messaggi) == prima_senza_id,
+      str(api_cons.messaggi))
+
+# Il turno lungo, quello che viene recapitato dopo: anche li' i consigli.
+api_rec = ApiConsigli()
+ponte_rec = tg.Ponte(bot["id"], "Prova", api_rec, lambda *a, **k: "",
+                     proposte=lambda: list(proposte_finte))
+ponte_rec.recapita("la risposta del turno lungo", [], chat=chat_cons)
+check("il recapito attacca i consigli alla risposta",
+      len(api_rec.messaggi) == 1 and len(api_rec.tastiere) == 1
+      and "sg:" in str(api_rec.tastiere[0][1]),
+      str((api_rec.messaggi, api_rec.tastiere)))
+
+# Una risposta spezzata in piu' messaggi: i pulsanti vanno sull'ULTIMO, ed
+# e' il suo id che torna a chi chiama.
+api_lungo = ApiConsigli()
+ponte_lungo = tg.Ponte(bot["id"], "Prova", api_lungo, lambda *a, **k: "")
+lungo = "parola " * (tg.MAX_TESTO // 3)
+id_lungo = ponte_lungo._rispondi(
+    chat_cons, lungo,
+    markup=tg.tastiera([[{"testo": "prova", "dati": "sg:0"}]]))
+check("una risposta lunga arriva a pezzi",
+      len(api_lungo.messaggi) > 1, str(len(api_lungo.messaggi)))
+check("e i pulsanti vanno solo sull'ultimo pezzo",
+      all(m is None for _t, m in api_lungo.messaggi[:-1])
+      and bool(api_lungo.messaggi[-1][1]),
+      str([bool(m) for _t, m in api_lungo.messaggi]))
+check("il numero del messaggio torna a chi chiama",
+      id_lungo == len(api_lungo.messaggi), str(id_lungo))
+
+# L'app e' quella che sa calcolarli (il ponte no): se questa funzione
+# sparisse o tornasse cose senza prompt, in chat arriverebbero pulsanti
+# che non fanno niente.
+app_cons, _sess_cons = app_finta()
+lista_app = app_cons._telegram_suggerimenti()
+check("l'app sa calcolare i consigli", isinstance(lista_app, list)
+      and bool(lista_app), str(lista_app)[:160])
+check("e ognuno ha titolo e prompt",
+      all(p.get("titolo") and p.get("prompt") for p in lista_app),
+      str(lista_app)[:160])
+
+# Un messaggio vecchio resta in chat con i suoi pulsanti: premendolo deve
+# partire il prompt CHE STA SOTTO QUEI PULSANTI, non quello dell'ultimo
+# turno. Con la mappa per chat il tocco prendeva la lista nuova, e partiva
+# una richiesta che con quello che si stava leggendo non c'entrava.
+proposte_finte[:] = [
+    {"id": "verifica", "titolo": "Consiglio del turno uno",
+     "prompt": "PROMPT-VECCHIO"},
+]
+ponte_cons.suggerimenti(chat_cons, 111)
+proposte_finte[:] = [
+    {"id": "verifica", "titolo": "Consiglio del turno due",
+     "prompt": "PROMPT-NUOVO"},
+]
+ponte_cons.suggerimenti(chat_cons, 222)
+check("i due messaggi ricordano ognuno i suoi prompt",
+      (ponte_cons._suggeriti.get((chat_cons, 111)) or [{}])[0].get("prompt")
+      == "PROMPT-VECCHIO"
+      and (ponte_cons._suggeriti.get((chat_cons, 222)) or [{}])[0].get("prompt")
+      == "PROMPT-NUOVO",
+      str(sorted(ponte_cons._suggeriti))[:160])
+prima_vecchio = len(turni_cons)
+ponte_cons._pulsante({"data": "sg:0", "id": "cb-vecchio",
+                      "message": {"message_id": 111,
+                                  "chat": {"id": chat_cons}}})
+check("un pulsante vecchio fa partire il prompt del suo messaggio",
+      ponte_cons.aspetta(5) and turni_cons[-1:] == ["PROMPT-VECCHIO"],
+      str(turni_cons[-2:]))
+check("e non quello del turno nuovo",
+      "PROMPT-NUOVO" not in str(turni_cons[prima_vecchio:]),
+      str(turni_cons[prima_vecchio:]))
+ponte_cons._pulsante({"data": "sg:0", "id": "cb-nuovo",
+                      "message": {"message_id": 222,
+                                  "chat": {"id": chat_cons}}})
+check("e il pulsante del turno nuovo fa partire il suo",
+      ponte_cons.aspetta(5) and turni_cons[-1:] == ["PROMPT-NUOVO"],
+      str(turni_cons[-2:]))
+# I prompt non si tengono per sempre: oltre il tetto, i pulsanti vecchi
+# rispondono "scaduto" invece di crescere senza fine.
+import orchestra.telegram as _tg_mod  # noqa: E402
+
+for _n in range(_tg_mod.SUGGERITI_RICORDATI + 8):
+    ponte_cons.suggerimenti(chat_cons, 5000 + _n)
+della_chat_cons = sum(1 for c in ponte_cons._suggeriti if c[0] == chat_cons)
+check("la mappa non cresce senza fine per una chat",
+      della_chat_cons <= _tg_mod.SUGGERITI_RICORDATI,
+      str(della_chat_cons))
+
+# Il tetto e' per chat: su un bot con due chat collegate, i turni di una non
+# devono far scadere i pulsanti ancora vivi dell'altra.
+chat_due = "555000222"
+tg.imposta_chat(bot["id"], chat_due, "seconda")
+proposte_finte[:] = [
+    {"id": "verifica", "titolo": "Consiglio della seconda chat",
+     "prompt": "PROMPT-SECONDA"},
+]
+ponte_cons.suggerimenti(chat_due, 777)
+for _n in range(_tg_mod.SUGGERITI_RICORDATI + 8):
+    ponte_cons.suggerimenti(chat_cons, 7000 + _n)
+check("i pulsanti dell'altra chat sopravvivono ai turni della prima",
+      (chat_due, 777) in ponte_cons._suggeriti,
+      str(sorted(ponte_cons._suggeriti))[:200])
+prima_due = len(turni_cons)
+ponte_cons._pulsante({"data": "sg:0", "id": "cb-due",
+                      "message": {"message_id": 777,
+                                  "chat": {"id": chat_due}}})
+check("e premerli fa partire il loro prompt",
+      ponte_cons.aspetta(5) and turni_cons[-1:] == ["PROMPT-SECONDA"],
+      str(turni_cons[prima_due:]))
+
+# Scollegare una chat deve portarsi via anche i prompt che il ponte teneva
+# per lei: erano roba di quella conversazione, e restare in memoria fino al
+# turno di qualcun altro che li sovrascrive vuol dire tenersi il testo di
+# chi se n'e' andato.
+chat_tre = "555000333"
+tg.imposta_chat(bot["id"], chat_tre, "terza")
+proposte_finte[:] = [
+    {"id": "verifica", "titolo": "Consiglio della terza chat",
+     "prompt": "PROMPT-TERZA"},
+]
+ponte_cons.suggerimenti(chat_tre, 999)
+voci_prima = len(ponte_cons._suggeriti)
+check("prima dello scollegamento i prompt della chat ci sono",
+      (chat_tre, 999) in ponte_cons._suggeriti,
+      str(sorted(ponte_cons._suggeriti))[:200])
+# `/scollega` e' il comando che stacca la chat, non una chiamata diretta
+# all'aiutante: il test guarda il percorso che l'utente usa davvero.
+ponte_cons._gestisci({"text": "/scollega", "chat": {"id": chat_tre}})
+check("scollegare la chat butta via i suoi prompt",
+      not any(c[0] == chat_tre for c in ponte_cons._suggeriti),
+      str(sorted(ponte_cons._suggeriti))[:200])
+check("e non quelli delle altre chat",
+      len(ponte_cons._suggeriti) == voci_prima - 1
+      and any(c[0] == chat_cons for c in ponte_cons._suggeriti),
+      str(voci_prima) + " -> " + str(len(ponte_cons._suggeriti)))
+check("e la chat non riceve piu' turni",
+      not tg.chat_collegata(bot["id"], chat_tre), "ancora collegata")
+# L'aiutante da solo, senza comando di mezzo: due voci sulla stessa chat,
+# e non ne resta nessuna (ne' quelle delle altre).
+ponte_cons.suggerimenti(chat_tre, 555)
+ponte_cons.suggerimenti(chat_tre, 666)
+ponte_cons.dimentica_suggerimenti(chat_tre)
+check("l'aiutante butta via tutte le voci di una chat",
+      not any(c[0] == chat_tre for c in ponte_cons._suggeriti)
+      and any(c[0] == chat_cons for c in ponte_cons._suggeriti),
+      str(sorted(ponte_cons._suggeriti))[:200])
+# Anche il pannello stacca le chat, e passa da un'altra strada: la rotta
+# `/api/telegram/scollega`. Se buttasse via i prompt solo il comando, chi
+# scollega dalla finestra lascerebbe in memoria quelli di una persona che
+# non riceve piu' niente.
+from orchestra.rotte_telegram import RotteTelegram
+class AppScollega:
+    def __init__(self, ponte):
+        self._telegram_ponti = {bot["id"]: ponte}
+        self.risposta = None
+
+    def _json(self, corpo, stato=200):
+        self.risposta = (corpo, stato)
+
+
+def scollega_da_pannello(corpo):
+    app_sc = AppScollega(ponte_cons)
+    RotteTelegram._r_post_telegram_scollega(
+        app_sc, "/api/telegram/scollega", corpo, None)
+    return app_sc.risposta
+
+
+chat_quattro = "555000444"
+tg.imposta_chat(bot["id"], chat_quattro, "quarta")
+ponte_cons.suggerimenti(chat_quattro, 1234)
+check("la chat da scollegare dal pannello ha i suoi prompt",
+      (chat_quattro, 1234) in ponte_cons._suggeriti,
+      str(sorted(ponte_cons._suggeriti))[:200])
+risposta_sc = scollega_da_pannello({"id": bot["id"], "chat_id": chat_quattro})
+check("scollegare dal pannello butta via i prompt di quella chat",
+      not any(c[0] == chat_quattro for c in ponte_cons._suggeriti)
+      and (risposta_sc or ({}, 0))[1] == 200, str(risposta_sc)[:140])
+check("e lascia stare le altre",
+      any(c[0] == chat_cons for c in ponte_cons._suggeriti),
+      str(sorted(ponte_cons._suggeriti))[:200])
+# Il pannello sa anche staccare TUTTO: li' non resta niente da ricordare.
+chat_cinque = "555000555"
+tg.imposta_chat(bot["id"], chat_cinque, "quinta")
+ponte_cons.suggerimenti(chat_cinque, 4321)
+scollega_da_pannello({"id": bot["id"]})
+check("\"stacca tutto\" butta via i prompt di ogni chat",
+      ponte_cons._suggeriti == {}, str(sorted(ponte_cons._suggeriti))[:200])
+# L'aiutante chiamato senza chat e' il caso di "stacca tutto": dopo la
+# rotta la mappa e' vuota, quindi se ne rimette una per vederla sparire.
+# "Stacca tutto" ha staccato anche questa, quindi si ricollega
+# prima: i prompt seguono la chat, non il contrario.
+tg.imposta_chat(bot["id"], chat_cons, "di nuovo")
+ponte_cons.suggerimenti(chat_cons, 31337)
+check("prima c'e' una voce da buttare", (chat_cons, 31337) in ponte_cons._suggeriti,
+      str(sorted(ponte_cons._suggeriti))[:200])
+ponte_cons.dimentica_suggerimenti()
+check("l'aiutante senza chat butta via tutto", ponte_cons._suggeriti == {},
+      str(sorted(ponte_cons._suggeriti))[:200])
+# Un turno che finisce quando la chat e' gia' stata staccata (chi la
+# scollega dal pannello mentre il turno gira) non deve ricordarsi i prompt
+# di una conversazione che non c'e' piu'.
+chat_mai = "555000999"
+check("una chat scollegata non riceve prompt da ricordare",
+      ponte_cons.suggerimenti(chat_mai, 4242) is False
+      and not any(c[0] == chat_mai for c in ponte_cons._suggeriti),
+      str(sorted(ponte_cons._suggeriti))[:200])
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("falliti:", ", ".join(FAIL))

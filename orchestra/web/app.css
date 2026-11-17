@@ -164,6 +164,18 @@
   }
   .cwrap { max-width: 900px; margin: 0 auto; }
   .row { display: flex; gap: 10px; align-items: flex-end; }
+  /* I pulsanti di fine turno: pillole sopra il campo. Non sono comandi,
+     sono frasi pronte — e si comportano da pulsanti perche' un link che
+     compila un campo sembra un link, e non si preme. */
+  .suggerimenti { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .suggerimenti[hidden] { display: none !important; }
+  .suggerimento {
+    font: 12px var(--mono); color: var(--fg); background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 5px 12px; cursor: pointer; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .suggerimento:hover { border-color: var(--accent-dim); color: var(--accent); }
   textarea {
     flex: 1; resize: none; background: var(--panel-2); color: var(--fg);
     border: 1px solid var(--border); border-radius: 8px;

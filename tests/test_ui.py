@@ -558,6 +558,51 @@ out.snapshotScrollHeight = mainEl.scrollHeight;
   await pollCallback();
   out.pollingFineTurno = main.scrollTop;
 
+  // --- REGRESSIONE: col polling l'unico segnale di fine turno e' busy che
+  // torna falso. Senza questo i pulsanti di fine turno non comparivano
+  // mai: `idle` non arriva, perche' il SSE e' quello che non funziona.
+  ready = true;
+  suggerimentiFatto = false;
+  mk("suggerimenti").children = [];
+  let chiestiSuggerimenti = 0;
+  const fetchPrima = globalThis.fetch;
+  const rispondi = (url) => {
+    if (url === "/api/suggerimenti") {
+      chiestiSuggerimenti += 1;
+      return { ok: true, status: 200, json: async () => ({ proposte: [
+        {id: "verifica", titolo: "Controlla", prompt: "guarda i file toccati"},
+      ]}) };
+    }
+    return { ok: true, status: 200, json: async () => ({ready: true, busy: false, messages: []}) };
+  };
+  globalThis.fetch = async (url) => rispondi(url);
+  setBusy(true);            // il polling vede il turno in corso
+  setBusy(false);           // ...e poi lo vede finito
+  await new Promise((r) => setTimeout(r, 20));
+  out.pollingSuggerimenti = chiestiSuggerimenti;
+  out.pollingSuggerimentiN = mk("suggerimenti").children.length;
+  out.pollingSuggerimentiTitolo = mk("suggerimenti").children.length
+    ? mk("suggerimenti").children[0].textContent : "";
+
+  // Lo stesso turno arriva anche da `idle`: nessuna seconda richiesta.
+  await suggerimentiCarica();
+  out.pollingSuggerimentiDoppio = chiestiSuggerimenti;
+
+  // Col SSE vivo (polling spento) il cambio di busy non carica niente: lo
+  // fa `idle`, ed e' li' che i pulsanti arrivano.
+  handle("turn_start", {});        // turno nuovo: la fine precedente scade
+  const timerVero = pollingTimer;
+  pollingTimer = null;
+  chiestiSuggerimenti = 0;
+  setBusy(true);
+  setBusy(false);
+  await new Promise((r) => setTimeout(r, 20));
+  out.sseSuggerimentiSulBusy = chiestiSuggerimenti;
+  await suggerimentiCarica();      // arriva `idle`
+  out.sseSuggerimentiIdle = chiestiSuggerimenti;
+  pollingTimer = timerVero;
+  globalThis.fetch = fetchPrima;
+
   // --- REGRESSIONE: una risposta piu' alta della soglia di `seiInFondo`
   // (140 px) restava appena sotto il bordo. `seguiTurno` ricorda che
   // l'utente seguiva all'inizio del turno, e lo riporta a fondo.
@@ -785,6 +830,23 @@ check("il polling conserva la posizione di lettura",
 # posizione torna a 0): chi stava leggendo in fondo deve restare in fondo.
 check("il polling a turno finito resta in fondo, non in cima",
       res.get("pollingFineTurno") == 5000, str(res.get("pollingFineTurno")))
+# --- REGRESSIONE: a fine turno i pulsanti si caricavano solo su `idle`, che
+# col polling non arriva mai. Ora il segnale e' busy che torna falso.
+check("col polling i pulsanti arrivano a turno finito",
+      res.get("pollingSuggerimenti") == 1
+      and res.get("pollingSuggerimentiN") == 1,
+      f"richieste={res.get('pollingSuggerimenti')} "
+      f"pulsanti={res.get('pollingSuggerimentiN')}")
+check("e col titolo giusto", res.get("pollingSuggerimentiTitolo") == "Controlla",
+      str(res.get("pollingSuggerimentiTitolo")))
+check("l'idle non ripete la richiesta dello stesso turno",
+      res.get("pollingSuggerimentiDoppio") == 1,
+      str(res.get("pollingSuggerimentiDoppio")))
+check("col SSE vivo il cambio di busy non chiede niente",
+      res.get("sseSuggerimentiSulBusy") == 0,
+      str(res.get("sseSuggerimentiSulBusy")))
+check("ed e' `idle` a caricare i pulsanti",
+      res.get("sseSuggerimentiIdle") == 1, str(res.get("sseSuggerimentiIdle")))
 # --- REGRESSIONE: una risposta piu' alta della soglia di `seiInFondo`
 # (140 px) restava appena sotto il bordo.
 check("la risposta finale arriva in fondo",

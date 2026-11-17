@@ -2399,6 +2399,26 @@ class OrchestraApp:
         except Exception:  # noqa: BLE001
             return []
 
+    def _telegram_suggerimenti(self) -> list[dict[str, Any]]:
+        """I pulsanti facoltativi di fine turno, con il prompt gia' scritto.
+
+        Si calcolano qui e non nel ponte perche' servono le stesse cose del
+        riepilogo — i file del turno e il git della root — che il ponte non
+        conosce. Un errore qui non deve far saltare un messaggio che e'
+        gia' partito: si torna una lista vuota e la chat resta com'era.
+        """
+        from . import riepilogo as _rie
+        from . import suggerimenti as _sug
+
+        try:
+            radice = str(self.gate_root())
+        except Exception:  # noqa: BLE001
+            radice = ""
+        try:
+            return _sug.proposte(_rie.ultimo(), radice=radice or os.getcwd())
+        except Exception:  # noqa: BLE001
+            return []
+
     def _telegram_recapita_dopo(self, bot_id: int, sess: Any,
                                 inizio: float, da_indice: int) -> None:
         """Manda la risposta quando il turno finisce, anche se e' lungo.
@@ -3815,6 +3835,9 @@ class OrchestraApp:
                 tocco=(lambda dati, b=bid: self.telegram_tocco(b, dati)),
                 risposta=(lambda testo, b=bid:
                           self.telegram_risposta_testo(b, testo)),
+                # I consigli di fine turno: facoltativi, e li calcola
+                # l'app (il ponte non sa cosa ha toccato il turno).
+                proposte=(lambda: self._telegram_suggerimenti()),
                 log=_log_telegram)
             ponti[bid] = ponte
             ponte.avvia()

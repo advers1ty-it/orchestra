@@ -938,6 +938,30 @@ class Api:
                 massimo: int = MASSIMO_FILE) -> bytes:
         return self._scarica(percorso, int(massimo))
 
+    def edit_reply_markup(self, chat_id: str | int, message_id: int,
+                          markup: str | None = None,
+                          secondi: float = 15) -> bool:
+        """Toglie (o cambia) i pulsanti SENZA riscrivere il testo.
+
+        Con `editMessageText` togliere una tastiera vorrebbe dire rimandare
+        il testo del messaggio — e qui il messaggio e' la risposta del
+        turno. Riscriverla per due bottoni significa poterla degradare (il
+        ripiego senza formattazione) o perdere (un 400 sul testo lungo)
+        per un motivo che col testo non c'entra. Questa chiamata tocca solo
+        la tastiera.
+        """
+        campi: dict[str, Any] = {
+            "chat_id": str(chat_id), "message_id": int(message_id),
+            "reply_markup": markup if markup is not None else tastiera(None),
+        }
+        try:
+            self.chiama("editMessageReplyMarkup", secondi=secondi, **campi)
+        except ErroreTelegram as e:
+            if "not modified" in str(e).lower():
+                return False
+            raise
+        return True
+
     def edit_message(self, chat_id: str | int, message_id: int,
                      testo: str, secondi: float = 15,
                      markup: str | None = None,
@@ -1379,6 +1403,12 @@ def semplice(testo: str) -> str:
 # attesa davanti a un telefono.
 RITENTA_ATTESA = 1.0
 
+# Quanti messaggi con i consigli si ricordano PER CHAT: i pulsanti
+# restano in chat, ma i prompt non si tengono per sempre. Il limite e' per
+# chat e non per ponte perche' un bot puo' avere piu' chat collegate, e i
+# turni di una non devono far scadere i pulsanti vivi dell'altra.
+SUGGERITI_RICORDATI = 32
+
 
 def _ritentabile(e: ErroreTelegram) -> bool:
     """Un errore che passa da solo: rete, limite di frequenza, 5xx.
@@ -1419,6 +1449,7 @@ class Ponte:
                  | None = None,
                  tocco: Callable[[str], str | dict[str, Any] | None] | None = None,
                  risposta: Callable[[str], str | None] | None = None,
+                 proposte: Callable[[], list[dict[str, Any]]] | None = None,
                  attesa: int = ATTESA_POLLING,
                  log: Callable[[str], None] | None = None) -> None:
         self.bot_id = int(bot_id)
@@ -1432,6 +1463,18 @@ class Ponte:
         # qualcosa aspetta e che la risposta arriva dall'altra parte.
         self.tocco = tocco
         self.risposta = risposta
+        # I pulsanti facoltativi di fine turno: chi li calcola sa cosa ha
+        # toccato il turno (file, test, git), che il ponte non sa. Qui si
+        # mandano e si ricordano i prompt, perche' in 64 byte di
+        # `callback_data` non ci starebbero mai.
+        #
+        # La mappa e' per MESSAGGIO, non per chat: un pulsante resta in
+        # chat anche dopo due turni, e la `callback_data` porta solo il suo
+        # numero. Tenendo la lista per chat, un tocco su un pulsante
+        # vecchio avrebbe preso i consigli del turno nuovo — che non
+        # c'entrano con quello che si sta leggendo.
+        self.proposte = proposte
+        self._suggeriti: dict[tuple[str, int], list[dict[str, Any]]] = {}
         self.attesa = max(0, int(attesa))
         self._log = log or (lambda _m: None)
         self._fermo = threading.Event()
@@ -1665,7 +1708,8 @@ class Ponte:
             return self.api.edit_message(chat_id, message_id,
                                          semplice(testo), markup=markup)
 
-    def _rispondi(self, chat_id: str, testo: str) -> None:
+    def _rispondi(self, chat_id: str, testo: str,
+                  markup: str | None = None) -> int:
         """Manda la risposta a pezzi, e ritenta quando Telegram tentenna.
 
         Un 429 (troppe richieste) o un 5xx non sono "il messaggio non si
@@ -1673,18 +1717,32 @@ class Ponte:
         andava persa con una riga nel log e niente in chat — ed e' il
         "poi non fa piu' niente" che si vede dal telefono, con il lavoro
         che pero' nella finestra era stato fatto.
+
+        `markup` va sull'ULTIMO pezzo, e il numero torna a chi chiama:
+        e' li' che finiscono i pulsanti di fine turno. Un messaggio in piu'
+        per ogni risposta era il difetto opposto — la chat raddoppiava.
         """
-        for pezzo in dividi(testo):
+        ultimo_id = 0
+        pezzi = dividi(testo)
+        for indice, pezzo in enumerate(pezzi):
+            ultimo = indice == len(pezzi) - 1
             for tentativo in range(3):
                 try:
-                    self._invia_testo(chat_id, pezzo)
+                    inviato = self._invia_testo(
+                        chat_id, pezzo, markup=markup if ultimo else None)
+                    # `inviato` puo' essere vuoto (un ponte finto, una
+                    # risposta senza `result`): l'id serve per attaccare i
+                    # pulsanti, non per mandare il messaggio.
+                    ultimo_id = int(((inviato or {}).get("result") or {}).get(
+                        "message_id") or 0)
                     break
                 except ErroreTelegram as e:
                     if not _ritentabile(e) or tentativo == 2:
                         self._log(f"telegram {self.nome}: risposta non "
                                   f"inviata: {e}")
-                        return
+                        return ultimo_id
                     time.sleep(RITENTA_ATTESA * (2 ** tentativo))
+        return ultimo_id
 
     def chat_turno(self) -> str:
         """La chat che sta facendo il turno adesso, o vuota.
@@ -1713,10 +1771,95 @@ class Ponte:
         if not chat or not (testo or "").strip():
             return False
         self.api.scrive(chat)
-        self._rispondi(chat, testo)
+        messaggio = self._rispondi(chat, testo)
         if file:
             self._manda_file(chat, [f for f in file if isinstance(f, dict)])
+        self.suggerimenti(chat, messaggio)
         return True
+
+    def suggerimenti(self, chat_id: str, message_id: int = 0) -> bool:
+        """I pulsanti facoltativi, attaccati alla risposta appena arrivata.
+
+        Sulla risposta e non su un messaggio a parte: ogni turno produceva
+        due messaggi in chat — la risposta e poi "e adesso?" — e la
+        seconda riga era un ingombro per un extra. L'occhio, a fine
+        lettura, e' gia' li'.
+
+        Facoltativi in tutti i sensi: chi non li preme non perde niente —
+        il prompt e' li' per risparmiare una frase, non per decidere al
+        posto suo. Ogni pulsante porta un numero, non il testo: il prompt
+        sta qui in memoria perche' in 64 byte di `callback_data` non ci
+        starebbe, e un prompt tagliato a meta' sarebbe peggio di nessun
+        pulsante.
+
+        Si ricalcolano a ogni fine turno invece di tenerli da parte: i
+        file toccati e il git cambiano, e un "commit" di ieri non dice
+        niente su oggi.
+        """
+        chat_id = str(chat_id or "")
+        if self.proposte is None or not chat_id:
+            return False
+        if not chat_collegata(self.bot_id, chat_id):
+            # La chat puo' essere stata staccata mentre il turno girava:
+            # attaccare i pulsanti a una risposta che nessuno puo' piu'
+            # premere, e ricordarsene i prompt, sarebbe un altro modo di
+            # tenersi il testo di chi se n'e' andato.
+            return False
+        try:
+            lista = [p for p in (self.proposte() or [])
+                     if isinstance(p, dict) and (p.get("prompt") or "")]
+        except Exception:  # noqa: BLE001 - un extra non ferma la chat
+            return False
+        if not lista:
+            self._suggeriti.pop((chat_id, int(message_id or 0)), None)
+            return False
+        if not message_id:
+            # Senza un messaggio a cui attaccarli non si manda un messaggio
+            # nuovo: i pulsanti sono un extra, e un extra che raddoppia la
+            # chat a ogni turno e' peggio di nessun extra.
+            return False
+        righe = [[{"testo": str(p.get("titolo") or "...")[:60],
+                   "dati": f"sg:{i}"}] for i, p in enumerate(lista[:4])]
+        try:
+            self.api.edit_reply_markup(chat_id, int(message_id), tastiera(righe))
+        except ErroreTelegram as e:
+            self._log(f"telegram {self.nome}: consigli non attaccati: {e}")
+            return False
+        self._ricorda_suggeriti((chat_id, int(message_id)), lista[:4])
+        return True
+
+    def _ricorda_suggeriti(self, chiave: tuple[str, int],
+                           lista: list[dict[str, Any]]) -> None:
+        """Ricorda i prompt di QUEL messaggio, e dimentica i piu' vecchi.
+
+        Il tetto esiste perche' i messaggi non muoiono: senza, la mappa
+        crescerebbe per ogni turno di ogni chat. Quando una voce esce, i
+        suoi pulsanti rispondono "consiglio scaduto" — onesto, e meglio
+        di una mappa che cresce per sempre.
+
+        Il tetto e' PER CHAT: su un bot con due chat collegate, un tetto
+        per ponte farebbe scadere i pulsanti ancora vivi di una per colpa
+        dei turni dell'altra, che non c'entrano niente.
+        """
+        self._suggeriti.pop(chiave, None)
+        self._suggeriti[chiave] = lista
+        della_chat = [c for c in self._suggeriti if c[0] == chiave[0]]
+        while len(della_chat) > SUGGERITI_RICORDATI:
+            self._suggeriti.pop(della_chat.pop(0), None)
+
+    def dimentica_suggerimenti(self, chat_id: str | None = None) -> None:
+        """Butta via i prompt dei consigli di una chat, o di tutte.
+
+        I prompt sono roba di quella conversazione: restare in memoria
+        dopo lo scollegamento vuol dire tenersi il testo di chi se n'e'
+        andato, finche' il turno di qualcun altro non li sovrascrive. Senza
+        `chat_id` si buttano tutte le voci del ponte, che sono di un bot
+        solo.
+        """
+        chiavi = [c for c in self._suggeriti
+                  if chat_id is None or c[0] == str(chat_id)]
+        for chiave in chiavi:
+            self._suggeriti.pop(chiave, None)
 
     def _invia_modulo(self, chat_id: str, testo: str,
                       righe: list | None) -> int:
@@ -1809,6 +1952,11 @@ class Ponte:
             self.api.answer_callback(cb_id,
                                      "Questa chat non e' collegata a Orchestra.")
             return
+        # I consigli di fine turno non sono un modulo: passano da qui, prima
+        # del controllo che li rifiuterebbe come "modulo non disponibile".
+        if dati.startswith("sg:"):
+            self._suggerimento_premuto(chat_id, message_id, cb_id, dati)
+            return
         if self.tocco is None and self.comandi is None:
             self.api.answer_callback(cb_id, "Modulo non disponibile.")
             return
@@ -1867,6 +2015,7 @@ class Ponte:
                     # stesso bot, un comando mandato da una non deve
                     # buttare fuori le altre.
                     esito = dimentica_chat(self.bot_id, chat_id)
+                    self.dimentica_suggerimenti(chat_id)
                     altre = int(esito.get("chat_quante") or 0)
                     resto = (f" Restano {altre} chat collegate." if altre
                              else "")
@@ -2135,9 +2284,47 @@ class Ponte:
         # scorrendo all'indietro quando vuole.
         if ragionamento:
             self._rispondi(chat_id, "Ragionamento del turno:\n" + ragionamento)
-        self._rispondi(chat_id, risposta)
+        messaggio = self._rispondi(chat_id, risposta)
         if prodotti:
             self._manda_file(chat_id, prodotti)
+        self.suggerimenti(chat_id, messaggio)
+
+    def _suggerimento_premuto(self, chat_id: str, message_id: int,
+                              cb_id: str, dati: str) -> None:
+        """Un consiglio premuto: diventa la richiesta, alla luce del sole.
+
+        Non e' un comando nascosto: quello che parte e' lo stesso testo che
+        l'utente avrebbe potuto scrivere. I pulsanti si tolgono dalla
+        risposta senza riscriverla: lasciarli li' farebbe credere che un
+        secondo tocco valga ancora, e riscrivere il testo della risposta
+        per due bottoni e' un rischio che non serve correre.
+        """
+        lista = self._suggeriti.get((chat_id, int(message_id or 0))) or []
+        try:
+            scelto = lista[int(dati.split(":", 1)[1])]
+        except (IndexError, ValueError):
+            self.api.answer_callback(cb_id, "Consiglio scaduto.")
+            return
+        prompt = str(scelto.get("prompt") or "").strip()
+        if not prompt:
+            self.api.answer_callback(cb_id, "Consiglio scaduto.")
+            return
+        self.api.answer_callback(cb_id)
+        self._suggeriti.pop((chat_id, int(message_id or 0)), None)
+        if message_id:
+            try:
+                self.api.edit_reply_markup(chat_id, int(message_id),
+                                           tastiera(None))
+            except ErroreTelegram:
+                pass
+        if self.occupato:
+            # Accodarlo lo farebbe leggere al turno sbagliato: si dice il
+            # testo, cosi' chi l'ha premuto non l'ha perso.
+            self._rispondi(chat_id,
+                           "C'e' gia' un turno in corso. Quando ho finito, "
+                           "mandami questo:\n\n" + prompt)
+            return
+        self._avvia_turno(chat_id, prompt, [])
 
     def _risposta_scritta(self, chat_id: str, testo: str,
                           atteso: dict[str, Any]) -> None:
