@@ -9,11 +9,22 @@ scrivere sul disco di chi usa Orchestra. Non uno cercava niente. Chiedere
 non lo sapesse, ma perché *non poteva saperlo*: la sua conoscenza ha una
 data di taglio e nessun tool gliela aggirava.
 
-DUCKDUCKGO, NESSUNA CHIAVE
+MOTORI SENZA CHIAVE
 
-`ddgs` cerca su DuckDuckGo senza account, senza token, senza carta. È la
-scelta coerente col resto: Orchestra è offline-first, gratis, e gira su
-127.0.0.1. Una API con chiave significherebbe un account e un costo fisso.
+`ddgs` interroga i motori di ricerca senza account, senza token, senza
+carta. È la scelta coerente col resto: Orchestra è offline-first, gratis,
+e gira su 127.0.0.1. Una API con chiave significherebbe un account e un
+costo fisso.
+
+UN MOTORE ALLA VOLTA, NON TUTTI INSIEME
+
+Il default di `ddgs` è `backend="auto"`: interroga *tutti* i motori in
+parallelo. Il grappolo di richieste è esattamente ciò che fa scattare i
+blocchi anti-bot — DuckDuckGo risponde 202 alla sfida, Brave 429, Mojeek
+403 — e quando l'unico motore ancora libero è lento si torna a mani vuote
+con un «No results found» che sembra una query senza risultati, mentre la
+query non c'entra niente. Qui i motori si chiedono in fila, e ci si ferma
+al primo che risponde.
 
 MA SE MANCA LA LIBRERIA, NON SI MUORE
 
@@ -31,6 +42,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -192,8 +204,78 @@ def _blocco_non_fidato(testo: str, fonte: str) -> str:
             f"<<<FINE CONTENUTO NON FIDATO>>>")
 
 
+# I motori di `ddgs`, in ordine di preferenza. Si prova il primo, se
+# torna vuoto si passa al successivo: vedi `_cerca_in_fila` per il perche'.
+MOTORI_RICERCA = ("duckduckgo", "yahoo", "brave", "mojeek", "wikipedia")
+
+# Il motore che ha risposto l'ultima volta. Le ricerche di un turno sono
+# ravvicinate e sullo stesso argomento: partire da quello che funziona
+# evita di ripagare il blocco a ogni query.
+_motore_buono = ""
+
+# Quanto si aspetta un singolo motore, e quanto puo' durare in tutto il
+# giro dei ripieghi. Senza tetto, cinque motori che non rispondono
+# tengono occupato il turno per mezzo minuto.
+SECONDI_MOTORE = 6
+SECONDI_TOTALI = 20
+PAUSA_FRA_MOTORI = 0.5
+
+# Due giri, non un loop. Un motore bloccato (202, 429, 403) non si
+# sblocca aspettando: insistere allunga il turno e basta. Un vuoto
+# passeggero invece succede — il motore risponde 200 con la pagina
+# sbagliata, o l'unico risultato viene scartato — e al secondo tentativo
+# la stessa query lo trova. Due giri coprono il secondo caso, non il primo.
+GIRI_RICERCA = 2
+PAUSA_SECONDO_GIRO = 2.0
+
+
+def _cerca_in_fila(DDGS: Any, q: str, limite: int) -> tuple[list[dict[str, Any]],
+                                                          list[str]]:
+    """Prova un motore alla volta, fermandosi al primo che risponde.
+
+    Restituisce i risultati e l'elenco di cosa e' successo ai motori
+    provati: senza, «nessun risultato» non distingue una query vuota da
+    cinque motori bloccati, e sembrano lo stesso guasto.
+    """
+    global _motore_buono
+
+    motori = list(MOTORI_RICERCA)
+    if _motore_buono in motori:
+        motori.remove(_motore_buono)
+        motori.insert(0, _motore_buono)
+
+    provati: list[str] = []
+    tentativi = 0
+    scadenza = time.monotonic() + SECONDI_TOTALI
+    for giro in range(GIRI_RICERCA):
+        if giro:
+            time.sleep(PAUSA_SECONDO_GIRO)
+        for motore in motori:
+            if time.monotonic() >= scadenza:
+                # Il tempo e' finito: provare gli altri a vuoto allunga il
+                # turno senza cambiare la risposta.
+                return [], provati
+            if tentativi:
+                # La pausa non e' galateo: colpire un motore mentre il
+                # precedente e' ancora in penalita' peggiora la ricerca
+                # successiva, che e' quella dopo.
+                time.sleep(PAUSA_FRA_MOTORI)
+            tentativi += 1
+            try:
+                esito = DDGS(timeout=SECONDI_MOTORE).text(
+                    q, max_results=limite, backend=motore)
+            except Exception as e:  # noqa: BLE001
+                provati.append(f"{motore}: {type(e).__name__}")
+                continue
+            if esito:
+                _motore_buono = motore
+                return list(esito), provati
+            provati.append(f"{motore}: vuoto")
+    return [], provati
+
+
 def tool_web_cerca() -> Tool:
-    """Cerca sul web con DuckDuckGo. Nessuna chiave."""
+    """Cerca sul web senza chiave, un motore alla volta."""
 
     def handler(query: str = "", limite: int = 5) -> str:
         q = (query or "").strip()
@@ -210,7 +292,7 @@ def tool_web_cerca() -> Tool:
                     "Orchestra funziona senza.")
         try:
             limite = max(1, min(int(limite or 5), 10))
-            risultati = list(DDGS().text(q, max_results=limite))
+            risultati, provati = _cerca_in_fila(DDGS, q, limite)
         except Exception as e:
             # La rete può non rispondere: un DNS che non risolve o un
             # proxy che blocca. Distinguere il motivo aiuta a capire se
@@ -219,7 +301,16 @@ def tool_web_cerca() -> Tool:
                     f"Se il problema è la rete, Orchestra funziona comunque "
                     f"in locale.")
         if not risultati:
-            return f"Nessun risultato per: {q}"
+            # Non e' detto che la query sia vuota: quando tacciono tutti
+            # insieme e' quasi sempre il blocco anti-bot, e dirlo evita
+            # che chi legge rifaccia la stessa query sperando diverso.
+            return (f"Nessun risultato per: {q}\n"
+                    f"Motori provati: {', '.join(provati) or 'nessuno'}.\n"
+                    f"Se nessuno ha risposto e' quasi sempre un blocco "
+                    f"temporaneo del motore (DuckDuckGo 202, Brave 429, "
+                    f"Mojeek 403): aspetta un minuto e riprova, o cambia le "
+                    f"parole della query. Se conosci gia' l'indirizzo, "
+                    f"`web_leggi` non passa da nessun motore.")
         righe = []
         for i, r in enumerate(risultati, 1):
             titolo = (r.get("title") or "").strip() or "(senza titolo)"
@@ -233,7 +324,7 @@ def tool_web_cerca() -> Tool:
     return Tool(
         name="web_cerca",
         description=(
-            "Searches the web (DuckDuckGo, no key). Use it when the question "
+            "Searches the web (no key, no account). Use it when the question "
             "depends on facts that may have changed since your training "
             "date: prices, versions, news, documentation. Do not use it "
             "for things you already know."
