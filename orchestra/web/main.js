@@ -730,6 +730,7 @@ function esitiTraccia() {
     // invece di farlo. Diverso da "solo parole": qui qualcosa e' stato
     // fatto, e il lavoro e' rimasto a meta'.
     annuncio_finale: "fermato su un annuncio",
+    risposta_vuota: "nessuna risposta scritta",
   };
   return _esitiTraccia;
 }

@@ -43,6 +43,9 @@ _ESITI = {
     "solo_parole": ("fermato: aveva annunciato senza fare", "errore"),
     "annuncio_finale": ("finito, ma con un annuncio a vuoto", "avviso"),
     "troncato": ("fermato: risposta troncata dal tetto di token", "avviso"),
+    # Il turno si e' chiuso senza una parola di testo: nessuna risposta da
+    # leggere. Non e' «finito» — e dirlo «finito» era il difetto.
+    "risposta_vuota": ("fermato: il modello non ha scritto niente", "avviso"),
     "verifica_fallita": ("finito senza superare la verifica", "avviso"),
 }
 

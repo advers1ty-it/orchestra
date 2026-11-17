@@ -240,6 +240,16 @@ _NUDGE_DOPO_LAVORO = (
     "un risultato."
 )
 
+# La risposta e' arrivata senza UNA PAROLA: il ragionamento c'e', il testo
+# no (o e' fatto di soli spazi). Un rimando, perche' quasi sempre il modello
+# sa rispondere e ha sbagliato solo l'ultimo pezzo.
+_NUDGE_VUOTA = (
+    "NOTA DEL SISTEMA: il tuo ultimo messaggio era VUOTO — non conteneva "
+    "una sola parola. Non ripetere il ragionamento e non scusarti: scrivi "
+    "adesso la risposta all'utente, in testo normale. Se non hai niente da "
+    "dire, dillo in una riga."
+)
+
 
 class Agent:
     """L'orchestratore.
@@ -326,6 +336,10 @@ class Agent:
             # output. Serve al tetto dei "continua": senza, un modello con
             # max_tokens basso brucerebbe tutte le iterazioni a riprovare.
             self._troncamenti: int = 0
+            # Quante volte la risposta e' arrivata senza una parola di
+            # testo. Raro, ma quando succede il turno non ha nessuna
+            # risposta da mostrare: non e' «completato».
+            self._risposte_vuote: int = 0
             # Budget. Lo stato si crea SEMPRE, anche senza limiti espliciti:
             # saltare la creazione perche' "non mi hanno passato niente"
             # faceva leggere il .env a BudgetGuard senza che nessuno gli
@@ -948,6 +962,7 @@ class Agent:
         self._verifica_esaurita = False
         self._chiamate_identiche = {}
         self._troncamenti = 0
+        self._risposte_vuote = 0
 
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):
@@ -1376,6 +1391,30 @@ class Agent:
             # niente, "annuncio_finale" se il turno ha comunque prodotto
             # lavoro. Sono due cose diverse, e chiamarle con lo stesso nome
             # sarebbe la bugia che questo blocco esiste per evitare.
+            # UNA RISPOSTA SENZA TESTO NON E' UNA RISPOSTA.
+            #
+            # Ogni tanto — raro, e per questo era passato — arriva una
+            # risposta con `content` vuoto o fatto di soli spazi: il
+            # ragionamento c'e', le parole no. Prima chiudeva come
+            # `risposta_finale`: in chat restava una riga vuota e un
+            # «completato» che non conteneva niente, e l'utente doveva
+            # scrivere «continua» per avere una risposta.
+            #
+            # Un rimando solo, come per il troncamento: se anche il
+            # secondo tentativo e' vuoto, il turno si chiude dicendolo
+            # (`risposta_vuota`) invece di far finta di aver risposto.
+            if not (resp.content or "").strip():
+                self._risposte_vuote += 1
+                if self._risposte_vuote <= 1:
+                    self._nota_sistema(_NUDGE_VUOTA, "__vuota__")
+                    self._emit("risposta_vuota",
+                               tentativo=self._risposte_vuote)
+                    continue
+                self._emit("risposta_vuota",
+                           tentativo=self._risposte_vuote, chiuso=True)
+                self.state.stopped_because = "risposta_vuota"
+                return self.state
+
             if self.state.tool_calls_made == 0:
                 self._vuote_di_fila += 1
             annuncio = self._annuncia_senza_fare(resp.content)

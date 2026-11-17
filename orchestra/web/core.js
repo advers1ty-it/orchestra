@@ -679,6 +679,7 @@ function avviaPollingFallback() {
           // Ricostruisci la chat come fa lo snapshot del SSE.
           const nodiClient = raccogliNodiClient();
           log.innerHTML = "";
+          if (typeof ragionamentoDimentica === "function") ragionamentoDimentica();
           const risultatiTool = {};
           (snap.messages || []).forEach((m) => {
             if (m && m.role === "tool" && m.tool_call_id) risultatiTool[m.tool_call_id] = m;
@@ -687,7 +688,10 @@ function avviaPollingFallback() {
             const text = (m && m.content != null) ? String(m.content) : "";
             if (m.role === "user") addText("user", text);
             else if (m.role === "assistant") {
-              if (m.reasoning) {
+              // `if (m.reasoning)` lasciava passare i ragionamenti fatti di
+              // soli a capo: un blocco vuoto, identico a una riga bianca.
+              // Qui, e nello snapshot qui sopra, si guarda il testo vero.
+              if ((m.reasoning || "").trim()) {
                 const r = el("div", "ragionamento");
                 r.textContent = m.reasoning;
                 log.appendChild(r);
@@ -841,6 +845,7 @@ function handle(kind, d) {
       const nodiClient = raccogliNodiClient();
       // ricostruisci la conversazione
       log.innerHTML = "";
+      if (typeof ragionamentoDimentica === "function") ragionamentoDimentica();
       // I risultati dei tool, indicizzati per id: le chiamate (dentro i
       // messaggi assistant) arrivano prima dei risultati (messaggi
       // role="tool"), ma raccoglierli prima rende il rendering immune
@@ -860,7 +865,7 @@ function handle(kind, d) {
         if (m.role === "user") addText("user", text);
         else if (m.role === "assistant") {
           // Il ragionamento appartiene a questa risposta e va prima di essa.
-          if (m.reasoning) {
+          if ((m.reasoning || "").trim()) {
             const r = el("div", "ragionamento");
             r.textContent = m.reasoning;
             log.appendChild(r);
@@ -976,7 +981,11 @@ function handle(kind, d) {
       ragionamentoVisibile = false;
       ragionamentoChiudi();
       togliAttesa();
-      if (d.content) {
+      // `d.content` puo' essere fatto di soli spazi: con `if (d.content)`
+      // bastava quello per creare una bolla vuota. Lo snapshot usa gia'
+      // `.trim()`, quindi la bolla spariva al reload — un difetto che
+      // sembrava casuale proprio per questo.
+      if ((d.content || "").trim()) {
         addText("assistant", d.content, true);
         // La risposta vera va in fondo SE l'utente stava seguendo il
         // turno — non "se è in fondo adesso". Con un tool da 200 righe,
@@ -1150,6 +1159,14 @@ function handle(kind, d) {
       addNote("fine turno · " + (d.riga || d.esito_testo || "fatto"));
       notificaTurno(d);
       break;
+    // La risposta e' arrivata senza una parola di testo. In chat non c'e'
+    // niente da leggere: senza questa riga resterebbe un turno chiuso col
+    // vuoto dentro, che e' peggio di un messaggio che spiega.
+    case "risposta_vuota":
+      addNote(d.chiuso
+        ? "il modello ha chiuso senza scrivere niente: nessuna risposta da mostrare."
+        : "risposta vuota: ho chiesto al modello di scriverla davvero.");
+      break;
     case "error":
       addText("error", d.message);
       break;
@@ -1167,6 +1184,7 @@ function handle(kind, d) {
     }
     case "reset":
       log.innerHTML = "";
+      if (typeof ragionamentoDimentica === "function") ragionamentoDimentica();
       stats.textContent = "—";
       break;
     case "idle":
@@ -1213,6 +1231,7 @@ function chiediPermessoNotifiche() {
 function showBanner(msg) {
   const b = el("div", "banner", msg);
   log.innerHTML = "";
+  if (typeof ragionamentoDimentica === "function") ragionamentoDimentica();
   log.appendChild(b);
 }
 

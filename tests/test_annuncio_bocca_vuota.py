@@ -204,6 +204,72 @@ if nudge3:
     check("il nudge chiede di finire o dirlo esplicitamente",
           "hai annunciato altro lavoro" in testo3, testo3[:80])
 
+# ------------------------------------------ [4] risposta senza una parola
+print("\n[4] Il modello che non scrive niente non ha risposto")
+
+
+class ProviderMuto:
+    """Il ragionamento c'e', il testo no: solo spazi."""
+
+    name = "fake"
+    model = "fake/modello"
+
+    def __init__(self, risposte):
+        self.risposte = list(risposte)
+        self.chiamate = 0
+
+    def chat(self, messages, tools=None, **kw):
+        self.chiamate += 1
+        testo = self.risposte[min(self.chiamate - 1, len(self.risposte) - 1)]
+        return LLMResponse(content=testo, model=self.model,
+                           prompt_tokens=4, completion_tokens=3,
+                           reasoning="ho ragionato e non ho scritto nulla")
+
+
+# Il difetto segnalato: ogni tanto il turno finiva con una riga vuota e un
+# «completato» sopra. Il modello aveva ragionato e `content` era vuoto.
+eventi4 = []
+prov4 = ProviderMuto(["  \n "])
+ag4 = Agent(prov4, default_registry(), "test", LoopConfig(max_iterations=6),
+            on_event=lambda k, d: eventi4.append(k))
+ag4.run("aggiorna le informazioni dal link")
+
+check("l'evento risposta_vuota parte", "risposta_vuota" in eventi4,
+      f"eventi: {sorted(set(eventi4))}")
+check("chiede una volta di scriverla davvero", prov4.chiamate == 2,
+      f"chiamate: {prov4.chiamate}")
+check("non chiude come risposta_finale",
+      ag4.state.stopped_because == "risposta_vuota",
+      f"esito: {ag4.state.stopped_because!r}")
+vuoto = [m for m in ag4.state.messages
+         if m.name == "__vuota__" and m.role == "tool"]
+check("il rimando e' nel contesto una volta sola", len(vuoto) == 1,
+      f"rimandi: {len(vuoto)}")
+
+# Lo stesso modello che al secondo colpo scrive: il turno si chiude bene,
+# e la risposta vera e' l'ultima cosa in chat.
+eventi5 = []
+prov5 = ProviderMuto(["   ",
+                      "Ecco le note aggiornate: sei bacheche, non quattro."])
+ag5 = Agent(prov5, default_registry(), "test", LoopConfig(max_iterations=6),
+            on_event=lambda k, d: eventi5.append(k))
+ag5.run("aggiorna le informazioni dal link")
+check("al secondo tentativo chiude come risposta_finale",
+      ag5.state.stopped_because == "risposta_finale",
+      f"esito: {ag5.state.stopped_because!r}")
+check("la risposta vera e' quella che resta in chat",
+      (ag5.state.messages[-1].content or "").startswith("Ecco le note"),
+      repr(ag5.state.messages[-1].content)[:80])
+
+# L'esito nuovo deve leggersi in parole: un codice crudo in un riepilogo
+# sembra un guasto dell'interfaccia.
+from orchestra.riepilogo import esito_leggibile  # noqa: E402
+
+testo_esito, gravita = esito_leggibile("risposta_vuota")
+check("l'esito si legge in parole", "non ha scritto niente" in testo_esito,
+      testo_esito)
+check("non e' dichiarato un esito ok", gravita != "ok", gravita)
+
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

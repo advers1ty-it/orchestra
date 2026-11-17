@@ -594,15 +594,29 @@ function ragionamentoApri() {
   const n = document.createElement("div");
   n.className = "ragionamento";
   n.textContent = "";
+  // Nasce nascosto: un blocco senza testo e' una riga vuota a schermo,
+  // e sembra un ragionamento che non e' arrivato. Si mostra al primo
+  // carattere vero (vedi `ragionamentoAggiungi`).
+  n.setAttribute("hidden", "");
   log.appendChild(n);
   ragionamentoCorrente = n;
-  n.removeAttribute("hidden");
   scrollDown();
+  // Si restituisce il nodo: `ragionamentoCorrente || ragionamentoApri()`
+  // prendeva il VALORE di ritorno, che era `undefined`, e il pezzo di
+  // ragionamento andava perso con un'eccezione — succedeva quando il
+  // puntatore era stato azzerato (`turn_end`, `idle`) ma il flag del
+  // ciclo era ancora acceso.
+  return n;
 }
 
 function ragionamentoAggiungi(testo) {
-  const n = ragionamentoCorrente || ragionamentoApri();
+  if (!ragionamentoCorrente) ragionamentoApri();
+  const n = ragionamentoCorrente;
   n.textContent += testo;
+  // Il provider manda a volte pezzi di ragionamento fatti di soli a capo:
+  // `if (d.testo)` li lascia passare, e il blocco restava aperto e vuoto.
+  // Solo quando c'e' qualcosa da leggere compare.
+  if (n.textContent.trim()) n.removeAttribute("hidden");
   scrollDown();
 }
 
@@ -610,6 +624,16 @@ function ragionamentoChiudi() {
   // Il blocco resta visibile come storia: si stacca solo il puntatore,
   // così il prossimo ragionamento apre un nodo nuovo. Non si nasconde.
   ragionamentoCorrente = null;
+}
+
+function ragionamentoDimentica() {
+  // Il log è stato svuotato (snapshot, polling, /nuova, banner): il nodo
+  // puntato non è più nel documento, e i pezzi che arrivassero adesso
+  // finirebbero in un nodo staccato — il ragionamento arriverebbe, e non
+  // si vedrebbe. Qui si riparte da zero: il prossimo pezzo apre un blocco
+  // nuovo, in fondo.
+  ragionamentoCorrente = null;
+  ragionamentoVisibile = false;
 }
 
 // ------------------------------------------------- onboarding guidato
