@@ -198,6 +198,11 @@ SUITES = [
     # rispondeva fuori bersaglio o chiudeva senza tool. Qui si prova la
     # soglia, il comportamento, e che i riepiloghi non si accumulino.
     ("finestra-pratica", "test_finestra_pratica.py", True),
+    # Un limite di spesa a 0 vuol dire "illimitato": e' un valore
+    # salvato, ma il pannello lo mostrava come campo vuoto (`0 || ""`),
+    # indistinguibile da "non configurato". Qui si guida il bundle vero
+    # e si leggono i campi dopo il popolamento dal server.
+    ("budget-pannello", "test_budget_pannello.py", True),
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),

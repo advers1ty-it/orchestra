@@ -164,17 +164,30 @@ function disegnaProvider(d) {
         hdrReasoning.disabled = false;
       }
 
-      // Budget: populate fields from server state
+      // Budget: i campi si riempiono con quello che il server HA
+      // salvato, non con quello che sembra.
+      //
+      // Qui c'era `b.task_tokens || ""`, e `0 || ""` fa stringa vuota:
+      // un limite messo a 0 — che in Orchestra vuol dire "illimitato",
+      // ed e' una scelta legittima — tornava a campo vuoto al riaprire
+      // il pannello, identico a "non configurato". Il valore era
+      // salvato (il server lo restituisce 0, e `check_limits` salta il
+      // confronto quando e' zero): mancava solo la riga che lo diceva.
+      // Vuoto resta vuoto per `null`: quello vuol dire davvero "non
+      // deciso", ed e' una cosa diversa da zero.
       if (d.budget) {
         const b = d.budget;
-        optBudgetTaskTokens.value = b.task_tokens || "";
-        optBudgetTaskCost.value = b.task_cost || "";
-        optBudgetTaskIters.value = b.task_iters || "";
-        optBudgetSessTokens.value = b.sess_tokens || "";
-        optBudgetSessCost.value = b.sess_cost || "";
-        optBudgetSessReqs.value = b.sess_reqs || "";
-        optBudgetDayCost.value = b.day_cost || "";
-        optBudgetMonthCost.value = b.month_cost || "";
+        const numero = (campo, v) => {
+          if (campo) campo.value = (v === null || v === undefined) ? "" : v;
+        };
+        numero(optBudgetTaskTokens, b.task_tokens);
+        numero(optBudgetTaskCost, b.task_cost);
+        numero(optBudgetTaskIters, b.task_iters);
+        numero(optBudgetSessTokens, b.sess_tokens);
+        numero(optBudgetSessCost, b.sess_cost);
+        numero(optBudgetSessReqs, b.sess_reqs);
+        numero(optBudgetDayCost, b.day_cost);
+        numero(optBudgetMonthCost, b.month_cost);
       }
     }
 
