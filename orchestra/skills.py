@@ -98,6 +98,20 @@ LUNGHEZZA_MINIMA = 120
 # Quante skill entrano nel prompt. oltre, si sceglie per pertinenza.
 MAX_NEL_PROMPT = 24
 
+# Quanti messaggi PRIMA dell'ultimo si guardano per capire di cosa si sta
+# parlando. Sei: abbastanza per un compito aperto in due righe, non tanto
+# da far rientrare argomenti chiusi mezz'ora fa.
+FINESTRA_MESSAGGI = 6
+
+# Quanto di ogni messaggio si guarda. Contano le parole, non il testo: un
+# allegato incollato in chat non deve costare una ricerca da megabyte.
+TAGLIO_MESSAGGIO = 500
+
+# L'ultimo messaggio si legge piu' a lungo: e' quello su cui si sta
+# lavorando adesso, e tagliarlo come gli altri perderebbe le parole del
+# compito vero quando il messaggio e' lungo.
+TAGLIO_ULTIMO = 2000
+
 _FRONT = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 _CAMPO = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$", re.M)
 
@@ -381,24 +395,40 @@ class Indice:
     def nomi(self) -> list[str]:
         return [s.nome for s in self.tutte()]
 
-    def cerca(self, parole: Iterable[str], limite: int = 6) -> list[Skill]:
+    def cerca(self, parole: Iterable[str], limite: int = 6,
+              recenti: Iterable[str] = ()) -> list[Skill]:
         """Per pertinenza, sul nome e sulla descrizione.
 
         Deliberatamente povera: nessun embedding, nessun vettore. Un
         indice lessicale con 200 skill non ha bisogno di altro, e una
         ricerca semantica che sbaglia di poco e' peggio di una che
         sbaglia in modo leggibile — perche' non sai quando fidarti.
+
+        `parole` sono quelle dell'ULTIMO messaggio, `recenti` quelle dei
+        messaggi prima, e valgono un terzo: il compito non sta sempre in
+        una riga. "E adesso?" dopo "mi servono le tabelle del pdf" da solo
+        non contiene nessuna parola utile, e la skill giusta restava fuori
+        dal prompt finche' l'utente non la nominava. Di qui i pesi: nome
+        dell'ultimo 6, testo dell'ultimo 3, nome recente 2, testo recente 1
+        — cosi' una parola vecchia non scavalca mai quella di adesso.
         """
-        parole = [p.lower() for p in parole if p and len(p) > 2]
-        if not parole:
+        ultime = _parole(parole)
+        prima = _parole(recenti)
+        if not ultime and not prima:
             return []
         punteggi: list[tuple[int, Skill]] = []
         for s in self.attive():
+            nome = s.nome.lower()
             testo = (s.nome + " " + s.descrizione).lower()
             p = 0
-            for w in parole:
-                if w in s.nome.lower():
-                    p += 3          # il nome e' il segnale piu' forte
+            for w in ultime:
+                if w in nome:
+                    p += 6          # il nome e' il segnale piu' forte
+                elif w in testo:
+                    p += 3
+            for w in prima:
+                if w in nome:
+                    p += 2
                 elif w in testo:
                     p += 1
             if p:
@@ -408,19 +438,32 @@ class Indice:
 
     # -- prompt ----------------------------------------------------------
 
-    def prompt(self, contesto: str = "", limite: int = MAX_NEL_PROMPT) -> str:
+    def prompt(self, contesto: str = "", limite: int = MAX_NEL_PROMPT,
+               recenti: Iterable[str] = ()) -> str:
         """Le due righe per skill, scelte per pertinenza.
 
         Il prompt completo e' quello che finisce nel messaggio di
         sistema, e li' il posto e' conteso: se le skill lo riempiono,
         le istruzioni dell'agente passano in secondo ordine. Per
         questo il limite e' uno e non si alza.
+
+        `recenti` sono i messaggi prima dell'ultimo: servono a capire di
+        cosa si sta parlando quando l'ultimo da solo non lo dice. Nel
+        prompt entrano comunque solo nomi e descrizioni delle skill: il
+        corpo resta fuori.
         """
         attive = self.attive()
         if not attive:
             return ""
-        scelte = self.cerca(contesto.split(), limite=limite) if contesto else []
-        if len(scelte) < limite and not contesto:
+        # `recenti` sono MESSAGGI, non parole: a `cerca` servono parole,
+        # come per l'ultimo messaggio. Passare le frasi intere faceva
+        # cercare "mi servono le tabelle del pdf" come una parola sola,
+        # che non compare in nessuna descrizione: la finestra c'era e non
+        # trovava niente.
+        recenti = " ".join(str(t) for t in recenti).split()
+        scelte = (self.cerca(contesto.split(), limite=limite, recenti=recenti)
+                  if contesto or recenti else [])
+        if len(scelte) < limite and not contesto and not recenti:
             # Solo SENZA contesto si completa con quante sono. Con un
             # contesto, completare con le prime rimaste e' il contrario
             # di cio' che serve: 40 skill "skill-NN" entrerebbero tutte,
@@ -728,3 +771,44 @@ def _nome_sicuro(nome: str) -> str:
     while ".." in s:
         s = s.replace("..", ".")
     return s or "skill"
+
+
+# ------------------------------------------------------------------------
+# Il contesto di una ricerca
+# ------------------------------------------------------------------------
+
+
+def _parole(valori: Iterable[str]) -> list[str]:
+    """Le parole che vale la pena cercare: minuscole, lunghe, ognuna UNA volta.
+
+    Una e due lettere compaiono dentro qualunque descrizione, quindi non
+    distinguono niente: cercarle farebbe entrare tutte le skill.
+
+    I doppioni nemmeno: le parole si sommano, quindi "pdf" detto in quattro
+    messaggi pesava quattro volte e poteva scavalcare quello che l'utente
+    sta chiedendo adesso. Il peso deve venire dalla pertinenza, non da
+    quante volte una parola e' stata ripetuta.
+    """
+    return list(dict.fromkeys(
+        w for w in (str(v).lower() for v in valori if v) if len(w) > 2))
+
+
+def contesto_dai_messaggi(messaggi: Iterable[Any]) -> tuple[str, list[str]]:
+    """(ultimo messaggio dell'utente, i precedenti della finestra).
+
+    Perche' una finestra e non l'ultimo: il compito non sta sempre in una
+    riga. "E adesso?" dopo "mi servono le tabelle del pdf" da solo non dice
+    niente, e con l'ultimo messaggio soltanto la skill giusta resta fuori
+    dal prompt finche' l'utente non la nomina — che e' il modo migliore per
+    non trovarla mai.
+
+    Solo i messaggi dell'UTENTE: quello che ha chiesto l'assistente non e'
+    un compito, e leggerlo farebbe cercare skill per i suoi stessi piani.
+    """
+    testi = [str(m.content or "") for m in messaggi
+             if getattr(m, "role", "") == "user" and m.content]
+    if not testi:
+        return "", []
+    ultimo = testi[-1][:TAGLIO_ULTIMO]
+    recenti = [t[:TAGLIO_MESSAGGIO] for t in testi[-(FINESTRA_MESSAGGI + 1):-1]]
+    return ultimo, recenti

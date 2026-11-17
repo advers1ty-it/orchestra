@@ -731,13 +731,14 @@ class Agent:
         # contiene i tool skill. Il prompt li elencava lo stesso.
         try:
             import orchestra.skills as sk
-            ultimo = ""
-            for m in reversed(self.state.messages):
-                if m.role == "user" and m.content:
-                    ultimo = m.content
-                    break
+            # La finestra, non solo l'ultimo messaggio: "e adesso?" dopo
+            # "mi servono le tabelle del pdf" da solo non dice niente, e la
+            # skill giusta restava fuori dal prompt finche' l'utente non la
+            # nominava. Si passano sia l'ultimo sia i precedenti, tagliati:
+            # contano le parole, non il testo.
+            ultimo, recenti = sk.contesto_dai_messaggi(self.state.messages)
             if self._ha_i_tool_skill():
-                extra = sk.Indice().prompt(ultimo[:2000])
+                extra = sk.Indice().prompt(ultimo, recenti=recenti)
             else:
                 extra = ""
         except Exception:

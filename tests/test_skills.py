@@ -15,6 +15,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import orchestra.skills as sk
+from orchestra.types import Message
 
 PASS, FAIL = [], []
 
@@ -306,6 +307,75 @@ try:
     check("e la legge", any(s.nome == "strana" for s in i.tutte()))
 except Exception as e:
     check("l'indice regge", False, f"{type(e).__name__}: {e}")
+
+print("\n[15] La scoperta guarda anche i messaggi prima")
+# Il difetto: si cercava solo nell'ultimo messaggio, quindi una skill
+# giusta restava invisibile finche' l'utente non la nominava. "E adesso?"
+# dopo "mi servono le tabelle del pdf" non contiene nessuna parola utile:
+# il compito c'era, ma era nella riga prima.
+i = idx()
+solo_ultimo = i.prompt("e adesso?")
+check("con il solo ultimo messaggio non la vede",
+      "estrai-pdf" not in solo_ultimo, solo_ultimo[:160])
+con_finestra = i.prompt("e adesso?",
+                        recenti=["mi servono le tabelle del pdf"])
+check("con la finestra la vede", "estrai-pdf" in con_finestra,
+      con_finestra[:250])
+# Nel prompt entrano nomi e descrizioni, non il messaggio: il corpo della
+# skill e' gia' escluso dal test [2].
+check("e non incolla il messaggio nel prompt",
+      "mi servono le tabelle" not in con_finestra, con_finestra[:200])
+
+# L'ultimo messaggio pesa piu' della finestra: chi risponde a quello che
+# l'utente sta chiedendo ADESSO va davanti a chi risponde a ieri.
+# Una parola conta UNA volta per sorgente. Prima si sommava, quindi "pdf"
+# ripetuto in sei messaggi valeva 12 e scavalcava l'"apk" di adesso: il
+# peso veniva da quante volte era stata ripetuta, non dalla pertinenza.
+base = [s.nome for s in i.cerca(["pdf", "apk"], limite=3)]
+ripetute = [s.nome for s in i.cerca(["pdf"] * 6 + ["apk"], limite=3)]
+check("ripetere una parola nell'ultimo messaggio non cambia l'ordine",
+      ripetute == base, f"{ripetute} invece di {base}")
+# Il caso dell'utente, e insieme il peso delle due sorgenti: la finestra
+# ripetuta sei volte non deve scavalcare l'ultimo messaggio. Senza conteggio
+# una volta sola questo diventa 12 contro 6.
+con_ripetizioni = i.cerca(["apk"], recenti=["pdf"] * 6, limite=3)
+check("una parola ripetuta nella finestra non scavalca l'ultimo messaggio",
+      con_ripetizioni and con_ripetizioni[0].nome == "compila-apk",
+      str([s.nome for s in con_ripetizioni])[:120])
+
+print("\n[16] La finestra: quali messaggi, e quanto testo")
+# Solo i messaggi dell'UTENTE: quello che l'assistente si e' proposto di
+# fare non e' un compito, e cercarlo farebbe entrare skill per i piani
+# dell'agente invece che per la richiesta.
+messaggi = [Message(role="user", content="primo"),
+            Message(role="assistant", content="faccio io"),
+            Message(role="user", content="secondo"),
+            Message(role="user", content="terzo")]
+ultimo, recenti = sk.contesto_dai_messaggi(messaggi)
+check("l'ultimo e' quello dell'utente", ultimo == "terzo", ultimo)
+check("e la finestra non contiene l'assistente",
+      recenti == ["primo", "secondo"], str(recenti))
+
+tanti = [Message(role="user", content=f"msg-{n}") for n in range(10)]
+_u, _r = sk.contesto_dai_messaggi(tanti)
+# Un controllo solo: se la finestra fosse piu' corta, disordinata o
+# comprendesse l'ultimo, la lista non sarebbe questa.
+check("la finestra sono i sei prima dell'ultimo",
+      _r == [f"msg-{n}" for n in range(3, 9)], str(_r))
+
+lungo = [Message(role="user", content="x" * 5000)]
+_u2, _ = sk.contesto_dai_messaggi(lungo)
+check("l'ultimo si taglia a 2000", len(_u2) == sk.TAGLIO_ULTIMO,
+      str(len(_u2)))
+lungo2 = [Message(role="user", content="y" * 5000),
+          Message(role="user", content="adesso")]
+_, _r2 = sk.contesto_dai_messaggi(lungo2)
+check("e i recenti a 500", len(_r2[0]) == sk.TAGLIO_MESSAGGIO,
+      str(len(_r2[0])))
+
+vuoto = sk.contesto_dai_messaggi([Message(role="assistant", content="ciao")])
+check("senza messaggi dell'utente non c'e' contesto", vuoto == ("", []),
+      str(vuoto))
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

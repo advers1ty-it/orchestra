@@ -1092,9 +1092,27 @@ def send_senza_risposta(testo, allegati=None, canale=""):
 sess_vecchio.send = send_senza_risposta
 app_vecchio.telegram_turno(bot["id"], "nuovo lavoro", None, None)
 sess_vecchio.busy = False
-time.sleep(1.2)
+# Si ASPETTA il recapito, invece di dormire un tempo fisso: il thread che
+# recapita controlla `busy` ogni 0,5s e poi aspetta 0,3s, quindi arriva a
+# ~1,2s dal ritorno del turno — esattamente la pausa che c'era qui. Sulle
+# macchine veloci il controllo vinceva la corsa, su quelle della CI la
+# perdeva, e lo stesso test era verde in locale e rosso su GitHub.
+for _ in range(40):
+    if ponte_vecchio.ricevuti:
+        break
+    time.sleep(0.1)
+testi_vecchio = [t for t, _f in ponte_vecchio.ricevuti]
 check("senza una risposta nuova non si ricicla quella di prima",
-      ponte_vecchio.ricevuti == [], cp(str(ponte_vecchio.ricevuti)))
+      testi_vecchio and all("risposta di ieri" not in t
+                            for t in testi_vecchio),
+      cp(str(ponte_vecchio.ricevuti)))
+# Il turno e' caduto senza scrivere: la chat non resta muta e non riceve
+# la frase di prima, riceve il motivo. E' la promessa della correzione,
+# e senza questo controllo "non recapitare niente" passerebbe per verde.
+check("e la chat dice che il turno non ha scritto una risposta",
+      len(testi_vecchio) == 1
+      and "senza scrivere una risposta" in testi_vecchio[0],
+      cp(str(ponte_vecchio.ricevuti)))
 
 print("\n[26] un invio rifiutato per un motivo temporaneo si ritenta")
 # Un 429 o un 5xx non sono "il messaggio non si manda": sono "adesso no".
