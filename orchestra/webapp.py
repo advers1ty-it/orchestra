@@ -2327,6 +2327,14 @@ class OrchestraApp:
         # "'Session' object has no attribute 'stream'". Il percorso della
         # finestra lo sapeva gia' (`s.bridge.stream`); questo no, ed era
         # il primo turno che passava di qui.
+        # Da dove comincia la risposta di QUESTO turno. Senza, a turno
+        # caduto si rileggeva l'ultima risposta della conversazione, e
+        # l'utente riceveva lo stesso messaggio un'altra volta: e' il loop
+        # visto su Telegram dopo un 429 (le richieste gratuite del giorno
+        # esaurite), e vale per ogni errore che chiude il turno senza
+        # scrivere niente.
+        prima = len(list(getattr(getattr(getattr(sess, "agent", None),
+                                         "state", None), "messages", []) or []))
         eventi = sess.bridge.stream(timeout=0.4)
         try:
             ponte = (getattr(self, "_telegram_ponti", {}) or {}).get(
@@ -2364,8 +2372,13 @@ class OrchestraApp:
         # telefono non c'e' modo di aprirla, e "fatto, sta nella cartella"
         # e' una risposta che costringe a tornare al computer per vedere
         # se e' venuta bene.
+        risposta = self._telegram_ultima_risposta(sess, da_indice=prima)
+        if not risposta:
+            # Nessuna risposta scritta in questo turno: si dice perche',
+            # invece di ripetere quella del turno prima.
+            risposta = self._telegram_spiega_turno_muto(sess, stato)
         esito: dict[str, Any] = {
-            "testo": self._telegram_ultima_risposta(sess),
+            "testo": risposta,
             "file": self._telegram_file_del_turno(inizio),
         }
         # Il ragionamento viaggia con l'esito solo se e' stato chiesto: a
@@ -2426,17 +2439,16 @@ class OrchestraApp:
             # margine evita di leggere la conversazione mentre viene
             # ancora scritta.
             time.sleep(0.3)
-            agente = getattr(sess, "agent", None)
-            messaggi = list(getattr(getattr(agente, "state", None),
-                                    "messages", []) or [])
-            testo = ""
-            for m in reversed(messaggi[int(da_indice):]):
-                if (getattr(m, "role", "") == "assistant"
-                        and (getattr(m, "content", "") or "").strip()):
-                    testo = m.content.strip()
-                    break
+            # La regola "solo il turno in corso" vive in un posto solo: si
+            # chiede a `_telegram_ultima_risposta` come fa il turno normale,
+            # invece di riscorrere la conversazione con un ciclo suo che
+            # potrebbe divergere al primo ritocco.
+            testo = self._telegram_ultima_risposta(sess, da_indice=da_indice)
             if not testo:
-                return
+                # Anche qui: un turno lungo che e' caduto non deve
+                # lasciare la chat muta, ne' tantomeno ricevere il
+                # messaggio del turno precedente.
+                testo = self._telegram_spiega_turno_muto(sess, {})
             try:
                 ponte.recapita(testo, self._telegram_file_del_turno(inizio))
             except Exception as e:  # noqa: BLE001 - un recapito perso non
@@ -2446,13 +2458,98 @@ class OrchestraApp:
         threading.Thread(target=attendi, daemon=True,
                          name=f"telegram-recapito-{bot_id}").start()
 
-    def _telegram_ultima_risposta(self, sess: Any) -> str:
-        for m in reversed(getattr(sess.agent.state, "messages", [])):
+    def _telegram_ultima_risposta(self, sess: Any,
+                                  da_indice: int = 0) -> str:
+        """L'ultima risposta scritta, da `da_indice` in poi.
+
+        `da_indice` e' dove cominciava il turno, e non e' un dettaglio:
+        senza, un turno che non scrive niente (429, budget, rete) trovava
+        la risposta del turno PRECEDENTE e la rimandava identica. Dal
+        telefono sembrava che il bot ripetesse sempre la stessa frase, e
+        non c'era modo di sapere che invece stava fallendo.
+        """
+        messaggi = list(getattr(getattr(getattr(sess, "agent", None),
+                                       "state", None), "messages", []) or [])
+        for m in reversed(messaggi[int(da_indice):]):
             if getattr(m, "role", "") == "assistant":
                 risposta = (getattr(m, "content", "") or "").strip()
                 if risposta:
                     return risposta
         return ""
+
+    def _telegram_spiega_turno_muto(self, sess: Any,
+                                    stato: dict[str, Any] | None) -> str:
+        """Perche' non c'e' una risposta: l'errore, o cosa ha fermato il turno.
+
+        Una chat che risponde sempre la stessa frase non dice niente; una
+        che dice "rate limit del servizio, si azzera domani" dice tutto
+        quello che serve, anche a chi ha solo il telefono in mano.
+        """
+        errore = str((stato or {}).get("errore") or "").strip()
+        if errore:
+            return self._telegram_spiega_errore(errore)
+        codice = str(getattr(getattr(getattr(sess, "agent", None), "state",
+                                    None), "stopped_because", "") or "")
+        if codice:
+            from .riepilogo import esito_leggibile
+
+            testo, _gravita = esito_leggibile(codice)
+            # `esito_leggibile` parla gia' di fermata ("fermato: budget
+            # esaurito"): senza toglierlo, la frase dice due volte la
+            # stessa cosa — "Il turno si e' fermato: fermato: ...".
+            testo = testo.replace("fermato: ", "").strip()
+            coda = ""
+            if codice == "budget_exceeded":
+                coda = (" Alza il tetto dal pannello Opzioni -> Budget sul "
+                        "computer, oppure aspetta il reset di giorno/mese.")
+            return f"Il turno si e' fermato: {testo}.{coda}"
+        return ("Il turno e' finito senza scrivere una risposta. Il lavoro "
+                "puo' essere stato fatto lo stesso: controlla nella finestra "
+                "di Orchestra. (Non ti ripeto il messaggio di prima: non "
+                "era la risposta a questa richiesta.)")
+
+    def _telegram_spiega_errore(self, errore: str) -> str:
+        """Un errore del provider, tradotto per chi legge dal telefono.
+
+        Il testo grezzo resta in fondo — e' quello che serve per capire se
+        e' un limite del giorno, una chiave o un guasto — ma la prima
+        riga dice cosa e' successo e cosa si puo' fare, perche' su un
+        telefono nessuno legge un JSON di OpenRouter.
+        """
+        basso = errore.lower()
+        if "429" in basso or "rate limit" in basso \
+                or "too many requests" in basso:
+            if "free" in basso and ("day" in basso or "daily" in basso
+                                    or "giornalier" in basso):
+                motivo = ("Ho esaurito le richieste gratuite di questo "
+                          "modello per oggi.")
+                come = ("Il limite si azzera al reset giornaliero del "
+                        "servizio. Nel frattempo: cambia modello con "
+                        "/modello, oppure aggiungi credito al servizio.")
+            else:
+                motivo = ("Il servizio mi sta rifiutando per troppe "
+                          "richieste (rate limit).")
+                come = "Riprova tra qualche secondo; il turno non e' stato fatto."
+        elif "401" in basso or "403" in basso:
+            motivo = ("Il servizio ha rifiutato questa chiave, o questo "
+                      "modello non e' disponibile per la chiave.")
+            come = ("Controlla la chiave dal pannello Opzioni sul computer, "
+                    "o cambia modello con /modello.")
+        elif "manca la chiave" in basso:
+            motivo = "Manca la chiave di questo servizio."
+            come = "Inseriscila dal pannello Opzioni sul computer."
+        elif ("errore di rete" in basso or "timed out" in basso
+                or "timeout" in basso or "connection" in basso):
+            motivo = "Non riesco a raggiungere il servizio (rete o timeout)."
+            come = "Riprova tra poco."
+        else:
+            motivo = "Il turno si e' fermato per un errore del servizio."
+            come = ("Riprova; se resta, apri il pannello Diagnosi nella "
+                    "finestra di Orchestra.")
+        dettaglio = " ".join(errore.split())
+        if len(dettaglio) > 400:
+            dettaglio = dettaglio[:397] + "..."
+        return f"{motivo}\n\n{come}\n\nDettaglio: {dettaglio}"
 
     def _telegram_segui(self, sess: Any, eventi: Any, avanzamento: Any,
                         bot: dict[str, Any]) -> dict[str, Any]:
@@ -2474,6 +2571,11 @@ class OrchestraApp:
             "inizio": time.monotonic(), "annullato": False, "finito": False,
             "ultimo_evento": time.monotonic(),
             "mostra_ragionamento": mostra,
+            # L'errore che ha chiuso il turno, se c'e' stato. Va ricordato
+            # qui: a fine turno e' l'unica cosa che spiega perche' non c'e'
+            # una risposta, e senza finiva che si mandava quella del
+            # turno prima.
+            "errore": "",
         }
         scadenza = stato["inizio"] + self._telegram_attesa()
         for ev in eventi:
@@ -2510,6 +2612,8 @@ class OrchestraApp:
                     stato["giro"] = int(dati.get("iteration") or 0)
                 except (TypeError, ValueError):
                     pass
+            elif tipo == "error":
+                stato["errore"] = str(dati.get("message") or "").strip()
             elif tipo == "cancel_requested":
                 stato["annullato"] = True
             elif tipo == "idle" and not dati.get("busy", True):

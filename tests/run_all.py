@@ -259,6 +259,12 @@ SUITES = [
     # rete, con un trasporto finto — quello che si prova e' che un
     # estraneo non faccia partire un turno.
     ("telegram", "test_telegram.py", True),
+    # Un turno caduto (429 del servizio, budget, rete) mandava su Telegram
+    # la risposta del turno PRECEDENTE: dal telefono sembrava che il bot
+    # ripetesse la stessa frase, e l'errore restava solo nella finestra
+    # del computer. Ora la risposta si legge dal turno in corso e, se non
+    # c'e', si spiega cosa e' successo.
+    ("telegram-errori", "test_telegram_errori.py", True),
     # I comandi del ponte che non sono chat: livello di reasoning (dal
     # telefono non si poteva impostare), obiettivo e consiglio. Senza
     # test, un comando che risponde "non riconosciuto" sembra un typo
