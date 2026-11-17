@@ -136,9 +136,9 @@ function disegnaProvider(d) {
         optReasoning.disabled = false;
       }
       // Max iterazioni + limite contesto corrente. Il limite è calcolato
-      // dal modello in uso (75% della sua finestra): si mostra, non si
-      // imposta — cambiarlo a mano litigherebbe con l'allineamento
-      // automatico al cambio modello.
+      // dal modello in uso (tetto pratico, mai oltre il 75% della sua
+      // finestra): si mostra, non si imposta — cambiarlo a mano
+      // litigherebbe con l'allineamento automatico al cambio modello.
       if (optMaxIters) {
         optMaxIters.value = d.max_iterations || "";
         optMaxIters.disabled = false;
@@ -153,7 +153,8 @@ function disegnaProvider(d) {
       }
       if (optContextNote && typeof d.context_limit === "number") {
         const k = Math.round(d.context_limit / 1000);
-        optContextNote.textContent = `compattazione oltre ~${k}k token (75% della finestra del modello)`;
+        optContextNote.textContent =
+          `compattazione oltre ~${k}k token (contesto utile, non la finestra intera)`;
       }
       // Header reasoning pick
       const hdrReasoning = $("reasoning-pick");

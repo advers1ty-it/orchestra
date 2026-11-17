@@ -1166,22 +1166,23 @@ class OrchestraApp:
         return "; ".join(avvisi)
 
     def allinea_finestra(self, model_id: str | None = None) -> int:
-        """Mette `context_limit` al 75% della finestra del modello.
+        """Sceglie quanti token tenere prima di compattare.
 
-        Torna il limite applicato. Se il modello non è nel catalogo o il
-        catalogo non si apre, resta 120_000: un default prudente batte un
-        crash all'avvio, e un modello sconosciuto con un limite piccolo
-        spreca contesto invece di perdere messaggi.
+        Torna il limite applicato. Non è il 75% della finestra del
+        modello: quello è il punto in cui la RICHIESTA non passa più
+        (400 dal provider), non il punto in cui il modello lavora bene.
+        Con una finestra da 1M il 75% sono 786k token, una conversazione
+        intera non ci arriva, e la compattazione non scatta mai —
+        misurato in uso: 317 messaggi, 145k token, `compactions: 0`.
+        La regola sta in `context.limite_compattazione`: tetto pratico
+        (60k) oppure ORCHESTRA_CONTEXT_LIMIT se l'utente l'ha scelta, e
+        in ogni caso mai oltre il 75% della finestra.
 
-        75% e non 100%: sopra resta spazio per la risposta che sta
-        arrivando, i tool e il system prompt. Compattare al 100% della
-        finestra è come riempire una valigia fino all'orlo e poi sedercisi
-        sopra per chiuderla.
+        Se il catalogo non sa la finestra, resta il tetto pratico: un
+        modello sconosciuto compattato un po' presto perde meno di un
+        modello compattato tardi, che risponde 400 o annega.
         """
-        # 120_000 è lo stesso default di LoopConfig: se il catalogo non
-        # sa rispondere, il comportamento è quello di prima. Nessun nuovo
-        # numero magico, solo lo stesso in due posti.
-        limite = 120_000
+        finestra = 0
         try:
             modello = model_id or self.env.get("ORCHESTRA_MODEL", "")
             cat = self.catalog
@@ -1196,10 +1197,15 @@ class OrchestraApp:
                 prof = (altro.models.get(modello)
                         if altro is not None else None)
             finestra = prof.info.context_length if prof is not None else 0
-            if finestra and finestra > 0:
-                limite = int(finestra * 0.75)
         except Exception:
             pass
+        try:
+            scelto = int(float(self.env.get("ORCHESTRA_CONTEXT_LIMIT", 0) or 0))
+        except (TypeError, ValueError):
+            scelto = 0
+        from .context import limite_compattazione
+
+        limite = limite_compattazione(finestra, tetto=scelto)
         try:
             self.session.agent.config.context_limit = limite
         except Exception:

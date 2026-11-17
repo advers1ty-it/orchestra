@@ -30,6 +30,55 @@ from .types import Message
 # risponde, e aggiorniamo da lì. Serve per decidere PRIMA di chiamare.
 CHARS_PER_TOKEN = 3.6
 
+# Quanto contesto serve DAVVERO all'agente.
+#
+# Il 75% della finestra del modello e' il punto oltre il quale la
+# RICHIESTA non passa piu' (400 dal provider). Non e' il punto oltre il
+# quale il modello lavora bene, e confondere i due e' il motivo per cui
+# la compattazione non si vedeva mai: con una finestra da 1M il 75% sono
+# 786.432 token, e una chat intera non ci arriva.
+#
+# Misurato in uso: 317 messaggi, ~145.000 token, `context_limit`
+# 786.432, `compactions: 0`. Il sintomo non era un errore: era il
+# modello che, dopo qualche ora sulla stessa conversazione, rispondeva
+# fuori bersaglio o chiudeva il turno senza usare un tool. Centinaia di
+# messaggi sotto il naso fanno quello; la finestra non c'entra.
+#
+# 60k bastano per un turno di lavoro (otto messaggi recenti con i loro
+# risultati tool) e sono abbastanza pochi perche' la compattazione
+# scatti in una sessione vera. Si cambia con ORCHESTRA_CONTEXT_LIMIT.
+TETTO_PRATICO = 60_000
+
+# Sotto questa soglia compattare mangerebbe il turno stesso: i messaggi
+# recenti, da soli, non ci starebbero piu'.
+MINIMO_UTILE = 4_000
+
+# L'etichetta del messaggio fuso. Serve a riconoscere un riepilogo
+# quando si ricompatta: vedi `compact_history`.
+RIEPILOGO_TAG = "[RIEPILOGO sessione]"
+
+
+def limite_compattazione(finestra: int, *, tetto: int = 0) -> int:
+    """Quanti token tenere prima di compattare.
+
+    `finestra` e' la finestra dichiarata dal modello (0 = sconosciuta).
+    `tetto` e' una scelta esplicita dell'utente: se c'e' vale lei, ma
+    sempre dentro la finestra — chiedere piu' della finestra non da' piu'
+    contesto, da' un 400.
+
+    Regola: il minore fra il tetto (pratico o scelto) e il 75% della
+    finestra. Con una finestra da 1M si compatta a 60k, non a 786k.
+    """
+    scelto = int(tetto) if tetto and tetto > 0 else TETTO_PRATICO
+    limite = scelto
+    if finestra and finestra > 0:
+        limite = min(scelto, int(finestra * 0.75))
+    # Il minimo non puo' superare la finestra: su un modello da 2k token
+    # un limite di 4k non e' prudente, e' una richiesta che non passa.
+    minimo = min(MINIMO_UTILE, int(finestra)) if finestra and finestra > 0 \
+        else MINIMO_UTILE
+    return max(int(limite), int(minimo))
+
 
 def estimate_tokens(text: str) -> int:
     if not text:
@@ -145,7 +194,16 @@ def compact_history(
     )
     protected: set[int] = set()
     if first_user_idx is not None:
-        protected.add(first_user_idx)
+        primo = rest[first_user_idx]
+        # ...ma un riepilogo di una compattazione precedente non e' un
+        # obiettivo: e' il risultato del lavoro gia' fatto. Proteggendolo,
+        # ogni compattazione ne aggiungeva uno nuovo davanti a quello
+        # vecchio, e dopo dieci giri il contesto era fatto di dieci
+        # riassunti sovrapposti — tutti "protetti", nessuno dei quali
+        # diceva dove si era arrivati. Si lascia fondere in quello nuovo,
+        # che lo riceve dentro la trascrizione.
+        if not (primo.content or "").startswith(RIEPILOGO_TAG):
+            protected.add(first_user_idx)
 
     cutoff = len(rest) - keep_recent
     to_merge = [
@@ -175,7 +233,7 @@ def compact_history(
         # non distruttivo, accorciando invece di cancellare.
         summary = _naive_summarize(transcript)
 
-    merged = Message(role="user", content=f"[RIEPILOGO sessione]\n{summary}")
+    merged = Message(role="user", content=f"{RIEPILOGO_TAG}\n{summary}")
 
     kept_indices = sorted(protected | set(range(cutoff, len(rest))))
     rebuilt = [merged] + [rest[i] for i in kept_indices]

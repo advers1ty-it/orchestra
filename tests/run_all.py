@@ -184,6 +184,20 @@ SUITES = [
     ("prefisso", "test_prefisso_stabile.py", True),
     # Il testo che arriva dal web e' dato, non istruzioni.
     ("non-fidato", "test_non_fidato.py", True),
+    # La ricerca web chiedeva tutti i motori insieme (backend="auto") e
+    # si faceva bloccare da ognuno: «Nessun risultato» quasi sempre. Ora
+    # un motore alla volta, con ripiego. Motori finti, nessuna rete.
+    ("web-motori", "test_web_motori.py", True),
+    # Il blocco ragionamento non deve arrivare vuoto (i pezzi di soli a
+    # capo lo aprivano e restava una riga bianca) e non deve sparire
+    # quando il log viene ricostruito. Eventi veri sul bundle, in Node.
+    ("ragionamento-visibile", "test_ragionamento_visibile.py", True),
+    # La compattazione deve AVVENIRE in una sessione vera. Con il limite
+    # al 75% della finestra (786k su un modello da 1M) non scattava mai:
+    # 317 messaggi e 145k token con `compactions: 0`, e il modello
+    # rispondeva fuori bersaglio o chiudeva senza tool. Qui si prova la
+    # soglia, il comportamento, e che i riepiloghi non si accumulino.
+    ("finestra-pratica", "test_finestra_pratica.py", True),
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),
