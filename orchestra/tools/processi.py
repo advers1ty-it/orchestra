@@ -308,9 +308,13 @@ def avvia(comando: str, cwd: str = ".", attesa: float = 2.0) -> dict:
                 stdin=subprocess.PIPE,
                 stdout=fh,
                 stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
+                # Binario di proposito: lo stdin e' una pipe e il testo lo
+                # codifica `scrivi`. Un TextIOWrapper aggiungerebbe un
+                # secondo buffer, e su una scrittura senza a capo il
+                # contenuto puo' restare nel wrapper mentre il figlio
+                # aspetta la riga. I byte arrivano quando `flush()`
+                # ritorna, senza dipendere dalla modalita' testo di
+                # subprocess.
                 creationflags=flags,
                 start_new_session=(os.name != "nt"),
                 **extra,
@@ -418,8 +422,9 @@ def scrivi(pid_tool: str, testo: str = "", a_capo: bool = True) -> dict:
     stream = p.popen.stdin
     if stream is None:
         return {"errore": f"{p.id} non ha stdin: impossibile scrivere"}
+    dati_bytes = dati.encode("utf-8")
     try:
-        stream.write(dati)
+        stream.write(dati_bytes)
         stream.flush()
     except (BrokenPipeError, OSError, ValueError) as exc:
         p.chiudi_stdin()
