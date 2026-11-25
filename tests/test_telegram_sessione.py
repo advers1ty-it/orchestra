@@ -1500,12 +1500,39 @@ check("il numero del messaggio torna a chi chiama",
 # sparisse o tornasse cose senza prompt, in chat arriverebbero pulsanti
 # che non fanno niente.
 app_cons, _sess_cons = app_finta()
-lista_app = app_cons._telegram_suggerimenti()
+lista_app = app_cons._telegram_suggerimenti(bot["id"])
 check("l'app sa calcolare i consigli", isinstance(lista_app, list)
       and bool(lista_app), str(lista_app)[:160])
 check("e ognuno ha titolo e prompt",
       all(p.get("titolo") and p.get("prompt") for p in lista_app),
       str(lista_app)[:160])
+
+# I consigli del telefono devono leggere la conversazione di QUEL bot: la
+# finestra puo' essere su un altro, e il modello commenterebbe il turno
+# sbagliato.
+visti_bot = []
+vero_sessione_bot = app_cons._sessione_bot
+app_cons._sessione_bot = lambda b: (visti_bot.append(b.get("id")),
+                                    _sess_cons)[1]
+lista_bot = app_cons._telegram_suggerimenti(bot["id"])
+check("i consigli Telegram leggono la sessione di quel bot",
+      bool(visti_bot) and int(visti_bot[0]) == int(bot["id"]),
+      str(visti_bot))
+check("e li sanno ancora calcolare", isinstance(lista_bot, list)
+      and bool(lista_bot), str(lista_bot)[:160])
+# Non basta scegliere la sessione giusta: lo scambio che arriva alla
+# generazione dev'essere il suo, non quello della finestra.
+from orchestra import suggerimenti as _sug_mod  # noqa: E402
+scambi_visti = []
+vero_proposte = _sug_mod.proposte
+_sug_mod.proposte = lambda rie, **kw: (
+    scambi_visti.append(kw.get("conversazione")), [])[1]
+_sess_cons.scambio_recente = lambda: "SCAMBIO-DEL-BOT"
+app_cons._telegram_suggerimenti(bot["id"])
+check("e ci arriva lo scambio di quel bot",
+      scambi_visti == ["SCAMBIO-DEL-BOT"], str(scambi_visti))
+_sug_mod.proposte = vero_proposte
+app_cons._sessione_bot = vero_sessione_bot
 
 # Un messaggio vecchio resta in chat con i suoi pulsanti: premendolo deve
 # partire il prompt CHE STA SOTTO QUEI PULSANTI, non quello dell'ultimo

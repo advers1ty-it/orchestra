@@ -2399,23 +2399,45 @@ class OrchestraApp:
         except Exception:  # noqa: BLE001
             return []
 
-    def _telegram_suggerimenti(self) -> list[dict[str, Any]]:
+    def _telegram_suggerimenti(self, bot_id: int) -> list[dict[str, Any]]:
         """I pulsanti facoltativi di fine turno, con il prompt gia' scritto.
 
         Si calcolano qui e non nel ponte perche' servono le stesse cose del
-        riepilogo — i file del turno e il git della root — che il ponte non
-        conosce. Un errore qui non deve far saltare un messaggio che e'
-        gia' partito: si torna una lista vuota e la chat resta com'era.
+        riepilogo — i file del turno, il git della root e l'ultimo scambio
+        che il ponte non conosce. Il modello li scrive sul turno vero; se
+        non risponde restano quelli ricavati dai fatti. Un errore qui non
+        deve far saltare un messaggio che e' gia' partito: si torna una
+        lista vuota e la chat resta com'era.
+
+        La sessione e' quella del bot che ha ricevuto il turno, non quella
+        aperta nella finestra: i consigli devono parlare di quel lavoro.
+        Se il bot non c'e' piu', niente consigli: meglio nessun pulsante
+        che uno che parla di un'altra conversazione.
         """
+        from . import bots as _bots
         from . import riepilogo as _rie
         from . import suggerimenti as _sug
 
+        try:
+            b = _bots.per_id_agente(int(bot_id))
+            sessione = self._sessione_bot(b) if b is not None else None
+        except Exception:  # noqa: BLE001 - senza sessione niente consigli
+            sessione = None
+        if sessione is None:
+            return []
         try:
             radice = str(self.gate_root())
         except Exception:  # noqa: BLE001
             radice = ""
         try:
-            return _sug.proposte(_rie.ultimo(), radice=radice or os.getcwd())
+            conversazione = sessione.scambio_recente()
+        except Exception:  # noqa: BLE001
+            conversazione = ""
+        agente = getattr(sessione, "agent", None)
+        try:
+            return _sug.proposte(_rie.ultimo(), radice=radice or os.getcwd(),
+                                 provider=getattr(agente, "provider", None),
+                                 conversazione=conversazione)
         except Exception:  # noqa: BLE001
             return []
 
@@ -3836,8 +3858,11 @@ class OrchestraApp:
                 risposta=(lambda testo, b=bid:
                           self.telegram_risposta_testo(b, testo)),
                 # I consigli di fine turno: facoltativi, e li calcola
-                # l'app (il ponte non sa cosa ha toccato il turno).
-                proposte=(lambda: self._telegram_suggerimenti()),
+                # l'app (il ponte non sa cosa ha toccato il turno). Il
+                # bot serve a leggere la SUA conversazione: il modello
+                # deve commentare quel turno, non quello aperto nella
+                # finestra.
+                proposte=(lambda b=bid: self._telegram_suggerimenti(b)),
                 log=_log_telegram)
             ponti[bid] = ponte
             ponte.avvia()

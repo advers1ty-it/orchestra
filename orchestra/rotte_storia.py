@@ -56,7 +56,9 @@ class RotteStoria:
         # I pulsanti di fine turno: le mosse che servono adesso, con il
         # prompt gia' scritto. Si calcolano qui e non alla fine del turno
         # perche' il git del progetto cambia anche fra un turno e l'altro,
-        # e un pulsante "commit" deve sapere cosa c'e' adesso.
+        # e un pulsante "commit" deve sapere cosa c'e' adesso. Il modello
+        # rilegge l'ultimo scambio: la risposta e' il consiglio, non una
+        # frase buona per qualsiasi progetto.
         from . import riepilogo as _rie
         from . import suggerimenti as _sug
 
@@ -69,8 +71,17 @@ class RotteStoria:
                 radice = _pr.percorso_di(nome) or ""
             except Exception:  # noqa: BLE001
                 radice = ""
+        sessione = getattr(self.app, "session", None)
+        provider = getattr(getattr(sessione, "agent", None),
+                           "provider", None)
+        try:
+            conversazione = (sessione.scambio_recente()
+                             if sessione is not None else "")
+        except Exception:  # noqa: BLE001
+            conversazione = ""
         self._json({"proposte": _sug.proposte(
-            _rie.ultimo(), radice=radice or os.getcwd())})
+            _rie.ultimo(), radice=radice or os.getcwd(),
+            provider=provider, conversazione=conversazione)})
 
     @rotta("GET", "/api/diff")
     def _r_get_diff(self, path: str, body: dict[str, Any],

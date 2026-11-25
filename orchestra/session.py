@@ -1778,6 +1778,19 @@ class Session:
         sicurezza: un singolo messaggio enorme non deve portare il
         prompt dell'estrattore a 500 KB.
         """
+        return self.scambio_recente(quanti=2, limite=8000)
+
+    def scambio_recente(self, quanti: int = 4, limite: int = 6000) -> str:
+        """Gli ultimi messaggi utente/assistente, in ordine, per chi legge.
+
+        Serve a chi deve capire che piega ha preso il turno senza
+        rileggere la sessione: l'estrattore di memoria ne vuole due (la
+        domanda e la risposta), i consigli di fine turno qualcuno in piu'
+        per vedere cosa l'utente aveva chiesto prima. Solo testo: i
+        risultati dei tool sono output di programmi, non frasi.
+        """
+        quanti = max(1, int(quanti or 1))
+        limite = max(1, int(limite or 1))
         scambio: list[str] = []
         for m in reversed(self.agent.state.messages):
             if m.role not in ("user", "assistant"):
@@ -1786,11 +1799,9 @@ class Session:
             if not t:
                 continue
             scambio.append(f"{m.role}: {t}")
-            # l'ultimo scambio e' la domanda piu' la risposta: due
-            # messaggi. Oltre, si sta rileggendo la sessione intera.
-            if len(scambio) >= 2:
+            if len(scambio) >= quanti:
                 break
-        return "\n".join(reversed(scambio))[-8000:]
+        return "\n".join(reversed(scambio))[-limite:]
 
     # -- recupero da un modello che non regge il tool-calling ---------------
     #
