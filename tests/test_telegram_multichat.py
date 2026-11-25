@@ -192,16 +192,21 @@ p = ponte(finto, 25)
 p.passo()
 finto.messaggio(111, "ciao da Anna")
 p.passo()
+# `passo` avvia il turno in un thread: senza aspettarlo, su Windows lento
+# la lista delle risposte e' ancora vuota e `[-1]` muore con IndexError.
+p.aspetta(5)
 check("la risposta arriva ad Anna", finto.a("111") and
       "ciao da Anna" in finto.a("111")[-1], str(finto.inviati))
 check("e non a Bruno", not any("ciao da Anna" in t for t in finto.a("222")),
       str(finto.inviati))
 finto.messaggio(222, "ciao da Bruno")
 p.passo()
+p.aspetta(5)
 check("la risposta arriva a Bruno", "ciao da Bruno" in finto.a("222")[-1],
       str(finto.inviati))
 finto.messaggio(333, "sono un estraneo")
 p.passo()
+p.aspetta(5)
 check("un estraneo non ottiene un turno",
       not any("risposta a:" in t for t in finto.a("333")),
       str(finto.inviati))
@@ -218,6 +223,7 @@ p2.passo()
 codice = tg.nuovo_codice(26)["codice"]
 finto2.messaggio(222, "/start " + codice, nome="Bruno")
 p2.passo()
+p2.aspetta(5)
 check("la seconda persona entra",
       tg.chat_collegata(26, 222), str(tg.chat_collegate(26)))
 check("e la prima non viene buttata fuori", tg.chat_collegata(26, 111),
@@ -226,6 +232,7 @@ check("il messaggio lo dice, invece di far scoprire dopo",
       "altre 1 chat" in finto2.a("222")[-1], str(finto2.a("222"))[-1:])
 finto2.messaggio(222, "/start " + codice, nome="Bruno")
 p2.passo()
+p2.aspetta(5)
 check("un secondo /start dice che sei gia' dentro",
       "gia'" in finto2.a("222")[-1].lower(), str(finto2.a("222"))[-1:])
 
@@ -239,17 +246,20 @@ p3 = ponte(finto3, 27)
 p3.passo()
 finto3.messaggio(222, "/scollega", nome="Bruno")
 p3.passo()
+p3.aspetta(5)
 check("Bruno esce", not tg.chat_collegata(27, 222), str(tg.chat_collegate(27)))
 check("Anna resta", tg.chat_collegata(27, 111), str(tg.chat_collegate(27)))
 check("e la conferma dice quante restano",
       "Restano 1 chat" in finto3.a("222")[-1], str(finto3.a("222"))[-1:])
 finto3.messaggio(222, "ci sono ancora?")
 p3.passo()
+p3.aspetta(5)
 check("chi e' uscito non ottiene risposte",
       not any("risposta a:" in t for t in finto3.a("222")),
       str(finto3.a("222")))
 finto3.messaggio(111, "ci sono io")
 p3.passo()
+p3.aspetta(5)
 check("chi resta continua a lavorare",
       "risposta a: ci sono io" in finto3.a("111")[-1],
       str(finto3.a("111")[-1:]))
