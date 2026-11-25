@@ -1196,6 +1196,10 @@ class Session:
             if self._busy:
                 return False
             self._busy = True
+            # Il riepilogo del turno precedente non vale per questo: finche'
+            # il turno non ne produce uno nuovo, chi chiede i consigli non
+            # deve leggere i file e l'esito di prima.
+            self._riepilogo = {}
             # La profondita' vale per il turno che sta per partire. Sta
             # qui e non nel thread: il tool la legge dal proprio oggetto
             # Session, e una sessione esegue un turno alla volta — quindi
@@ -1287,6 +1291,27 @@ class Session:
                 self.bridge.emit("riepilogo", r)
             except Exception:  # noqa: BLE001
                 pass
+            # Solo ora la sessione torna libera: il riepilogo nuovo e' gia'
+            # assegnato, quindi un turno che parte adesso non puo' farselo
+            # sovrascrivere da questo.
+            with self._lock:
+                self._busy = False
+            # `idle` e' l'ultimo evento: la UI lo usa per chiedere i
+            # consigli, quindi il riepilogo nuovo deve essere gia' stato
+            # assegnato. Arriva anche quando il riepilogo non si e' potuto
+            # costruire: la sessione deve tornare utilizzabile lo stesso.
+            self.bridge.emit("idle", {
+                "busy": False,
+                "iterations": st.iterations,
+                "total_tokens": st.total_tokens,
+                "tool_calls": st.tool_calls_made,
+                "tool_errors": st.tool_errors,
+                "compactions": st.compactions,
+                "context_limit": getattr(
+                    getattr(self.agent, "config", None),
+                    "context_limit", 0) or 0,
+                "context_tokens": count_tokens(self.agent.state.messages),
+            })
 
     def _esegui_turno(self, user_input: str, allegati: list,
                       reg: Any) -> None:
@@ -1476,12 +1501,11 @@ class Session:
             self._salva_su_disco()
             self._ricorda_turno()
             self._impara_dal_turno(user_input, reg)
-            # `busy` va azzerato PRIMA di emettere `idle`, non dopo: la UI
-            # usa `idle` come segnale per riabilitare l'input, e se arrivasse
-            # prima dello stato reale accetterebbe un messaggio che il server
-            # rifiuterebbe con 409. Ordine: stato, poi segnale.
+            # `busy` resta true finche' `_run_turn` non ha assegnato il
+            # riepilogo: se scendesse qui, un nuovo `send` potrebbe partire
+            # e questo turno, finendo, sovrascriverebbe il riepilogo nuovo
+            # con quello vecchio.
             with self._lock:
-                self._busy = False
                 # Il checkout valeva per questo turno, non per la
                 # sessione: il prossimo messaggio dell'utente torna
                 # nella cartella del progetto.
@@ -1491,19 +1515,6 @@ class Session:
                     self.registry.disattiva("proponi_merge")
                 except Exception:  # noqa: BLE001
                     pass
-                now_free = True
-            if now_free:
-                st = self.agent.state
-                self.bridge.emit("idle", {"busy": False,
-                    "iterations": st.iterations,
-                    "total_tokens": st.total_tokens,
-                    "tool_calls": st.tool_calls_made,
-                    "tool_errors": st.tool_errors,
-                    "compactions": st.compactions,
-                    "context_limit": getattr(
-                        getattr(self.agent, "config", None),
-                        "context_limit", 0) or 0,
-                    "context_tokens": count_tokens(self.agent.state.messages)})
 
     def _nuova_sessione_db(self) -> int:
         """Crea una riga nello storico e ne torna l'id."""

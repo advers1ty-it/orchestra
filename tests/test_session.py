@@ -476,6 +476,58 @@ s_rie_a.reset()
 check("il reset azzera il riepilogo", s_rie_a.riepilogo() == {},
       str(s_rie_a.riepilogo()))
 
+print("\n[13] I consigli non leggono il riepilogo del turno precedente")
+# `idle` e' il segnale con cui la UI chiede i consigli: se arriva prima che
+# la sessione assegni il riepilogo nuovo, `/api/suggerimenti` legge ancora
+# quello di prima. Qui si guarda l'istante esatto in cui l'evento parte.
+prov_idle = SlowProvider(delay=0.0)
+prov_idle.model = "modello-primo"
+s_idle = Session(provider=prov_idle, registry=noop_reg(), system_prompt="SYS",
+                 config=LoopConfig(max_iterations=8))
+s_idle.send("primo turno")
+s_idle.wait(timeout=10)
+check("il primo turno lascia un riepilogo",
+      s_idle.riepilogo().get("modello") == "modello-primo",
+      str(s_idle.riepilogo()))
+
+prov_idle.model = "modello-secondo"
+# Un ritardo vero nel secondo turno: senza, il turno potrebbe finire prima
+# che il test riesca a guardare lo stato "in corso".
+prov_idle.delay = 0.1
+visto_eventi: dict = {"ordine": []}
+emit_originale = s_idle.bridge.emit
+
+def emit_con_visto(kind, data):
+    if kind == "riepilogo":
+        visto_eventi["ordine"].append(kind)
+        visto_eventi["al_riepilogo"] = s_idle.riepilogo()
+    elif kind == "idle":
+        visto_eventi["ordine"].append(kind)
+        visto_eventi["riepilogo"] = s_idle.riepilogo()
+        visto_eventi["busy"] = s_idle.busy
+    emit_originale(kind, data)
+
+s_idle.bridge.emit = emit_con_visto
+try:
+    s_idle.send("secondo turno")
+    durante = s_idle.riepilogo()
+    s_idle.wait(timeout=10)
+finally:
+    s_idle.bridge.emit = emit_originale
+check("mentre il turno gira il riepilogo vecchio non e' piu' leggibile",
+      durante == {}, str(durante))
+check("l'evento riepilogo porta gia' il riepilogo nuovo",
+      visto_eventi.get("al_riepilogo", {}).get("modello") == "modello-secondo",
+      str(visto_eventi.get("al_riepilogo")))
+check("a idle il riepilogo e' gia' quello nuovo",
+      visto_eventi.get("riepilogo", {}).get("modello") == "modello-secondo",
+      str(visto_eventi.get("riepilogo")))
+check("e idle viene dopo il riepilogo, non prima",
+      visto_eventi.get("ordine") == ["riepilogo", "idle"],
+      str(visto_eventi.get("ordine")))
+check("e la sessione e' gia' libera quando lo annuncia",
+      visto_eventi.get("busy") is False, str(visto_eventi.get("busy")))
+
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)
