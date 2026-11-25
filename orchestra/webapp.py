@@ -2415,7 +2415,6 @@ class OrchestraApp:
         che uno che parla di un'altra conversazione.
         """
         from . import bots as _bots
-        from . import riepilogo as _rie
         from . import suggerimenti as _sug
 
         try:
@@ -2435,7 +2434,8 @@ class OrchestraApp:
             conversazione = ""
         agente = getattr(sessione, "agent", None)
         try:
-            return _sug.proposte(_rie.ultimo(), radice=radice or os.getcwd(),
+            return _sug.proposte(sessione.riepilogo(),
+                                 radice=radice or os.getcwd(),
                                  provider=getattr(agente, "provider", None),
                                  conversazione=conversazione)
         except Exception:  # noqa: BLE001

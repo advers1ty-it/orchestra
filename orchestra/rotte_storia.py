@@ -45,10 +45,12 @@ class RotteStoria:
     @rotta("GET", "/api/riepilogo")
     def _r_get_riepilogo(self, path: str, body: dict[str, Any],
                          s: Any) -> None:
-        # L'ultimo riepilogo di turno: esito, file, token, costo.
-        from . import riepilogo
-
-        self._json({"riepilogo": riepilogo.ultimo()})
+        # L'ultimo riepilogo della sessione aperta: esito, file, token,
+        # costo. Non quello del processo, che con due sessioni sarebbe il
+        # turno di chi ha finito per ultimo.
+        sessione = getattr(self.app, "session", None)
+        self._json({"riepilogo":
+                    sessione.riepilogo() if sessione is not None else {}})
 
     @rotta("GET", "/api/suggerimenti")
     def _r_get_suggerimenti(self, path: str, body: dict[str, Any],
@@ -59,7 +61,6 @@ class RotteStoria:
         # e un pulsante "commit" deve sapere cosa c'e' adesso. Il modello
         # rilegge l'ultimo scambio: la risposta e' il consiglio, non una
         # frase buona per qualsiasi progetto.
-        from . import riepilogo as _rie
         from . import suggerimenti as _sug
 
         radice = ""
@@ -80,7 +81,8 @@ class RotteStoria:
         except Exception:  # noqa: BLE001
             conversazione = ""
         self._json({"proposte": _sug.proposte(
-            _rie.ultimo(), radice=radice or os.getcwd(),
+            sessione.riepilogo() if sessione is not None else {},
+            radice=radice or os.getcwd(),
             provider=provider, conversazione=conversazione)})
 
     @rotta("GET", "/api/diff")

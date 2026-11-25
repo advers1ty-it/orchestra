@@ -17,16 +17,17 @@ Le tre domande a cui risponde sono quelle che si fanno davvero:
 
 Non e' un giudizio sul lavoro: non dice se il codice e' buono. Dice
 cosa e' successo, che e' l'unica cosa che si puo' dire senza mentire.
+
+Il riepilogo appartiene alla sessione che l'ha prodotto: la sessione lo
+conserva e lo restituisce. Un deposito globale sarebbe il turno di chi ha
+finito per ultimo, e con due turni insieme i consigli di una chat
+citerebbero i file dell'altra.
 """
 
 from __future__ import annotations
 
-import threading
 import time
 from typing import Any
-
-_LOCK = threading.Lock()
-_ULTIMO: dict[str, Any] = {}
 
 _ESITI = {
     "": ("finito", "ok"),
@@ -144,13 +145,4 @@ def costruisci(*, stato: Any, modifiche: list[dict[str, Any]] | None = None,
         "traccia_id": traccia_id,
         "ts": time.time(),
     }
-    with _LOCK:
-        _ULTIMO.clear()
-        _ULTIMO.update(r)
     return r
-
-
-def ultimo() -> dict[str, Any]:
-    """L'ultimo riepilogo, o {} se non c'e' ancora stato un turno."""
-    with _LOCK:
-        return dict(_ULTIMO)

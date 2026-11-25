@@ -115,14 +115,13 @@ print("\n== la durata si legge ==")
 r = riepilogo.costruisci(stato=Stato(), durata_s=125)
 check("due minuti e cinque", r["durata"] == "2m 05s", r["durata"])
 
-print("\n== l'ultimo riepilogo resta disponibile ==")
+print("\n== ogni costruzione restituisce il suo riepilogo ==")
 
-check("ultimo() lo restituisce", riepilogo.ultimo().get("durata") == "2m 05s",
-      str(riepilogo.ultimo()))
-prima = riepilogo.ultimo()
-r = riepilogo.costruisci(stato=Stato(), durata_s=3)
-check("un nuovo turno lo sostituisce",
-      riepilogo.ultimo()["durata"] == "3s" and prima["durata"] == "2m 05s")
+secondo = riepilogo.costruisci(stato=Stato(), durata_s=3)
+check("il riepilogo gia' costruito non cambia", r["durata"] == "2m 05s",
+      r["durata"])
+check("il nuovo e' indipendente", secondo["durata"] == "3s",
+      secondo["durata"])
 
 print("\n== l'Agent accumula il costo anche senza budget ==")
 

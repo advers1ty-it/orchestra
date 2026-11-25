@@ -117,9 +117,13 @@ class SessioneFinta:
         self.eventi = []
         self.mandato = False
         self.canale = ""
+        self._riepilogo = {}
 
     def modello_in_uso(self):
         return self.modello
+
+    def riepilogo(self):
+        return dict(self._riepilogo)
 
     def steer(self, testo):
         if self.coda_piena:
@@ -1520,17 +1524,31 @@ check("i consigli Telegram leggono la sessione di quel bot",
       str(visti_bot))
 check("e li sanno ancora calcolare", isinstance(lista_bot, list)
       and bool(lista_bot), str(lista_bot)[:160])
-# Non basta scegliere la sessione giusta: lo scambio che arriva alla
-# generazione dev'essere il suo, non quello della finestra.
+# Non basta scegliere la sessione giusta: riepilogo e scambio che
+# arrivano alla generazione devono essere i suoi, non quelli dell'altro
+# bot o della finestra.
 from orchestra import suggerimenti as _sug_mod  # noqa: E402
-scambi_visti = []
+
+bot_altro = bots_mod.crea(nome="Altro")
+sess_a, sess_b = SessioneFinta(), SessioneFinta()
+sess_a._riepilogo = {"file": [{"percorso": "a.py"}]}
+sess_b._riepilogo = {"file": [{"percorso": "b.py"}]}
+sess_a.scambio_recente = lambda: "SCAMBIO-A"
+sess_b.scambio_recente = lambda: "SCAMBIO-B"
+app_cons._sessione_bot = lambda b: (
+    sess_a if int(b["id"]) == int(bot["id"]) else sess_b)
+visti = []
 vero_proposte = _sug_mod.proposte
 _sug_mod.proposte = lambda rie, **kw: (
-    scambi_visti.append(kw.get("conversazione")), [])[1]
-_sess_cons.scambio_recente = lambda: "SCAMBIO-DEL-BOT"
+    visti.append((rie, kw.get("conversazione"))), [])[1]
 app_cons._telegram_suggerimenti(bot["id"])
-check("e ci arriva lo scambio di quel bot",
-      scambi_visti == ["SCAMBIO-DEL-BOT"], str(scambi_visti))
+app_cons._telegram_suggerimenti(bot_altro["id"])
+check("ogni bot legge il proprio riepilogo",
+      [v[0]["file"][0]["percorso"] for v in visti] == ["a.py", "b.py"],
+      str([v[0] for v in visti]))
+check("e il proprio scambio",
+      [v[1] for v in visti] == ["SCAMBIO-A", "SCAMBIO-B"],
+      str([v[1] for v in visti]))
 _sug_mod.proposte = vero_proposte
 app_cons._sessione_bot = vero_sessione_bot
 

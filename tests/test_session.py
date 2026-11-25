@@ -444,6 +444,38 @@ check("la coda e' vuota a fine turno",
       s_steer.agent.state.steer_queue == [],
       str(s_steer.agent.state.steer_queue))
 
+print("\n[12] Ogni sessione legge il proprio riepilogo")
+# Con un deposito globale vinceva l'ultimo turno del processo: due sessioni
+# che finiscono vicine si scambiavano i file. Qui i due modelli sono
+# diversi apposta, cosi' si vede quale riepilogo legge ciascuna.
+prov_a = SlowProvider()
+prov_a.model = "modello-a"
+prov_b = SlowProvider()
+prov_b.model = "modello-b"
+s_rie_a = Session(provider=prov_a, registry=noop_reg(), system_prompt="SYS",
+                  config=LoopConfig(max_iterations=8))
+s_rie_a.send("prima sessione")
+s_rie_a.wait(timeout=10)
+rie_a = s_rie_a.riepilogo()
+s_rie_b = Session(provider=prov_b, registry=noop_reg(), system_prompt="SYS",
+                  config=LoopConfig(max_iterations=8))
+s_rie_b.send("seconda sessione")
+s_rie_b.wait(timeout=10)
+rie_b = s_rie_b.riepilogo()
+check("la prima sessione ha il suo riepilogo",
+      rie_a.get("modello") == "modello-a", str(rie_a.get("modello")))
+check("la seconda ha il suo",
+      rie_b.get("modello") == "modello-b", str(rie_b.get("modello")))
+check("il turno della seconda non tocca la prima",
+      s_rie_a.riepilogo().get("modello") == "modello-a",
+      str(s_rie_a.riepilogo().get("modello")))
+check("una sessione senza turni non ha riepilogo",
+      Session(provider=SlowProvider(), registry=noop_reg(),
+              system_prompt="SYS").riepilogo() == {})
+s_rie_a.reset()
+check("il reset azzera il riepilogo", s_rie_a.riepilogo() == {},
+      str(s_rie_a.riepilogo()))
+
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:
     print("FALLITI:", FAIL)

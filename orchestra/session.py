@@ -298,6 +298,11 @@ class Session:
         # riempirebbe il DB di conversazioni finte).
         self._sessione_id: int | None = None
 
+        # L'ultimo riepilogo di QUESTA sessione: esito, file, token,
+        # costo. Globale sarebbe quello di chi ha finito per ultimo, e i
+        # consigli di una chat finirebbero per citare i file di un'altra.
+        self._riepilogo: dict[str, Any] = {}
+
         # Il progetto su cui si sta lavorando. Ogni fatto che nasce da
         # un turno porta questa etichetta, ed e' quello che permette
         # di chiedere alla memoria "cosa serve per QUESTO progetto"
@@ -1278,6 +1283,7 @@ class Session:
                     modello=self.modello_in_uso(),
                     traccia_id=traccia_id,
                 )
+                self._riepilogo = r
                 self.bridge.emit("riepilogo", r)
             except Exception:  # noqa: BLE001
                 pass
@@ -1522,6 +1528,9 @@ class Session:
             return False
         with self._lock:
             self._sessione_id = sessione_id
+            # Il riepilogo e' del turno che stava in memoria: la
+            # conversazione appena aperta non ne ha uno suo.
+            self._riepilogo = {}
             ricostruiti = [Message(role="system",
                                    content=self.agent.system_prompt)]
             for m in messaggi:
@@ -1851,6 +1860,15 @@ class Session:
     def modello_in_uso(self) -> str:
         return getattr(self.agent.provider, "model", "") or "?"
 
+    def riepilogo(self) -> dict[str, Any]:
+        """L'ultimo riepilogo di QUESTA sessione, o {} se non c'e'.
+
+        Non e' un valore del processo: due turni possono finire insieme su
+        sessioni diverse, e i consigli di una non devono citare i file
+        dell'altra.
+        """
+        return dict(self._riepilogo)
+
     def cambia_modello(self, model_id: str) -> bool:
         """Cambia il modello a meta' turno, perche' quello vecchio e' morto."""
         if self._cambia_modello is None:
@@ -1929,6 +1947,9 @@ class Session:
             # riga nasce in `_salva_su_disco`, al primo turno con contenuto.
             # Così la cronologia mostra solo conversazioni vere.
             self._sessione_id = None
+            # Una conversazione nuova non eredita il riepilogo di quella
+            # che c'era prima.
+            self._riepilogo = {}
         self.bridge.emit("reset", {})
 
     def steer(self, testo: str) -> bool:
