@@ -169,18 +169,56 @@ def _server_id(cfg: dict[str, Any]) -> str:
     return str(cfg.get("id") or cfg.get("name") or uuid.uuid4().hex[:8])
 
 
+def config_richiede_conferma(cfg: dict[str, Any]) -> bool:
+    """La configurazione appartiene a un preset che richiede conferma?
+
+    Il flag non viene salvato: si ricava dal catalogo attuale. Per questo
+    vale anche per i server aggiunti prima che la conferma esistesse.
+    """
+    # Le configurazioni molto vecchie possono non avere il campo
+    # `preset`: il nome (o l'id) con cui sono state salvate e' comunque
+    # quello del preset. Si provano entrambi: un id arbitrario non deve
+    # nascondere un nome riconoscibile. Meglio chiedere una conferma in
+    # piu' che avviare un server potente senza averlo riconosciuto.
+    if not isinstance(cfg, dict):
+        return False
+    from . import mcp_preset
+    visti: set[str] = set()
+    for valore in (cfg.get("preset"), cfg.get("name"), cfg.get("id")):
+        preset_id = str(valore or "").strip().lower()
+        if not preset_id or preset_id in visti:
+            continue
+        visti.add(preset_id)
+        p = mcp_preset.per_id(preset_id)
+        if p and p.get("richiede_conferma"):
+            return True
+    return False
+
+
 def list_servers() -> list[dict[str, Any]]:
     out = []
     for cfg in _load_config():
         sid = _server_id(cfg)
         conn = _connections.get(sid)
+        preset = cfg.get("preset") or ""
+        conferma = config_richiede_conferma(cfg)
+        # Un preset (anche una vecchia config potente senza il campo
+        # `preset`) puo' avere un DSN o una password negli args: la lista
+        # serve alla UI, non a mostrare come e' fatto il comando. Il
+        # comando completo resta nella config privata e viene usato per
+        # connettere; qui si mostrano solo i dati di stato. Anche i
+        # preset non potenti nascondono la config esecutiva: la UI non
+        # ne ha bisogno e l'URL puo' cambiare senza un perche'.
+        nascondi = bool(preset) or conferma
         out.append({
             "id": sid,
             "name": cfg.get("name") or sid,
             "transport": cfg.get("transport") or "stdio",
-            "command": cfg.get("command"),
-            "args": cfg.get("args") or [],
-            "url": cfg.get("url"),
+            "preset": preset,
+            "richiede_conferma": conferma,
+            "command": None if nascondi else cfg.get("command"),
+            "args": [] if nascondi else (cfg.get("args") or []),
+            "url": None if nascondi else cfg.get("url"),
             "enabled": bool(cfg.get("enabled", True)),
             "connected": bool(conn and conn.initialized),
             "error": (conn.error if conn else ""),
@@ -198,6 +236,12 @@ def _find_config(sid: str) -> dict[str, Any] | None:
         if _server_id(cfg) == sid:
             return cfg
     return None
+
+
+def richiede_conferma(sid: str) -> bool:
+    """Vero se il server e' un preset che richiede una conferma."""
+    cfg = _find_config(str(sid))
+    return bool(cfg and config_richiede_conferma(cfg))
 
 
 def add_server(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -292,6 +336,17 @@ def connect_all(timeout: float = 20.0) -> list[dict[str, Any]]:
         if not cfg.get("enabled", True):
             continue
         sid = _server_id(cfg)
+        if config_richiede_conferma(cfg):
+            # All'avvio (e con "Connetti tutti") un database o Desktop
+            # Commander non devono partire da soli: l'utente li connette
+            # dalla riga, dopo averli aggiunti con la conferma.
+            out.append({
+                "id": sid,
+                "ok": False,
+                "skipped": True,
+                "error": "richiede una connessione esplicita dalla lista",
+            })
+            continue
         out.append({"id": sid, **connect(sid, timeout=timeout)})
     return out
 

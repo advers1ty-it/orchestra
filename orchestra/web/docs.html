@@ -142,6 +142,10 @@
     <p><b>Opzioni</b> (chiavi, modello, limiti, bot, remoto), <b>Obiettivo</b> (lavoro autonomo), <b>Cron</b> (lavori programmati), <b>MCP</b> (strumenti esterni), <b>Cosa fai?</b> (la domanda iniziale), <b>Docs</b> (questa guida), <b>Consiglio</b> (più pareri su una decisione).</p>
   </div>
   <div class="box">
+    <h3>MCP senza parametri</h3>
+    <p>Per collegare un servizio o un programma non serve compilare comando e argomenti: scegli un <b>preset</b> nel pannello MCP (ce ne sono oltre 50, con la ricerca) oppure scrivi in chat «collega GitHub via MCP». Ci sono servizi online come GitHub, GitLab, Supabase, Neon, Notion, Atlassian, Cloudflare, Datadog, PostHog; programmi locali come Unreal Engine, Unity, Godot, Blender, FreeCAD, GIMP, JetBrains, Obsidian; database e infrastruttura come PostgreSQL, MongoDB, Redis, Grafana, Terraform. L'agente usa il bridge pronto e ti chiede solo il token, la cartella o il progetto. I server non in elenco restano configurabili a mano. Prima di aggiungere un preset locale che puo' modificare file, repository o dati (Desktop Commander, Git, database, Terraform) il pannello chiede una conferma esplicita e lascia il server disconnesso: la connessione richiede un secondo clic e un'ulteriore conferma esplicita, e anche «Connetti tutti» e il riavvio li saltano. Anche il tool `mcp` con azione `connetti` passa dalla conferma di permesso per questi preset.</p>
+  </div>
+  <div class="box">
     <h3>Chi risponde</h3>
     <p>Il menu <b>identità</b> sceglie chi sta lavorando: «agente principale» oppure uno dei tuoi bot. Poi <b>scopo</b> (che lavoro stai facendo, e Orchestra sceglie il modello adatto), <b>servizio</b>, <b>modello</b> e <b>reasoning</b> (quanto «pensare» prima di rispondere).</p>
   </div>

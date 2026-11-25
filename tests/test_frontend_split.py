@@ -83,6 +83,14 @@ check("lo script esterno ha defer", " defer" in html,
 # li assembla il server.
 check("un solo script esterno", len(scripts) == 1 and scripts[0] == "/app.js",
       str(scripts))
+check("il pannello MCP ha il selettore e i campi dei preset",
+      'id="mcp-preset"' in html and 'id="mcp-preset-campi"' in html
+      and 'id="mcp-preset-cerca"' in html,
+      "mancano gli elementi del selettore preset")
+check("i preset potenti hanno un modale di conferma esplicito",
+      'id="mcp-conferma"' in html and 'id="mcp-conferma-ok"' in html
+      and 'id="mcp-conferma-procedi"' in html,
+      "manca la conferma prima di aggiungere un preset locale potente")
 
 print("\n[1b] La cache del service worker non resta indietro")
 # CSS, icone e manifest sono serviti cache-first: se il nome della cache non

@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import shutil
 import subprocess
 import threading
 import time
@@ -107,6 +108,17 @@ class Trasporto:
 # stdio
 # ---------------------------------------------------------------------------
 
+def _risolvi_comando(comando: str) -> str:
+    """Il percorso vero di un comando nel PATH, o il nome com'e'.
+
+    Su Windows `npx` e' `npx.CMD`: Popen non lo trova se il nome e' nudo.
+    `shutil.which` restituisce il percorso giusto e, per un comando gia'
+    assoluto o inesistente, lascia il valore originale.
+    """
+    trovato = shutil.which(str(comando))
+    return trovato or str(comando)
+
+
 class StdioTrasporto(Trasporto):
     def __init__(self, cfg: dict[str, Any]) -> None:
         self.cfg = cfg
@@ -129,6 +141,7 @@ class StdioTrasporto(Trasporto):
             cmd = [self.cfg.get("command")] + list(self.cfg.get("args") or [])
             if not cmd[0]:
                 raise ValueError("command mancante")
+            cmd[0] = _risolvi_comando(str(cmd[0]))
             env = _env_minimo()
             for k, v in (self.cfg.get("env") or {}).items():
                 env[str(k)] = str(v)

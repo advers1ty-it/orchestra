@@ -428,6 +428,23 @@ _AUTO_BROWSER = (
 )
 _AUTO_COMPUTER = ("desktop", "mouse", "finestra", "programma")
 _AUTO_AUTOMAZIONE = ("cron", "schedulat", "mcp", "ogni giorno")
+# "Collega Notion" non contiene la parola MCP, ma e' la richiesta piu'
+# naturale per la skill mcp. Senza questo, il profilo restava "base" e il
+# tool mcp non era nemmeno disponibile: la skill lo nominava e l'agente
+# non poteva eseguirla.
+_AUTO_MCP_VERBI = ("collega", "connetti", "configura", "integra")
+_AUTO_MCP_SERVIZI = ("github", "gitlab", "supabase", "neon", "notion",
+                     "linear", "sentry", "stripe", "datadog", "firecrawl",
+                     "exa", "context7", "huggingface", "hugging face",
+                     "cloudflare",
+                     "airtable", "resend", "semgrep", "deepwiki", "posthog",
+                     "pagerduty", "twilio", "atlassian", "clickup",
+                     "netlify", "miro", "paypal", "elasticsearch",
+                     "playwright", "filesystem", "unreal", "godot",
+                     "blender", "unity", "freecad", "gimp", "krita",
+                     "inkscape", "jetbrains", "obsidian", "postgres",
+                     "mongodb", "redis", "sqlite", "grafana", "terraform",
+                     "chrome", "sequential")
 _AUTO_SKILL = ("skill", "procedura", "importa", "riusa", "come si fa")
 _AUTO_WEB = ("cerca", "web", "storico", "passato", "internet",
              "documentazione")
@@ -447,6 +464,9 @@ def profilo_per_testo(testo: str) -> str:
     # computer stanno solo in "pieno", insieme a cron e mcp. Prendere un
     # profilo piu' piccolo vorrebbe dire togliere il tool richiesto.
     if any(k in t for k in _AUTO_BROWSER + _AUTO_COMPUTER + _AUTO_AUTOMAZIONE):
+        return "pieno"
+    if (any(v in t for v in _AUTO_MCP_VERBI)
+            and any(s in t for s in _AUTO_MCP_SERVIZI)):
         return "pieno"
     if any(k in t for k in _AUTO_SKILL):
         return "skill"

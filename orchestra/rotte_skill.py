@@ -21,6 +21,17 @@ from .rotte import rotta
 CARTELLA_CESTINO = ".cestino"
 
 
+def _mcp_conferma_errore(handler: Any, preset: str) -> None:
+    """La risposta comune per un preset che richiede consenso."""
+    handler._json({
+        "ok": False,
+        "error": ("questo preset locale puo' modificare file, "
+                  "repository o dati: serve una conferma esplicita"),
+        "richiede_conferma": True,
+        "preset": preset,
+    }, 409)
+
+
 def _skill_elenco(indice) -> dict[str, Any]:
     """Le skill, raggruppate per origine e per categoria.
 
@@ -561,6 +572,13 @@ class RotteSkill:
         self._json({"servers": mcp_mod.list_servers()})
         return
 
+    @rotta("POST", "/api/mcp/presets")
+    def _r_post_mcp_presets(self, path: str, body: dict[str, Any],
+                            s: Any) -> None:
+        from . import mcp_preset
+        self._json({"presets": mcp_preset.catalogo()})
+        return
+
     @rotta("POST", "/api/mcp/tools")
     def _r_post_mcp_tools(self, path: str, body: dict[str, Any],
                           s: Any) -> None:
@@ -595,9 +613,32 @@ class RotteSkill:
     def _r_post_mcp_add(self, path: str, body: dict[str, Any],
                         s: Any) -> None:
         from . import mcp as mcp_mod
-        cfg = body if isinstance(body, dict) else {}
+        from . import mcp_preset
+        from .tools.mcp import _config_pubblica
+        cfg = dict(body) if isinstance(body, dict) else {}
+        preset = str(cfg.get("preset") or "").strip()
+        if preset:
+            p = mcp_preset.per_id(preset)
+            # Un preset che puo' toccare file, repository o database non
+            # deve partire per un clic distratto. La UI mostra un modale
+            # con una spunta esplicita e rimanda conferma=true solo dopo
+            # che l'utente l'ha accettata.
+            if p and p.get("richiede_conferma") and cfg.get("conferma") is not True:
+                _mcp_conferma_errore(self, preset)
+                return
+            valori = cfg.get("valori")
+            try:
+                cfg = mcp_preset.configura(
+                    preset, valori if isinstance(valori, dict) else {},
+                    nome=cfg.get("nome"))
+            except ValueError as e:
+                self._json({"ok": False, "error": str(e)}, 400)
+                return
         c = mcp_mod.add_server(cfg)
-        self._json({"ok": True, "server": c})
+        # La UI ha bisogno solo dell'id per connettere; non rimandare al
+        # browser header o env che possono contenere il token appena
+        # incollato.
+        self._json({"ok": True, "server": _config_pubblica(c)})
         return
 
     @rotta("POST", "/api/mcp/delete")
@@ -613,8 +654,18 @@ class RotteSkill:
     def _r_post_mcp_connect(self, path: str, body: dict[str, Any],
                             s: Any) -> None:
         from . import mcp as mcp_mod
-        jid = (body.get("id") if isinstance(body, dict) else None)
-        r = mcp_mod.connect(str(jid or ""))
+        jid = str((body.get("id") if isinstance(body, dict) else "") or "")
+        cfg = mcp_mod._find_config(jid)
+        confermato = isinstance(body, dict) and body.get("conferma") is True
+        # La stessa barriera dell'aggiunta: una configurazione gia' scritta
+        # (anche da una versione precedente) non deve partire con una sola
+        # chiamata. La UI manda conferma=true dopo il checkbox.
+        if (cfg is not None
+                and mcp_mod.config_richiede_conferma(cfg)
+                and not confermato):
+            _mcp_conferma_errore(self, str(cfg.get("preset") or ""))
+            return
+        r = mcp_mod.connect(jid)
         self._json(r)
         return
 

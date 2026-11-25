@@ -97,6 +97,7 @@ ATTESE = frozenset({
     "POST /api/mcp/connect_all",
     "POST /api/mcp/delete",
     "POST /api/mcp/disconnect",
+    "POST /api/mcp/presets",
     "POST /api/mcp/prompts",
     "POST /api/mcp/resources",
     "POST /api/mcp/servers",
@@ -281,6 +282,113 @@ def main() -> int:
               for r in tabella.tutte()))
     check("login e logout restano fuori dalla tabella",
           "POST /api/login" not in presenti and "POST /api/logout" not in presenti)
+
+    print("\n[8] Il pannello MCP riceve il catalogo")
+
+    class _FintoHandler:
+        def __init__(self):
+            self.out = None
+            self.code = None
+
+        def _json(self, obj, code=200):
+            self.out, self.code = obj, code
+
+    finto = _FintoHandler()
+    webapp.Handler._r_post_mcp_presets(
+        finto, "/api/mcp/presets", {}, None)
+    ids = {p.get("id") for p in (finto.out or {}).get("presets", [])}
+    check("la rotta restituisce i preset", finto.code == 200 and bool(ids),
+          str(finto.out)[:200])
+    check("il catalogo include i programmi locali",
+          {"unreal", "godot", "blender"}.issubset(ids), str(sorted(ids)))
+
+    # La rotta e' la seconda barriera: anche chi chiama l'API direttamente
+    # non deve poter aggiungere un preset potente senza la conferma che la
+    # UI raccoglie con il checkbox.
+    finto = _FintoHandler()
+    webapp.Handler._r_post_mcp_add(
+        finto, "/api/mcp/add",
+        {"preset": "git", "valori": {"cartella": "D:/progetti/app"}}, None)
+    check("un preset potente senza conferma viene rifiutato",
+          finto.code == 409
+          and (finto.out or {}).get("richiede_conferma") is True,
+          str(finto.out))
+    check("il rifiuto spiega perche' serve la conferma",
+          "conferma" in str((finto.out or {}).get("error", "")),
+          str(finto.out))
+
+    # Anche un server gia' configurato (magari da una versione precedente,
+    # senza un campo "richiede_conferma" salvato) non deve partire con la
+    # sola chiamata /connect: il flag si ricava dal preset nel catalogo.
+    from orchestra import mcp as mcp_mod
+    vecchio_find = mcp_mod._find_config
+    vecchio_connect = mcp_mod.connect
+    esistente = {
+        "id": "git-esistente", "name": "Git esistente", "preset": "git",
+        "transport": "stdio", "command": "comando-che-non-deve-partire",
+    }
+    chiamate = []
+    mcp_mod._find_config = lambda sid: esistente if sid == "git-esistente" else None
+    mcp_mod.connect = lambda sid, timeout=20.0: (chiamate.append(sid)
+                                                  or {"ok": True})
+    try:
+        finto = _FintoHandler()
+        webapp.Handler._r_post_mcp_connect(
+            finto, "/api/mcp/connect", {"id": "git-esistente"}, None)
+        check("un server potente gia' aggiunto non parte senza conferma",
+              finto.code == 409 and not chiamate, str(finto.out))
+        finto = _FintoHandler()
+        webapp.Handler._r_post_mcp_connect(
+            finto, "/api/mcp/connect",
+            {"id": "git-esistente", "conferma": True}, None)
+        check("con la conferma esplicita la connessione parte",
+              finto.code == 200 and chiamate == ["git-esistente"],
+              str(finto.out))
+
+        # Config molto vecchia: nessun campo preset, ma id/nome sono
+        # quelli del preset potente.
+        legacy = {
+            "id": "git", "name": "Git", "transport": "stdio",
+            "command": "comando-che-non-deve-partire",
+        }
+        mcp_mod._find_config = lambda sid: legacy if sid == "git" else None
+        chiamate.clear()
+        finto = _FintoHandler()
+        webapp.Handler._r_post_mcp_connect(
+            finto, "/api/mcp/connect", {"id": "git"}, None)
+        check("una config vecchia senza preset non parte senza conferma",
+              finto.code == 409 and not chiamate, str(finto.out))
+
+        # Anche la rotta "Connetti tutti" deve saltare i preset protetti.
+        vecchio_load = mcp_mod._load_config
+        mcp_mod._load_config = lambda: [esistente]
+        try:
+            finto = _FintoHandler()
+            webapp.Handler._r_post_mcp_connect_all(
+                finto, "/api/mcp/connect_all", {}, None)
+            risultati = (finto.out or {}).get("results", [])
+            check("connect_all salta il preset potente",
+                  finto.code == 200 and len(risultati) == 1
+                  and risultati[0].get("skipped") is True, str(finto.out))
+        finally:
+            mcp_mod._load_config = vecchio_load
+
+        # Un server normale passa senza conferma.
+        normale = {
+            "id": "normal-existing", "name": "normale",
+            "transport": "stdio", "command": "comando-finto",
+        }
+        chiamate.clear()
+        mcp_mod._find_config = lambda sid: normale if sid == "normal-existing" else None
+        finto = _FintoHandler()
+        webapp.Handler._r_post_mcp_connect(
+            finto, "/api/mcp/connect", {"id": "normal-existing"}, None)
+        check("un server normale si connette senza conferma",
+              finto.code == 200 and chiamate == ["normal-existing"],
+              str(finto.out))
+    finally:
+        mcp_mod._find_config = vecchio_find
+        mcp_mod.connect = vecchio_connect
 
     print("\n" + "=" * 60)
     print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")

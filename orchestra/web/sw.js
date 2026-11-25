@@ -9,7 +9,7 @@
    cioe' quando serve. `tests/test_frontend_split.py` lo ricalcola dagli
    asset dichiarati in SHELL: se non torna, il test e' rosso e dice quale
    mettere. */
-const CACHE = "orchestra-shell-e7b47a0c";
+const CACHE = "orchestra-shell-575a5bb9";
 const SHELL = ["/", "/app.css", "/app.js", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

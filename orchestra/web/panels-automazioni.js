@@ -218,6 +218,11 @@ caricaCron = async function() {
 
 // ============================== MCP ==============================
 const mcpBar = $("mcp-bar");
+const mcpPreset = $("mcp-preset");
+const mcpPresetCerca = $("mcp-preset-cerca");
+const mcpPresetCampi = $("mcp-preset-campi");
+let mcpPresets = [];
+let mcpPresetCaricati = false;
 const mcpNome = $("mcp-nome");
 const mcpTransport = $("mcp-transport");
 const mcpCommand = $("mcp-command");
@@ -228,6 +233,138 @@ const mcpHeaders = $("mcp-headers");
 const mcpStatus = $("mcp-status");
 const mcpList = $("mcp-list");
 const mcpTools = $("mcp-tools");
+const mcpConferma = $("mcp-conferma");
+const mcpConfermaNome = $("mcp-conferma-nome");
+const mcpConfermaTesto = $("mcp-conferma-testo");
+const mcpConfermaOk = $("mcp-conferma-ok");
+const mcpConfermaProcedi = $("mcp-conferma-procedi");
+let mcpConfermaCfg = null;
+let mcpConfermaPreset = null;
+let mcpConfermaAzione = "add";
+
+function mcpPresetScelto() {
+  if (!mcpPreset) return null;
+  return mcpPresets.find((p) => p.id === mcpPreset.value) || null;
+}
+
+function mcpPresetMostra() {
+  const p = mcpPresetScelto();
+  const manuale = !p;
+  for (const el of [mcpNome, mcpTransport, mcpCommand, mcpArgs, mcpUrl,
+                    mcpEnv, mcpHeaders]) {
+    if (el) el.disabled = !manuale;
+  }
+  if (mcpPresetCampi) {
+    mcpPresetCampi.replaceChildren();
+    mcpPresetCampi.hidden = !p;
+  }
+  if (!p) {
+    if (mcpNome) mcpNome.value = "";
+    if (mcpTransport) mcpTransport.value = "stdio";
+    if (mcpCommand) mcpCommand.value = "";
+    if (mcpArgs) mcpArgs.value = "";
+    if (mcpUrl) mcpUrl.value = "";
+    if (mcpEnv) mcpEnv.value = "";
+    if (mcpHeaders) mcpHeaders.value = "";
+    return;
+  }
+  if (mcpNome) mcpNome.value = p.nome || p.id;
+  if (mcpTransport) mcpTransport.value = p.trasporto || "stdio";
+  if (mcpCommand) mcpCommand.value = "";
+  if (mcpArgs) mcpArgs.value = "";
+  if (mcpUrl) mcpUrl.value = "";
+  if (mcpEnv) mcpEnv.value = "";
+  if (mcpHeaders) mcpHeaders.value = "";
+  for (const c of (p.campi || [])) {
+    const label = document.createElement("label");
+    const titolo = document.createElement("span");
+    titolo.textContent = (c.etichetta || c.nome) +
+      (c.obbligatorio ? " *" : "");
+    const input = document.createElement("input");
+    input.type = c.segreto ? "password" : "text";
+    input.placeholder = c.esempio || "";
+    input.autocomplete = "off";
+    input.dataset.campo = c.nome;
+    label.appendChild(titolo);
+    label.appendChild(input);
+    if (c.dove) {
+      const a = document.createElement("a");
+      a.href = c.dove;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "Dove trovarlo";
+      label.appendChild(a);
+    }
+    if (mcpPresetCampi) mcpPresetCampi.appendChild(label);
+  }
+  const nota = document.createElement("div");
+  nota.className = "goal-meta";
+  nota.textContent = p.nota || "";
+  if (p.docs) {
+    const a = document.createElement("a");
+    a.href = p.docs;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = (p.nota ? " " : "") + "Documentazione";
+    nota.appendChild(a);
+  }
+  if (mcpPresetCampi) mcpPresetCampi.appendChild(nota);
+}
+
+function mcpPresetDisegna(filtro) {
+  if (!mcpPreset) return;
+  const q = (filtro || "").trim().toLowerCase();
+  const prima = mcpPreset.value;
+  mcpPreset.replaceChildren();
+  const vuoto = document.createElement("option");
+  vuoto.value = "";
+  vuoto.textContent = "Personalizzato (manuale)";
+  mcpPreset.appendChild(vuoto);
+  const gruppi = [
+    {label: "Programmi locali", test: (p) => p.locale && p.categoria === "programma"},
+    {label: "Dati e infrastruttura", test: (p) => p.locale && p.categoria === "dati"},
+    {label: "Utility locali", test: (p) => p.locale && p.categoria === "utility"},
+    {label: "Servizi online", test: (p) => !p.locale},
+  ];
+  for (const g of gruppi) {
+    const gruppo = mcpPresets.filter(g.test).filter((p) => {
+      if (!q) return true;
+      return (p.id + " " + p.nome + " " + (p.descrizione || "") +
+              " " + (p.categoria || "")).toLowerCase().includes(q);
+    });
+    if (!gruppo.length) continue;
+    const og = document.createElement("optgroup");
+    og.label = g.label;
+    for (const p of gruppo) {
+      const o = document.createElement("option");
+      o.value = p.id;
+      o.textContent = p.nome + (p.trasporto ? " · " + p.trasporto : "") +
+        (p.oauth ? " · OAuth" : "");
+      og.appendChild(o);
+    }
+    mcpPreset.appendChild(og);
+  }
+  if (prima) mcpPreset.value = prima;
+}
+
+async function mcpPresetCarica() {
+  if (!mcpPreset || mcpPresetCaricati) return;
+  try {
+    const r = await fetch("/api/mcp/presets", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: "{}",
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || ("errore " + r.status));
+    mcpPresets = d.presets || [];
+    mcpPresetDisegna(mcpPresetCerca ? mcpPresetCerca.value : "");
+    mcpPresetCaricati = true;
+    mcpPresetMostra();
+  } catch (e) {
+    if (mcpStatus) mcpStatus.textContent = "preset non caricati: " + e;
+  }
+}
 
 function mcpRiga(s) {
   const riga = document.createElement("div");
@@ -247,14 +384,29 @@ function mcpRiga(s) {
   riga.appendChild(st);
   const azioni = document.createElement("span");
   azioni.className = "goal-meta";
+  const presetConnessione = mcpPresets.find((p) => p.id === s.preset) || null;
+  const potente = !!(s.richiede_conferma ||
+    (presetConnessione && presetConnessione.richiede_conferma));
   const btnConn = document.createElement("button");
   btnConn.className = "ghost";
   btnConn.textContent = s.connected ? "Disconnetti" : "Connetti";
   btnConn.addEventListener("click", async (e) => {
     e.stopPropagation();
-    if (s.connected) await fetch("/api/mcp/disconnect", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: s.id }) });
-    else await fetch("/api/mcp/connect", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: s.id }) });
-    caricaMcp();
+    if (s.connected) {
+      await fetch("/api/mcp/disconnect", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: s.id }) });
+      caricaMcp();
+      return;
+    }
+    if (potente) {
+      const meta = presetConnessione || {
+        id: s.preset || s.id,
+        nome: s.name || s.id,
+        nota: "",
+      };
+      mcpConfermaApri(meta, {id: s.id}, "connect");
+      return;
+    }
+    await mcpConnetti(s.id);
   });
   const btnDel = document.createElement("button");
   btnDel.className = "ghost";
@@ -270,13 +422,130 @@ function mcpRiga(s) {
   return riga;
 }
 
+function mcpPost(url) {
+  return fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: "{}",
+  });
+}
+
+function mcpConfermaChiudi() {
+  mcpConfermaCfg = null;
+  mcpConfermaPreset = null;
+  mcpConfermaAzione = "add";
+  if (mcpConferma) mcpConferma.classList.add("hidden");
+  if (mcpConfermaOk) mcpConfermaOk.checked = false;
+  if (mcpConfermaProcedi) {
+    mcpConfermaProcedi.disabled = true;
+    mcpConfermaProcedi.textContent = "Aggiungi senza connettere";
+  }
+}
+
+function mcpConfermaApri(preset, cfg, azione) {
+  mcpConfermaCfg = cfg;
+  mcpConfermaPreset = preset;
+  mcpConfermaAzione = azione === "connect" ? "connect" : "add";
+  const connetti = mcpConfermaAzione === "connect";
+  if (mcpConfermaNome) mcpConfermaNome.textContent = preset.nome || preset.id;
+  if (mcpConfermaTesto) {
+    const nota = preset.nota ? preset.nota + " " : "";
+    mcpConfermaTesto.textContent = connetti
+      ? nota + "Stai per avviare questo server locale: partira' solo " +
+        "dopo questa conferma."
+      : nota + "Dopo l'aggiunta il server restera' disconnesso: dovrai " +
+        "premere Connetti nella lista.";
+  }
+  if (mcpConfermaOk) mcpConfermaOk.checked = false;
+  if (mcpConfermaProcedi) {
+    mcpConfermaProcedi.disabled = true;
+    mcpConfermaProcedi.textContent = connetti
+      ? "Connetti" : "Aggiungi senza connettere";
+  }
+  if (mcpConferma) mcpConferma.classList.remove("hidden");
+  if (mcpConfermaOk) mcpConfermaOk.focus();
+}
+
+async function mcpConnetti(id, conferma) {
+  if (!id) return {ok: false, error: "id del server mancante"};
+  if (mcpStatus) mcpStatus.textContent = "connessione...";
+  try {
+    const body = {id: id};
+    if (conferma === true) body.conferma = true;
+    const r = await fetch("/api/mcp/connect", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    await caricaMcp();
+    if (mcpStatus) {
+      mcpStatus.textContent = d.ok
+        ? "connesso"
+        : "connessione non riuscita: " +
+          (d.error || ("errore " + r.status));
+    }
+    return d;
+  } catch (e) {
+    if (mcpStatus) mcpStatus.textContent = "errore: " + e;
+    return {ok: false, error: String(e)};
+  }
+}
+
+async function mcpInvia(cfg, preset) {
+  if (mcpStatus) mcpStatus.textContent = "aggiunta...";
+  try {
+    const r = await fetch("/api/mcp/add", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(cfg),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (mcpStatus) mcpStatus.textContent = d.error || ("errore " + r.status);
+      return;
+    }
+    // Un preset potente resta spento: la conferma autorizza a scrivere la
+    // configurazione, non ad avviare il processo. La connessione e' un
+    // secondo gesto esplicito dalla lista. Per OAuth il primo connect apre
+    // il browser e puo' aspettare piu' del timeout, quindi si connette
+    // sempre dall'utente.
+    const potente = !!(preset && preset.richiede_conferma);
+    let cr = null;
+    if (!potente && (!preset || !preset.oauth)) {
+      cr = await fetch("/api/mcp/connect", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ id: (d.server && d.server.id) }),
+      }).then((x) => x.json().catch(() => ({})));
+    }
+    if (mcpPreset) mcpPreset.value = "";
+    mcpPresetMostra();
+    await caricaMcp();
+    if (mcpStatus) {
+      if (potente) {
+        mcpStatus.textContent = "aggiunto; non connesso automaticamente. " +
+          "Premi Connetti per usarlo.";
+      } else if (preset && preset.oauth) {
+        mcpStatus.textContent = "aggiunto; premi Connetti e completa l'accesso nel browser";
+      } else {
+        mcpStatus.textContent = cr && cr.ok
+          ? "aggiunto e connesso"
+          : "aggiunto; connessione non riuscita: " +
+            ((cr && cr.error) || "server non raggiungibile");
+      }
+    }
+  } catch (e) { if (mcpStatus) mcpStatus.textContent = "errore: " + e; }
+}
+
 async function caricaMcp() {
   if (!mcpBar || mcpBar.hidden) return;
+  if (!mcpPresetCaricati) mcpPresetCarica();
   try {
-    const rs = await fetch("/api/mcp/servers").then((r) => r.json().catch(() => ({})));
-    const ts = await fetch("/api/mcp/tools").then((r) => r.json().catch(() => ({})));
-    const rr = await fetch("/api/mcp/resources").then((r) => r.json().catch(() => ({})));
-    const rp = await fetch("/api/mcp/prompts").then((r) => r.json().catch(() => ({})));
+    const rs = await mcpPost("/api/mcp/servers").then((r) => r.json().catch(() => ({})));
+    const ts = await mcpPost("/api/mcp/tools").then((r) => r.json().catch(() => ({})));
+    const rr = await mcpPost("/api/mcp/resources").then((r) => r.json().catch(() => ({})));
+    const rp = await mcpPost("/api/mcp/prompts").then((r) => r.json().catch(() => ({})));
     const servers = rs.servers || [];
     if (mcpList) {
       mcpList.replaceChildren();
@@ -333,57 +602,107 @@ on("btn-mcp", "click", () => {
 
 on("mcp-refresh", "click", () => caricaMcp());
 
+on("mcp-preset", "change", () => mcpPresetMostra());
+
+on("mcp-preset-cerca", "input", () => {
+  if (!mcpPreset) return;
+  const prima = mcpPreset.value;
+  mcpPresetDisegna(mcpPresetCerca ? mcpPresetCerca.value : "");
+  if (mcpPreset.value !== prima) mcpPresetMostra();
+});
+
 on("mcp-add", "click", async () => {
-  const nome = (mcpNome && mcpNome.value || "").trim();
-  const command = (mcpCommand && mcpCommand.value || "").trim();
-  if (!nome) { if (mcpStatus) mcpStatus.textContent = "nome richiesto"; return; }
-  const args = (mcpArgs && mcpArgs.value || "").trim().split(/\s+/).filter(Boolean);
-  const env = {};
-  const envStr = (mcpEnv && mcpEnv.value || "").trim();
-  if (envStr) {
-    for (const part of envStr.split(";")) {
-      const idx = part.indexOf("=");
-      if (idx > 0) env[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+  const preset = mcpPresetScelto();
+  let cfg;
+  if (preset) {
+    const valori = {};
+    const campi = mcpPresetCampi
+      ? mcpPresetCampi.querySelectorAll("input[data-campo]") : [];
+    for (const inp of campi) {
+      valori[inp.dataset.campo] = (inp.value || "").trim();
     }
-  }
-  const headers = {};
-  const headStr = (mcpHeaders && mcpHeaders.value || "").trim();
-  if (headStr) {
-    for (const part of headStr.split(";")) {
-      const idx = part.indexOf("=");
-      if (idx > 0) headers[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+    const mancante = (preset.campi || []).find(
+      (c) => c.obbligatorio && !valori[c.nome]);
+    if (mancante) {
+      if (mcpStatus) {
+        mcpStatus.textContent = "serve " + (mancante.etichetta || mancante.nome);
+      }
+      return;
     }
+    cfg = { preset: preset.id, valori: valori };
+  } else {
+    const nome = (mcpNome && mcpNome.value || "").trim();
+    if (!nome) { if (mcpStatus) mcpStatus.textContent = "nome richiesto"; return; }
+    const command = (mcpCommand && mcpCommand.value || "").trim();
+    const args = (mcpArgs && mcpArgs.value || "").trim().split(/\s+/).filter(Boolean);
+    const env = {};
+    const envStr = (mcpEnv && mcpEnv.value || "").trim();
+    if (envStr) {
+      for (const part of envStr.split(";")) {
+        const idx = part.indexOf("=");
+        if (idx > 0) env[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+      }
+    }
+    const headers = {};
+    const headStr = (mcpHeaders && mcpHeaders.value || "").trim();
+    if (headStr) {
+      for (const part of headStr.split(";")) {
+        const idx = part.indexOf("=");
+        if (idx > 0) headers[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+      }
+    }
+    const transport = (mcpTransport && mcpTransport.value) || "stdio";
+    const url = (mcpUrl && mcpUrl.value || "").trim();
+    if (transport !== "stdio" && !url) {
+      if (mcpStatus) mcpStatus.textContent = "url richiesto per " + transport;
+      return;
+    }
+    cfg = { name: nome, transport: transport,
+            command: command, args: args, env: env,
+            url: url, headers: headers, enabled: true };
   }
-  const transport = (mcpTransport && mcpTransport.value) || "stdio";
-  const url = (mcpUrl && mcpUrl.value || "").trim();
-  if (transport !== "stdio" && !url) {
-    if (mcpStatus) mcpStatus.textContent = "url richiesto per " + transport;
+  if (preset && preset.richiede_conferma) {
+    mcpConfermaApri(preset, cfg);
     return;
   }
-  const cfg = { name: nome, transport: transport,
-                command: command, args: args, env: env,
-                url: url, headers: headers, enabled: true };
-  if (mcpStatus) mcpStatus.textContent = "aggiunta...";
-  try {
-    const r = await fetch("/api/mcp/add", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(cfg) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { if (mcpStatus) mcpStatus.textContent = d.error || ("errore " + r.status); return; }
-    // connetti subito
-    await fetch("/api/mcp/connect", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id: (d.server && d.server.id) }) });
-    if (mcpNome) mcpNome.value = "";
-    if (mcpCommand) mcpCommand.value = "";
-    if (mcpArgs) mcpArgs.value = "";
-    if (mcpEnv) mcpEnv.value = "";
-    if (mcpUrl) mcpUrl.value = "";
-    if (mcpHeaders) mcpHeaders.value = "";
-    caricaMcp();
-    if (mcpStatus) mcpStatus.textContent = "aggiunto e connesso";
-  } catch (e) { if (mcpStatus) mcpStatus.textContent = "errore: " + e; }
+  await mcpInvia(cfg, preset);
+});
+
+if (mcpConferma) {
+  mcpConferma.addEventListener("click", (e) => {
+    if (e.target === mcpConferma) mcpConfermaChiudi();
+  });
+}
+on("mcp-conferma-ok", "change", () => {
+  if (mcpConfermaProcedi) {
+    mcpConfermaProcedi.disabled = !(mcpConfermaOk && mcpConfermaOk.checked);
+  }
+});
+on("mcp-conferma-annulla", "click", mcpConfermaChiudi);
+on("mcp-conferma-procedi", "click", async () => {
+  if (!mcpConfermaCfg || !mcpConfermaPreset ||
+      !mcpConfermaOk || !mcpConfermaOk.checked) return;
+  const azione = mcpConfermaAzione;
+  const cfg = mcpConfermaCfg;
+  const preset = mcpConfermaPreset;
+  mcpConfermaChiudi();
+  if (azione === "connect") {
+    await mcpConnetti(cfg && cfg.id, true);
+  } else {
+    await mcpInvia(Object.assign({}, cfg, {conferma: true}), preset);
+  }
 });
 
 on("mcp-connect-all", "click", async () => {
-  await fetch("/api/mcp/connect_all", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" });
-  caricaMcp();
+  const r = await fetch("/api/mcp/connect_all", { method: "POST", headers: {"Content-Type":"application/json"}, body: "{}" });
+  const d = await r.json().catch(() => ({}));
+  await caricaMcp();
+  const saltati = (d.results || []).filter((x) => x && x.skipped).length;
+  if (mcpStatus) {
+    mcpStatus.textContent = saltati
+      ? saltati + " preset potenti richiedono Connetti e conferma"
+      : "connessione completata";
+  }
 });
 
 
