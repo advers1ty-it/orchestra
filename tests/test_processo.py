@@ -160,11 +160,16 @@ w2 = tool.handler(azione="scrivi", id=sid2, testo="", a_capo=True) if sid2 else 
 check("il solo a capo completa la riga",
       "SCRITTO" in w2 and "con a capo" in w2, w2[:200])
 letto2 = ""
-for _ in range(25):
+# Il processo puo' essere ancora in avvio sui runner condivisi: il tetto
+# copre l'attesa vera, non un numero scelto per far passare il test.
+for _ in range(150):
     letto2 = tool.handler(azione="leggi", id=sid2) if sid2 else ""
     if "letto:" in letto2:
         break
     time.sleep(0.1)
+if "letto:" not in letto2:
+    print(f"  DEBUG w1={w1!r} prima={prima!r} w2={w2!r} "
+          f"letto2={letto2!r}")
 check("il processo ha letto la riga completa",
       "letto:" in letto2 and "senza-capo" in letto2, letto2[:200])
 # Il processo stampa e poi esce: aspettare l'uscita evita di provare a
