@@ -61,6 +61,13 @@ class RotteStoria:
         # e un pulsante "commit" deve sapere cosa c'e' adesso. Il modello
         # rilegge l'ultimo scambio: la risposta e' il consiglio, non una
         # frase buona per qualsiasi progetto.
+        #
+        # Non si aspetta il modello: i pulsanti ricavati dai fatti del turno
+        # sono veri e si possono mostrare subito, mentre i consigli su
+        # misura arrivano dopo. `in_corso` dice alla finestra che c'e' una
+        # risposta migliore in arrivo e che vale la pena richiedere: senza,
+        # la UI mostrava le fisse e non tornava piu' a chiedere, e i
+        # consigli del modello restavano in cache per nessuno.
         from . import suggerimenti as _sug
 
         radice = ""
@@ -80,10 +87,14 @@ class RotteStoria:
                              if sessione is not None else "")
         except Exception:  # noqa: BLE001
             conversazione = ""
-        self._json({"proposte": _sug.proposte(
-            sessione.riepilogo() if sessione is not None else {},
+        rie = sessione.riepilogo() if sessione is not None else {}
+        chiave = _sug.chiave(rie)
+        proposte = _sug.proposte(
+            rie,
             radice=radice or os.getcwd(),
-            provider=provider, conversazione=conversazione)})
+            provider=provider, conversazione=conversazione, attesa=0)
+        self._json({"proposte": proposte,
+                    "in_corso": _sug.in_corso(chiave)})
 
     @rotta("GET", "/api/diff")
     def _r_get_diff(self, path: str, body: dict[str, Any],

@@ -343,23 +343,48 @@ def _valida(testo: str) -> list[dict[str, Any]]:
     return fuori if len(fuori) >= 2 else []
 
 
-def _una_volta(chiave: str,
-               genera: Callable[[], list[dict[str, Any]]]) -> list[dict[str, Any]]:
-    """Genera una volta per turno, aspettando al massimo `ATTESA`.
+def chiave(rie: dict[str, Any] | None) -> str:
+    """L'identita' del turno: due richieste sullo stesso pagano una volta.
+
+    Vuota quando il riepilogo non dice a quale turno appartiene (nessun
+    `ts`): senza identita' non si puo' ne' mettere in cache ne' dire a chi
+    chiede se il modello sta ancora scrivendo.
+    """
+    rie = rie or {}
+    ts = rie.get("ts")
+    return f"{ts}|{rie.get('traccia_id') or ''}" if ts else ""
+
+
+def in_corso(chiave_turno: str) -> bool:
+    """Il modello sta ancora scrivendo i consigli di questo turno?"""
+    if not chiave_turno:
+        return False
+    with _LOCK:
+        return chiave_turno in _IN_CORSO
+
+
+def _una_volta(chiave_turno: str,
+               genera: Callable[[], list[dict[str, Any]]],
+               attesa: float | None = None) -> list[dict[str, Any]]:
+    """Genera una volta per turno, aspettando al massimo `attesa`.
 
     Chi arriva secondo aspetta la generazione gia' in corso invece di
     pagarne una seconda: e' il caso normale, perche' la finestra e il
     telefono chiedono quasi insieme. Chi aspetta e non riceve in tempo usa
     le fisse; se il risultato arriva dopo, resta in cache per la prossima
     richiesta dello stesso turno.
+
+    Anche il FALLIMENTO resta in cache (lista vuota): un turno chiuso non
+    deve far ripartire la stessa domanda a ogni richiesta — con un modello
+    lento o una chiave scaduta sarebbe un'attesa di dodici secondi ogni
+    volta, per un consiglio che non arrivera' mai.
     """
     with _LOCK:
-        pronto = _CACHE.get(chiave)
-        if pronto:
-            return list(pronto)
-        evento = _IN_CORSO.get(chiave)
+        if chiave_turno in _CACHE:
+            return list(_CACHE[chiave_turno])
+        evento = _IN_CORSO.get(chiave_turno)
         if evento is None:
-            evento = _IN_CORSO[chiave] = threading.Event()
+            evento = _IN_CORSO[chiave_turno] = threading.Event()
 
             def lavora() -> None:
                 try:
@@ -367,18 +392,17 @@ def _una_volta(chiave: str,
                 except Exception:  # noqa: BLE001 - un consiglio in meno
                     lista = []
                 with _LOCK:
-                    if lista:
-                        _CACHE[chiave] = list(lista)
-                        while len(_CACHE) > _CACHE_MASSIMO:
-                            _CACHE.pop(next(iter(_CACHE)))
-                    _IN_CORSO.pop(chiave, None)
+                    _CACHE[chiave_turno] = list(lista)
+                    while len(_CACHE) > _CACHE_MASSIMO:
+                        _CACHE.pop(next(iter(_CACHE)))
+                    _IN_CORSO.pop(chiave_turno, None)
                 evento.set()
 
             threading.Thread(target=lavora, daemon=True,
                              name="orchestra-suggerimenti").start()
-    evento.wait(max(0.0, ATTESA))
+    evento.wait(max(0.0, ATTESA if attesa is None else attesa))
     with _LOCK:
-        return list(_CACHE.get(chiave) or [])
+        return list(_CACHE.get(chiave_turno) or [])
 
 
 def proposte(rie: dict[str, Any] | None = None, *,
@@ -386,7 +410,8 @@ def proposte(rie: dict[str, Any] | None = None, *,
              stato_git: Callable[[], list[str]] | None = None,
              massimo: int = MASSIMO,
              provider: Any = None,
-             conversazione: str = "") -> list[dict[str, Any]]:
+             conversazione: str = "",
+             attesa: float | None = None) -> list[dict[str, Any]]:
     """I pulsanti da mostrare a fine turno, dal piu' urgente al piu' aperto.
 
     Prima si prova a farli scrivere al modello sul turno vero; se non c'e',
@@ -406,18 +431,28 @@ def proposte(rie: dict[str, Any] | None = None, *,
     dal_modello: list[dict[str, Any]] = []
     if (posti_modello > 0 and (conversazione or "").strip()
             and callable(getattr(provider, "chat", None))):
-        ts = rie.get("ts")
-        if ts:
+        chiave_turno = chiave(rie)
+        if chiave_turno:
             def genera() -> list[dict[str, Any]]:
                 from .types import Message
 
                 prompt = _prompt_dinamico(rie, radice, conversazione, sporchi_)
-                risposta = provider.chat(
-                    [Message(role="user", content=prompt)], tools=None)
+                messaggi = [Message(role="user", content=prompt)]
+                try:
+                    # I consigli sono un compito semplice: col ragionamento
+                    # massimo del turno arrivavano dopo i dodici secondi di
+                    # attesa, cioe' mai. "low" risponde in un terzo del tempo
+                    # e le proposte restano buone.
+                    risposta = provider.chat(
+                        messaggi, tools=None, reasoning_level="low")
+                except TypeError:
+                    # un provider che non conosce il parametro: meglio lento
+                    # che senza consigli
+                    risposta = provider.chat(messaggi, tools=None)
                 return _valida(getattr(risposta, "content", "") or "")
 
             dal_modello = _una_volta(
-                f"{ts}|{rie.get('traccia_id') or ''}", genera
+                chiave_turno, genera, attesa
             )[:posti_modello]
     if dal_modello:
         fuori = list(dal_modello)

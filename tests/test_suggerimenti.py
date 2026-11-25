@@ -177,10 +177,12 @@ class ProviderFinto:
         self.errore = errore
         self.chiamate = 0
         self.prompt = ""
+        self.kwargs = {}
 
     def chat(self, messages, tools=None, **kw):
         self.chiamate += 1
         self.prompt = messages[0].content
+        self.kwargs = dict(kw)
         if self.errore:
             raise self.errore
         return LLMResponse(content=self.risposta, model="finto")
@@ -341,6 +343,80 @@ check("due richieste parallele, una sola chiamata al modello",
 check("e tutte e due ricevono i consigli",
       len(esiti) == 2 and all(len(x) == 3 for x in esiti),
       str([len(x) for x in esiti]))
+
+print("\n== i consigli non pagano il ragionamento del turno ==")
+
+p_low = ProviderFinto(RISPOSTA)
+sg.proposte(rie(20), radice=casa, stato_git=lambda: [], provider=p_low,
+            conversazione=CONVERSAZIONE)
+check("chiedono poco ragionamento", p_low.kwargs.get("reasoning_level") == "low",
+      str(p_low.kwargs))
+
+
+class ProviderSenzaReasoning:
+    """Un provider che non conosce `reasoning_level` (firma stretta)."""
+
+    def __init__(self, risposta):
+        self.risposta = risposta
+        self.chiamate = 0
+
+    def chat(self, messages, tools=None):
+        self.chiamate += 1
+        return LLMResponse(content=self.risposta, model="finto")
+
+
+senza_kw = ProviderSenzaReasoning(RISPOSTA)
+lista5 = sg.proposte(rie(21), radice=casa, stato_git=lambda: [],
+                     provider=senza_kw, conversazione=CONVERSAZIONE)
+check("un provider senza il parametro funziona lo stesso",
+      len(lista5) == 3 and all(x["id"].startswith("dinamico-") for x in lista5),
+      str([x["id"] for x in lista5]))
+
+print("\n== il modello lento: pulsanti subito, i suoi appena pronti ==")
+
+lento2 = ProviderFinto(RISPOSTA)
+_chat_vera2 = lento2.chat
+
+
+def _chat_lenta2(messages, tools=None, **kw):
+    time.sleep(0.5)
+    return _chat_vera2(messages, tools=tools, **kw)
+
+
+lento2.chat = _chat_lenta2
+chiave_lenta = sg.chiave(rie(22))
+t0 = time.time()
+subito = sg.proposte(rie(22), radice=casa, stato_git=lambda: [],
+                     provider=lento2, conversazione=CONVERSAZIONE, attesa=0)
+dt = time.time() - t0
+check("con attesa=0 non blocca", dt < 0.3, f"{dt:.2f}s")
+check("e mostra le fisse", "verifica" in per_id(subito),
+      str(list(per_id(subito))))
+check("dicendo che il modello sta ancora scrivendo",
+      sg.in_corso(chiave_lenta) is True)
+time.sleep(0.9)
+check("quando ha finito non e' piu' in corso",
+      sg.in_corso(chiave_lenta) is False)
+dopo = sg.proposte(rie(22), radice=casa, stato_git=lambda: [],
+                   provider=lento2, conversazione=CONVERSAZIONE, attesa=0)
+check("e la richiesta dopo porta i consigli del modello",
+      len(dopo) == 3 and all(x["id"].startswith("dinamico-") for x in dopo),
+      str([x["id"] for x in dopo]))
+check("senza richiamare il modello", lento2.chiamate == 1,
+      str(lento2.chiamate))
+
+print("\n== un fallimento non si ritenta a ogni richiesta ==")
+
+rotto2 = ProviderFinto(errore=RuntimeError("giu'"))
+chiave_rotta = sg.chiave(rie(23))
+sg.proposte(rie(23), radice=casa, stato_git=lambda: [], provider=rotto2,
+            conversazione=CONVERSAZIONE, attesa=0)
+time.sleep(0.4)
+check("il fallimento e' in cache", sg.in_corso(chiave_rotta) is False)
+sg.proposte(rie(23), radice=casa, stato_git=lambda: [], provider=rotto2,
+            conversazione=CONVERSAZIONE, attesa=0)
+check("e non fa ripartire il modello", rotto2.chiamate == 1,
+      str(rotto2.chiamate))
 
 print("\n" + "=" * 60)
 print(f"PASS {len(PASS)}  FAIL {len(FAIL)}")

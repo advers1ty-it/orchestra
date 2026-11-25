@@ -227,6 +227,13 @@ function ripristinaNodiClient(nodi) {
 // uno. Torna falso appena parte un turno nuovo.
 let suggerimentiFatto = false;
 let suggerimentiInCorso = false;
+// Il modello scrive i consigli su misura DOPO la fine del turno: se non ha
+// ancora finito il server risponde `in_corso` e si riprova fra poco. Il
+// server non richiama il modello, legge la cache del turno.
+let suggerimentiTimer = null;
+let suggerimentiTentativi = 0;
+const SUGGERIMENTI_RIPROVE = 10;
+const SUGGERIMENTI_ATTESA = 3000;
 
 function suggerimentiNascondi() {
   const box = $("suggerimenti");
@@ -256,6 +263,10 @@ function suggerimentiMostra(lista) {
       if (typeof autoGrow === "function") autoGrow();
       input.focus();
       try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+      // Premuto: non si torna a chiedere, e un aggiornamento in arrivo non
+      // deve far riapparire i pulsanti sotto le dita.
+      suggerimentiFatto = true;
+      clearTimeout(suggerimentiTimer);
       suggerimentiNascondi();
     };
     box.appendChild(b);
@@ -275,8 +286,17 @@ async function suggerimentiCarica() {
     // Nel frattempo puo' essere ripartito un turno: in quel caso i
     // pulsanti non servono piu' e coprirebbero la steer bar.
     if (busy) return;
-    suggerimentiFatto = true;
     suggerimentiMostra(j.proposte || []);
+    if (j.in_corso && suggerimentiTentativi < SUGGERIMENTI_RIPROVE) {
+      // Il modello sta ancora scrivendo i consigli su misura: si riprova
+      // fra poco e si sostituiscono appena pronti. Il primo giro mostra
+      // comunque i pulsanti veri ricavati dal turno, non una casella vuota.
+      suggerimentiTentativi += 1;
+      clearTimeout(suggerimentiTimer);
+      suggerimentiTimer = setTimeout(suggerimentiCarica, SUGGERIMENTI_ATTESA);
+    } else {
+      suggerimentiFatto = true;
+    }
   } catch (e) {
     suggerimentiNascondi();
   } finally {
@@ -289,7 +309,12 @@ function setBusy(v) {
   busy = v;
   // Mentre l'agente lavora i pulsanti di fine turno non c'entrano niente:
   // sono la risposta al turno PRECEDENTE, e il turno nuovo avra' i suoi.
-  if (v) { suggerimentiNascondi(); suggerimentiFatto = false; }
+  if (v) {
+    suggerimentiNascondi();
+    suggerimentiFatto = false;
+    suggerimentiTentativi = 0;
+    clearTimeout(suggerimentiTimer);
+  }
   // La fine del turno non arriva solo da `idle`: se il SSE e' morto e la
   // UI sta leggendo /api/state, l'unico segnale e' questo, busy che torna
   // falso. Si caricano qui e solo in polling — col SSE vivo lo fa `idle`,
