@@ -26,6 +26,7 @@ os.makedirs(os.environ["ORCHESTRA_ROOT"], exist_ok=True)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from orchestra import cron as cron_mod  # noqa: E402
+from orchestra.tools.cron import tool_cron  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -98,6 +99,80 @@ check("il job e' partito", r.get("ok"), str(r))
 check("il segnaposto del padre non e' nell'ambiente",
       "CANARY_CRON" not in uscita, uscita[:200])
 del os.environ["CANARY_CRON"]
+
+print("\n[6] La modifica parziale non riscrive enabled e action_type")
+# `enabled=True` e `action_type="goal"` erano i default della firma, e
+# finivano sempre nei campi aggiornati: modificare lo schedule di un job
+# spento lo riaccendeva, e cambiare il comando di un job shell lo
+# trasformava in un goal che poi falliva con "obiettivo mancante".
+cron_tool = tool_cron()
+j = cron_mod.crea("parziale", "@daily", "shell",
+                  {"command": "echo ciao"}, enabled=False)
+r = cron_tool.handler(azione="modifica", id=j["id"], schedule="@hourly")
+agg = cron_mod.get(j["id"]) or {}
+check("lo schedule e' cambiato", agg.get("schedule") == "0 * * * *",
+      str(agg.get("schedule")))
+check("enabled resta False", agg.get("enabled") is False,
+      str(agg.get("enabled")))
+check("action_type resta shell", agg.get("action_type") == "shell",
+      str(agg.get("action_type")))
+check("il comando resta quello",
+      (agg.get("action") or {}).get("command") == "echo ciao",
+      str(agg.get("action")))
+
+r = cron_tool.handler(azione="modifica", id=j["id"], command="echo nuovo")
+agg = cron_mod.get(j["id"]) or {}
+check("cambiare solo command resta shell",
+      agg.get("action_type") == "shell"
+      and (agg.get("action") or {}).get("command") == "echo nuovo",
+      str(agg))
+check("e non riattiva il job", agg.get("enabled") is False,
+      str(agg.get("enabled")))
+
+cron_tool.handler(azione="modifica", id=j["id"], enabled=True)
+agg = cron_mod.get(j["id"]) or {}
+check("enabled esplicito lo riattiva", agg.get("enabled") is True,
+      str(agg.get("enabled")))
+
+g = cron_mod.crea("goal-parziale", "@daily", "goal",
+                  {"objective": "fare cose", "profile": "base"},
+                  enabled=False)
+cron_tool.handler(azione="modifica", id=g["id"], nome="rinominato")
+agg = cron_mod.get(g["id"]) or {}
+check("goal: action_type resta goal", agg.get("action_type") == "goal",
+      str(agg.get("action_type")))
+check("goal: enabled resta False", agg.get("enabled") is False,
+      str(agg.get("enabled")))
+check("goal: l'obiettivo resta",
+      (agg.get("action") or {}).get("objective") == "fare cose",
+      str(agg.get("action")))
+
+print("\n[7] Cambiare solo l'obiettivo non resetta il profilo ad auto")
+g = cron_mod.crea("goal-profilo", "@daily", "goal",
+                  {"objective": "prima", "profile": "base"})
+r = cron_tool.handler(azione="modifica", id=g["id"],
+                      objective="seconda")
+agg = cron_mod.get(g["id"]) or {}
+check("l'obiettivo e' cambiato",
+      (agg.get("action") or {}).get("objective") == "seconda",
+      str(agg.get("action")))
+check("il profilo resta base",
+      (agg.get("action") or {}).get("profile") == "base",
+      str(agg.get("action")))
+
+# Anche il modulo, chiamato direttamente, deve conservare il profilo.
+cron_mod.aggiorna(g["id"], action={"objective": "terza"})
+agg = cron_mod.get(g["id"]) or {}
+check("aggiorna diretto conserva il profilo",
+      (agg.get("action") or {}).get("profile") == "base",
+      str(agg.get("action")))
+
+cron_tool.handler(azione="modifica", id=g["id"],
+                  objective="quarta", profile="pieno")
+agg = cron_mod.get(g["id"]) or {}
+check("un profilo esplicito viene applicato",
+      (agg.get("action") or {}).get("profile") == "pieno",
+      str(agg.get("action")))
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

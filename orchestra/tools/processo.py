@@ -1,4 +1,4 @@
-"""Tool processo: avviare, leggere e fermare un comando che resta vivo."""
+"""Tool processo: avviare, leggere, scrivere e fermare un comando vivo."""
 
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ def _testo_avvio(esito: dict) -> str:
         testa = (f"AVVIATO {esito['id']} (pid {esito['pid']}), ancora vivo "
                  f"dopo {esito['durata']}s.")
         corpo = "\n".join(righe)
+        corpo += (f"\nScrivi sul suo stdin con processo(azione=\"scrivi\", "
+                  f"id=\"{esito['id']}\", testo=\"...\").")
         corpo += (f"\nLeggi l'output con processo(azione=\"leggi\", "
                   f"id=\"{esito['id']}\"); fermalo con "
                   f"processo(azione=\"ferma\", id=\"{esito['id']}\").")
@@ -57,9 +59,25 @@ def _testo_lettura(esito: dict) -> str:
     return "\n".join(righe)
 
 
+def _testo_scrittura(esito: dict) -> str:
+    """La conferma di `scrivi`: quanti caratteri, non il testo inviato."""
+    righe = [
+        f"SCRITTO su {esito['id']}: {esito['scritti']} caratteri"
+        f"{' con a capo' if esito.get('a_capo') else ' senza a capo'}.",
+        f"Stato: {esito['stato']}",
+        f"Log: {esito['log']}",
+        f"Leggi la risposta con processo(azione=\"leggi\", "
+        f"id=\"{esito['id']}\").",
+    ]
+    if not esito.get("vivo"):
+        righe.append("Il processo non e' piu' vivo: il log dice perche'.")
+    return "\n".join(righe)
+
+
 def tool_processo() -> Tool:
     def handler(azione: str = "elenca", comando: str = "", cwd: str = ".",
-                id: str = "", righe: int = 80, attesa: float = 2.0) -> str:
+                id: str = "", righe: int = 80, attesa: float = 2.0,
+                testo: str = "", a_capo: bool = True) -> str:
         azione = (azione or "").strip().lower()
         if azione in ("avvia", "start"):
             # Gli stessi controlli di `run_shell`, dalla stessa funzione:
@@ -80,6 +98,14 @@ def tool_processo() -> Tool:
             if esito.get("errore"):
                 return esito["errore"]
             return _testo_lettura(esito)
+        if azione == "scrivi":
+            if not (id or "").strip():
+                return ("MANCA L'ID: serve l'id del processo a cui scrivere "
+                        "(lo stampa 'avvia'; 'elenca' li mostra tutti).")
+            esito = processi.scrivi(id, testo=testo, a_capo=a_capo)
+            if esito.get("errore"):
+                return f"NON SCRITTO: {esito['errore']}"
+            return _testo_scrittura(esito)
         if azione == "ferma":
             if not (id or "").strip():
                 return ("MANCA L'ID: serve l'id del processo da fermare "
@@ -108,8 +134,8 @@ def tool_processo() -> Tool:
                 righe_out.append(f"  {p['id']:5} {p['stato']:42} "
                                  f"{p['cmd']}")
             return "\n".join(righe_out)
-        return (f"AZIONE NON VALIDA: '{azione}'. Usa avvia, leggi, ferma o "
-                f"elenca.")
+        return (f"AZIONE NON VALIDA: '{azione}'. Usa avvia, leggi, scrivi, "
+                f"ferma o elenca.")
 
     return Tool(
         name="processo",
@@ -123,20 +149,23 @@ def tool_processo() -> Tool:
             "process is still alive (a command that dies at startup — port "
             "in use, missing module — is reported with its output right "
             "there); azione='leggi' returns the last lines of the log "
-            "without consuming them; azione='ferma' kills the whole process "
-            "tree; azione='elenca' lists what is running. The same "
-            "permission checks as run_shell apply. Processes stop when "
-            "Orchestra exits."
+            "without consuming them; azione='scrivi' writes text to the "
+            "process's stdin, so a REPL or a CLI that asks a question can "
+            "receive an answer (use a_capo=False to leave a line open); "
+            "azione='ferma' kills the whole process tree; azione='elenca' "
+            "lists what is running. The same permission checks as "
+            "run_shell apply. Processes stop when Orchestra exits."
         ),
         schema={
             "type": "object",
             "properties": {
                 "azione": {
                     "type": "string",
-                    "enum": ["avvia", "leggi", "ferma", "elenca"],
+                    "enum": ["avvia", "leggi", "scrivi", "ferma", "elenca"],
                     "description": (
-                        "avvia (start)|leggi (read the log)|ferma "
-                        "(stop)|elenca (list). Default 'elenca'."),
+                        "avvia (start)|leggi (read the log)|scrivi (write "
+                        "to stdin)|ferma (stop)|elenca (list). Default "
+                        "'elenca'."),
                 },
                 "comando": {
                     "type": "string",
@@ -149,15 +178,32 @@ def tool_processo() -> Tool:
                 "cwd": {
                     "type": "string",
                     "description": (
-                        "Working directory for the command, relative to the "
-                        "project. Default '.'."),
+                        "Working directory for the command. Relative to "
+                        "the project, or ABSOLUTE: a path outside the root "
+                        "asks the user for permission. Default '.'."),
                     "default": ".",
                 },
                 "id": {
                     "type": "string",
                     "description": (
                         "Process id returned by azione='avvia' (like 'p1'). "
-                        "Required for leggi and ferma."),
+                        "Required for leggi, scrivi and ferma."),
+                },
+                "testo": {
+                    "type": "string",
+                    "description": (
+                        "Text to write to the process's stdin, for "
+                        "azione='scrivi'. Max 4000 UTF-8 bytes per call; "
+                        "split longer input. The text is not echoed back."),
+                    "default": "",
+                },
+                "a_capo": {
+                    "type": "boolean",
+                    "description": (
+                        "For azione='scrivi': add a newline after the text "
+                        "(default true). Set false to leave a line open and "
+                        "send the rest with a later call."),
+                    "default": True,
                 },
                 "righe": {
                     "type": "integer",

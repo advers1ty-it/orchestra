@@ -490,6 +490,37 @@ class SessioneBrowser:
         except ErroreCDP:
             return ""
 
+    def html(self) -> str:
+        """L'HTML del DOM dopo l'esecuzione della pagina."""
+        valore = self.eval(
+            "document.documentElement ? "
+            "document.documentElement.outerHTML : ''", timeout=10)
+        return str(valore or "")
+
+    def screenshot(self, larghezza: int = 1280,
+                   altezza: int = 800) -> bytes:
+        """Un PNG della pagina corrente, dopo il controllo dell'URL."""
+        if self.cdp is None:
+            raise ErroreCDP("sessione non aperta")
+        try:
+            self.cdp.call("Emulation.setDeviceMetricsOverride", {
+                "width": larghezza, "height": altezza,
+                "deviceScaleFactor": 1, "mobile": False,
+            }, timeout=5)
+        except ErroreCDP:
+            # Il viewport e' un dettaglio estetico: se il dominio non c'e',
+            # lo screenshot si prende comunque.
+            pass
+        r = self.cdp.call("Page.captureScreenshot", {"format": "png"},
+                          timeout=20)
+        dati = (r or {}).get("data") if isinstance(r, dict) else ""
+        if not dati:
+            raise ErroreCDP("il browser non ha restituito lo screenshot")
+        try:
+            return base64.b64decode(dati)
+        except (ValueError, TypeError) as e:
+            raise ErroreCDP(f"screenshot non decodificabile: {e}") from e
+
     def digita(self, testo: str) -> None:
         if self.cdp is None:
             raise ErroreCDP("sessione non aperta")

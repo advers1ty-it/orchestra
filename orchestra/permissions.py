@@ -265,11 +265,18 @@ class Gate:
             padre = padre.parent
 
     def valuta(self, percorso: str, azione: str,
-               dettaglio: str = "") -> str:
+               dettaglio: str = "", *,
+               dentro_root_concesso: bool = True) -> str:
         """Tre esiti: "concesso", "chiedi", "negato".
 
         "chiedi" vuol dire che il chiamante deve fare una domanda
         all'utente. "negato" non e' rimandabile: si nega e basta.
+
+        `dentro_root_concesso=False` toglie la scorciatoia "dentro la root
+        = concesso". Serve alle conferme esplicite (commit, push, comandi
+        distruttivi): stare nel progetto non e' una risposta alla domanda
+        "vuoi pubblicare?". I permessi gia' concessi o negati restano
+        validi.
         """
         p = Path(percorso)
         if not p.is_absolute():
@@ -283,8 +290,10 @@ class Gate:
         # all'esistenza.
         p = self._canonico(p)
 
-        # 1. dentro la root: nessuna domanda, e' il posto di lavoro
-        if self.dentro_root(p):
+        # 1. dentro la root: nessuna domanda, e' il posto di lavoro.
+        #    `dentro_root_concesso=False` salta questo ramo per le azioni
+        #    che devono essere confermate anche qui (commit, push).
+        if dentro_root_concesso and self.dentro_root(p):
             return "concesso"
 
         # 2. percorsi vietati: nessuna delle quattro scelte li sblocca.
@@ -329,7 +338,8 @@ class Gate:
 
     def chiedi_all_utente(self, percorso: str, azione: str,
                           dettaglio: str = "",
-                          richiesta_id: str | None = None) -> bool:
+                          richiesta_id: str | None = None,
+                          *, forza: bool = False) -> bool:
         """Ferma l'esecuzione finche' l'utente non risponde.
 
         True = concesso. False = negato. Se non c'e' nessuno a cui
@@ -340,8 +350,14 @@ class Gate:
         deve conoscere l'id per rispondere: senza, il chiamante lo
         scoprirebbe solo dentro l'evento, e nel frattempo la domanda
         sarebbe gia' partita con un id diverso.
+
+        `forza=True` chiede anche quando il percorso e' dentro la root:
+        e' per le azioni che non sono un accesso a un file (commit, push,
+        comandi distruttivi), dove "siamo nel progetto" non e' un
+        consenso. Un "sempre" gia' dato resta valido per quella chiave.
         """
-        esito = self.valuta(percorso, azione, dettaglio)
+        esito = self.valuta(percorso, azione, dettaglio,
+                            dentro_root_concesso=not forza)
         if esito == "concesso":
             return True
         if esito == "negato":
@@ -352,9 +368,11 @@ class Gate:
         with self._lock:
             rid = richiesta_id or f"p{self._contatore + 1}"
             self._contatore += 1
-        richiesta = Richiesta(id=rid, percorso=str(percorso), azione=azione,
-                              dettaglio=dettaglio,
-                              motivo="fuori dalla cartella di lavoro")
+        richiesta = Richiesta(
+            id=rid, percorso=str(percorso), azione=azione,
+            dettaglio=dettaglio,
+            motivo=("conferma esplicita" if forza
+                    else "fuori dalla cartella di lavoro"))
         evento = threading.Event()
         with self._lock:
             self._attesa[rid] = evento

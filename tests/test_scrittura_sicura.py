@@ -80,6 +80,8 @@ print("\n[3] Cosa va chiesto e cosa no")
 da_chiedere = [
     "rm -rf build",
     "rm -f vecchio.log",
+    "git commit -m 'x'",
+    "git push",
     "git reset --hard",
     "git clean -fd",
     "git checkout -- .",
@@ -97,7 +99,6 @@ normali = [
     "npm test",
     "rm nota.txt",
     "python -m pytest -q",
-    "git commit -m 'x'",
     "cat README.md",
 ]
 for cmd in normali:
@@ -127,15 +128,19 @@ if shell:
         def __init__(self, risposta):
             self.risposta = risposta
             self.domande = []
+            self.forza = None
 
-        def chiedi_all_utente(self, percorso, azione, dettaglio=""):
+        def chiedi_all_utente(self, percorso, azione, dettaglio="", **kwargs):
             self.domande.append((percorso, azione, dettaglio))
+            self.forza = kwargs.get("forza")
             return self.risposta
 
     gate = GateFinto(False)
     T.set_permission_gate(gate)
     esito = shell.handler(command="rm -rf lavoro")
     check("ha chiesto", len(gate.domande) == 1, str(gate.domande))
+    check("e la conferma e' esplicita, non un 'dentro root'",
+          gate.forza is True, str(gate.forza))
     check("come azione distruttiva, non 'eseguire'",
           gate.domande and gate.domande[0][1] == "distruggere",
           str(gate.domande))

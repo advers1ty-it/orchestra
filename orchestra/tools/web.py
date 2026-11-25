@@ -132,6 +132,11 @@ class _RedirectPubblico(urllib.request.HTTPRedirectHandler):
                 newurl, code, "redirect verso rete locale bloccato", headers, fp)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
+# Quanti byte leggiamo da una risposta. E' lo stesso tetto per web_leggi
+# e per scarica: un file che non ci sta non deve passare per un limite
+# diverso a seconda del tool che lo prende.
+TETTO_RISPOSTA_BYTE = 1_200_000
+
 # Quanto prendiamo da una pagina. Una risposta troppo lunga torna al
 # modello come muro di testo e costa token senza che legga la metà; troppo
 # corta e perde il pezzo che cercavi. 6000 caratteri è circa una pagina
@@ -379,7 +384,7 @@ def tool_web_leggi() -> Tool:
                     return ("La connessione e' finita su un indirizzo di "
                             "rete locale: richiesta bloccata (possibile "
                             "DNS rebinding).")
-                grezzo = resp.read(1_200_000).decode(
+                grezzo = resp.read(TETTO_RISPOSTA_BYTE).decode(
                     resp.headers.get_content_charset() or "utf-8", "replace")
                 finale = urljoin(u, resp.geturl())
                 # Il redirect e' gia' stato validato, ma il controllo

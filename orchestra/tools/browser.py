@@ -9,14 +9,15 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from ..types import Tool
-from .web import _blocco_non_fidato, _html_a_testo, _titolo
+from ._guard import _gate
+from .web import (_RedirectPubblico, _blocco_non_fidato, _html_a_testo,
+                  _peer_pubblico, _rete_locale, _titolo)
 
 
 def _browser_exe() -> str | None:
@@ -54,12 +55,92 @@ def _safe_url(u: str) -> tuple[str, str | None]:
     return u, None
 
 
+def _accesso_locale(u: str, azione: str = "leggere una pagina locale") -> str:
+    """Il motivo per cui un URL locale non e' accessibile, o "".
+
+    I tool browser riportano al modello il contenuto della pagina, quindi
+    hanno lo stesso confine SSRF di `web_leggi`: la rete locale si
+    riconosce con `_rete_locale`, che guarda TUTTI gli indirizzi risolti e
+    non solo la stringa dell'host.
+
+    A differenza di `web_leggi`, pero', una pagina locale e' un caso di
+    lavoro vero — il server del progetto. Qui si chiede, come per un
+    percorso fuori dalla root: la domanda e' esplicita e la risposta vale
+    per questa volta, per la sessione o per sempre. Senza gate (CLI,
+    benchmark, test) si nega, perche' non c'e' nessuno a cui chiedere.
+    """
+    host = urlparse(u).hostname or ""
+    if not _rete_locale(host):
+        return ""
+    gate = _gate()
+    if gate is not None:
+        try:
+            if gate.chiedi_all_utente(u, azione, f"URL: {u}"):
+                return ""
+        except Exception:  # noqa: BLE001 - un gate rotto non deve aprire nulla
+            pass
+    return (
+        f"Rete locale bloccata: {host}. I tool browser leggono una pagina "
+        f"e la riportano al modello, quindi valgono per i siti pubblici; "
+        f"un servizio su localhost o sulla rete di casa si apre solo con "
+        f"un permesso esplicito. Se e' il server locale del progetto, "
+        f"conferma dal pannello Permessi; per un file locale usa read_file."
+    )
+
+
+class _RedirectLocaleBloccato(RuntimeError):
+    """Un URL pubblico e' finito su rete locale: non si legge il contenuto."""
+
+
+def _motivo_redirect(iniziale: str, finale: str) -> str:
+    """Blocca il redirect da un URL pubblico a uno locale.
+
+    Il controllo iniziale di `_accesso_locale` dice se il PRIMO URL e'
+    locale; non dice dove Chrome e' finito. Un sito pubblico puo'
+    rispondere 302 verso `http://127.0.0.1/...`, e `--dump-dom` leggeva
+    quella pagina. Qui si guarda l'URL vero dopo la navigazione.
+
+    Un URL iniziale locale e' gia' passato dal gate (o e' un uso interno
+    del CDP): in quel caso un altro URL locale e' lo stesso permesso. Un
+    URL iniziale pubblico, invece, non puo' diventare locale per effetto
+    di un redirect: sarebbe un modo per aggirare la domanda iniziale.
+    """
+    if not iniziale or not finale:
+        return ""
+    host_iniziale = urlparse(iniziale).hostname or ""
+    host_finale = urlparse(finale).hostname or ""
+    if not _rete_locale(host_iniziale) and _rete_locale(host_finale):
+        return (
+            "Redirect verso rete locale bloccato: "
+            f"{iniziale} ha portato il browser a {finale}. "
+            "Un URL pubblico non puo' leggere localhost o la rete privata."
+        )
+    return ""
+
+
+def _risposta_render(grezzo: str, fonte: str) -> str:
+    """Trasforma l'HTML in testo, con lo stesso tetto e lo stesso recinto."""
+    titolo = _titolo(grezzo)
+    testo = _html_a_testo(grezzo)
+    if not testo:
+        return (f"Pagina senza testo estraibile su {fonte} "
+                f"({len(grezzo)} byte grezzi — magari JSON/PDF/immagine).")
+    if len(testo) > 6000:
+        testo = testo[:6000] + f"\n\n[...troncato: {len(testo)} caratteri]"
+    prefisso = f"# {titolo}\n{fonte}\n\n" if titolo else f"{fonte}\n\n"
+    return prefisso + _blocco_non_fidato(testo, fonte)
+
+
 def tool_browser_apri() -> Tool:
     def handler(url: str = "") -> str:
         u, err = _safe_url(url)
         if err:
             return err
         try:
+            # `browser_apri` e' l'eccezione deliberata: apre nel browser
+            # dell'utente, che vede la pagina, e non riporta il contenuto
+            # al modello. Serve anche per mostrare il server locale del
+            # progetto quando non c'e' un gate a cui chiedere.
             import webbrowser
             aperto = webbrowser.open_new_tab(u)
         except Exception as e:  # noqa: BLE001
@@ -86,54 +167,68 @@ def tool_browser_render() -> Tool:
         u, err = _safe_url(url)
         if err:
             return err
+        motivo = _accesso_locale(u)
+        if motivo:
+            return motivo
         exe = _browser_exe()
-        if not exe:
-            # riutilizza il fetch leggero esistente
-            import urllib.request
-            req = urllib.request.Request(u, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; Orchestra/1.0)"})
+        if exe:
+            # Chrome non restituisce l'URL finale con `--dump-dom`: si
+            # passa dal CDP, dove `Page.navigate` e `location.href` dicono
+            # dove si e' finiti. Il controllo avviene PRIMA di leggere il
+            # DOM; se il redirect e' locale, la sessione viene chiusa.
             try:
-                with urllib.request.urlopen(req, timeout=25) as r:
-                    grezzo = r.read(1_200_000).decode(
-                        r.headers.get_content_charset() or "utf-8", "replace")
-            except Exception as e:  # noqa: BLE001
-                return f"browser non disponibile e fetch leggero fallito: {e}"
-            testo = _html_a_testo(grezzo)[:6000]
-            if not testo:
-                return f"Non trovo testo su {u}."
-            return _blocco_non_fidato(testo, u)
-        work = os.path.join(tempfile.gettempdir(), "orchestra_browser")
-        os.makedirs(work, exist_ok=True)
+                s = _sessione_cdp(u)
+                finale = s.url_corrente()
+                motivo = _motivo_redirect(u, finale)
+                if motivo:
+                    chiudi_sessione_cdp()
+                    return motivo
+                grezzo = s.html()
+                # La pagina puo' cambiare URL mentre il DOM viene letto
+                # (meta refresh o JavaScript): il controllo che conta e'
+                # quello sull'URL da cui proviene il testo che stiamo per
+                # restituire.
+                finale = s.url_corrente() or finale
+                motivo = _motivo_redirect(u, finale)
+                if motivo:
+                    chiudi_sessione_cdp()
+                    return motivo
+            except _RedirectLocaleBloccato as e:
+                return str(e)
+            except Exception:  # noqa: BLE001
+                # Canale CDP non disponibile: si usa il fetch leggero,
+                # che ha gia' redirect e peer controllati.
+                grezzo = ""
+            if grezzo:
+                return _risposta_render(grezzo, finale or u)
+
+        # Ripiego senza browser o senza canale CDP: stesse protezioni di
+        # `web_leggi` (redirect validati prima di seguirli, peer dopo).
+        import urllib.request
+        req = urllib.request.Request(u, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; Orchestra/1.0)"})
         try:
-            r = subprocess.run(
-                [exe, "--headless=new", "--disable-gpu",
-                 "--no-first-run", "--disable-extensions",
-                 f"--user-data-dir={work}",
-                 "--disable-background-networking",
-                 "--dump-dom", u],
-                text=True, capture_output=True, timeout=40,
-                encoding="utf-8", errors="replace")
-        except subprocess.TimeoutExpired:
-            return f"timeout: il browser non ha risposto in 40 s per {u}"
+            opener = urllib.request.build_opener(_RedirectPubblico)
+            with opener.open(req, timeout=25) as r:
+                # Un URL pubblico puo' risolvere a 127.0.0.1 fra il
+                # controllo DNS e l'apertura del socket (rebinding):
+                # il peer vero lo dice solo adesso. Se l'utente ha
+                # approvato una pagina locale, il peer locale e'
+                # quello atteso e non va bloccato.
+                if not _rete_locale(urlparse(u).hostname or "") \
+                        and not _peer_pubblico(r):
+                    return ("La connessione e' finita su un indirizzo "
+                            "di rete locale: richiesta bloccata "
+                            "(possibile DNS rebinding).")
+                grezzo = r.read(1_200_000).decode(
+                    r.headers.get_content_charset() or "utf-8", "replace")
+                finale = r.geturl()
         except Exception as e:  # noqa: BLE001
-            return f"non riesco ad eseguire il browser: {type(e).__name__}: {e}"
-        grezzo = (r.stdout or "")
-        if not grezzo and r.stderr:
-            return f"il browser ha fallito su {u}: {r.stderr[:400]}"
-        if not grezzo:
-            return f"il browser non ha estratto nulla per {u}"
-        if r.returncode not in (0, 1) and not grezzo:
-            return (f"il browser non ha risposto correttamente ({r.returncode}): "
-                    f"{r.stderr[:300]}")
-        titolo = _titolo(grezzo)
-        testo = _html_a_testo(grezzo)
-        if not testo:
-            return (f"Pagina senza testo estraibile su {u} "
-                    f"({len(grezzo)} byte grezzi — magari JSON/PDF/immagine).")
-        if len(testo) > 6000:
-            testo = testo[:6000] + f"\n\n[...troncato: {len(testo)} caratteri]"
-        prefisso = f"# {titolo}\n{u}\n\n" if titolo else f"{u}\n\n"
-        return prefisso + _blocco_non_fidato(testo, u)
+            return f"browser non disponibile e fetch leggero fallito: {e}"
+        motivo = _motivo_redirect(u, finale)
+        if motivo:
+            return motivo
+        return _risposta_render(grezzo, finale or u)
 
     return Tool(
         name="browser_render",
@@ -154,10 +249,10 @@ def tool_browser_render() -> Tool:
 # ---------------------------------------------------------------------------
 # CDP: interazione vera (click, digitazione, attesa, console, rete)
 #
-# I tre tool sopra restano come sono: leggono l'HTML con un processo a
-# parte, e funzionano anche se il canale di debug non parte. Questi
-# nuovi usano il canale, e se non c'e' dicono perche' invece di fingersi
-# cliccanti.
+# `browser_render` e `browser_screenshot` usano il CDP per verificare
+# l'URL finale prima di leggere o catturare; `browser_apri` resta il
+# browser dell'utente. I tool di interazione usano lo stesso canale, e se
+# non c'e' dicono perche' invece di fingersi cliccanti.
 # ---------------------------------------------------------------------------
 
 _SESSIONE = None  # type: ignore[var-annotated]
@@ -192,7 +287,21 @@ def _sessione_cdp(url: str = ""):
             _SESSIONE = SessioneBrowser(exe)
             _SESSIONE.apri()
         if url:
-            _SESSIONE.vai(url)
+            esito = _SESSIONE.vai(url)
+            finale = ((esito or {}).get("url")
+                      or _SESSIONE.url_corrente())
+            motivo = _motivo_redirect(url, finale)
+            if not finale or motivo:
+                # Non lasciare il browser sulla pagina locale: un
+                # browser_console successivo, senza URL, la leggerebbe.
+                try:
+                    _SESSIONE.chiudi()
+                except Exception:  # noqa: BLE001
+                    pass
+                _SESSIONE = None
+                raise _RedirectLocaleBloccato(
+                    motivo or ("URL finale non verificabile: "
+                               f"navigazione verso {url} senza URL finale"))
         return _SESSIONE
 
 
@@ -236,6 +345,9 @@ def tool_browser_click() -> Tool:
             u, err = _safe_url(url)
             if err:
                 return err
+            motivo = _accesso_locale(u, "aprire una pagina locale")
+            if motivo:
+                return motivo
         try:
             s = _sessione_cdp(u)
             esito = s.eval(_js_click(selettore.strip()))
@@ -277,6 +389,9 @@ def tool_browser_digita() -> Tool:
             u, err = _safe_url(url)
             if err:
                 return err
+            motivo = _accesso_locale(u, "aprire una pagina locale")
+            if motivo:
+                return motivo
         import json as _json
 
         sel = _json.dumps(selettore.strip())
@@ -338,6 +453,9 @@ def tool_browser_attendi() -> Tool:
             u, err = _safe_url(url)
             if err:
                 return err
+            motivo = _accesso_locale(u, "aprire una pagina locale")
+            if motivo:
+                return motivo
         import json as _json
 
         pezzi = []
@@ -463,6 +581,9 @@ def tool_browser_screenshot() -> Tool:
         u, err = _safe_url(url)
         if err:
             return err
+        motivo = _accesso_locale(u)
+        if motivo:
+            return motivo
         exe = _browser_exe()
         if not exe:
             return ("Manca un browser di sistema (Chrome/Edge). Il "
@@ -477,24 +598,34 @@ def tool_browser_screenshot() -> Tool:
         except Exception:
             base = Path(tempfile.gettempdir())
         out_path = base / nome_file
-        work = os.path.join(tempfile.gettempdir(), "orchestra_browser")
-        os.makedirs(work, exist_ok=True)
-        cmd = [exe, "--headless=new",
-               f"--screenshot={out_path}",
-               "--disable-gpu", "--window-size=1280,800",
-               f"--user-data-dir={work}",
-               "--no-first-run", "--disable-extensions",
-               "--hide-scrollbars", "--disable-background-networking", u]
+        # Anche lo screenshot passa dal CDP: l'URL finale va controllato
+        # PRIMA di catturare, altrimenti un redirect pubblico->locale
+        # produrrebbe un'immagine della rete privata. Il vecchio
+        # `--screenshot` non esponeva l'URL finale e non permetteva il
+        # controllo.
         try:
-            r = subprocess.run(cmd, text=True, capture_output=True, timeout=40,
-                               encoding="utf-8", errors="replace")
-        except subprocess.TimeoutExpired:
-            return f"timeout (40 s) generando screenshot di {u}"
+            s = _sessione_cdp(u)
+            finale = s.url_corrente()
+            motivo = _motivo_redirect(u, finale)
+            if motivo:
+                chiudi_sessione_cdp()
+                return motivo
+            png = s.screenshot(1280, 800)
+            finale = s.url_corrente() or finale
+            motivo = _motivo_redirect(u, finale)
+            if motivo:
+                chiudi_sessione_cdp()
+                return motivo
+        except _RedirectLocaleBloccato as e:
+            return str(e)
         except Exception as e:  # noqa: BLE001
             return f"errore screenshot: {type(e).__name__}: {e}"
+        try:
+            out_path.write_bytes(png)
+        except OSError as e:
+            return f"non riesco a salvare lo screenshot in {out_path}: {e}"
         if not out_path.exists():
-            return (f"Il screenshot non e' stato creato: {u}.\n"
-                    f"stderr: {(r.stderr or '')[:300]}")
+            return f"Il screenshot non e' stato creato: {u}."
         return f"Screenshot salvato: {out_path} ({out_path.stat().st_size} byte)"
 
     return Tool(

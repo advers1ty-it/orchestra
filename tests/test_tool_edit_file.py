@@ -28,6 +28,8 @@ os.environ["ORCHESTRA_ROOT"] = WORK
 os.makedirs(WORK, exist_ok=True)
 
 from orchestra.tools import default_registry  # noqa: E402
+import orchestra.checkpoint as checkpoint_mod  # noqa: E402
+import orchestra.scrittura as scrittura_mod  # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -56,8 +58,9 @@ print("\n[1] Il tool c'e' ed e' importabile")
 r = default_registry()
 check("edit_file e' registrato", "edit_file" in r)
 check("e' attivo", r.get("edit_file") in r.active)
-check("ha uno schema con trova/sostituisci",
-      set(r.get("edit_file").schema["required"]) == {"path", "trova", "sostituisci"},
+check("lo schema accetta una sola sostituzione o un batch",
+      set(r.get("edit_file").schema["required"]) == {"path"}
+      and "modifiche" in r.get("edit_file").schema["properties"],
       str(r.get("edit_file").schema["required"]))
 
 print("\n[2] La sostituzione e' esatta")
@@ -102,6 +105,89 @@ for bad in ["../../../Windows/win.ini", "..\\..\\secrets.txt", "/etc/passwd"]:
         check(f"edit_file blocca {bad[:30]}", True)
     except Exception as e:  # noqa: BLE001
         check(f"edit_file blocca {bad[:30]}", False, f"tipo inatteso: {type(e).__name__}")
+
+print("\n[6] Batch: piu' sostituzioni, un solo checkpoint e una scrittura")
+scrivi("alfa\nbeta\ngamma\n")
+conta = {"checkpoint": 0, "scritture": 0}
+cp_orig = checkpoint_mod.registra
+sc_orig = scrittura_mod.scrivi_bytes
+
+
+def cp_conta(*a, **k):
+    conta["checkpoint"] += 1
+    return cp_orig(*a, **k)
+
+
+def sc_conta(*a, **k):
+    conta["scritture"] += 1
+    return sc_orig(*a, **k)
+
+
+checkpoint_mod.registra = cp_conta
+scrittura_mod.scrivi_bytes = sc_conta
+try:
+    out = h(path=P, modifiche=[
+        {"trova": "alfa", "sostituisci": "ALFA"},
+        {"trova": "beta", "sostituisci": "BETA"},
+    ])
+finally:
+    checkpoint_mod.registra = cp_orig
+    scrittura_mod.scrivi_bytes = sc_orig
+check("il batch dice quante modifiche", "2 modifiche" in out, out)
+check("il batch applica tutte le voci", leggi() == "ALFA\nBETA\ngamma\n", leggi())
+check("un solo checkpoint", conta["checkpoint"] == 1, str(conta))
+check("una sola scrittura", conta["scritture"] == 1, str(conta))
+
+print("\n[7] Il batch e' atomico: se una voce non c'e', non scrive")
+scrivi("uno\ndue\n")
+conta = {"checkpoint": 0, "scritture": 0}
+checkpoint_mod.registra = cp_conta
+scrittura_mod.scrivi_bytes = sc_conta
+try:
+    out = h(path=P, modifiche=[
+        {"trova": "uno", "sostituisci": "1"},
+        {"trova": "TRE", "sostituisci": "3"},
+    ])
+finally:
+    checkpoint_mod.registra = cp_orig
+    scrittura_mod.scrivi_bytes = sc_orig
+check("dice quale voce manca", "modifica 2" in out and "NESSUNA CORRISPONDENZA" in out, out)
+check("il file e' intatto", leggi() == "uno\ndue\n", leggi())
+check("niente checkpoint", conta["checkpoint"] == 0, str(conta))
+check("niente scrittura", conta["scritture"] == 0, str(conta))
+
+print("\n[8] Batch: all/count per voce, dry_run e CRLF")
+scrivi("x x x\n")
+h(path=P, modifiche=[
+    {"trova": "x", "sostituisci": "y", "count": 2},
+    {"trova": "x", "sostituisci": "z"},
+])
+check("count e poi prima occorrenza", leggi() == "y y z\n", leggi())
+
+scrivi("a\na\n")
+out = h(path=P, modifiche=[{"trova": "a", "sostituisci": "b", "all": True}],
+        dry_run=True)
+check("dry_run batch non scrive", "DRY-RUN" in out and "nessuna scrittura" in out, out)
+check("dry_run batch lascia il file", leggi() == "a\na\n", leggi())
+
+with open(P, "wb") as f:
+    f.write(b"uno\r\ndue\r\n")
+h(path=P, modifiche=[{"trova": "uno\ndue", "sostituisci": "UNO\nDUE"}])
+with open(P, "rb") as f:
+    crlf = f.read()
+check("batch con CRLF e stringa LF", crlf == b"UNO\r\nDUE\r\n", repr(crlf))
+
+print("\n[9] Batch: i due modi non si mescolano")
+scrivi("a\n")
+out = h(path=P, trova="a", sostituisci="b",
+        modifiche=[{"trova": "a", "sostituisci": "c"}])
+check("mescolare e' errore", "ERRORE" in out and "non entrambi" in out, out)
+out = h(path=P, modifiche=[{"trova": "", "sostituisci": "x"}])
+check("trova vuoto nel batch e' errore", "ERRORE" in out and "modifica 1" in out, out)
+out = h(path=P, modifiche=[{"trova": "a", "sostituisci": "b"}], all=True)
+check("all fuori dal batch e' errore", "ERRORE" in out, out)
+out = h(path=P, modifiche=[])
+check("lista vuota e' errore", "ERRORE" in out, out)
 
 print(f"\n{'='*60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

@@ -237,8 +237,12 @@ class RotteAutomazione:
                 if at == "shell":
                     campi["action"] = {"command": (body.get("command") or "").strip()}
                 else:
-                    campi["action"] = {"objective": (body.get("objective") or "").strip(),
-                                       "profile": (body.get("profile") or "auto").strip()}
+                    azione = {"objective": (body.get("objective") or "").strip()}
+                    if body.get("profile"):
+                        azione["profile"] = str(body.get("profile")).strip()
+                    # Senza `profile` la modifica parziale non lo tocca:
+                    # cron.aggiorna conserva quello gia' salvato nel job.
+                    campi["action"] = azione
         try:
             job = cron_mod.aggiorna(jid, **campi)
         except (ValueError, RuntimeError) as e:

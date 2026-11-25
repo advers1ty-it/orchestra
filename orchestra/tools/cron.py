@@ -25,11 +25,11 @@ def tool_cron() -> Tool:
         id: str = "",
         nome: str = "",
         schedule: str = "",
-        action_type: str = "goal",
+        action_type: str = "",
         objective: str = "",
-        profile: str = "auto",
+        profile: str | None = None,
         command: str = "",
-        enabled: bool = True,
+        enabled: bool | None = None,
     ) -> str:
         azione = (azione or "lista").strip().lower()
         try:
@@ -67,11 +67,15 @@ def tool_cron() -> Tool:
                 return "scheduler cron fermato"
 
             if azione in ("crea", "create", "aggiungi", "add"):
-                if action_type == "shell":
+                tipo = action_type or "goal"
+                if tipo == "shell":
                     action = {"command": command}
                 else:
-                    action = {"objective": objective, "profile": profile}
-                job = cron_mod.crea(nome, schedule, action_type, action, enabled=enabled)
+                    action = {"objective": objective,
+                              "profile": profile or "auto"}
+                job = cron_mod.crea(
+                    nome, schedule, tipo, action,
+                    enabled=True if enabled is None else enabled)
                 return f"job creato: {job.get('id')} ({job.get('nome')}) next={job.get('next_run')}"
 
             if azione in ("modifica", "update", "mod"):
@@ -85,11 +89,26 @@ def tool_cron() -> Tool:
                 if action_type:
                     campi["action_type"] = action_type
                 if objective or command:
-                    if action_type == "shell":
+                    # Il tipo si deduce da cosa e' stato passato: cambiare
+                    # solo il comando di un job shell non deve trasformarlo
+                    # in un goal (e fallire con "obiettivo mancante").
+                    tipo = action_type or ("shell" if command else "goal")
+                    campi["action_type"] = tipo
+                    if tipo == "shell":
                         campi["action"] = {"command": command}
                     else:
-                        campi["action"] = {"objective": objective, "profile": profile}
-                campi["enabled"] = bool(enabled)
+                        # `profile` e' None quando non e' stato passato:
+                        # in quel caso cron.aggiorna conserva quello del
+                        # job invece di riportarlo al default "auto".
+                        nuova = {"objective": objective}
+                        if profile:
+                            nuova["profile"] = profile
+                        campi["action"] = nuova
+                # Solo se e' stato chiesto: `enabled` e' un booleano, e un
+                # default True rimetteva in moto un job che l'utente aveva
+                # spento, senza che la modifica lo riguardasse.
+                if enabled is not None:
+                    campi["enabled"] = bool(enabled)
                 j = cron_mod.aggiorna(id, **campi)
                 if j is None:
                     return "ERRORE: job sconosciuto"
@@ -149,11 +168,11 @@ def tool_cron() -> Tool:
                 "id": {"type": "string", "description": "Job id (for modifica/elimina/esegui/dettagli)."},
                 "nome": {"type": "string", "description": "Job name."},
                 "schedule": {"type": "string", "description": "5-field cron expression or a shortcut (@daily, @hourly, @weekly, @monthly, @yearly, @reboot)."},
-                "action_type": {"type": "string", "description": "goal (default) or shell: what the job runs."},
+                "action_type": {"type": "string", "description": "goal or shell: what the job runs. For crea the default is goal; for modifica omit it to leave the job type unchanged."},
                 "objective": {"type": "string", "description": "Objective to run (when action_type=goal)."},
-                "profile": {"type": "string", "description": "Tool profile for the goal (auto/base/ricerca/skill/pieno)."},
+                "profile": {"type": "string", "description": "Tool profile for the goal (auto/base/ricerca/skill/pieno). For modifica, omit it to leave the job's current profile unchanged."},
                 "command": {"type": "string", "description": "Shell command (when action_type=shell)."},
-                "enabled": {"type": "boolean", "description": "Whether the job is enabled (default true)."},
+                "enabled": {"type": "boolean", "description": "Whether the job is enabled. For crea the default is true; for modifica omit it to leave the job as it is."},
             },
             "required": [],
         },

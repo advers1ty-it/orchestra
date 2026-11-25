@@ -1,4 +1,5 @@
-"""I processi che sopravvivono alla chiamata: avviarli, leggerli, fermarli.
+"""I processi che sopravvivono alla chiamata: avviarli, leggerli,
+scrivergli su stdin e fermarli.
 
 Il problema che risolve. `run_shell` ASPETTA: ha un timeout, e quando
 scade uccide il processo. Va bene per `pytest`, non per un `npm run dev`,
@@ -52,7 +53,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import testo as testo_mod
-from ._guard import _detect_posix_shell, _kill_tree, _root, _sandbox_env
+from ._guard import (_detect_posix_shell, _kill_tree, _root, _safe_path,
+                     _sandbox_env)
 
 # Quanti processi possono essere vivi insieme. Otto copre il caso vero
 # (frontend, backend, database, tunnel) con margine, e lascia un numero
@@ -75,6 +77,16 @@ BYTE_IN_CODA = 400_000
 # Le ultime righe del log che accompagnano un processo morto subito: e'
 # il messaggio d'errore del comando, cioe' la diagnosi.
 RIGHE_DIAGNOSI = 40
+
+# Quanto testo si puo' scrivere in una volta su stdin, in byte UTF-8.
+# Non e' un limite di gusto: una pipe ha un buffer finito (su Windows
+# quello predefinito e' di circa 4 KB), e se il processo non legge (un
+# server che non ha stdin, un comando gia' morto) una scrittura piu'
+# grande resta bloccata dentro `flush()`. Con un tetto basso l'agente
+# manda un comando per volta, che e' anche il modo in cui si parla a un
+# REPL. Il conteggio e' in byte, non in caratteri: un carattere UTF-8
+# puo' occuparne quattro.
+MASSIMO_STDIN = 4_000
 
 _LOCK = threading.Lock()
 _PROCESSI: dict[str, "Processo"] = {}
@@ -132,6 +144,18 @@ class Processo:
         if self.fermato:
             return f"fermato da me dopo {self.durata:.1f}s"
         return f"uscito con codice {self.codice} dopo {self.durata:.1f}s"
+
+    def chiudi_stdin(self) -> None:
+        """Chiude il lato padre della pipe, senza sollevare.
+
+        Il processo puo' essere gia' uscito e la pipe puo' essere gia'
+        stata chiusa da un errore di scrittura: entrambe sono normali.
+        """
+        try:
+            if self.popen.stdin is not None and not self.popen.stdin.closed:
+                self.popen.stdin.close()
+        except (OSError, ValueError):
+            pass
 
 
 def _cartella_log() -> Path:
@@ -206,6 +230,7 @@ def _pota() -> None:
     morti.sort(key=lambda p: p.avviato)
     for p in morti[:len(morti) - MASSIMO_MORTI]:
         _PROCESSI.pop(p.id, None)
+        p.chiudi_stdin()
 
 
 def avvia(comando: str, cwd: str = ".", attesa: float = 2.0) -> dict:
@@ -219,9 +244,15 @@ def avvia(comando: str, cwd: str = ".", attesa: float = 2.0) -> dict:
     except (TypeError, ValueError):
         attesa = 2.0
 
-    cartella = Path(cwd or ".")
-    if not cartella.is_absolute():
-        cartella = Path(_root()) / cartella
+    # La cartella di lavoro e' un confine come un percorso di file: un
+    # `cwd` fuori dalla root non e' una scorciatoia, e' la stessa domanda
+    # che fa `read_file`. Prima `Path(cwd)` accettava qualunque directory
+    # esistente, quindi `processo` poteva avviare un comando fuori dalla
+    # root senza che nessuno lo chiedesse.
+    try:
+        cartella = _safe_path(str(cwd or "."))
+    except (ValueError, PermissionError) as exc:
+        return {"errore": f"cartella non ammessa: {exc}"}
     if not cartella.is_dir():
         return {"errore": f"NON È UNA DIRECTORY: {cwd}"}
 
@@ -263,14 +294,23 @@ def avvia(comando: str, cwd: str = ".", attesa: float = 2.0) -> dict:
         flags = subprocess.CREATE_NEW_PROCESS_GROUP
 
     try:
-        with open(log, "ab", buffering=0) as fh:
+        # "wb" e non "ab": l'id riparte da p1 a ogni avvio di
+        # Orchestra, quindi un log lasciato dalla sessione precedente
+        # verrebbe mostrato come output del processo nuovo. Il file e'
+        # nuovo per questa sessione: si tronca, non si accoda.
+        with open(log, "wb", buffering=0) as fh:
             proc = subprocess.Popen(
                 argv,  # type: ignore[arg-type]
                 cwd=str(cartella),
                 env=_sandbox_env(),
-                stdin=subprocess.DEVNULL,
+                # Una pipe vera, non DEVNULL: un REPL o una CLI che chiede
+                # conferma deve poter ricevere una riga da `scrivi`.
+                stdin=subprocess.PIPE,
                 stdout=fh,
                 stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 creationflags=flags,
                 start_new_session=(os.name != "nt"),
                 **extra,
@@ -288,6 +328,10 @@ def avvia(comando: str, cwd: str = ".", attesa: float = 2.0) -> dict:
             proc.wait(timeout=attesa)
         except subprocess.TimeoutExpired:
             pass
+    if not p.vivo:
+        # Il comando e' morto durante l'avvio: nessuno leggera' quella
+        # pipe, e tenerla aperta e' solo un descrittore in piu'.
+        p.chiudi_stdin()
 
     testo, nota = _coda_log(log, RIGHE_DIAGNOSI)
     esito = {
@@ -315,6 +359,8 @@ def leggi(pid_tool: str, righe: int = 80) -> dict:
     p = _prendi(pid_tool)
     if p is None:
         return {"errore": _non_trovato(pid_tool)}
+    if not p.vivo:
+        p.chiudi_stdin()
     try:
         righe = max(1, min(int(righe or 80), 5000))
     except (TypeError, ValueError):
@@ -334,6 +380,66 @@ def leggi(pid_tool: str, righe: int = 80) -> dict:
     }
 
 
+def scrivi(pid_tool: str, testo: str = "", a_capo: bool = True) -> dict:
+    """Scrive `testo` (piu' un a capo, se richiesto) su stdin del processo.
+
+    Non aspetta che il processo risponda: un REPL puo' metterci un tempo
+    arbitrario, e bloccare il tool sarebbe peggio che dire "scrivi e poi
+    leggi". La risposta contiene il numero di caratteri inviati, non il
+    testo: puo' contenere segreti o codice che non serve rimandare al
+    modello.
+    """
+    p = _prendi(pid_tool)
+    if p is None:
+        return {"errore": _non_trovato(pid_tool)}
+    if not p.vivo:
+        p.chiudi_stdin()
+        return {
+            "errore": (f"{p.id} non e' vivo ({p.stato()}): stdin non e' "
+                       "piu' scrivibile. Leggi il log per capire perche' "
+                       "e' uscito."),
+            "id": p.id, "stato": p.stato(), "vivo": False,
+        }
+    if testo is None:
+        testo = ""
+    if not isinstance(testo, str):
+        return {"errore": "il testo da scrivere deve essere una stringa"}
+    dati = testo + ("\n" if a_capo else "")
+    try:
+        byte = len(dati.encode("utf-8"))
+    except UnicodeEncodeError:
+        return {"errore": "il testo contiene caratteri non codificabili in UTF-8"}
+    if byte > MASSIMO_STDIN:
+        return {
+            "errore": (f"testo troppo lungo: {byte} byte UTF-8, "
+                       f"massimo {MASSIMO_STDIN}. Spezza in piu' scritture."),
+            "id": p.id,
+        }
+    stream = p.popen.stdin
+    if stream is None:
+        return {"errore": f"{p.id} non ha stdin: impossibile scrivere"}
+    try:
+        stream.write(dati)
+        stream.flush()
+    except (BrokenPipeError, OSError, ValueError) as exc:
+        p.chiudi_stdin()
+        return {
+            "errore": (f"scrittura su stdin fallita per {p.id}: {exc}. "
+                       "Il processo potrebbe essere uscito; controlla con "
+                       "azione='leggi'."),
+            "id": p.id, "stato": p.stato(), "vivo": p.vivo,
+        }
+    return {
+        "id": p.id,
+        "stato": p.stato(),
+        "vivo": p.vivo,
+        "scritti": len(dati),
+        "a_capo": bool(a_capo),
+        "cmd": p.comando,
+        "log": str(p.log),
+    }
+
+
 def ferma(pid_tool: str, timeout: float = 5.0) -> dict:
     """Ferma il processo e tutto quello che ha generato.
 
@@ -344,6 +450,7 @@ def ferma(pid_tool: str, timeout: float = 5.0) -> dict:
     if p is None:
         return {"errore": _non_trovato(pid_tool)}
     if not p.vivo:
+        p.chiudi_stdin()
         return {"id": p.id, "stato": p.stato(), "vivo": False,
                 "giafinito": True,
                 "nota": "era gia' finito: niente da fermare"}
@@ -356,6 +463,7 @@ def ferma(pid_tool: str, timeout: float = 5.0) -> dict:
             p.popen.kill()
         except Exception:  # noqa: BLE001
             pass
+    p.chiudi_stdin()
     testo, nota = _coda_log(p.log, 20)
     return {
         "id": p.id,
@@ -405,12 +513,14 @@ def ferma_tutti() -> int:
     fermati = 0
     for p in processi:
         if not p.vivo:
+            p.chiudi_stdin()
             continue
         try:
             _kill_tree(p.pid)
             p.fermato = True
             fermati += 1
         except Exception:  # noqa: BLE001
+            p.chiudi_stdin()
             continue
         # Attendere il decesso, non solo chiederlo. `taskkill` (e `killpg`
         # su POSIX) ritorna quando ha INVIATO il segnale: il processo puo'
@@ -426,13 +536,17 @@ def ferma_tutti() -> int:
                 p.popen.wait(timeout=1.0)
             except Exception:  # noqa: BLE001
                 pass
+        p.chiudi_stdin()
     return fermati
 
 
 def azzera() -> None:
     """Svuota l'elenco (per i test: i processi non sono fermati)."""
     with _LOCK:
+        processi = list(_PROCESSI.values())
         _PROCESSI.clear()
+    for p in processi:
+        p.chiudi_stdin()
 
 
 atexit.register(ferma_tutti)

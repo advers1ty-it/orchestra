@@ -1,4 +1,4 @@
-"""Il tool `processo`: avviare un server, guardarlo, fermarlo.
+"""Il tool `processo`: avviare un server, guardarlo, scrivergli, fermarlo.
 
 Il difetto che questo file copre, in una riga: `run_shell` ASPETTA e
 uccide al timeout, quindi con Orchestra non si poteva avviare un server e
@@ -18,8 +18,10 @@ per non far comparire nessuna domanda.
 
 import os
 import re
+import shutil
 import socket
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -58,11 +60,11 @@ for profilo in ("base", "ricerca", "skill", "pieno"):
 desc = tool.description
 check("la descrizione dice che run_shell aspetta",
       "run_shell" in desc and "WAIT" in desc.upper())
-check("la descrizione elenca le quattro azioni",
-      all(a in desc for a in ("avvia", "leggi", "ferma", "elenca")))
+check("la descrizione elenca le cinque azioni",
+      all(a in desc for a in ("avvia", "leggi", "scrivi", "ferma", "elenca")))
 check("le azioni sono quelle del codice",
       tool.schema["properties"]["azione"]["enum"] ==
-      ["avvia", "leggi", "ferma", "elenca"])
+      ["avvia", "leggi", "scrivi", "ferma", "elenca"])
 check("ogni parametro del tool ha una descrizione",
       all(bool(p.get("description"))
           for p in tool.schema["properties"].values()))
@@ -101,6 +103,112 @@ check("elenca non conta piu' processi vivi", e.startswith("0 vivi"), e[:120])
 check("ma il processo uscito resta nell'elenco",
       pid_tool in e, e[:200])
 
+print("\n[3b] Si puo' scrivere su stdin, e l'a capo e' controllabile")
+cmd_stdin = ("python -u -c \"import sys; print('pronto-stdin', flush=True); "
+             "[print('eco:' + riga.rstrip(), flush=True) "
+             "for riga in sys.stdin]\"")
+s = tool.handler(azione="avvia", comando=cmd_stdin, attesa=1)
+check("il lettore di stdin e' vivo", "AVVIATO" in s, s[:160])
+msid = re.search(r"\b(p\d+)\b", s)
+sid = msid.group(1) if msid else ""
+pronto = ""
+for _ in range(25):
+    pronto = tool.handler(azione="leggi", id=sid, righe=20) if sid else ""
+    if "pronto-stdin" in pronto:
+        break
+    time.sleep(0.1)
+check("il processo ha stampato il prompt", "pronto-stdin" in pronto,
+      pronto[:200])
+w = tool.handler(azione="scrivi", id=sid, testo="ciao") if sid else ""
+check("scrivi dice quanti caratteri ha inviato",
+      "SCRITTO" in w and "5 caratteri" in w, w[:200])
+check("e indica come leggere la risposta",
+      'azione="leggi"' in w, w[:200])
+eco = ""
+for _ in range(25):
+    eco = tool.handler(azione="leggi", id=sid, righe=20) if sid else ""
+    if "eco:ciao" in eco:
+        break
+    time.sleep(0.1)
+check("il processo ha ricevuto la riga", "eco:ciao" in eco, eco[:200])
+lungo = tool.handler(
+    azione="scrivi", id=sid,
+    testo="x" * (processi.MASSIMO_STDIN + 1)) if sid else ""
+check("un testo troppo lungo viene rifiutato",
+      "NON SCRITTO" in lungo and "troppo lungo" in lungo, lungo[:200])
+senza = tool.handler(azione="scrivi", id=sid, testo="", a_capo=False) if sid else ""
+check("si puo' scrivere senza a capo",
+      "SCRITTO" in senza and "senza a capo" in senza, senza[:200])
+if sid:
+    tool.handler(azione="ferma", id=sid)
+
+cmd_line = ("python -u -c \"import sys; riga = sys.stdin.readline(); "
+            "print('letto:' + repr(riga), flush=True)\"")
+s2 = tool.handler(azione="avvia", comando=cmd_line, attesa=1)
+msid2 = re.search(r"\b(p\d+)\b", s2)
+sid2 = msid2.group(1) if msid2 else ""
+check("il secondo lettore e' vivo", "AVVIATO" in s2, s2[:160])
+w1 = tool.handler(azione="scrivi", id=sid2, testo="senza-capo",
+                  a_capo=False) if sid2 else ""
+check("scrive senza chiudere la riga",
+      "SCRITTO" in w1 and "senza a capo" in w1, w1[:200])
+time.sleep(0.3)
+prima = tool.handler(azione="leggi", id=sid2) if sid2 else ""
+check("senza a capo il processo aspetta ancora",
+      "--- output ---" not in prima, prima[:200])
+w2 = tool.handler(azione="scrivi", id=sid2, testo="", a_capo=True) if sid2 else ""
+check("il solo a capo completa la riga",
+      "SCRITTO" in w2 and "con a capo" in w2, w2[:200])
+letto2 = ""
+for _ in range(25):
+    letto2 = tool.handler(azione="leggi", id=sid2) if sid2 else ""
+    if "letto:" in letto2:
+        break
+    time.sleep(0.1)
+check("il processo ha letto la riga completa",
+      "letto:" in letto2 and "senza-capo" in letto2, letto2[:200])
+# Il processo stampa e poi esce: aspettare l'uscita evita di provare a
+# scrivere nella finestra in cui la pipe e' gia' chiusa ma `poll()`
+# risponde ancora vivo. Il caso "scrivi a un processo davvero finito"
+# deve arrivare dal controllo esplicito, non da un errore di pipe.
+for _ in range(20):
+    if not sid2 or not processi.leggi(sid2)["vivo"]:
+        break
+    time.sleep(0.1)
+morto = tool.handler(azione="scrivi", id=sid2, testo="x") if sid2 else ""
+check("scrivi a un processo finito lo dice",
+      "NON SCRITTO" in morto and "non e' vivo" in morto, morto[:200])
+manca = tool.handler(azione="scrivi", id="", testo="x")
+check("senza id il messaggio lo dice", "MANCA L'ID" in manca, manca[:160])
+sconosciuto = tool.handler(azione="scrivi", id="p999", testo="x")
+check("un id sconosciuto elenca quelli veri",
+      "NON SCRITTO" in sconosciuto and "p999" in sconosciuto,
+      sconosciuto[:200])
+
+print("\n[3c] Un REPL vero: si scrive un'espressione e si legge il risultato")
+repl = tool.handler(azione="avvia", comando="python -u -i -q", attesa=1)
+mrepl = re.search(r"\b(p\d+)\b", repl)
+rid = mrepl.group(1) if mrepl else ""
+check("il REPL e' vivo", "AVVIATO" in repl, repl[:160])
+w = tool.handler(azione="scrivi", id=rid, testo="print(2+2)") if rid else ""
+check("scrivi accetta un'espressione", "SCRITTO" in w, w[:160])
+repl_out = ""
+for _ in range(25):
+    repl_out = tool.handler(azione="leggi", id=rid) if rid else ""
+    if "4" in repl_out and ">>>" in repl_out:
+        break
+    time.sleep(0.1)
+check("il REPL ha eseguito e stampato 4",
+      "4" in repl_out and ">>>" in repl_out, repl_out[:200])
+if rid:
+    tool.handler(azione="scrivi", id=rid, testo="exit()")
+    for _ in range(25):
+        if not processi.leggi(rid)["vivo"]:
+            break
+        time.sleep(0.1)
+    check("exit() chiude il REPL", not processi.leggi(rid)["vivo"],
+          str(processi.leggi(rid))[:200])
+
 print("\n[4] Fermare due volte non e' un errore, e un id sbagliato lo dice")
 f2 = tool.handler(azione="ferma", id=pid_tool)
 check("fermare un processo gia' finito lo dichiara",
@@ -112,7 +220,8 @@ vuoto = tool.handler(azione="ferma", id="")
 check("senza id il messaggio lo dice", "MANCA L'ID" in vuoto, vuoto[:120])
 sbagliata = tool.handler(azione="salta")
 check("un'azione sconosciuta elenca quelle valide",
-      "AZIONE NON VALIDA" in sbagliata and "avvia" in sbagliata)
+      "AZIONE NON VALIDA" in sbagliata and "avvia" in sbagliata
+      and "scrivi" in sbagliata)
 
 print("\n[5] Il log sta nella root, cosi' read_file lo puo' aprire")
 log = os.path.join(_RADICE, "tmp", "processi", f"{pid_tool}.log")
@@ -221,6 +330,28 @@ check("e dopo non ne resta nessuno vivo",
       not any(p["vivo"] for p in processi.elenca()["processi"]))
 if uid:
     check("il processo era quello", processi.leggi(uid)["vivo"] is False)
+
+print("\n[10] La cartella di lavoro non aggira il confine della root")
+# `cwd` era l'unico parametro che arrivava a `Path` senza passare da
+# `_safe_path`: un comando in background poteva partire in una cartella
+# fuori dalla root senza che all'utente comparisse nessuna domanda.
+fuori_dir = tempfile.mkdtemp(prefix="proc-fuori-")
+try:
+    r = tool.handler(azione="avvia",
+                     comando="python -c \"print('non-doveva-partire')\"",
+                     cwd=fuori_dir, attesa=0.5)
+    check("un cwd fuori dalla root viene negato",
+          "NON AVVIATO" in r and "cartella" in r.lower(), r[:200])
+    check("e il comando non e' stato eseguito",
+          "non-doveva-partire" not in r, r[:200])
+finally:
+    shutil.rmtree(fuori_dir, ignore_errors=True)
+
+dentro = tool.handler(azione="avvia",
+                      comando="python -c \"print('cwd-dentro')\"",
+                      cwd="orchestra", attesa=1)
+check("un cwd relativo dentro la root parte",
+      "cwd-dentro" in dentro and "NON AVVIATO" not in dentro, dentro[:200])
 
 print(f"\n{'=' * 60}\nPASS {len(PASS)}  FAIL {len(FAIL)}")
 if FAIL:

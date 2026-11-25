@@ -346,7 +346,19 @@ def aggiorna(job_id: str, **campi) -> dict[str, Any] | None:
         if "action_type" in campi and campi["action_type"] is not None:
             target["action_type"] = str(campi["action_type"])
         if "action" in campi and campi["action"] is not None:
-            target["action"] = campi["action"]
+            nuova = campi["action"]
+            # Una modifica parziale puo' cambiare solo l'obiettivo. In quel
+            # caso il profilo non e' nella nuova azione e va conservato:
+            # altrimenti lo scheduler userebbe il default "auto" e il job
+            # cambierebbe comportamento senza che sia stato chiesto.
+            if (isinstance(nuova, dict)
+                    and target.get("action_type") == "goal"
+                    and "profile" not in nuova):
+                vecchia = target.get("action")
+                if isinstance(vecchia, dict) and vecchia.get("profile"):
+                    nuova = dict(nuova)
+                    nuova["profile"] = vecchia["profile"]
+            target["action"] = nuova
         if "enabled" in campi and campi["enabled"] is not None:
             target["enabled"] = bool(campi["enabled"])
         _valida_azione(target["action_type"], target["action"],

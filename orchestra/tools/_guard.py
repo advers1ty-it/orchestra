@@ -672,19 +672,31 @@ def verifica_comando(command: str) -> str | None:
     rischio = policy_mod.rischio_operativo(command)
     if rischio:
         if gate is not None:
+            # `forza=True`: anche dentro la root. "Siamo nel progetto"
+            # non e' un consenso a cancellare o a pubblicare; senza,
+            # un gate reale considerava il percorso dentro la root gia'
+            # concesso e non mostrava mai la domanda.
+            azione = ("pubblicare" if "git push" in rischio
+                      else "confermare" if "git commit" in rischio
+                      else "distruggere")
+            parola = ("rischioso" if ("git commit" in rischio
+                                      or "git push" in rischio)
+                      else "distruttivo")
             if not gate.chiedi_all_utente(
-                    _root(), "distruggere",
-                    f"{rischio}. Comando: {command[:200]}"):
+                    _root(), azione,
+                    f"{rischio}. Comando: {command[:200]}", forza=True):
                 return (
-                    "NON ESEGUITO: comando che cancella o riporta indietro "
-                    f"file dentro la cartella di lavoro ({rischio}), "
-                    "permesso non concesso.\n"
+                    f"NON ESEGUITO: comando {parola} dentro la cartella "
+                    f"di lavoro ({rischio}), permesso non concesso.\n"
                     f"Comando: {command[:200]}"
                 )
         elif os.environ.get("ORCHESTRA_CONSENTI_DISTRUTTIVI") != "1":
+            parola = ("rischioso" if ("git commit" in rischio
+                                      or "git push" in rischio)
+                      else "distruttivo")
             return (
-                "NON ESEGUITO: comando distruttivo dentro la cartella di "
-                f"lavoro ({rischio}) e nessuno a cui chiedere il "
+                f"NON ESEGUITO: comando {parola} dentro la cartella "
+                f"di lavoro ({rischio}) e nessuno a cui chiedere il "
                 "permesso in questa modalita'.\n"
                 "Se e' quello che vuoi, rilancia Orchestra con "
                 "ORCHESTRA_CONSENTI_DISTRUTTIVI=1, oppure esegui il "

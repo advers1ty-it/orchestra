@@ -1,4 +1,4 @@
-"""Tool edit_file: sostituire una parte di file senza riscriverlo tutto.
+"""Tool edit_file: sostituire una o più parti di un file senza riscriverlo.
 
 E' nato come script a sé in `orchestra/tools/`, e per questo motivo non
 era mai stato visto dall'agente: `orchestra/tools.py` (modulo) e
@@ -7,6 +7,12 @@ Python ignora la cartella — `import orchestra.tools.edit_file` fallisce con
 `__path__ attribute not found`. Il file c'era, ma non era importabile.
 
 Ora il pacchetto esiste e il tool sta dentro, importabile come gli altri.
+
+Accetta anche una lista di sostituzioni (`modifiche`): si legge il file una
+volta, si applicano in ordine, e si scrive una volta sola con un solo
+checkpoint. Se una voce non trova la sua stringa non si scrive niente: un
+batch a metà è peggio di un batch fallito, perché la prima metà non si
+distingue dal resto.
 """
 
 from __future__ import annotations
@@ -34,8 +40,34 @@ def _sostituisci(testo: str, trova: str, sostituisci: str, quante: int) -> tuple
     return out, fatte
 
 
+def _prepara(testo: str, trova: str, sostituisci: str) -> tuple[str, str, int]:
+    """La stringa da cercare, quella che la sostituisce, e quante volte c'è.
+
+    Il ripiego sui fine riga vale per OGNI voce del batch: dopo la prima
+    sostituzione il testo è ancora quello del file (CRLF), e la voce
+    successiva copiata da `read_file` porta i `\\n`. Calcolare le occorrenze
+    una volta sola all'inizio darebbe risultati sbagliati appena una
+    sostituzione cambia il testo.
+    """
+    cerca, metti = trova, sostituisci
+    occorrenze = testo.count(cerca)
+    if occorrenze == 0 and "\r\n" in testo:
+        # Il modello copia le righe da read_file, che mostra il testo
+        # con i \n (splitlines li toglie): su un file CRLF una ricerca
+        # multilinea copiata cosi' non combacia, e il tool risponderebbe
+        # "NESSUNA CORRISPONDENZA" su una stringa che esiste. Si riprova
+        # con i fine riga del file, e la sostituzione adotta gli
+        # stessi, altrimenti si mescolano due stili nello stesso file.
+        altra = trova.replace("\r\n", "\n").replace("\n", "\r\n")
+        if altra != trova and testo.count(altra):
+            cerca = altra
+            metti = sostituisci.replace("\r\n", "\n").replace("\n", "\r\n")
+            occorrenze = testo.count(cerca)
+    return cerca, metti, occorrenze
+
+
 def tool_edit_file() -> Tool:
-    """Sostituisce una stringa in un file, senza riscrivere tutto il file.
+    """Sostituisce una o più stringhe in un file, senza riscriverlo tutto.
 
     E' la differenza con `write_file`: riscrivere un file di 2000 righe
     per cambiare una riga costa il file intero in token, e ogni riga
@@ -43,15 +75,51 @@ def tool_edit_file() -> Tool:
     che si cerca e quello che lo sostituisce.
     """
 
-    def handler(path: str, trova: str, sostituisci: str,
+    def handler(path: str, trova: str = "", sostituisci: str = "",
                 all: bool = False, count: int | None = None,
-                dry_run: bool = False) -> str:
-        if not trova:
+                dry_run: bool = False, modifiche: list | None = None) -> str:
+        # Due modi per la stessa cosa: una sostituzione, o un elenco.
+        # Mescolarli non e' ambiguo per il codice ma lo e' per il
+        # risultato: si rifiuta, invece di scegliere in silenzio.
+        if modifiche is not None and not isinstance(modifiche, (list, tuple)):
+            return ("ERRORE: 'modifiche' deve essere una lista di oggetti "
+                    "{trova, sostituisci}.")
+        voci_batch = list(modifiche or [])
+        if voci_batch and (trova or sostituisci):
+            return ("ERRORE: usa o 'trova'/'sostituisci' per una sola "
+                    "sostituzione, o 'modifiche' per piu' sostituzioni: "
+                    "non entrambi.")
+        if voci_batch and (all or count is not None):
+            return ("ERRORE: con 'modifiche', metti 'all' e 'count' dentro "
+                    "ogni voce, non fuori.")
+        if not voci_batch and not trova:
             # Una sostituzione vuota non e' un errore di battitura: e' una
             # richiesta palese. Ma senza messaggio il modello non capisce
             # perche' non e' successo niente.
             return ("ERRORE: 'trova' e' vuoto. Una sostituzione vuota "
-                    "non ha senso: usa write_file per riscrivere il file.")
+                    "non ha senso: usa write_file per riscrivere il file, "
+                    "oppure passa 'modifiche'.")
+
+        if voci_batch:
+            voci = []
+            for i, voce in enumerate(voci_batch, 1):
+                if not isinstance(voce, dict):
+                    return (f"ERRORE: la modifica {i} non e' un oggetto "
+                            f"{{trova, sostituisci}}.")
+                t = str(voce.get("trova") or "")
+                if not t:
+                    return (f"ERRORE: la modifica {i} ha 'trova' vuoto. "
+                            f"Una sostituzione vuota non ha senso.")
+                s = voce.get("sostituisci")
+                voci.append({
+                    "trova": t,
+                    "sostituisci": "" if s is None else str(s),
+                    "all": bool(voce.get("all")),
+                    "count": voce.get("count"),
+                })
+        else:
+            voci = [{"trova": trova, "sostituisci": sostituisci,
+                     "all": bool(all), "count": count}]
 
         p = _safe_path(path)
         if not p.exists():
@@ -82,41 +150,57 @@ def tool_edit_file() -> Tool:
         # credere.
         originale, codifica_file = decodifica(dati)
 
-        cerca, metti = trova, sostituisci
-        occorrenze = originale.count(cerca)
-        if occorrenze == 0 and "\r\n" in originale:
-            # Il modello copia le righe da read_file, che mostra il testo
-            # con i \n (splitlines li toglie): su un file CRLF una ricerca
-            # multilinea copiata cosi' non combacia, e il tool rispondeva
-            # "NESSUNA CORRISPONDENZA" su una stringa che esiste. Si riprova
-            # con i fine riga del file, e la sostituzione adotta gli
-            # stessi, altrimenti si mescolano due stili nello stesso file.
-            altra = trova.replace("\r\n", "\n").replace("\n", "\r\n")
-            if altra != trova and originale.count(altra):
-                cerca = altra
-                metti = sostituisci.replace("\r\n", "\n").replace("\n", "\r\n")
-                occorrenze = originale.count(cerca)
-        if occorrenze == 0:
-            return (f"NESSUNA CORRISPONDENZA in {path}: la stringa cercata "
-                    f"non c'e'. Leggi il file e riprova con la stringa esatta.")
+        nuovo = originale
+        totale = 0
+        dettagli: list[tuple[int, int, int]] = []
+        for i, voce in enumerate(voci, 1):
+            # Le occorrenze si contano sul testo GIA' modificato dalle voci
+            # precedenti: e' l'ordine che il chiamante ha chiesto, e una
+            # voce puo' cercare qualcosa che la voce prima ha appena
+            # creato.
+            cerca, metti, occorrenze = _prepara(
+                nuovo, voce["trova"], voce["sostituisci"])
+            if occorrenze == 0:
+                if len(voci) == 1:
+                    return (f"NESSUNA CORRISPONDENZA in {path}: la stringa "
+                            f"cercata non c'e'. Leggi il file e riprova con "
+                            f"la stringa esatta.")
+                return (f"NESSUNA CORRISPONDENZA in {path}, modifica {i}: "
+                        f"la stringa cercata non c'e'. Nessuna scrittura: "
+                        f"il file e' intatto.")
 
-        if all:
-            quante = occorrenze
-        elif count is not None:
-            quante = max(0, min(int(count), occorrenze))
-        else:
-            quante = 1
+            if voce["all"]:
+                quante = occorrenze
+            elif voce["count"] is not None:
+                try:
+                    quante = max(0, min(int(voce["count"]), occorrenze))
+                except (TypeError, ValueError):
+                    return (f"ERRORE: 'count' non valido nella modifica {i}: "
+                            f"{voce['count']!r}.")
+            else:
+                quante = 1
 
-        nuovo, fatte = _sostituisci(originale, cerca, metti, quante)
-        if fatte == 0:
-            return f"NESSUNA SOSTITUZIONE in {path}"
+            nuovo, fatte = _sostituisci(nuovo, cerca, metti, quante)
+            if fatte == 0:
+                return f"NESSUNA SOSTITUZIONE in {path} (modifica {i})"
+            totale += fatte
+            dettagli.append((i, fatte, occorrenze))
 
         if dry_run:
-            return (f"DRY-RUN: {fatte} sostituzioni su {occorrenze} "
-                    f"occorrenze in {path} (nessuna scrittura)")
+            if len(voci) == 1:
+                _, fatte, occorrenze = dettagli[0]
+                return (f"DRY-RUN: {fatte} sostituzioni su {occorrenze} "
+                        f"occorrenze in {path} (nessuna scrittura)")
+            righe = [f"  {i}. {fatte} su {occorrenze}"
+                     for i, fatte, occorrenze in dettagli]
+            return (f"DRY-RUN: {totale} sostituzioni in {path} "
+                    f"({len(voci)} modifiche, nessuna scrittura)\n"
+                    + "\n".join(righe))
 
-        # Checkpoint prima di sovrascrivere: e' l'unico momento in cui
-        # esiste ancora la versione da cui si puo' tornare indietro.
+        # Checkpoint UNA volta, prima dell'unica scrittura: se una voce
+        # fallisce, il file non e' stato toccato e non c'e' niente da
+        # annullare; se arriviamo qui, la versione vecchia e' ancora quella
+        # da salvare.
         try:
             from ..checkpoint import registra
 
@@ -133,21 +217,28 @@ def tool_edit_file() -> Tool:
             scrivi_bytes(p, codifica(nuovo, codifica_file))
         except OSError as e:
             return f"MODIFICA FALLITA: {path}: {e} (il file non e' stato toccato)"
-        resto = occorrenze - fatte
-        msg = f"Sostituite {fatte} occorrenze in {path}"
+        resto = sum(occ - fatte for _, fatte, occ in dettagli)
+        msg = f"Sostituite {totale} occorrenze in {path}"
+        if len(voci) > 1:
+            msg += f" ({len(voci)} modifiche)"
         if resto:
             # Dire quante ne restano e' il segnale che "all" non e' stato
             # chiesto: il modello vede subito che la modifica e' parziale.
-            msg += f" (ne restano {resto}: usa all=true per tutte)"
+            msg += (f" (ne restano {resto}: usa all=true nella voce "
+                    f"corrispondente per tutte)")
         return msg
 
     return Tool(
         name="edit_file",
         description=(
-            "Edits part of a file without rewriting it: replaces one string "
-            "with another. Use it instead of write_file for large files. "
-            "Read the content with read_file FIRST, and pass the exact "
-            "string as it appears in the file."
+            "Edits a file without rewriting it from scratch. Pass ONE "
+            "replacement with `trova`/`sostituisci`, or SEVERAL with "
+            "`modifiche` (a list of {trova, sostituisci, all?, count?} "
+            "applied in order). A batch is atomic: every pattern must "
+            "match, it gets ONE checkpoint and ONE write, and if any "
+            "pattern is missing nothing is written. Read the content with "
+            "read_file FIRST, and pass the exact strings as they appear "
+            "in the file."
         ),
         schema={
             "type": "object",
@@ -162,39 +253,91 @@ def tool_edit_file() -> Tool:
                 "trova": {
                     "type": "string",
                     "description": (
-                        "Exact string to find in the file (copy it from "
-                        "read_file, whitespace and line breaks included)."
+                        "Single replacement: exact string to find in the "
+                        "file (copy it from read_file, whitespace and line "
+                        "breaks included). For several, use `modifiche`."
                     ),
                 },
                 "sostituisci": {
                     "type": "string",
-                    "description": "String that replaces it.",
+                    "description": (
+                        "Single replacement: string that replaces it. "
+                        "Empty deletes the match."
+                    ),
                 },
                 "all": {
                     "type": "boolean",
                     "description": (
-                        "Replace EVERY occurrence. Default false: only the "
-                        "first one."
+                        "Single replacement: replace EVERY occurrence. "
+                        "Default false: only the first one. In a batch, set "
+                        "`all` on each item."
                     ),
                     "default": False,
                 },
                 "count": {
                     "type": "integer",
                     "description": (
-                        "Replace at most N occurrences (alternative to "
-                        "all). Default: 1."
+                        "Single replacement: replace at most N occurrences "
+                        "(alternative to `all`). Default: 1. In a batch, set "
+                        "`count` on each item."
                     ),
                 },
                 "dry_run": {
                     "type": "boolean",
                     "description": (
                         "Reports how many replacements it would make WITHOUT "
-                        "writing. Useful before changing anything."
+                        "writing. Useful before changing anything; it works "
+                        "for a batch too."
                     ),
                     "default": False,
                 },
+                "modifiche": {
+                    "type": "array",
+                    "description": (
+                        "Batch: replacements to apply in order. Each item is "
+                        "{trova, sostituisci, all?, count?}. Use INSTEAD of "
+                        "`trova`/`sostituisci`. All patterns must match; if "
+                        "one is missing, nothing is written. One checkpoint "
+                        "and one write for the whole batch."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "trova": {
+                                "type": "string",
+                                "description": (
+                                    "Exact string to find, at this point in "
+                                    "the sequence."
+                                ),
+                            },
+                            "sostituisci": {
+                                "type": "string",
+                                "description": (
+                                    "String that replaces it. Empty deletes "
+                                    "the match."
+                                ),
+                            },
+                            "all": {
+                                "type": "boolean",
+                                "description": (
+                                    "Replace every occurrence of this item. "
+                                    "Default false: only the first."
+                                ),
+                                "default": False,
+                            },
+                            "count": {
+                                "type": "integer",
+                                "description": (
+                                    "Replace at most N occurrences of this "
+                                    "item (alternative to `all`). Default: 1."
+                                ),
+                            },
+                        },
+                        "required": ["trova", "sostituisci"],
+                    },
+                },
             },
-            "required": ["path", "trova", "sostituisci"],
+            "required": ["path"],
         },
         handler=handler,
     )
