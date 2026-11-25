@@ -151,7 +151,8 @@ check("il secondo lettore e' vivo", "AVVIATO" in s2, s2[:160])
 w1 = tool.handler(azione="scrivi", id=sid2, testo="senza-capo",
                   a_capo=False) if sid2 else ""
 check("scrive senza chiudere la riga",
-      "SCRITTO" in w1 and "senza a capo" in w1, w1[:200])
+      "SCRITTO" in w1 and "senza a capo" in w1
+      and "10 caratteri" in w1, w1[:200])
 time.sleep(0.3)
 prima = tool.handler(azione="leggi", id=sid2) if sid2 else ""
 check("senza a capo il processo aspetta ancora",
@@ -167,7 +168,7 @@ for _ in range(150):
     if "letto:" in letto2:
         break
     time.sleep(0.1)
-if "letto:" not in letto2:
+if "letto:" not in letto2 or "senza-capo" not in letto2:
     print(f"  DEBUG w1={w1!r} prima={prima!r} w2={w2!r} "
           f"letto2={letto2!r}")
 check("il processo ha letto la riga completa",
