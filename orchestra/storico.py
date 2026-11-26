@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS sessioni (
     modello     TEXT    NOT NULL DEFAULT '',
     provider    TEXT    NOT NULL DEFAULT '',
     bot         TEXT    NOT NULL DEFAULT '',
+    -- Il progetto a cui appartiene la conversazione. Vuoto = nessun
+    -- progetto (le chat nate prima di questa colonna restano qui, e
+    -- valgono per chiunque invece di sparire dal filtro).
+    progetto    TEXT    NOT NULL DEFAULT '',
     creata      REAL    NOT NULL,
     aggiornata  REAL    NOT NULL
 );
@@ -132,6 +136,21 @@ class Storico:
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
+            # Migrazione: le conversazioni ora sanno a che progetto
+            # appartengono. Le righe gia' scritte restano con '', e
+            # vengono trattate come "senza progetto": visibili col
+            # progetto attivo invece di sparire dalla cronologia.
+            try:
+                self._conn.execute(
+                    "ALTER TABLE sessioni ADD COLUMN progetto TEXT "
+                    "NOT NULL DEFAULT ''")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessioni_progetto"
+                " ON sessioni(progetto)")
+            self._conn.commit()
 
     def chiudi(self) -> None:
         with self._lock:
@@ -140,17 +159,35 @@ class Storico:
     # -- sessioni ----------------------------------------------------------
 
     def nuova_sessione(self, modello: str = "", provider: str = "",
-                       titolo: str = "", bot: str = "") -> int:
+                       titolo: str = "", bot: str = "",
+                       progetto: str = "") -> int:
+        progetto = (progetto or "").strip()
         ora = time.time()
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO sessioni (titolo, modello, provider, bot,"
-                " creata, aggiornata) VALUES (?, ?, ?, ?, ?, ?)",
-                (titolo, modello, provider, bot, ora, ora))
+                " progetto, creata, aggiornata)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (titolo, modello, provider, bot, progetto, ora, ora))
             self._conn.commit()
             return int(cur.lastrowid)
 
-    def elenco(self, limite: int = 100, bot: str | None = None) -> list[dict[str, Any]]:
+    def imposta_progetto(self, sessione_id: int, progetto: str) -> bool:
+        """Lega una conversazione al progetto indicato.
+
+        Si usa alla creazione (col progetto attivo), quando l'utente
+        cambia progetto a chat aperta, e aprendo una conversazione che
+        un progetto ce l'aveva gia'.
+        """
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE sessioni SET progetto = ? WHERE id = ?",
+                ((progetto or "").strip(), sessione_id))
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def elenco(self, limite: int = 100, bot: str | None = None,
+               progetto: str = "") -> list[dict[str, Any]]:
         """Le sessioni più recenti, col conto dei messaggi.
 
         Il conto serve a distinguere una chat vuota — aperta per sbaglio
@@ -162,15 +199,27 @@ class Storico:
         che serve quando il bot si riapre). La distinzione conta: la
         cronologia dell'utente non deve sparire perche' un bot ha una
         chat sua.
+
+        `progetto` filtra per progetto. Vuoto = nessun filtro (tutte).
+        Quando c'e', entrano anche le conversazioni SENZA progetto:
+        sono quelle nate prima di questa colonna, e nasconderle su ogni
+        progetto sarebbe far sparire la cronologia di chi aggiorna.
         """
-        where = "WHERE s.bot = ?" if bot is not None else ""
-        parametri: tuple[Any, ...] = ((bot, limite) if bot is not None
-                                      else (limite,))
+        criteri: list[str] = []
+        parametri: list[Any] = []
+        if bot is not None:
+            criteri.append("s.bot = ?")
+            parametri.append(bot)
+        if progetto:
+            criteri.append("(LOWER(s.progetto) = LOWER(?) OR s.progetto = '')")
+            parametri.append(progetto.strip())
+        where = ("WHERE " + " AND ".join(criteri)) if criteri else ""
+        parametri.append(limite)
         with self._lock:
             righe = self._conn.execute(
                 f"""
                 SELECT s.id, s.titolo, s.modello, s.provider, s.bot,
-                       s.creata, s.aggiornata,
+                       s.progetto, s.creata, s.aggiornata,
                        (SELECT COUNT(*) FROM messaggi m
                          WHERE m.sessione_id = s.id AND m.ruolo IN ('user','assistant'))
                          AS n_messaggi
@@ -178,7 +227,7 @@ class Storico:
                   {where}
                  ORDER BY s.aggiornata DESC
                  LIMIT ?
-                """, parametri).fetchall()
+                """, tuple(parametri)).fetchall()
         return [dict(r) for r in righe]
 
     def sessione(self, sessione_id: int) -> dict[str, Any] | None:
@@ -289,7 +338,8 @@ class Storico:
             fuori.append(d)
         return fuori
 
-    def cerca(self, query: str, limite: int = 20) -> list[dict[str, Any]]:
+    def cerca(self, query: str, limite: int = 20,
+              progetto: str = "") -> list[dict[str, Any]]:
         """Cerca nel contenuto delle conversazioni passate.
 
         FTS5, non sottostringa. Ma il risultato non è la riga nuda: un
@@ -306,6 +356,10 @@ class Storico:
         Le parole si quotano: una query con un apostrofo fa fallire la
         sintassi MATCH, e la ricerca tornerebbe vuota invece di dire che
         non ha trovato niente.
+
+        `progetto` restringe ai fatti di quel progetto, e include le
+        conversazioni senza progetto (legacy): un filtro che fa sparire
+        il passato non e' un filtro, e' una perdita.
         """
         q = (query or "").strip()
         if not q:
@@ -316,29 +370,39 @@ class Storico:
         if not parole:
             return []
         frase = " AND ".join(f'"{p}"' for p in parole)
+        filtro = (" AND (LOWER(s.progetto) = LOWER(?) OR s.progetto = '')"
+                  if progetto else "")
+        tetto = max(1, min(int(limite or 20), 50))
         with self._lock:
             try:
+                parametri: tuple[Any, ...] = ((frase, progetto.strip(), tetto)
+                                              if progetto else (frase, tetto))
                 righe = self._conn.execute(
                     "SELECT m.id AS msg_id, m.ruolo, m.contenuto,"
                     "       m.creata, s.id AS sessione_id, s.titolo,"
-                    "       s.aggiornata, s.modello"
+                    "       s.aggiornata, s.modello, s.progetto"
                     " FROM messaggi_fts"
                     " JOIN messaggi m ON m.id = messaggi_fts.rowid"
                     " JOIN sessioni s ON s.id = m.sessione_id"
                     " WHERE messaggi_fts MATCH ?"
+                    + filtro +
                     " ORDER BY rank, m.creata DESC LIMIT ?",
-                    (frase, max(1, min(int(limite or 20), 50)))).fetchall()
+                    parametri).fetchall()
             except Exception:
                 # indice FTS mancante o DB vecchio: si torna al filtro su
                 # contenuto, che è quello che faceva prima. Meglio lento che
                 # muto.
+                parametri = ((f"%{q.lower()}%", progetto.strip(), tetto)
+                             if progetto else (f"%{q.lower()}%", tetto))
                 righe = self._conn.execute(
                     "SELECT m.id AS msg_id, m.ruolo, m.contenuto, m.creata,"
-                    "       s.id AS sessione_id, s.titolo, s.aggiornata, s.modello"
+                    "       s.id AS sessione_id, s.titolo, s.aggiornata,"
+                    "       s.modello, s.progetto"
                     " FROM messaggi m JOIN sessioni s ON s.id = m.sessione_id"
                     " WHERE LOWER(m.contenuto) LIKE ?"
+                    + filtro +
                     " ORDER BY m.creata DESC LIMIT ?",
-                    (f"%{q.lower()}%", max(1, min(int(limite or 20), 50)))).fetchall()
+                    parametri).fetchall()
         fuori = []
         for r in righe:
             d = dict(r)

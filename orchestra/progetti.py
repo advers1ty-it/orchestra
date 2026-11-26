@@ -424,6 +424,65 @@ def _root_progetto() -> str:
     return getattr(_LOCALE, "nome", "") or ""
 
 
+def per_percorso(percorso: str) -> tuple[str, str]:
+    """(nome, percorso) del progetto registrato che contiene `percorso`.
+
+    Serve a chi parte da una cartella e non da un nome: la CLI, che
+    non ha il selettore della UI, e ogni thread che ha impostato solo
+    la root. Vince il percorso piu' lungo, cosi' un progetto dentro un
+    altro non viene oscurato dal genitore. Il confronto e' case-
+    insensitive e sul separatore di sistema: su Windows D:\\Lavori e
+    d:\\lavori sono la stessa cartella.
+    """
+    try:
+        base = os.path.abspath(os.path.expanduser(percorso or ""))
+    except (OSError, ValueError):
+        return "", ""
+    if not base:
+        return "", ""
+    migliore = ("", "")
+    lunghezza = -1
+    for p in progetti_noti():
+        nome = str(p.get("nome") or "").strip()
+        radice = str(p.get("percorso") or "").strip()
+        if not nome or not radice:
+            continue
+        try:
+            radice = os.path.abspath(os.path.expanduser(radice))
+        except (OSError, ValueError):
+            continue
+        dentro = os.path.normcase(base)
+        fuori = os.path.normcase(radice)
+        if dentro == fuori or dentro.startswith(fuori + os.sep):
+            if len(fuori) > lunghezza:
+                lunghezza = len(fuori)
+                migliore = (nome, radice)
+    return migliore
+
+
+def progetto_attivo() -> str:
+    """Il nome del progetto attivo, anche se il thread ha solo la root.
+
+    Il nome sta in un `threading.local` che la UI imposta nel thread del
+    turno. La CLI, e i thread che impostano solo la cartella, non lo
+    fanno: qui si ricava dal percorso in uso, cercando un progetto
+    registrato che lo contiene. Senza questo, `progetti` rispondeva
+    "nessun progetto attivo" proprio mentre si lavorava dentro un
+    progetto, e `nota` si rifiutava.
+    """
+    nome = _root_progetto()
+    if nome:
+        return nome
+    try:
+        from .tools._guard import _root
+
+        percorso = str(_root())
+    except Exception:  # noqa: BLE001
+        return ""
+    nome, _ = per_percorso(percorso)
+    return nome
+
+
 # --------------------------------------------------------------------------
 # Il riconoscimento dell'intento
 

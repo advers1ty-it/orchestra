@@ -162,6 +162,20 @@ SUITES = [
     # Le istruzioni del repository (AGENTS.md, CLAUDE.md): senza, l'agente
     # usa i comandi che conosce invece di quelli del progetto.
     ("progetto", "test_istruzioni_progetto.py", True),
+    # La scheda del progetto nel prompt: percorso, nota, alias, data e
+    # ora, ramo git con le modifiche, piani gia' scritti. Senza, un
+    # progetto riaperto riparte dalla scoperta.
+    ("progetto-prompt", "test_progetto_prompt.py", True),
+    # Il tool progetti: elenco, scheda dell'attivo, nota. Non cambia il
+    # progetto attivo, perche' quello sposta la cartella in cui si
+    # scrive: il confine resta alla UI e al riconoscimento.
+    ("tool-progetti", "test_tool_progetti.py", True),
+    # Le conversazioni legate al progetto: colonna con migrazione,
+    # creazione, cambio progetto, riapertura e filtro di elenco/ricerca.
+    ("storico-progetto", "test_storico_progetto.py", True),
+    # Il progetto attivo nella CLI: senza nome nel thread, `progetti`
+    # rispondeva "nessun progetto" mentre si scriveva in un progetto.
+    ("progetti-cli", "test_progetti_cli.py", True),
     # L'undo delle scritture: senza, un file sovrascritto per errore e'
     # perso per chi non usa git.
     ("annulla", "test_annulla.py", True),

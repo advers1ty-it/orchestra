@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import time
 import traceback
 from datetime import datetime
@@ -50,6 +51,32 @@ ENV_PATH = os.path.join(HERE, ".env")
 # ogni turno.
 MAX_FILE_RECENTI = 8
 MAX_CARATTERI_FILE_RECENTI = 600
+
+# Quanti piani entrano nel blocco, e quanto puo' essere lunga la nota del
+# progetto. Il blocco si paga a ogni turno: una nota da 5.000 caratteri
+# non e' contesto, e' un secondo prompt.
+MAX_PIANI_PROMPT = 3
+MAX_CARATTERI_NOTA = 240
+MAX_CARATTERI_ALIAS = 140
+
+_GIORNI = ("lunedi'", "martedi'", "mercoledi'", "giovedi'",
+           "venerdi'", "sabato", "domenica")
+_MESI = ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+         "luglio", "agosto", "settembre", "ottobre", "novembre",
+         "dicembre")
+
+
+def _taglia_corto(testo: str, tetto: int) -> str:
+    """Una riga sola, troncata col segno che lo dichiara.
+
+    La nota e gli alias arrivano da un campo libero: possono contenere
+    newline, tabulazioni o 5.000 caratteri. Nel prompt diventano una
+    riga sola, e il taglio si vede invece di sembrare testo completo.
+    """
+    pulito = " ".join((testo or "").split())
+    if len(pulito) <= tetto:
+        return pulito
+    return pulito[:tetto].rstrip() + "…"
 
 
 @dataclass
@@ -626,6 +653,14 @@ class Agent:
         possa cambiare, e l'utente che dice "adesso passiamo
         all'app parrucchieri" riceve un "non posso".
 
+        Porta anche la scheda del progetto: cartella, nota, alias,
+        giorno e ora, ramo git col numero di modifiche, e gli ultimi
+        piani in `plans/`. Sono le cose che un agente chiederebbe prima
+        di toccare un file: senza, un progetto riaperto dopo giorni
+        riparte dalla scoperta, e "ieri" o "sul ramo di prova" sono
+        parole che non puo' verificare. La nota e i piani si troncano
+        corti: questo blocco si paga a ogni turno.
+
         E dice dove si e' gia' lavorato: gli ultimi file toccati nel
         progetto, presi da `progetti.file_toccati`. Senza, l'agente che
         riapre un progetto riparte da zero e cerca file che conosceva
@@ -653,6 +688,8 @@ class Agent:
             f"stessa cosa. I fatti senza progetto valgono per "
             f"ogni progetto, e tornano insieme a quelli giusti.",
         ]
+        righe.append(self._riga_adesso())
+        righe.extend(self._righe_scheda_progetto(progetto))
         recenti = self._file_recenti_progetto(progetto)
         riga_recenti = self._riga_file_recenti(recenti)
         if riga_recenti:
@@ -724,6 +761,157 @@ class Agent:
                 + ", ".join(pezzi)
                 + ". Non e' tutto: per il resto usa `list_dir` e "
                   "`find_files`.")
+
+    def _riga_adesso(self) -> str:
+        """La data e l'ora locali, in una riga.
+
+        Un agente senza l'ora del mondo non sa cosa vuol dire "oggi",
+        "ieri" o "questa settimana", e non puo' datare quello che
+        scrive. Non sta nel prefisso stabile: la data cambia, e un
+        prefisso che cambia ogni giorno non colpisce mai la cache.
+        """
+        adesso = datetime.now()
+        return (f"Siamo {_GIORNI[adesso.weekday()]} {adesso.day} "
+                f"{_MESI[adesso.month - 1]} {adesso.year}, "
+                f"ore {adesso:%H:%M}.")
+
+    def _righe_scheda_progetto(self, progetto: str) -> list[str]:
+        """Percorso, nota, alias, stato git e piani del progetto.
+
+        Ogni riga e' opzionale e indipendente: un progetto senza nota,
+        senza git o senza piani non deve perdere le altre. Le eccezioni
+        sono silenziose per la stessa ragione del resto del blocco — un
+        prompt senza una riga resta un prompt valido, un'eccezione
+        fermerebbe il turno.
+        """
+        try:
+            from . import progetti as _pr
+
+            base = _pr.percorso_di(progetto)
+        except Exception:  # noqa: BLE001 - senza percorso resta il nome
+            base = ""
+        righe: list[str] = []
+        if base:
+            righe.append(f"Cartella del progetto: `{base}`.")
+        for riga in (self._nota_progetto(progetto),
+                     self._alias_progetto(progetto),
+                     self._stato_git(base),
+                     self._piani_progetto(base)):
+            if riga:
+                righe.append(riga)
+        return righe
+
+    def _nota_progetto(self, progetto: str) -> str:
+        """La nota scritta a mano sul progetto, troncata corta.
+
+        E' dove finiscono le cose che valgono per quel lavoro e non per
+        altri: il cliente, la consegna, il comando di test. Senza, il
+        modello le scopre solo se l'utente le ripete a ogni sessione.
+        """
+        try:
+            from . import progetti as _pr
+
+            riga = _pr.per_nome(progetto) or {}
+        except Exception:  # noqa: BLE001
+            return ""
+        nota = _taglia_corto(str(riga.get("note") or ""), MAX_CARATTERI_NOTA)
+        return f"Nota del progetto: {nota}" if nota else ""
+
+    def _alias_progetto(self, progetto: str) -> str:
+        """Gli altri nomi del progetto, entro un tetto di caratteri."""
+        try:
+            from . import progetti as _pr
+
+            riga = _pr.per_nome(progetto) or {}
+            alias = _pr.alias_di(riga)
+        except Exception:  # noqa: BLE001
+            return ""
+        if not alias:
+            return ""
+        pezzi: list[str] = []
+        usati = 0
+        for nome in alias:
+            costo = len(nome) + (2 if pezzi else 0)
+            if usati + costo > MAX_CARATTERI_ALIAS:
+                break
+            pezzi.append(nome)
+            usati += costo
+        if not pezzi:
+            return ""
+        coda = "…" if len(pezzi) < len(alias) else ""
+        return "Chiamato anche: " + ", ".join(pezzi) + coda + "."
+
+    def _stato_git(self, base: str) -> str:
+        """Ramo e numero di file con modifiche non committate.
+
+        `git status --porcelain -b` in una chiamata sola: due comandi
+        (rev-parse + status) sono due processi a ogni turno. Se la
+        cartella non e' un repository, o git non c'e', la riga sparisce:
+        non e' un errore, e' un progetto senza git.
+        """
+        if not base or not os.path.isdir(base):
+            return ""
+        opzioni: dict[str, Any] = {}
+        if os.name == "nt":
+            opzioni["creationflags"] = getattr(subprocess,
+                                               "CREATE_NO_WINDOW", 0)
+        try:
+            esito = subprocess.run(
+                ["git", "-C", base, "status", "--porcelain=v1", "-b"],
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=2, **opzioni)
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        if esito.returncode != 0:
+            return ""
+        righe = [r for r in (esito.stdout or "").splitlines() if r.strip()]
+        if not righe or not righe[0].startswith("## "):
+            return ""
+        testa = righe[0][3:].strip()
+        if testa.startswith("No commits yet on "):
+            ramo = testa[len("No commits yet on "):].strip()
+        else:
+            ramo = testa.split("...", 1)[0].strip()
+        if not ramo:
+            ramo = "HEAD staccato"
+        modifiche = len(righe) - 1
+        if modifiche == 0:
+            return f"Git: ramo `{ramo}`, nessuna modifica non committata."
+        if modifiche == 1:
+            return f"Git: ramo `{ramo}`, 1 file con modifiche non committate."
+        return (f"Git: ramo `{ramo}`, {modifiche} file con modifiche "
+                f"non committate.")
+
+    def _piani_progetto(self, base: str) -> str:
+        """Gli ultimi piani presenti in `plans/`, per nome e basta.
+
+        Un piano e' una traccia di quello che si e' deciso: senza il suo
+        nome nel prompt, la sessione che riapre il progetto non sa che
+        esiste, e ricomincia dalla scoperta. Si mostrano i piu' recenti,
+        non tutti: `plans/` puo' crescere per mesi.
+        """
+        if not base:
+            return ""
+        cartella = os.path.join(base, "plans")
+        try:
+            nomi = [n for n in os.listdir(cartella)
+                    if n.lower().endswith(".md")]
+        except OSError:
+            return ""
+        if not nomi:
+            return ""
+
+        def quando(nome: str) -> float:
+            try:
+                return os.path.getmtime(os.path.join(cartella, nome))
+            except OSError:
+                return 0.0
+
+        nomi.sort(key=quando, reverse=True)
+        scelti = nomi[:MAX_PIANI_PROMPT]
+        return ("Ultimi piani in `plans/`: "
+                + ", ".join(f"`{n}`" for n in scelti)
+                + ". Leggili con `read_file` prima di ripartire da zero.")
 
     def _blocco_istruzioni_progetto(self) -> str:
         """Le istruzioni del progetto attivo (`AGENTS.md`, `CLAUDE.md`, ...).

@@ -272,7 +272,7 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <p>Un progetto non è un'etichetta: è la <b>cartella in cui l'agente scrive</b>, e quindi il confine di sicurezza. Il selettore «Attivo» nella barra laterale cambia subito la cartella; il pulsante <b>Gestione</b> serve ad aggiungerne altri (nome e percorso) o a toglierli.</p>
 <ul>
   <li>All'avvio Orchestra riconosce il progetto dalla cartella da cui è partita.</li>
-  <li>Scegliere un progetto cambia anche quali conversazioni e quali fatti di memoria vedi: ogni progetto ha i suoi.</li>
+  <li>Ogni conversazione nasce col progetto attivo e lo ricorda: riaprendola torna quel progetto, e l'elenco e la ricerca mostrano quelle del progetto attivo, più quelle senza progetto (le chat nate prima di questo legame).</li>
   <li>Se l'agente riconosce il nome di un altro progetto in una frase, lo propone: il menu si aggiorna, non viene sovrascritto di nascosto.</li>
 </ul>
 
@@ -402,7 +402,7 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <section id="memoria">
 <h2>Memoria e cronologia</h2>
 <ul>
-  <li><b>Cronologia</b>: tutte le conversazioni, con la ricerca. Si aprono e si riprendono, e con un bot attivo vedi quelle di quel bot.</li>
+  <li><b>Cronologia</b>: le conversazioni del progetto attivo, con la ricerca; quelle senza progetto restano visibili. Si aprono e si riprendono, e con un bot attivo vedi quelle di quel bot.</li>
   <li><b>Memoria</b>: i fatti che aggiungi tu (barra laterale, campo «Fatto da ricordare») o che l'agente salva. Non vengono ficcati nel prompt: l'agente li cerca quando servono, così non occupano spazio a ogni messaggio.</li>
   <li><b>Tutti i fatti</b> apre l'elenco completo: si cercano, si correggono, si tolgono.</li>
   <li>Una manutenzione automatica evita i doppioni e potatura i fatti mai usati; non tocca quelli che usi.</li>

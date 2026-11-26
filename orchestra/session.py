@@ -436,6 +436,9 @@ class Session:
                 # di un'altra conversazione — era il motivo per cui aprire
                 # una chat dalla cronologia non cambiava niente a schermo.
                 "sessione_id": self._sessione_id,
+                # Il progetto della conversazione: aprendone una vecchia,
+                # la UI deve poter aggiornare il selettore senza dedurlo.
+                "progetto": self.progetto,
                 "busy": self._busy,
                 "iterations": st.iterations,
                 "total_tokens": st.total_tokens,
@@ -510,6 +513,14 @@ class Session:
                 self.agent._aggiorna_prompt()
             except Exception:
                 pass
+        # La conversazione aperta ricorda il progetto: senza questa riga,
+        # cambiare progetto a chat aperta lasciava la riga sul vecchio, e
+        # riaprendola sarebbe tornata la cartella sbagliata.
+        try:
+            if self._sessione_id is not None:
+                storico().imposta_progetto(self._sessione_id, progetto)
+        except Exception:  # noqa: BLE001 - lo storico non ferma il turno
+            pass
         return progetto
 
     def _prepara_root(self) -> None:
@@ -1520,7 +1531,8 @@ class Session:
         """Crea una riga nello storico e ne torna l'id."""
         try:
             return storico().nuova_sessione(modello=self.modello_in_uso(),
-                                            bot=self.bot)
+                                            bot=self.bot,
+                                            progetto=self.progetto)
         except Exception:
             return -1
 
@@ -1535,6 +1547,7 @@ class Session:
             raise RuntimeError("sessione occupata: attendi o annulla prima")
         try:
             messaggi = storico().messaggi(sessione_id)
+            riga = storico().sessione(sessione_id) or {}
         except Exception:
             return False
         with self._lock:
@@ -1551,6 +1564,33 @@ class Session:
                                                name=m.get("nome"),
                                                reasoning=m.get("ragionamento", "") or ""))
             self.agent.state.messages = ricostruiti
+        # Il progetto della conversazione torna con lei. Se la riga non ne
+        # ha uno (chat nate prima della colonna) si adotta quello attivo:
+        # continuare a scrivere in una chat "senza progetto" mentre si
+        # lavora in un progetto e' il modo per non ritrovarla piu'.
+        salvato = str(riga.get("progetto") or "").strip()
+        cambiato = False
+        if salvato and salvato.lower() != (self.progetto or "").lower():
+            self.imposta_progetto(salvato)
+            cambiato = True
+        elif not salvato and self.progetto:
+            try:
+                storico().imposta_progetto(sessione_id, self.progetto)
+            except Exception:  # noqa: BLE001
+                pass
+        if cambiato:
+            percorso = ""
+            try:
+                from . import progetti as _pr
+
+                percorso = _pr.percorso_di(salvato)
+            except Exception:  # noqa: BLE001
+                pass
+            self.bridge.emit("progetto_cambiato", {
+                "progetto": salvato,
+                "percorso": percorso,
+                "motivo": "conversazione riaperta",
+            })
         self.bridge.emit("sessione_caricata", {"id": sessione_id})
         return True
 

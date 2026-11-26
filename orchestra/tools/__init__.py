@@ -64,6 +64,7 @@ from .run_shell import tool_run_shell  # noqa: E402
 from .processo import tool_processo  # noqa: E402
 from .calculate import tool_calculate  # noqa: E402
 from .memoria import tool_memoria  # noqa: E402
+from .progetti import tool_progetti  # noqa: E402
 from .web import tool_web_cerca, tool_web_leggi  # noqa: E402
 from .scarica import tool_scarica  # noqa: E402
 from .storico import tool_storico_cerca  # noqa: E402
@@ -367,7 +368,7 @@ for _nomi_profilo in _PROFILI.values():
     _nomi_profilo.update({"search_text", "find_files", "ask_user",
                           "proponi_piano", "analisi_python", "run_tests",
                           "email", "telegram_invia", "calendario",
-                          "rubrica", "office"})
+                          "rubrica", "office", "progetti"})
 del _nomi_profilo
 
 
@@ -514,7 +515,8 @@ def default_registry() -> ToolRegistry:
                  tool_analisi_python(), tool_run_tests(),
                  tool_ask_user(), tool_proponi_piano(),
                  tool_run_shell(), tool_processo(), tool_calculate(),
-                 tool_memoria(), tool_web_cerca(), tool_web_leggi(),
+                 tool_memoria(), tool_progetti(),
+                 tool_web_cerca(), tool_web_leggi(),
                  tool_scarica(),
                  tool_storico_cerca(), tool_cron(),
                  tool_skill_cerca(), tool_skill_leggi(),

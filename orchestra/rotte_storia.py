@@ -123,6 +123,25 @@ class RotteStoria:
             return
         self._json(t)
 
+    def _progetto_filtro(self, body: dict[str, Any]) -> str:
+        """Il progetto su cui filtrare cronologia e ricerca.
+
+        Default: il progetto attivo. Un `progetto` esplicito nel body
+        vince; "tutti" (o "*") toglie il filtro, per la cronologia
+        completa. Le conversazioni senza progetto restano visibili su
+        ogni progetto: sono quelle nate prima della colonna.
+        """
+        esplicito = ""
+        if isinstance(body, dict):
+            esplicito = str(body.get("progetto") or "").strip()
+        if esplicito:
+            return "" if esplicito.lower() in ("tutti", "tutto", "*") \
+                else esplicito
+        try:
+            return self.app._progetto_attivo() or ""
+        except Exception:  # noqa: BLE001
+            return ""
+
     @rotta("GET", "/api/storico")
     def _r_get_storico(self, path: str, body: dict[str, Any],
                        s: Any) -> None:
@@ -132,10 +151,12 @@ class RotteStoria:
         # sintomo era "il pannello resta vuoto", che non dice niente
         # del motivo.
         try:
-            elenco = (self.app._storico.elenco(limite=200)
+            progetto = self._progetto_filtro(body)
+            elenco = (self.app._storico.elenco(limite=200, progetto=progetto)
                       if self.app._storico else [])
             self._json({
                 "sessioni": elenco,
+                "progetto": progetto,
                 "attiva": getattr(self.app.session, "_sessione_id", None),
             })
         except Exception as e:
@@ -169,9 +190,12 @@ class RotteStoria:
         # Elenco delle conversazioni. Solo GET: la lista si scrive
         # da sola a fine turno, non c'e' niente da mandare.
         try:
-            elenco = self.app._storico.elenco(limite=200) if self.app._storico else []
+            progetto = self._progetto_filtro(body)
+            elenco = (self.app._storico.elenco(limite=200, progetto=progetto)
+                      if self.app._storico else [])
             self._json({
                 "sessioni": elenco,
+                "progetto": progetto,
                 "attiva": getattr(self.app.session, "_sessione_id", None),
             })
         except Exception as e:
@@ -185,17 +209,21 @@ class RotteStoria:
         # "sto cercando" da "sto guardando la lista".
         storico_db = self.app._storico
         q = (body.get("query") or "").strip()
-        fuori: dict[str, Any] = {"query": q, "risultati": [], "sessioni": []}
+        progetto = self._progetto_filtro(body)
+        fuori: dict[str, Any] = {"query": q, "progetto": progetto,
+                                 "risultati": [], "sessioni": []}
         if q and storico_db is not None:
             try:
                 fuori["risultati"] = storico_db.cerca(
-                    q, limite=int(body.get("limite") or 30))
+                    q, limite=int(body.get("limite") or 30),
+                    progetto=progetto)
             except Exception as e:
                 self._json({"error": str(e)}, 500)
                 return
         else:
             try:
-                fuori["sessioni"] = (storico_db.elenco(limite=200)
+                fuori["sessioni"] = (storico_db.elenco(limite=200,
+                                                        progetto=progetto)
                                      if storico_db else [])
                 fuori["attiva"] = getattr(self.app.session,
                                           "_sessione_id", None)
