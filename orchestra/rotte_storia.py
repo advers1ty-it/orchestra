@@ -303,7 +303,9 @@ class RotteStoria:
             if progetto:
                 tutti = m.fatti_per_progetto(progetto)
             else:
-                tutti = m.fatti() + m.importanti()
+                # `fatti()` restituisce gia' tutto, Importanti compresi:
+                # sommare `importanti()` li farebbe comparire due volte.
+                tutti = m.fatti()
             ql = q.lower()
             fuori["risultati"] = [
                 {"testo": f, "usi": 0, "importante": f in m.importanti(),
@@ -345,10 +347,11 @@ class RotteStoria:
         from .memoria import memoria
         vecchio = (body.get("vecchio") or "").strip()
         nuovo_testo = (body.get("nuovo") or "").strip()
+        progetto = (body.get("progetto") or "").strip()
         if not vecchio or not nuovo_testo:
             self._json({"error": "vecchio o nuovo vuoto"}, 400)
             return
-        fatto = memoria().modifica(vecchio, nuovo_testo)
+        fatto = memoria().modifica(vecchio, nuovo_testo, progetto=progetto)
         from .memoria import stato as stato_memoria
         self._json({"ok": True, "modificato": fatto, **stato_memoria()})
 
@@ -357,10 +360,11 @@ class RotteStoria:
                                 s: Any) -> None:
         from .memoria import memoria
         fatto = (body.get("fatto") or "").strip()
+        progetto = (body.get("progetto") or "").strip()
         if not fatto:
             self._json({"error": "fatto vuoto"}, 400)
             return
-        tolto = memoria().elimina(fatto)
+        tolto = memoria().elimina(fatto, progetto=progetto)
         from .memoria import stato as stato_memoria
         self._json({"ok": True, "tolto": tolto, **stato_memoria()})
 

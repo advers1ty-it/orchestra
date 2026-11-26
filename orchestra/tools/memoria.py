@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..memoria import _accetta_progetto
 from ..memoria import memoria as _memoria_file
 from ..memoria import sembra_regola
 from ..memoria_indice import indice_memoria
@@ -273,20 +274,40 @@ def tool_memoria() -> Tool:
                 + (f" [progetto: {progetto}]" if progetto else "")
                 + f": {fatto}")
 
-    def elimina(fatto: str = "") -> str:
-        """Toglie un fatto. Non chiede conferma: la memoria è dell'utente."""
+    def elimina(fatto: str = "", progetto: str = "") -> str:
+        """Toglie un fatto. Non chiede conferma: la memoria è dell'utente.
+
+        Il confronto e' sul fatto ESATTO: "gatto" non e' un fatto solo
+        perche' compare dentro "Il gatto si chiama Fido". `progetto`
+        restringe a un progetto; vuoto = tutti (e' il default storico, e
+        un agente che vuole togliere il fatto di un altro progetto non
+        deve restare prigioniero del progetto attivo).
+        """
         fatto = (fatto or "").strip()
+        progetto = (progetto or "").strip()
         if not fatto:
             return "Quale fatto? Serve il testo."
-        if memoria().elimina(fatto):
+        m = memoria()
+        if _accetta_progetto(m.elimina):
+            tolto = m.elimina(fatto, progetto=progetto)
+        else:
+            tolto = m.elimina(fatto)
+        if tolto:
             return f"Dimenticato: {fatto}"
         return f"Non l'ho trovato in memoria: {fatto}"
 
-    def modifica(vecchio: str = "", nuovo: str = "") -> str:
-        """Riscrive un fatto esistente, tenendo data e origine."""
+    def modifica(vecchio: str = "", nuovo: str = "",
+                 progetto: str = "") -> str:
+        """Riscrive un fatto esistente, tenendo progetto, data e origine."""
+        progetto = (progetto or "").strip()
         if not (vecchio or "").strip() or not (nuovo or "").strip():
             return "Servono il fatto da cambiare e il testo nuovo."
-        if memoria().modifica(vecchio, nuovo):
+        m = memoria()
+        if _accetta_progetto(m.modifica):
+            cambiato = m.modifica(vecchio, nuovo, progetto=progetto)
+        else:
+            cambiato = m.modifica(vecchio, nuovo)
+        if cambiato:
             return f"Modificato: {nuovo}"
         return f"Non l'ho trovato in memoria: {vecchio}"
 
@@ -349,9 +370,9 @@ def tool_memoria() -> Tool:
             if azione == "aggiungi":
                 return aggiungi(fatto, priorita, progetto)
             if azione == "elimina":
-                return elimina(query or fatto)
+                return elimina(query or fatto, progetto)
             if azione == "modifica":
-                return modifica(vecchio or fatto, nuovo or query)
+                return modifica(vecchio or fatto, nuovo or query, progetto)
             if azione == "elenca":
                 return elenca(limite)
             if azione == "ottimizza":

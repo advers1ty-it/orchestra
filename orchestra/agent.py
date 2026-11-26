@@ -44,6 +44,13 @@ from .types import (
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(HERE, ".env")
 
+# Quanti file gia' toccati entrano nel blocco del progetto, e quanto puo'
+# essere lungo l'elenco. E' una traccia, non un inventario: per il resto
+# il modello ha `list_dir` e `find_files`, e ogni percorso qui si paga a
+# ogni turno.
+MAX_FILE_RECENTI = 8
+MAX_CARATTERI_FILE_RECENTI = 600
+
 
 @dataclass
 class LoopConfig:
@@ -619,27 +626,142 @@ class Agent:
         possa cambiare, e l'utente che dice "adesso passiamo
         all'app parrucchieri" riceve un "non posso".
 
+        E dice dove si e' gia' lavorato: gli ultimi file toccati nel
+        progetto, presi da `progetti.file_toccati`. Senza, l'agente che
+        riapre un progetto riparte da zero e cerca file che conosceva
+        gia'. L'elenco e' corto e relativo alla cartella: e' una traccia,
+        non un inventario.
+
         Vuoto se non c'e' un progetto: e' il caso normale, e in quel
         caso il prompt resta identico carattere per carattere.
         """
         progetto = (getattr(self, "progetto", "") or "").strip()
         if not progetto:
             return ""
-        return (
-            f"\n\n---\n"
+        righe = [
+            "",
+            "",
+            "---",
             f"Stai lavorando al progetto «{progetto}», e i tuoi file "
             f"vanno in quella cartella: e' li' che il tool `read_file` "
             f"e `write_file` leggono e scrivono, senza che tu debba "
-            f"scrivere il percorso per esteso.\n"
+            f"scrivere il percorso per esteso.",
             f"I fatti di memoria che appartengono a questo progetto "
             f"sono marcati [progetto:{progetto}]. Il tool `memoria` "
             f"li cerca gia' col filtro giusto da solo: non devi "
             f"passare progetto='{progetto}' — ma se lo passi, e' la "
             f"stessa cosa. I fatti senza progetto valgono per "
-            f"ogni progetto, e tornano insieme a quelli giusti.\n"
-            f"Se l'utente cambia progetto, lo dice: e' il momento in "
-            f"cui la cartella e i fatti cambiano."
-        )
+            f"ogni progetto, e tornano insieme a quelli giusti.",
+        ]
+        recenti = self._file_recenti_progetto(progetto)
+        riga_recenti = self._riga_file_recenti(recenti)
+        if riga_recenti:
+            righe.append(riga_recenti)
+        righe.append("Se l'utente cambia progetto, lo dice: e' il momento "
+                     "in cui la cartella e i fatti cambiano.")
+        return "\n".join(righe)
+
+    def _file_recenti_progetto(self, progetto: str) -> list[str]:
+        """Gli ultimi file toccati nel progetto, deduplicati e relativi.
+
+        `progetti.file_toccati` registra ogni scrittura, quindi lo stesso
+        file compare molte volte: qui conta la posizione, e ripetere lo
+        stesso percorso nell'elenco non dice niente di piu'.
+
+        I percorsi si fanno relativi alla cartella del progetto: quello
+        che serve al modello e' `src/menu.ts`, non la radice assoluta che
+        occupa mezza riga. Se un percorso non sta dentro la cartella
+        (capita con progetti spostati) resta com'e'.
+        """
+        try:
+            from . import progetti as _pr
+
+            righe = _pr.file_toccati(progetto, limite=MAX_FILE_RECENTI * 3)
+        except Exception:  # noqa: BLE001 - senza traccia il prompt resta
+            return []
+        try:
+            base = _pr.percorso_di(progetto)
+        except Exception:  # noqa: BLE001
+            base = ""
+        fuori: list[str] = []
+        for riga in righe:
+            percorso = str(riga.get("path") or "").strip()
+            if not percorso:
+                continue
+            if base:
+                try:
+                    rel = os.path.relpath(percorso, base)
+                    if not rel.startswith(".."):
+                        percorso = rel
+                except (OSError, ValueError):  # drive diversi
+                    pass
+            percorso = percorso.replace("\\", "/")
+            if percorso not in fuori:
+                fuori.append(percorso)
+            if len(fuori) >= MAX_FILE_RECENTI:
+                break
+        return fuori
+
+    def _riga_file_recenti(self, percorsi: list[str]) -> str:
+        """L'elenco compatto, dentro il tetto di caratteri. '' se vuoto.
+
+        Il tetto e' sui caratteri e non solo sul numero: un percorso molto
+        lungo, da solo, puo' valere dieci. Si taglia in fondo, dove
+        stanno i file piu' vecchi.
+        """
+        pezzi: list[str] = []
+        usati = 0
+        for percorso in percorsi:
+            pezzo = f"`{percorso}`"
+            costo = len(pezzo) + (2 if pezzi else 0)
+            if usati + costo > MAX_CARATTERI_FILE_RECENTI:
+                break
+            pezzi.append(pezzo)
+            usati += costo
+        if not pezzi:
+            return ""
+        return ("Ultimi file toccati in questo progetto: "
+                + ", ".join(pezzi)
+                + ". Non e' tutto: per il resto usa `list_dir` e "
+                  "`find_files`.")
+
+    def _blocco_istruzioni_progetto(self) -> str:
+        """Le istruzioni del progetto attivo (`AGENTS.md`, `CLAUDE.md`, ...).
+
+        Sono per PROGETTO, non per processo: leggerle alla creazione della
+        sessione significava leggere la cartella di chi aveva creato la
+        sessione — spesso quella di installazione — e non cambiare mai piu'
+        quando l'utente attivava o cambiava progetto. Da qui invece si
+        risolvono dal NOME del progetto attivo, quindi entrano nel blocco
+        volatile e si rileggono a ogni aggiornamento del prompt (cambio
+        progetto compreso). Il prefisso stabile resta intatto, e la cache
+        dei provider continua a colpire.
+
+        Si risolve dal nome e non dalla root del thread perche'
+        `_aggiorna_prompt` gira anche nel thread della richiesta HTTP, dove
+        la root della sessione non e' impostata: li' `_root()` darebbe la
+        cartella sbagliata.
+
+        Vuoto se non c'e' un progetto o se non ha istruzioni: un blocco
+        vuoto e' contesto pagato per non dire niente.
+        """
+        nome = (getattr(self, "progetto", "") or "").strip()
+        if not nome:
+            return ""
+        try:
+            from . import progetti as _pr
+
+            percorso = _pr.percorso_di(nome)
+        except Exception:  # noqa: BLE001 - senza percorso niente istruzioni
+            return ""
+        if not percorso:
+            return ""
+        try:
+            from .istruzioni_progetto import blocco_prompt
+
+            return blocco_prompt(percorso)
+        except Exception:  # noqa: BLE001 - il prompt resta senza
+            return ""
 
     def _ha_i_tool_skill(self) -> bool:
         """I tool per leggere e cercare le skill sono attivi?
@@ -783,7 +905,15 @@ class Agent:
         except Exception:  # noqa: BLE001 - senza memoria il prompt resta
             memoria = ""
         canale = self._blocco_canale()
-        volatile = (blocco_piano + canale + memoria + extra + progetto).strip()
+        # Le istruzioni del repository sono per progetto e si rileggono qui:
+        # dopo un cambio progetto devono essere quelle nuove, e un file
+        # modificato a mano deve valere dal turno dopo senza riavviare.
+        try:
+            istruzioni = self._blocco_istruzioni_progetto()
+        except Exception:  # noqa: BLE001 - senza istruzioni il prompt resta
+            istruzioni = ""
+        volatile = (blocco_piano + canale + memoria + extra + progetto
+                    + istruzioni).strip()
         # PERCHE' DUE MESSAGGI DI SISTEMA E NON UNO.
         #
         # Il primo blocco (regole, persona, memoria) e' il prefisso che i

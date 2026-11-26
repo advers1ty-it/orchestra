@@ -54,6 +54,11 @@ OVERLAP_CARATTERI = 320
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS fatti (
     testo     TEXT PRIMARY KEY,
+    -- Il fatto INTERO da cui viene questa riga. Per un fatto corto e'
+    -- uguale a `testo`; per un fatto lungo ogni chunk porta qui il testo
+    -- completo, cosi' la ricerca e la UI possono mostrare il fatto e non
+    -- il pezzo di frase che ha fatto match.
+    padre     TEXT NOT NULL DEFAULT '',
     importante INTEGER NOT NULL DEFAULT 0,
     origine   TEXT NOT NULL DEFAULT '',
     creata    REAL NOT NULL,
@@ -95,6 +100,19 @@ END;
 def percorso_db() -> str:
     """Accanto allo storico, nella cartella dati di Orchestra."""
     return percorso("memoria_indice.db")
+
+
+def _filtro_progetto(colonna: str = "progetto") -> str:
+    """Il predicato SQL di un progetto: quello chiesto, PIU' i fatti senza.
+
+    Un fatto senza progetto vale per ogni progetto, ed e' quello che il
+    blocco del progetto dice al modello. Escluderlo qui lo renderebbe
+    invisibile proprio mentre si lavora a un progetto, cioe' quando
+    serve. Sta in una funzione sola perche' lo usano quattro query: se
+    ognuna se lo scrivesse per conto suo, la prima ritoccata sarebbe
+    quella che diverge.
+    """
+    return f"(LOWER({colonna}) = LOWER(?) OR {colonna} = '')"
 
 
 def chunk_testo(testo: str) -> list[str]:
@@ -142,11 +160,13 @@ class IndiceMemoria:
             # fallisce e l'indice non si apre.
             self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS fatti ("
-                "testo TEXT PRIMARY KEY, importante INTEGER NOT NULL DEFAULT 0, "
+                "testo TEXT PRIMARY KEY, padre TEXT NOT NULL DEFAULT '', "
+                "importante INTEGER NOT NULL DEFAULT 0, "
                 "origine TEXT NOT NULL DEFAULT '', creata REAL NOT NULL, "
                 "scade REAL, usi INTEGER NOT NULL DEFAULT 0)")
             self._conn.commit()
             self._migra_progetto()
+            self._migra_padre()
             self._conn.executescript(SCHEMA)
             self._conn.commit()
         self._ultimo_file = 0.0
@@ -170,6 +190,30 @@ class IndiceMemoria:
             if "progetto" not in colonne:
                 self._conn.execute(
                     "ALTER TABLE fatti ADD COLUMN progetto TEXT NOT NULL DEFAULT ''")
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _migra_padre(self) -> None:
+        """Aggiunge `padre` a un indice nato prima di lui.
+
+        Senza `padre` una riga d'indice non sa di essere un pezzo di un
+        fatto lungo, e finisce nella UI e nella ricerca come se fosse un
+        fatto intero — troncato a meta' frase. Le righe vecchie non hanno
+        un padre ricostruibile qui: si mettono come padre di se stesse,
+        e la prima ricostruzione dal file scrive quello vero.
+        """
+        try:
+            colonne = {r["name"] for r in
+                       self._conn.execute("PRAGMA table_info(fatti)").fetchall()}
+            if "padre" not in colonne:
+                self._conn.execute(
+                    "ALTER TABLE fatti ADD COLUMN padre TEXT NOT NULL DEFAULT ''")
+            # Anche se la colonna c'era, una migrazione interrotta puo'
+            # averla lasciata vuota: senza padre la riga si presenta
+            # come un fatto suo, quindi il ripiego e' sicuro.
+            self._conn.execute(
+                "UPDATE fatti SET padre = testo WHERE padre = ''")
+            self._conn.commit()
         except Exception:  # noqa: BLE001
             pass
 
@@ -226,78 +270,240 @@ class IndiceMemoria:
         file e' la verita'. Per farlo serve la riga intera, non il
         testo pulito — quindi qui si rilegge il file riga per riga, che
         e' quello che `ricostruisci` fa gia' in ogni caso.
+
+        E non si azzera quello che il file NON sa. `creata`, `usi` e
+        `scade` vivono solo nell'indice: reinserire ogni riga con
+        `creata = adesso` e `usi = 0` faceva sembrare nuovo ogni fatto un
+        istante prima di deciderne la potatura, e cosi' nessun fatto
+        vecchio veniva mai potato. La riga che c'era gia' si riusa tal
+        quale, per testo esatto (o per chunk, se il fatto e' lungo); per
+        un fatto nuovo la data si legge dal commento `<!-- ... -->`
+        della riga, non da `time.time()`.
+        """
+        metadati = self._metadati_file()
+        fatti = self._fatti_dal_file()
+
+        with self._lock:
+            esistenti = {r["testo"]: dict(r) for r in self._conn.execute(
+                "SELECT testo, origine, creata, scade, usi FROM fatti")}
+            self._conn.execute("DELETE FROM fatti")
+            adesso = time.time()
+            for testo, imp in fatti:
+                meta_file = metadati.get(testo, {})
+                self._inserisci(
+                    testo, importante=imp,
+                    origine=meta_file.get("origine", ""),
+                    creata=meta_file.get("creata") or adesso,
+                    progetto=meta_file.get("progetto", ""),
+                    meta=esistenti)
+            self._conn.commit()
+        return len(fatti)
+
+    def _fatti_dal_file(self) -> list[tuple[str, bool]]:
+        """(testo, importante) di ogni fatto del file, in ordine.
+
+        `fatti()` torna tutto, Importanti compresi: gli si tolgono quelli
+        per non scriverli due volte — la seconda scrittura vincerebbe con
+        `importante = 0` e la regola uscirebbe dal prompt.
+        """
+        importanti = self.sorgente.importanti()
+        gia_importanti = set(importanti)
+        altri = [f for f in self.sorgente.fatti() if f not in gia_importanti]
+        return ([(t, True) for t in importanti]
+                + [(t, False) for t in altri])
+
+    def _metadati_file(self) -> dict[str, dict[str, Any]]:
+        """Per ogni fatto del FILE: fonte, data di creazione, progetto.
+
+        Il file e' la verita' sui fatti, ma la data vive in un commento
+        HTML, la fonte in `_fonte_` e il progetto in `[progetto:...]`:
+        qui si leggono una volta sola, per la ricostruzione e per
+        l'istantanea della potatura.
+
+        Una data che non si parsa vale `None`, e chi chiama decide (di
+        solito: adesso). Meglio nessuna data che una data inventata:
+        una data sbagliata e' un fatto potato troppo presto.
         """
         from .memoria import _pulizia_riga
 
-        importanti = self.sorgente.importanti()
-        gia_importanti = set(importanti)
-        # `fatti()` torna tutto: si toglie chi è importante, o lo si
-        # riscrive con importante=0 più sotto
-        altri = [f for f in self.sorgente.fatti() if f not in gia_importanti]
-
-        # Il progetto di ogni fatto, letto dalla riga grezza.
-        progetti: dict[str, str] = {}
+        fuori: dict[str, dict[str, Any]] = {}
         try:
-            for riga in self.sorgente.leggi().splitlines():
-                r = riga.strip()
-                if not r.startswith("-"):
-                    continue
-                corpo = r.lstrip("-").strip()
-                testo_pulito, _fonte, prog = _pulizia_riga(corpo)
-                if testo_pulito and prog:
-                    progetti[testo_pulito] = prog
-        except Exception:  # noqa: BLE001
-            pass
+            testo = self.sorgente.leggi()
+        except Exception:  # noqa: BLE001 - senza file non c'e' memoria
+            return fuori
+        for riga in testo.splitlines():
+            r = riga.strip()
+            if not r.startswith("-"):
+                continue
+            corpo = r.lstrip("-").strip()
+            pulito, fonte, progetto = _pulizia_riga(corpo)
+            if not pulito:
+                continue
+            creata = None
+            m = re.search(r"<!--\s*(\d{4}-\d{2}-\d{2})\s*-->", corpo)
+            if m:
+                try:
+                    creata = time.mktime(
+                        time.strptime(m.group(1), "%Y-%m-%d"))
+                except ValueError:
+                    creata = None
+            fuori[pulito] = {"origine": fonte, "creata": creata,
+                             "progetto": progetto}
+        return fuori
 
+    def _istantanea(self) -> list[dict[str, Any]]:
+        """I fatti come sono adesso, senza scrivere niente nell'indice.
+
+        La potatura decide su `creata`, `usi` e `scade`, che vivono
+        nell'indice. Ricostruirlo per leggerli era una scrittura dentro
+        un `dry_run`, e prima azzerava proprio i numeri su cui la
+        decisione si basa: un'anteprima che cambia l'anteprima dopo.
+
+        Qui il file da' i fatti e l'indice da' solo quello che il file
+        non sa, per testo esatto o per chunk. `dry_run` e applicazione
+        leggono la stessa istantanea, cosi' l'anteprima dice davvero
+        quello che l'applicazione fara'.
+        """
         with self._lock:
-            self._conn.execute("DELETE FROM fatti")
-            adesso = time.time()
-            for testo in importanti:
-                self._inserisci(testo, importante=True, creata=adesso,
-                                progetto=progetti.get(testo, ""))
-            for testo in altri:
-                self._inserisci(testo, importante=False, creata=adesso,
-                                progetto=progetti.get(testo, ""))
-            self._conn.commit()
-        return len(importanti) + len(altri)
+            db = {r["testo"]: dict(r) for r in self._conn.execute(
+                "SELECT testo, origine, creata, scade, usi FROM fatti")}
+        metadati = self._metadati_file()
+
+        righe: list[dict[str, Any]] = []
+        visti: set[str] = set()
+        adesso = time.time()
+        for testo, imp in self._fatti_dal_file():
+            if testo in visti:
+                continue
+            visti.add(testo)
+            meta_file = metadati.get(testo, {})
+            riga = self._meta_indice(testo, db) or {
+                "testo": testo,
+                "origine": meta_file.get("origine", ""),
+                "creata": meta_file.get("creata") or adesso,
+                "scade": None,
+                "usi": 0,
+            }
+            riga["importante"] = 1 if imp else 0
+            riga["progetto"] = meta_file.get("progetto", "")
+            righe.append(riga)
+        return righe
+
+    def _meta_indice(self, testo: str,
+                     db: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+        """La riga d'indice di un fatto, o None se non c'e'.
+
+        Un fatto lungo non ha una riga col suo testo: ha i chunk. Si
+        generano con `chunk_testo`, la stessa funzione che li ha
+        indicizzati, invece di cercare per sottostringa — che su una
+        memoria grande sarebbe una scansione per ogni fatto.
+        """
+        trovate = [db[p] for p in chunk_testo(testo) if p in db]
+        if not trovate:
+            return None
+        prima = trovate[0]
+        # `usi` si somma sui chunk: l'overlap li fa contare due volte, ma
+        # alla potatura serve solo sapere se il fatto e' mai stato usato.
+        return {
+            "testo": testo,
+            "origine": prima["origine"],
+            "creata": min(float(r["creata"]) for r in trovate),
+            "scade": prima["scade"],
+            "usi": sum(int(r["usi"]) for r in trovate),
+        }
 
     def _inserisci(self, testo: str, *, importante: bool,
                    origine: str = "", creata: float | None = None,
                    scade_giorni: int | None = None,
-                   usi: int = 0, progetto: str = "") -> None:
+                   usi: int = 0, progetto: str = "",
+                   meta: dict[str, dict[str, Any]] | None = None) -> None:
         """Scrive nel file e poi nell'indice. Mai solo nell'indice.
 
         L'ordine conta: se il file è la verità, va scritto per primo. Se
         il DB prendesse la scrittura e il file no, al primo
         `ricostruisci_se_cambiato` il fatto sparisce — e non si capisce
         perché, perché in memoria c'era.
+
+        `meta` e' l'indice com'era prima di una ricostruzione: `creata`,
+        `usi`, `origine` e `scade` non stanno nel file, e perdere questi
+        quattro campi a ogni rilettura vorrebbe dire che nessun fatto e'
+        mai vecchio e nessuno e' mai stato usato — cioe' una potatura che
+        non pota mai niente. La riga che c'era si riusa tal quale.
         """
         for pezzo in chunk_testo(testo):
             scade = (time.time() + scade_giorni * 86400) if scade_giorni else None
+            creata_riga = creata or time.time()
+            origine_riga = origine
+            usi_riga = usi
+            vecchia = (meta or {}).get(pezzo)
+            if vecchia is not None:
+                creata_riga = vecchia["creata"] or creata_riga
+                origine_riga = vecchia["origine"] or origine_riga
+                scade = vecchia["scade"]
+                usi_riga = vecchia["usi"]
             self._conn.execute(
-                "INSERT INTO fatti (testo, importante, origine, creata, scade, usi,"
-                " progetto) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO fatti (testo, padre, importante, origine, creata,"
+                " scade, usi, progetto) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(testo) DO UPDATE SET"
+                "   padre = excluded.padre,"
                 "   importante = excluded.importante,"
                 "   scade = COALESCE(excluded.scade, fatti.scade),"
                 "   progetto = CASE WHEN excluded.progetto <> ''"
                 "                   THEN excluded.progetto ELSE fatti.progetto END",
-                (pezzo, 1 if importante else 0, origine,
-                 creata or time.time(), scade, usi, progetto))
+                (pezzo, testo, 1 if importante else 0, origine_riga,
+                 creata_riga, scade, usi_riga, progetto))
 
     # -- contratto comune --------------------------------------------------
 
     def fatti(self) -> list[str]:
+        """TUTTI i fatti interi, Importanti compresi.
+
+        Prima filtrava `importante = 0`. Sembrava una separazione pulita
+        — gli Importanti hanno `importanti()` — ma chi disegna la memoria
+        usa questa lista: il pannello e `stato()` mostravano solo meta'
+        archivio, mentre il prompt vedeva l'altra meta'. "Ho salvato una
+        regola e non c'e'" era il sintomo, e la regola c'era.
+
+        Il file e' la verita' dei fatti; nell'indice un fatto lungo e'
+        piu' chunk, e restituire le righe significava mostrare pezzi di
+        frase come se fossero fatti interi — e contarne tre per un fatto
+        solo. Dall'indice si prende solo la scadenza, che il file non ha.
+
+        Se il backend sotto non sa elencare i fatti, si torna alle righe
+        dell'indice: meglio un fatto a pezzi che nessun fatto.
+        """
         self.ricostruisci_se_cambiato()
-        return [r["testo"] for r in self._query(
-            "SELECT testo FROM fatti"
-            " WHERE importante = 0 AND (scade IS NULL OR scade > ?)",
-            (time.time(),))]
+        metodo = getattr(self.sorgente, "fatti", None)
+        if not callable(metodo) or self.sorgente is self:
+            return [r["testo"] for r in self._query(
+                "SELECT testo FROM fatti"
+                " WHERE scade IS NULL OR scade > ?",
+                (time.time(),))]
+        with self._lock:
+            scaduti = {r["testo"] for r in self._conn.execute(
+                "SELECT testo FROM fatti"
+                " WHERE scade IS NOT NULL AND scade <= ?", (time.time(),))}
+        fuori: list[str] = []
+        for fatto in metodo():
+            if any(pezzo in scaduti for pezzo in chunk_testo(fatto)):
+                continue
+            fuori.append(fatto)
+        return fuori
 
     def importanti(self) -> list[str]:
+        """Gli Importanti INTERI, dal file.
+
+        Gli importanti non scadono: se stanno nel prompt devono essere
+        veri sempre. E se sono lunghi l'indice li ha a chunk: le righe
+        davano pezzi di regola al posto della regola.
+        """
         self.ricostruisci_se_cambiato()
-        # gli importanti non scadono: se l'hai messo nel prompt è perché
-        # deve essere vero sempre
+        metodo = getattr(self.sorgente, "importanti", None)
+        if callable(metodo) and self.sorgente is not self:
+            try:
+                return list(metodo())
+            except Exception:  # noqa: BLE001 - backend senza l'elenco
+                pass
         return [r["testo"] for r in self._query(
             "SELECT testo FROM fatti WHERE importante = 1")]
 
@@ -354,51 +560,81 @@ class IndiceMemoria:
                 pass
         return nuovo
 
-    def elimina(self, fatto: str) -> bool:
-        """Toglie dal file e dall'indice."""
-        tolto = self.sorgente.elimina(fatto)
+    def _riallinea_indice(self) -> None:
+        """Rifa' l'indice dal file, tutto.
+
+        Dopo una cancellazione o una modifica non si tocca la riga per
+        testo: i fatti lunghi stanno nell'indice a CHUNK, e ogni pezzo e'
+        una riga a se'. `DELETE WHERE testo = ?` cancellava al massimo un
+        pezzo — spesso nessuno, perche' il testo del file non e' nessuno
+        dei chunk — e gli altri restavano cercabili: la ricerca
+        restituiva un fatto che il file non aveva piu'.
+
+        Ricostruire dal file e' l'unico modo che non dipende da come il
+        testo e' stato spezzato, ed e' anche il contratto del modulo: il
+        file e' la verita', l'indice uno specchio.
+
+        Se la ricostruzione fallisce si azzera `_ultimo_file`: il
+        prossimo accesso riprova, invece di fidarsi di un indice che non
+        e' stato aggiornato.
+        """
+        try:
+            self.ricostruisci()
+        except Exception:  # noqa: BLE001 - il file e' gia' la verita'
+            self._ultimo_file = 0.0
+            return
+        try:
+            self._ultimo_file = os.path.getmtime(self.sorgente.percorso)
+        except OSError:
+            self._ultimo_file = 0.0
+
+    def elimina(self, fatto: str, progetto: str = "") -> bool:
+        """Toglie dal file, poi riallinea l'indice dal file.
+
+        `progetto` arriva al backend a file solo se lo conosce: il
+        contratto di un backend sono `leggi`/`scrivi`/`elimina`.
+        """
+        from .memoria import _accetta_progetto
+
+        if _accetta_progetto(self.sorgente.elimina):
+            tolto = self.sorgente.elimina(fatto, progetto=progetto)
+        else:
+            tolto = self.sorgente.elimina(fatto)
         if tolto:
-            with self._lock:
-                self._conn.execute("DELETE FROM fatti WHERE testo = ?",
-                                   (fatto.strip(),))
-                self._conn.commit()
-            try:
-                self._ultimo_file = os.path.getmtime(self.sorgente.percorso)
-            except OSError:
-                pass
+            self._riallinea_indice()
         return tolto
 
-    def modifica(self, vecchio: str, nuovo: str) -> bool:
-        """Riscrive un fatto nel file e aggiorna l'indice.
+    def modifica(self, vecchio: str, nuovo: str, progetto: str = "") -> bool:
+        """Riscrive un fatto nel file e riallinea l'indice dal file.
 
-        Il file resta la verità: si delega a `Memoria.modifica`, poi si
-        cancella la riga vecchia dall'indice e si indicizza quella nuova.
+        Il file resta la verità: si delega a `Memoria.modifica` e poi si
+        ricostruisce l'indice. Non si cancella la riga vecchia per testo:
+        con i chunk una riga dell'indice non e' un fatto.
         """
-        cambiato = self.sorgente.modifica(vecchio, nuovo)
+        from .memoria import _accetta_progetto
+
+        if _accetta_progetto(self.sorgente.modifica):
+            cambiato = self.sorgente.modifica(vecchio, nuovo,
+                                             progetto=progetto)
+        else:
+            cambiato = self.sorgente.modifica(vecchio, nuovo)
         if cambiato:
-            with self._lock:
-                self._conn.execute("DELETE FROM fatti WHERE testo = ?",
-                                   (vecchio.strip(),))
-                self._conn.commit()
-            self.ricostruisci_se_cambiato(forza=True)
-            try:
-                self._ultimo_file = os.path.getmtime(self.sorgente.percorso)
-            except OSError:
-                pass
+            self._riallinea_indice()
         return cambiato
 
     def fatti_per_progetto(self, progetto: str) -> list[str]:
-        """I fatti di un progetto.
+        """I fatti di un progetto, piu' quelli che non hanno progetto.
+
+        I fatti senza progetto valgono per ogni progetto: il filtro non
+        li nasconde, o sarebbero invisibili proprio mentre si lavora.
 
         Si chiede al FILE, non all'indice: la verita' dei fatti e' la
         riga di testo, e la colonna `progetto` nell'indice e' uno
         specchio che va tenuto allineato a mano.
 
-        Il file e' anche la risposta completa: `IndiceMemoria.fatti()`
-        restituisce solo i fatti NON importanti, mentre sul file ci sono
-        anche quelli. Un filtro per progetto che perdesse gli
-        importanti darebbe un archivio che nasconde proprio i fatti
-        che il modello vede nel prompt — e il dubbio che ne nasce
+        Il file e' la risposta completa: un filtro per progetto che
+        perdesse gli Importanti darebbe un archivio che nasconde proprio
+        i fatti che il modello vede nel prompt — e il dubbio che ne nasce
         ("l'ho perso?") costa piu' del fatto stesso.
         """
         metodo = getattr(self.sorgente, "fatti_per_progetto", None)
@@ -407,12 +643,13 @@ class IndiceMemoria:
                 return metodo(progetto)
             except Exception:  # noqa: BLE001
                 pass
-        # Backend senza il metodo: si filtra qui, sull'indice.
+        # Backend senza il metodo: si filtra qui, sull'indice. `fatti()`
+        # torna gia' tutto: sommare `importanti()` li conterebbe due volte.
         if not progetto:
-            return self.fatti() + self.importanti()
+            return self.fatti()
         fuori = []
         for r in self._query(
-                "SELECT testo FROM fatti WHERE LOWER(progetto) = LOWER(?)",
+                f"SELECT testo FROM fatti WHERE {_filtro_progetto()}",
                 (progetto,)):
             testo = r["testo"]
             if testo and testo not in fuori:
@@ -477,7 +714,7 @@ class IndiceMemoria:
                 if progetto:
                     righe = self._conn.execute(
                         "SELECT * FROM fatti WHERE (scade IS NULL OR scade > ?)"
-                        "   AND LOWER(progetto) = LOWER(?)"
+                        f"   AND {_filtro_progetto()}"
                         " ORDER BY importante DESC, creata DESC LIMIT ?",
                         (adesso, progetto, limite)).fetchall()
                 else:
@@ -494,6 +731,7 @@ class IndiceMemoria:
                 # La colonna `progetto` va selezionata a mano: senza,
                 # il risultato non dice da quale progetto viene.
                 campi = ("f.rowid AS rowid, f.testo AS testo,"
+                         " f.padre AS padre,"
                          " f.importante AS importante, f.origine AS origine,"
                          " f.creata AS creata, f.scade AS scade, f.usi AS usi,"
                          " f.progetto AS progetto")
@@ -507,7 +745,7 @@ class IndiceMemoria:
                     # modi diversi ("Sito" e "sito") dava due risultati
                     # diversi — e il sintomo sarebbe "il progetto non
                     # e' stato trovato" quando invece c'era.
-                    filtri += " AND LOWER(f.progetto) = LOWER(?)"
+                    filtri += f" AND {_filtro_progetto('f.progetto')}"
                     argomenti.append(progetto)
                 argomenti.append(limite)
                 try:
@@ -526,7 +764,7 @@ class IndiceMemoria:
                     if progetto:
                         righe = [r for r in self._conn.execute(
                             "SELECT * FROM fatti WHERE (scade IS NULL OR scade > ?)"
-                            "   AND LOWER(progetto) = LOWER(?)",
+                            f"   AND {_filtro_progetto()}",
                             (adesso, progetto)).fetchall()
                             if q.lower() in r["testo"].lower()][:limite]
                     else:
@@ -539,7 +777,21 @@ class IndiceMemoria:
                     self._conn.execute("UPDATE fatti SET usi = usi + 1 WHERE rowid = ?",
                                        (r["rowid"],))
                 self._conn.commit()
-        return [dict(r) for r in righe]
+        # Un fatto lungo puo' avere PIU' chunk che fanno match: e' un
+        # fatto solo, e va mostrato intero una volta sola. `padre` lo
+        # scrive `_inserisci`; una riga vecchia senza padre vale come
+        # padre di se stessa.
+        fuori: list[dict[str, Any]] = []
+        visti: set[str] = set()
+        for r in righe:
+            d = dict(r)
+            intero = (d.get("padre") or "").strip() or d["testo"]
+            if intero in visti:
+                continue
+            visti.add(intero)
+            d["testo"] = intero
+            fuori.append(d)
+        return fuori
 
     def statistiche(self) -> dict[str, Any]:
         """Quanto è grande, e quanto è morto.
@@ -552,21 +804,30 @@ class IndiceMemoria:
         self.ricostruisci_se_cambiato()
         adesso = time.time()
         with self._lock:
-            totale = self._conn.execute("SELECT COUNT(*) c FROM fatti").fetchone()["c"]
+            # Si contano i FATTI, non le righe: un fatto lungo nell'indice
+            # e' piu' chunk, e contarlo tre volte fa sembrare la memoria
+            # piu' grande di quello che e'.
+            totale = self._conn.execute(
+                "SELECT COUNT(DISTINCT padre) c FROM fatti").fetchone()["c"]
             vivi = self._conn.execute(
-                "SELECT COUNT(*) c FROM fatti WHERE scade IS NULL OR scade > ?",
+                "SELECT COUNT(DISTINCT padre) c FROM fatti"
+                " WHERE scade IS NULL OR scade > ?",
                 (adesso,)).fetchone()["c"]
             importanti = self._conn.execute(
-                "SELECT COUNT(*) c FROM fatti WHERE importante = 1").fetchone()["c"]
+                "SELECT COUNT(DISTINCT padre) c FROM fatti"
+                " WHERE importante = 1").fetchone()["c"]
             mai_usati = self._conn.execute(
-                "SELECT COUNT(*) c FROM fatti WHERE usi = 0").fetchone()["c"]
+                "SELECT COUNT(*) c FROM (SELECT padre FROM fatti"
+                " GROUP BY padre HAVING SUM(usi) = 0)").fetchone()["c"]
             piu_usati = [dict(r) for r in self._conn.execute(
-                "SELECT testo, usi FROM fatti WHERE usi > 0"
+                "SELECT padre AS testo, SUM(usi) AS usi FROM fatti"
+                " GROUP BY padre HAVING SUM(usi) > 0"
                 " ORDER BY usi DESC LIMIT 10")]
             in_scadenza = [dict(r) for r in self._conn.execute(
-                "SELECT testo, scade FROM fatti"
+                "SELECT padre AS testo, MIN(scade) AS scade FROM fatti"
                 " WHERE scade IS NOT NULL AND scade > ? AND scade < ?"
-                " ORDER BY scade", (adesso, adesso + 7 * 86400))]
+                " GROUP BY padre ORDER BY scade",
+                (adesso, adesso + 7 * 86400))]
         try:
             byte_file = os.path.getsize(self.sorgente.percorso)
         except OSError:
@@ -635,17 +896,16 @@ class IndiceMemoria:
         """
         from .memoria import _pulizia_riga
 
-        self.ricostruisci_se_cambiato(forza=True)
+        # Niente ricostruzione qui: l'istantanea legge il file e prende
+        # dall'indice solo i contatori, senza scrivere. Un `dry_run` che
+        # ricostruiva l'indice cambiava i numeri che stava per leggere —
+        # e una potatura che si azzera i contatori non pota mai niente.
+        righe = self._istantanea()
         adesso = time.time()
         progetto = (progetto or "").strip()
         grace = max(0, int(giorni_grazia or 0))
 
         # -- candidati alla potatura --------------------------------------
-        with self._lock:
-            righe = self._conn.execute(
-                "SELECT testo, usi, creata, progetto, importante, scade "
-                "FROM fatti").fetchall()
-        righe = [dict(r) for r in righe]
 
         da_rimuovere: list[str] = []
         motivi: dict[str, str] = {}

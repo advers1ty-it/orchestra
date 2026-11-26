@@ -300,6 +300,31 @@ SUITES = [
     # va in `## Importanti`, e che il prompt manda a cercare prima di
     # agire.
     ("memoria-prompt", "test_memoria_prompt.py", True),
+    # Cancellare e modificare un fatto per sottostringa portava via anche
+    # le righe che nominavano la parola, e per i fatti lunghi l'indice
+    # restava indietro (i chunk non si cancellavano). Qui si prova il
+    # confronto esatto, il rispetto del progetto, la coda della riga
+    # conservata da `modifica` e la ricostruzione dell'indice dal file.
+    ("memoria-elimina", "test_memoria_elimina.py", True),
+    # La potatura non potava mai niente: la ricostruzione dell'indice
+    # riportava `creata` a oggi e `usi` a zero un istante prima della
+    # decisione, e il dry_run ricostruiva pure lui. Qui si prova che i
+    # contatori sopravvivono alla ricostruzione e che un fatto vecchio e
+    # mai usato viene rimosso davvero.
+    ("memoria-potatura", "test_memoria_potatura.py", True),
+    # Un memory.md senza a capo finale faceva incollare il fatto nuovo
+    # all'ultimo: due fatti in una riga, letti come uno. Si prova il
+    # percorso diretto e quello di `aggiungi`.
+    ("memoria-appendi", "test_memoria_appendi.py", True),
+    # Cosa vede la UI: fatti normali E Importanti, il percorso di
+    # memory.md (non del database) e nessun chunk presentato come fatto
+    # intero nell'elenco, nella ricerca e nelle statistiche.
+    ("memoria-stato", "test_memoria_stato.py", True),
+    # L'estrazione automatica leggeva anche le risposte dell'assistente:
+    # una frase presa da una pagina e ripetuta dal modello diventava una
+    # regola permanente. Ora si estrae solo dai messaggi dell'utente e
+    # ogni fatto passa da una validazione meccanica.
+    ("memoria-estrazione", "test_memoria_estrazione.py", True),
     # I comandi del ponte che non sono chat: livello di reasoning (dal
     # telefono non si poteva impostare), obiettivo e consiglio. Senza
     # test, un comando che risponde "non riconosciuto" sembra un typo

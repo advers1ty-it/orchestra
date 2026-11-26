@@ -87,30 +87,22 @@ def _https_richiesta(headers: Any) -> bool:
 
 
 def _prompt_base() -> str:
-    """Il prompt di sistema stabile: regole e istruzioni del progetto.
+    """Il prefisso stabile: regole e persona. Niente di per-progetto.
 
-    NON contiene la memoria. `## Importanti` la mette l'Agent a ogni
-    turno, nel blocco volatile (vedi `Agent._aggiorna_prompt`): prima
-    stava qui, e questo prompt si costruisce una volta sola, alla
-    creazione della sessione. Una regola salvata dopo non entrava piu'
-    finche' la sessione non veniva ricostruita — su un bot acceso da
-    giorni, cioe' mai.
+    NON contiene la memoria: `## Importanti` la mette l'Agent a ogni
+    turno, nel blocco volatile (vedi `Agent._aggiorna_prompt`). Non
+    contiene nemmeno le istruzioni del repository (`AGENTS.md`, ...):
+    quelle sono del PROGETTO, e qui si costruiscono una volta sola, alla
+    creazione della sessione. Attivare un progetto dopo non le avrebbe
+    mai portate, e cambiandolo sarebbero rimaste quelle vecchie. Ora le
+    mette l'Agent nel blocco volatile, risolte dal progetto attivo.
 
     Sta fuori dalla classe perche' serve sia a costruire una sessione sia
     ad aggiornare l'identita' di una sessione viva: nel secondo caso non
     si puo' ricostruire tutto (si perderebbe la conversazione), quindi il
     punto di partenza va ricomposto allo stesso modo.
     """
-    from .istruzioni_progetto import blocco_prompt as blocco_progetto
-
-    prompt = SYSTEM_PROMPT
-    # Le istruzioni del repository (AGENTS.md, CLAUDE.md, ...) stanno tra
-    # le regole e i fatti personali: sono piu' specifiche delle regole
-    # generali, ma non possono sovrascriverle.
-    istruzioni = blocco_progetto()
-    if istruzioni:
-        prompt = f"{prompt}\n\n{istruzioni}"
-    return prompt
+    return SYSTEM_PROMPT
 
 
 MAX_BODY = 64 * 1024  # un prompt non occupa 64KB: oltre e' un errore

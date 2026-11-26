@@ -208,6 +208,41 @@ def test_ricerca_per_progetto():
           f"risposta: {ris3!r}")
 
 
+def test_progetto_attivo_include_i_globali():
+    print("\n== il progetto attivo include i fatti senza progetto ==")
+    from orchestra import memoria as mem
+    from orchestra import progetti as pr
+    from orchestra.tools.memoria import tool_memoria
+
+    m = mem.memoria()
+    globale = "La password del wifi e' attaccata al frigo"
+    m.aggiungi(globale, origine="test")
+    m.aggiungi("Il menu del ristorante ha sei sezioni", origine="test",
+               progetto="sito-ristorante")
+
+    # La promessa del blocco progetto nel prompt: i fatti senza progetto
+    # valgono per ogni progetto e tornano insieme a quelli giusti.
+    solo_progetto = m.fatti_per_progetto("sito-ristorante")
+    check("dal file, il fatto senza progetto torna col progetto attivo",
+          any(globale in f for f in solo_progetto), str(solo_progetto))
+
+    # Il percorso vero: senza `progetto` il tool usa quello ATTIVO, e
+    # prima lo passava all'indice che escludeva i fatti con progetto
+    # vuoto, rendendoli invisibili proprio mentre si lavora.
+    pr._set_root_sessione("", "sito-ristorante")
+    try:
+        ris = tool_memoria().handler(azione="cerca", query="password wifi")
+        voci = [v for v in ris.splitlines() if v.strip().startswith("- ")]
+        check("con un progetto attivo, `cerca` trova il fatto globale",
+              any("frigo" in v for v in voci), ris)
+        ris2 = tool_memoria().handler(azione="cerca", query="menu sezioni")
+        voci2 = [v for v in ris2.splitlines() if v.strip().startswith("- ")]
+        check("e trova anche quello del progetto attivo",
+              any("sei sezioni" in v for v in voci2), ris2)
+    finally:
+        pr._set_root_sessione("", "")
+
+
 # --------------------------------------------------------------------------
 # 5. Il turno ricorda da solo
 # --------------------------------------------------------------------------
@@ -287,6 +322,7 @@ if __name__ == "__main__":
     test_estrazione()
     test_progetto_in_memoria()
     test_ricerca_per_progetto()
+    test_progetto_attivo_include_i_globali()
     test_il_turno_ricorda()
 
     print(f"\n{'='*60}")

@@ -92,7 +92,12 @@ def _leggi(p: Path) -> str:
 
 
 def blocco_prompt(radice: str | Path | None = None) -> str:
-    """Il blocco da aggiungere al prompt di sistema, o ''.
+    """Il blocco da aggiungere al prompt, o ''.
+
+    Lo chiama l'Agent a ogni turno, con la radice del PROGETTO attivo
+    (vedi `Agent._blocco_istruzioni_progetto`), non il prefisso stabile:
+    le istruzioni sono del progetto, e attivarlo o cambiarlo deve
+    portarle con se'.
 
     Si legge solo la radice del progetto: cercare `AGENTS.md` risalendo
     le cartelle e' una decisione che va presa, non indovinata — un file

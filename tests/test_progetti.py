@@ -244,6 +244,56 @@ def test_file_toccati() -> None:
 
 
 # --------------------------------------------------------------------------
+# i file recenti nel prompt
+# --------------------------------------------------------------------------
+
+def test_file_recenti_nel_prompt() -> None:
+    sezione("i file recenti nel prompt del progetto")
+    import time
+
+    from orchestra.session import LoopConfig, Session
+    from orchestra.tools import default_registry
+
+    p = os.path.join(_TMP, "lavori", "progetto-prompt")
+    os.makedirs(os.path.join(p, "src"), exist_ok=True)
+    pr.registra("Progetto Prompt", p)
+
+    # Dieci file, dal piu' vecchio al piu' recente: il tetto deve lasciare
+    # fuori i primi, non gli ultimi. La pausa rende l'ordine dei timestamp
+    # vero anche dove l'orologio ha una risoluzione grossa.
+    for i in range(10):
+        pr.registra_file("Progetto Prompt", os.path.join("src", f"file{i}.txt"))
+        time.sleep(0.002)
+
+    class ProviderFinto:
+        name = "finto"
+        model = "finto-1"
+
+        def chat(self, *a, **k):
+            raise AssertionError("il test non fa turni")
+
+    sess = Session(provider=ProviderFinto(), registry=default_registry(),
+                   system_prompt="BASE-STABILE",
+                   config=LoopConfig(max_iterations=2))
+    sess.imposta_progetto("Progetto Prompt")
+    volatile = next((m.content for m in sess.agent.state.messages
+                     if m.role == "system" and m.name == "__contesto__"), "")
+
+    check("il prompt del progetto elenca i file gia' toccati",
+          "src/file9.txt" in volatile, volatile[-400:])
+    check("l'elenco e' relativo alla cartella del progetto",
+          p.replace("\\", "/") not in volatile, volatile[-400:])
+    check("il file piu' recente viene prima",
+          volatile.index("file9.txt") < volatile.index("file6.txt"),
+          volatile[-400:])
+    elencati = [i for i in range(10) if f"file{i}.txt" in volatile]
+    check("l'elenco ha un tetto di 8", len(elencati) == 8, str(elencati))
+    check("e dice come trovare il resto",
+          "list_dir" in volatile and "find_files" in volatile,
+          volatile[-300:])
+
+
+# --------------------------------------------------------------------------
 # il tool scrive nel progetto
 # --------------------------------------------------------------------------
 
@@ -357,6 +407,7 @@ def main() -> int:
         test_riconoscimento()
         test_root()
         test_file_toccati()
+        test_file_recenti_nel_prompt()
         test_tool_scrive_nel_progetto()
         test_memoria_col_progetto()
         test_il_cambio_e_annunciato()
