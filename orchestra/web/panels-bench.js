@@ -224,28 +224,29 @@ const benchLog = $("bench-log");
 const benchOut = $("bench-out");
 let benchTimer = null;
 
-function openBench() {
+function openBench(opener) {
   benchPanel.classList.remove("hidden");
+  apriFocusModale(benchPanel, opener);
   pollBench();
   caricaRouting();
 }
 function closeBench() {
   benchPanel.classList.add("hidden");
+  chiudiFocusModale(benchPanel);
   if (benchTimer) { clearInterval(benchTimer); benchTimer = null; }
 }
 on($("bench-close"), "click", closeBench);
-on($("opz-bench-apri"), "click", () => { chiudiOpzioni(); openBench(); });
-// via on(), non addEventListener diretto: se il pannello manca, questo
-// era l'unico punto che uccideva TUTTO lo script che segue. Serve
-// core.js perche' il bundle e' un unico script: un solo elemento
-// assente e la pagina resta a meta' senza dire perche'.
+on($("opz-bench-apri"), "click", (e) => { chiudiOpzioni(); openBench(e.currentTarget); });
+// via on(), non addEventListener diretto: se il pannello manca, questo era l'unico punto che uccideva TUTTO lo script
+// che segue.
 on(benchPanel, "click", (e) => { if (e.target === benchPanel) closeBench(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && benchPanel && !benchPanel.classList.contains("hidden")) closeBench();
+});
 
 on($("bench-run"), "click", async () => {
   const scelti = modelliScelti();
-  // Niente selezione = niente benchmark. Meglio dirlo qui che lasciare
-  // che il server campioni da solo: se vuoi tre modelli e ne hai scelti
-  // zero, il risultato sarebbe un altro elenco e sembrerebbe funzionare.
+  // Niente selezione = niente benchmark.
   if (!scelti.length) {
     benchOut.textContent = "";
     benchLog.textContent = "nessun modello selezionato: spunta almeno una casella";

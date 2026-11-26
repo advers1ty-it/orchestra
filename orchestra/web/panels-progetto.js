@@ -545,20 +545,20 @@ if (progModalOk) {
   });
 }
 
-// ── Modal progetti: apertura e chiusura ─────────────────────────
-// Stesso pattern del modal memoria: overlay fissato sopra tutto,
-// show/hide, Escape chiude. Il pulsante in testata della sidebar
-// ("Gestione") e i due pulsanti interni fanno la stessa cosa.
-function apriProgetti() {
+// ── Modal progetti: apertura e chiusura ───────────────────────── Stesso pattern del modal memoria: overlay fissato
+// sopra tutto, show/hide, Escape chiude.
+function apriProgetti(opener) {
   if (!progModal) return;
   progModal.hidden = false;
+  apriFocusModale(progModal, opener);
   caricaProgetti();
 }
 function chiudiProgetti() {
   if (!progModal) return;
   progModal.hidden = true;
+  chiudiFocusModale(progModal);
 }
-on(progGestisci, "click", apriProgetti);
+on(progGestisci, "click", (e) => apriProgetti(e.currentTarget));
 on(progChiudi, "click", chiudiProgetti);
 on(progChiudi2, "click", chiudiProgetti);
 if (progModal) {

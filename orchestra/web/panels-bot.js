@@ -859,7 +859,7 @@ async function scollegaTelegram() {
     pick.addEventListener("change", async () => {
       const v = pick.value;
       if (v === "__gestisci__") {
-        if (typeof apriOpzioni === "function") apriOpzioni();
+        if (typeof apriOpzioni === "function") apriOpzioni(pick);
         if (typeof mostraSezione === "function") mostraSezione("bot");
         caricaBot();
         return;

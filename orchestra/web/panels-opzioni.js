@@ -1,36 +1,26 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-opzioni")<0)window.__diagFiles.push("panels-opzioni");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-opzioni");}})();
-// ------------------------------------------------------------- Opzioni
-// Il pannello piu' sensibile dell'app: qui si scrivono le credenziali.
-//
-// Regola che governa tutto il file: il valore di una chiave gia'
-// salvata non viene mai letto, e non viene neanche rimesso nel campo.
-// Il campo parte vuoto ogni volta, e se lasci vuoto e salvi, la chiave
-// viene cancellata. E' l'unico modo per essere onesto su cosa succede
-// al file .env: se il campo e' vuoto, sparisce anche la chiave.
+// Opzioni: qui si scrivono le credenziali. Il valore di una chiave salvata non
+// viene mai riletto né rimesso nel campo; campo vuoto + salva cancella la chiave.
 const opzioniPanel = $("opzioni");
 
-function apriOpzioni() {
+function apriOpzioni(opener) {
   opzioniPanel.classList.remove("hidden");
+  apriFocusModale(opzioniPanel, opener);
   caricaOpzioni();
 }
 function chiudiOpzioni() {
   opzioniPanel.classList.add("hidden");
+  chiudiFocusModale(opzioniPanel);
 }
-on($("btn-opzioni"), "click", apriOpzioni);
+on($("btn-opzioni"), "click", (e) => apriOpzioni(e.currentTarget));
 on($("opzioni-close"), "click", chiudiOpzioni);
 on(opzioniPanel, "click", (e) => { if (e.target === opzioniPanel) chiudiOpzioni(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && opzioniPanel && !opzioniPanel.classList.contains("hidden")) chiudiOpzioni();
+});
 
 
-// ---- Servizio e modello: due menu, non due campi di testo
-// Erano due righe di chiavi come le altre, e si perdevano. Sono la
-// configurazione, non una credenziale: un id scritto a mano che sbaglia
-// fallisce solo alla prima chiamata, con un errore che sembra di rete.
-// Un menu non puo' sbagliare.
-//
-// Il menu servizio elenca SOLO i provider che hanno una chiave: quelli
-// senza si rifiutano al momento di usarne uno, quindi el menu direbbe
-// "usa groq" e poi fallirebbe. I motori locali compaiono sempre, perche'
-// non hanno bisogno di chiave e sono l'unica via senza account.
+// Servizio e modello: due menu, non due righe di chiavi.
 const optProvider = $("opt-provider");
 const optModel = $("opt-model");
 const optReasoning = $("opt-reasoning");
@@ -601,10 +591,11 @@ async function ricaricaMemoria() {
   }
 }
 
-function apriMemoria() {
+function apriMemoria(opener) {
   if (!memModal) return;
   memModal.hidden = false;
   memModal.classList.add("show");
+  apriFocusModale(memModal, opener);
   if (memCerca) { memCerca.value = ""; memAnnullaCerca.hidden = true; }
   ricaricaMemoria();
 }
@@ -613,6 +604,7 @@ function chiudiMemoria() {
   if (!memModal) return;
   memModal.hidden = true;
   memModal.classList.remove("show");
+  chiudiFocusModale(memModal);
 }
 
 async function cercaMemoria() {
@@ -647,7 +639,7 @@ on(memAnnullaCerca, "click", () => {
 });
 on($("mem-trova"), "click", () => { if (memCerca) memCerca.focus(); });
 on($("mem-chiudi"), "click", chiudiMemoria);
-on($("side-mem-tutti"), "click", apriMemoria);
+on($("side-mem-tutti"), "click", (e) => apriMemoria(e.currentTarget));
 on($("side-mem-aggiungi"), "click", async () => {
   const inp = $("side-mem-input");
   const v = inp ? inp.value.trim() : "";

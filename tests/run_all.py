@@ -148,6 +148,12 @@ SUITES = [
     # la descrizione e il campo della chiave nella stessa scheda.
     ("servizi-ui", "test_servizi_ui.py", True),
     ("traccia-modale", "test_traccia_modale.py", True),
+    # Il focus non deve uscire dal modale ne' tornare al controllo
+    # sbagliato quando il browser non ha focalizzato il pulsante al click.
+    ("focus-modale", "test_focus_modale.py", True),
+    # I pannelli veri devono passare il proprio pulsante al gestore del
+    # focus: senza, la chiusura torna al controllo sbagliato.
+    ("focus-pannelli", "test_focus_pannelli.py", True),
     # I filtri della traccia stanno nella query SQL: la lista e' gia'
     # tagliata, e filtrare nel client nasconderebbe il turno fallito di
     # ieri dietro cinquanta turni riusciti di oggi.

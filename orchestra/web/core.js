@@ -32,53 +32,140 @@ const on = (el, evento, fn) => {
   bersaglio.addEventListener(evento, fn);
   return true;
 };
+
+// Focus dei modali: entra all'apertura, torna al pulsante, Tab resta dentro.
+const modaliFocus = [];
+const FOCUSABILI_MODALE = [
+  "a[href]", "button:not([disabled])", "input:not([disabled]):not([type=hidden])",
+  "select:not([disabled])", "textarea:not([disabled])",
+  "[contenteditable=true]", "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function elementoVisibile(el) {
+  if (!el || el === document.body || el.disabled) return false;
+  // Un elemento in una sezione chiusa non deve entrare nel giro del Tab.
+  if (typeof el.getClientRects === "function" && el.getClientRects().length === 0) return false;
+  for (let p = el; p; p = p.parentElement) {
+    if (p.hidden) return false;
+    if (typeof p.hasAttribute === "function" && p.hasAttribute("hidden")) return false;
+    if (typeof p.getAttribute === "function" && p.getAttribute("aria-hidden") === "true") return false;
+  }
+  return true;
+}
+
+function focusabiliIn(root) {
+  if (!root || typeof root.querySelectorAll !== "function") return [];
+  return Array.from(root.querySelectorAll(FOCUSABILI_MODALE)).filter(elementoVisibile);
+}
+
+function apriFocusModale(root, opener) {
+  if (!root) return;
+  const attivo = opener && typeof opener.focus === "function" ? opener : document.activeElement;
+  let voce = modaliFocus.find((v) => v.root === root);
+  if (!voce) {
+    voce = { root, opener: attivo && attivo !== document.body ? attivo : null };
+    modaliFocus.push(voce);
+  }
+  if (typeof root.setAttribute === "function" &&
+      !(typeof root.hasAttribute === "function" && root.hasAttribute("tabindex"))) {
+    root.setAttribute("tabindex", "-1");
+  }
+  const primo = focusabiliIn(root)[0] || root;
+  if (typeof primo.focus === "function") primo.focus();
+}
+
+function chiudiFocusModale(root) {
+  const i = modaliFocus.map((v) => v.root).lastIndexOf(root);
+  if (i < 0) return;
+  const inCima = i === modaliFocus.length - 1;
+  const voce = modaliFocus.splice(i, 1)[0];
+  if (!inCima) return;
+  const opener = voce.opener;
+  const sotto = modaliFocus[modaliFocus.length - 1];
+  const openerValido = elementoVisibile(opener) && typeof opener.focus === "function";
+  // Se sotto c'e' un altro modale, il focus non torna fuori: torna dentro quello.
+  if (sotto) {
+    const dentroSotto = typeof sotto.root.contains === "function"
+      ? sotto.root.contains(opener) : false;
+    if (openerValido && dentroSotto) {
+      opener.focus();
+      return;
+    }
+    const primo = focusabiliIn(sotto.root)[0] || sotto.root;
+    if (typeof primo.focus === "function") primo.focus();
+    return;
+  }
+  if (openerValido) {
+    opener.focus();
+    return;
+  }
+  const fallback = ["input", "btn-opzioni", "btn-send"]
+    .map((id) => $(id)).find(elementoVisibile);
+  if (fallback && typeof fallback.focus === "function") fallback.focus();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Tab" || !modaliFocus.length) return;
+  const root = modaliFocus[modaliFocus.length - 1].root;
+  if (!root || root.hidden || (root.classList && root.classList.contains("hidden"))) return;
+  const focusabili = focusabiliIn(root);
+  if (!focusabili.length) {
+    e.preventDefault();
+    if (typeof root.focus === "function") root.focus();
+    return;
+  }
+  const attivo = document.activeElement;
+  const i = focusabili.indexOf(attivo);
+  if (i < 0) {
+    e.preventDefault();
+    focusabili[e.shiftKey ? focusabili.length - 1 : 0].focus();
+    return;
+  }
+  if (e.shiftKey && i === 0) {
+    e.preventDefault();
+    focusabili[focusabili.length - 1].focus();
+  } else if (!e.shiftKey && i === focusabili.length - 1) {
+    e.preventDefault();
+    focusabili[0].focus();
+  }
+});
+
+// Anche un focus programmatico non deve finire dietro al modale aperto.
+document.addEventListener("focusin", (e) => {
+  if (!modaliFocus.length) return;
+  const root = modaliFocus[modaliFocus.length - 1].root;
+  if (!root || root.hidden || (root.classList && root.classList.contains("hidden"))) return;
+  if (typeof root.contains === "function" && root.contains(e.target)) return;
+  const primo = focusabiliIn(root)[0] || root;
+  if (typeof primo.focus === "function") primo.focus();
+});
+
 const log = $("log"), main = $("main"), input = $("input");
 const btnSend = $("btn-send");
 const steerBar = $("steer-bar"), steerInput = $("steer-input"), steerSend = $("steer-send"), steerStop = $("steer-stop");
 const dot = $("dot"), stats = $("stats"), conn = $("conn");
 const modelPick = $("model-pick");
 const reasoningPick = $("reasoning-pick");
-// id -> modello. Il popup del selettore serve il punteggio di una
-// riga, e cercarlo rileggendo le option sarebbe una ricerca fra 400
-// elementi per ognuna.
+// id -> modello.
 let modelliPerId = {};
 // Il servizio dichiara il tool-calling? Li' calcolato in
 // loadModels, letto anche dal popup del selettore.
 let servizioDichiaraTool = true;
 let servizioTace = false;
 
-// Lo scope attivo e' la categoria di lavoro scelta nell'header. Vive qui
-// perche' loadModels() la usa per scrivere il punteggio dentro ogni
-// opzione: la stessa variabile governa anche la raccomandazione, e due
-// copie di "quale scope e'" possono divergere senza che nessuno se ne
-// accorga.
+// Lo scope attivo e' la categoria di lavoro scelta nell'header.
 let scopeAttivo = "";
 
-// Il punteggio che va mostrato nell'opzione. Su scope vuoto non mostriamo
-// un numero: sarebbe una media di cose diverse. Con uno scope scelto, il
-// numero vero, e "—" quando quel modello non e' stato misurato li'.
+// Il punteggio che va mostrato nell'opzione.
 function punteggioPerScope(m, scope) {
   const s = m.scores || {};
   // Con uno scope scelto: il numero vero di QUELLA categoria, e "—"
   // quando quel modello non e' stato misurato li'.
   if (scope) {
     const v = s[scope];
-    return (typeof v === "number") ? v.toFixed(2) : "—";
+    return (typeof v === "number") ? v.toFixed(2) : "n/d";
   }
   // Senza scope: il numero unico, che confronta tutto il benchmark.
-  //
-  // Prima qui si restituiva stringa vuota e il menu non mostrava
-  // nessun punteggio finche' non avevi scelto una categoria nel
-  // pannello Benchmark. Il numero c'era ed era giusto, ma solo a una
-  // condizione che nessuno sapeva, e il menu sembrava semplicemente
-  // muto.
-  //
-  // Il campo si chiama `punteggio_unico`, non `totale`: la rotta
-  // /api/models lo espone gia' da prima. Avevo cercato un nome che
-  // non esisteva invece di guardare cosa arrivava, e poi avevo
-  // duplicato il dato sotto un altro nome per far quadrare il mio
-  // errore. Due copie dello stesso numero divergono, e quella che
-  // resta indietro e' quella che qualcuno crede sia quella giusta.
   const t = m.punteggio_unico;
   return (t && typeof t.punteggio === "number")
     ? String(Math.round(t.punteggio)) : "";
@@ -442,9 +529,8 @@ function renderMarkdown(text) {
     (_, lang, cod) => accantona("blocco:" + "<pre><code>" + cod.replace(/\n$/, "") + "</code></pre>"));
   h = h.replace(/`[^`\n]+`/g,
     (m) => accantona("inline:" + "<code>" + m.slice(1, -1) + "</code>"));
-  // evita che http://... diventi corsivo sugli slash: i link prima.
-  // L'URL esclude le virgolette: senza, un `"` dentro l'URL chiuderebbe
-  // l'href e il resto diventerebbe attributo — classica via d'uscita.
+  // I link prima, così http://... non diventa corsivo sugli slash. L'URL esclude
+  // le virgolette: senza, un `"` chiuderebbe l'href e il resto diventerebbe un attributo.
   h = h.replace(/\[([^\]]+)\]\((https?:[^)"'\s]+)\)/g,
     '<a href="$2" target="_blank" rel="noopener">$1</a>');
   h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
@@ -560,13 +646,15 @@ function mostraPermesso(d) {
   permessoAttivo = d.id;
   $("permesso-percorso").textContent = d.percorso || "";
   $("permesso-dettaglio").textContent =
-    "azione: " + (d.azione || "") + (d.dettaglio ? " — " + d.dettaglio : "");
+    "azione: " + (d.azione || "") + (d.dettaglio ? ", " + d.dettaglio : "");
   permessoBox.classList.remove("hidden");
+  apriFocusModale(permessoBox);
   $("permesso-una").focus();
 }
 
 function nascondiPermesso() {
   permessoBox.classList.add("hidden");
+  chiudiFocusModale(permessoBox);
   permessoAttivo = null;
 }
 
@@ -639,11 +727,13 @@ function mostraDomanda(d) {
   }
   $("domanda-input").value = "";
   $("domanda").classList.remove("hidden");
+  apriFocusModale($("domanda"));
   $("domanda-input").focus();
 }
 
 function nascondiDomanda() {
   $("domanda").classList.add("hidden");
+  chiudiFocusModale($("domanda"));
   domandaAttiva = null;
 }
 

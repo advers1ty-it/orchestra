@@ -89,21 +89,19 @@ async function annullaModifica() {
       addNote(d.error || `niente da annullare (${r.status})`);
       return;
     }
-    addNote(`annullato: ${d.percorso} — ${d.azione_fatta}`);
+    addNote(`annullato: ${d.percorso}, ${d.azione_fatta}`);
   } catch (e) { addNote(`annullamento fallito: ${e}`); }
 }
 
 const btnUndo = document.getElementById("btn-undo");
 if (btnUndo) btnUndo.addEventListener("click", annullaModifica);
 
-// Le modifiche del turno. L'undo dice "torna indietro su un file";
-// questo dice "guarda cosa e' cambiato", che e' la domanda da fare
-// prima di decidere se annullare.
-function apriDiff() {
+function apriDiff(opener) {
   const m = $("diff-modal");
   if (!m) return;
   m.hidden = false;
   m.classList.add("show");
+  apriFocusModale(m, opener);
   caricaDiff();
 }
 
@@ -112,6 +110,7 @@ function chiudiDiff() {
   if (!m) return;
   m.hidden = true;
   m.classList.remove("show");
+  chiudiFocusModale(m);
 }
 
 function classeRiga(riga) {
@@ -182,7 +181,7 @@ async function caricaDiff() {
   }
 }
 
-on($("btn-diff"), "click", apriDiff);
+on($("btn-diff"), "click", (e) => apriDiff(e.currentTarget));
 on($("diff-chiudi"), "click", chiudiDiff);
 on($("diff-aggiorna"), "click", caricaDiff);
 on($("diff-modal"), "click", (e) => {
@@ -673,48 +672,25 @@ caricaOpzioni().catch(() => {
 fetch("/api/state").then(r => r.json()).then(s => {
   if (s.version) showVersion(s.version);
   ready = s.ready !== false;
-  // I bottoni allega e verifica seguono `ready`. Prima erano impostati una
-  // sola volta all'avvio, quando ready era ancora false: restavano
-  // disabilitati per sempre e il ✓ non si accendeva mai.
+  // I bottoni allega e verifica seguono `ready`.
   if (btnAllega) btnAllega.disabled = !ready;
   if (btnVerifica) btnVerifica.disabled = !ready;
   if (!ready) { showBanner(s.error); if (typeof apriOpzioni === "function") apriOpzioni(); return; }
-  // setBusy applica `ready` ai controlli. Senza questa chiamata il
-  // flag e' impostato ma nessuno lo guarda: il campo resta disabilitato
-  // e la pagina sembra rotta. E' lo stesso buco dei selettori di
-  // servizio e scopo — una variabile che cambia non abilita niente da
-  // sola, serve qualcuno che la legga e agisca.
+  // setBusy applica `ready` ai controlli.
   setBusy(false);
-  // Sul telefono/tunnel il SSE puo' non consegnare lo snapshot
-  // iniziale (buffering Cloudflare): /api/state e' la fonte di verita'
-  // al caricamento, quindi lo applichiamo sempre, non solo se il log
-  // e' vuoto. Un eventuale snapshot SSE successivo lo rimpiazza.
+  // Sul telefono/tunnel il SSE puo' non consegnare lo snapshot iniziale (buffering Cloudflare): /api/state e' la fonte
+  // di verita' al caricamento, quindi lo applichiamo sempre, non solo se il log e' vuoto.
   handle("snapshot", s);
 }).catch(() => { conn.textContent = "server non raggiungibile"; });
 
-// La versione è il modo più economico per capire se stai guardando la
-// pagina giusta. Senza, una UI in cache vecchia si manifesta come
-// "funziona tutto tranne una cosa" e sembra un bug.
+// La versione è il modo più economico per capire se stai guardando la pagina giusta.
 function showVersion(v) {
   $("ver").textContent = v || "?";
-  $("ver").title = `interfaccia ${v || "?"} — se non corrisponde al server, ricarica`;
+  $("ver").title = `interfaccia ${v || "?"}: se non corrisponde al server, ricarica`;
 }
 
-// ---------------------------------------------------- tracce dei turni
-// La diagnosi dopo il fatto: ogni turno lascia una traccia su disco, e
-// qui si riapre "perché è andato com'è andato" senza ripeterlo. Una riga
-// per turno recente; al click, la sequenza esatta degli eventi.
-// Codici di esito in parole: l'utente legge "completato",
-// non "risposta_finale".
-// I codici di esito in un posto solo: la lista, il filtro e il dettaglio
-// devono dire la stessa parola per lo stesso codice. Prima la mappa
-// stava dentro `etichettaEsito`, e il filtro avrebbe dovuto ripeterla.
-// Una funzione che ritorna la mappa, non una `const`: panels.js chiama
-// `caricaSideTracce()` all'avvio, e i file sono concatenati in un ordine
-// in cui questa parte di main.js arriva DOPO. Una `const` sarebbe in
-// temporal dead zone, e la lista delle tracce morirebbe all'avvio con
-// "Cannot access before initialization". Le funzioni sono gia'
-// disponibili quando il file viene definito.
+// tracce dei turni: La diagnosi dopo il fatto: ogni turno lascia una traccia su disco, e qui si riapre "perché è andato
+// com'è andato" senza ripeterlo.
 var _esitiTraccia = null;
 function esitiTraccia() {
   if (!_esitiTraccia) _esitiTraccia = {
@@ -799,17 +775,19 @@ async function caricaSideTracce() {
 
 // Il dettaglio sta in un modale: aperto sotto la lista finiva fuori
 // dal viewport, e il click sembrava non funzionare.
-function apriModaleTraccia() {
+function apriModaleTraccia(opener) {
   const m = $("traccia-modal");
   if (!m) return;
   m.hidden = false;
   m.classList.add("show");
+  apriFocusModale(m, opener);
 }
 function chiudiModaleTraccia() {
   const m = $("traccia-modal");
   if (!m) return;
   m.hidden = true;
   m.classList.remove("show");
+  chiudiFocusModale(m);
 }
 on($("traccia-chiudi"), "click", chiudiModaleTraccia);
 on($("traccia-filtro-esito"), "change", caricaSideTracce);

@@ -403,7 +403,7 @@ function mcpRiga(s) {
         nome: s.name || s.id,
         nota: "",
       };
-      mcpConfermaApri(meta, {id: s.id}, "connect");
+      mcpConfermaApri(meta, {id: s.id}, "connect", e.currentTarget);
       return;
     }
     await mcpConnetti(s.id);
@@ -434,7 +434,10 @@ function mcpConfermaChiudi() {
   mcpConfermaCfg = null;
   mcpConfermaPreset = null;
   mcpConfermaAzione = "add";
-  if (mcpConferma) mcpConferma.classList.add("hidden");
+  if (mcpConferma) {
+    mcpConferma.classList.add("hidden");
+    chiudiFocusModale(mcpConferma);
+  }
   if (mcpConfermaOk) mcpConfermaOk.checked = false;
   if (mcpConfermaProcedi) {
     mcpConfermaProcedi.disabled = true;
@@ -442,7 +445,7 @@ function mcpConfermaChiudi() {
   }
 }
 
-function mcpConfermaApri(preset, cfg, azione) {
+function mcpConfermaApri(preset, cfg, azione, opener) {
   mcpConfermaCfg = cfg;
   mcpConfermaPreset = preset;
   mcpConfermaAzione = azione === "connect" ? "connect" : "add";
@@ -462,7 +465,10 @@ function mcpConfermaApri(preset, cfg, azione) {
     mcpConfermaProcedi.textContent = connetti
       ? "Connetti" : "Aggiungi senza connettere";
   }
-  if (mcpConferma) mcpConferma.classList.remove("hidden");
+  if (mcpConferma) {
+    mcpConferma.classList.remove("hidden");
+    apriFocusModale(mcpConferma, opener);
+  }
   if (mcpConfermaOk) mcpConfermaOk.focus();
 }
 
@@ -611,7 +617,7 @@ on("mcp-preset-cerca", "input", () => {
   if (mcpPreset.value !== prima) mcpPresetMostra();
 });
 
-on("mcp-add", "click", async () => {
+on("mcp-add", "click", async (e) => {
   const preset = mcpPresetScelto();
   let cfg;
   if (preset) {
@@ -662,7 +668,7 @@ on("mcp-add", "click", async () => {
             url: url, headers: headers, enabled: true };
   }
   if (preset && preset.richiede_conferma) {
-    mcpConfermaApri(preset, cfg);
+    mcpConfermaApri(preset, cfg, "add", e.currentTarget);
     return;
   }
   await mcpInvia(cfg, preset);
@@ -724,8 +730,19 @@ on("mcp-connect-all", "click", async () => {
   const defaultBtn = document.getElementById('council-default');
   const sceltiEl = document.getElementById('council-scelti');
   if (!btn || !panel) return;
-  btn.addEventListener('click', () => { panel.classList.remove('hidden'); loadRoster(); });
-  if (close) close.addEventListener('click', () => panel.classList.add('hidden'));
+  function chiudiCouncil() {
+    panel.classList.add('hidden');
+    chiudiFocusModale(panel);
+  }
+  btn.addEventListener('click', () => {
+    panel.classList.remove('hidden');
+    apriFocusModale(panel, btn);
+    loadRoster();
+  });
+  if (close) close.addEventListener('click', chiudiCouncil);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !panel.classList.contains('hidden')) chiudiCouncil();
+  });
   let roster = [];
   let timer = null;
   // Chi siede lo decide l'utente: le card si cliccano, e il Chair puo'

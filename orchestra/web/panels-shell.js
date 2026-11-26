@@ -235,18 +235,20 @@ const capMsg = $("cap-msg");
 let capTab = "skill";
 let capTool = [];
 
-function apriCapacita() {
+function apriCapacita(opener) {
   if (!capacita) return;
   capacita.classList.remove("hidden");
   mostraCapTab(capTab);
-  // Le skill si rileggono a ogni apertura: l'agente propone una
-  // procedura mentre il modale è chiuso, e una lista vecchia qui è
-  // esattamente il punto in cui non si nota.
+  apriFocusModale(capacita, opener);
+  // Le skill si rileggono a ogni apertura: l'agente propone una procedura mentre il modale è chiuso, e una lista
+  // vecchia qui è esattamente il punto in cui non si nota.
   if (typeof caricaSkill === "function") caricaSkill();
 }
 
 function chiudiCapacita() {
-  if (capacita) capacita.classList.add("hidden");
+  if (!capacita) return;
+  capacita.classList.add("hidden");
+  chiudiFocusModale(capacita);
 }
 
 // Una tab per volta, come le sezioni di Opzioni. Il caricamento segue
@@ -351,12 +353,9 @@ function disegnaStrumenti() {
 
 // Dalla sidebar si apre lo stesso modale, non una seconda finestra.
 const sideCap = $("side-cap");
-if (sideCap) sideCap.addEventListener("click", () => apriCapacita());
+if (sideCap) sideCap.addEventListener("click", () => apriCapacita(sideCap));
 
-// ------------------------------------------- sidebar: riduci, non chiudere
-//
-// La X chiudeva del tutto e si perdeva la larghezza scelta. Adesso si
-// riduce a una striscia: riaprirla è un clic e la larghezza resta.
+// Sidebar: riduci, non chiudere. La X perdeva la larghezza scelta.
 
 const MIN_LARGHEZZA = 180;
 const MAX_LARGHEZZA = 520;
@@ -916,17 +915,12 @@ async function _depsApri() {
 }
 if (btnDeps) btnDeps.addEventListener("click", _depsApri);
 
-// ------------------------------------------------- documentazione (nuova scheda)
+// documentazione (nuova scheda)
 const btnDocs = $("btn-docs");
 if (btnDocs) btnDocs.addEventListener("click", () => window.open("/docs", "_blank", "noopener"));
 
-// ------------------------------------------------- diagnostica allowlisted
-// Era un modal costruito a mano da JavaScript e aperto da un pulsante in
-// alto: un overlay in piu', con stile duplicato e nessun collegamento con
-// il resto dell'interfaccia. Ora e' una sezione di Opzioni, e l'unica cosa
-// che resta del vecchio e' la chiamata all'endpoint. L'output NON si
-// accumula: eseguire due volte il comando deve dare due risultati, non
-// quattro.
+// diagnostica allowlisted: Era un modal costruito a mano da JavaScript e aperto da un pulsante in alto: un overlay in
+// piu', con stile duplicato e nessun collegamento con il resto dell'interfaccia.
 const diagScelta = $("diag-scelta");
 const diagRun = $("diag-run");
 const diagOut = $("diag-out");
