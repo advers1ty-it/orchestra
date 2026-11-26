@@ -1,7 +1,5 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-storia")<0)window.__diagFiles.push("panels-storia");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-storia");}})();
-// ------------------------------------------------------------------ storico
-// Le conversazioni salvate su disco. Il pannello si ricarica da sé quando
-// si apre, non ha un pulsante "applica": quello che c'è è già applicato.
+// storico: Le conversazioni salvate su disco.
 
 const storicoElenco = $("storico-elenco");
 const storicoMsg = $("storico-msg");
@@ -150,7 +148,7 @@ if (storicoRicarica) {
   storicoRicarica.addEventListener("click", caricaStorico);
 }
 
-// ------------------------------------------------------------------- memoria
+// memoria
 
 const memoriaElenco = $("memoria-elenco");
 const memoriaMsg = $("memoria-msg");
@@ -172,7 +170,11 @@ async function caricaMemoria() {
       memoriaPercorso.textContent = d.percorso;
     }
     memoriaElenco.replaceChildren();
+    // `fatti` porta sia i normali sia gli Importanti: la sezione non li
+    // separa, e senza questo elenco non si distingue una regola che vale
+    // sempre da un fatto che aspetta di essere cercato.
     const fatti = d.fatti || [];
+    const importanti = new Set(d.importanti || []);
     if (!fatti.length) {
       const li = document.createElement("li");
       li.className = "small dim";
@@ -184,6 +186,14 @@ async function caricaMemoria() {
     for (const fatto of fatti) {
       const li = document.createElement("li");
       li.className = "memoria-riga";
+
+      if (importanti.has(fatto)) {
+        const stella = document.createElement("span");
+        stella.className = "memoria-imp";
+        stella.textContent = "★";
+        stella.title = "Importante: sta nel prompt di ogni conversazione";
+        li.appendChild(stella);
+      }
 
       const testo = document.createElement("span");
       testo.className = "memoria-fatto";

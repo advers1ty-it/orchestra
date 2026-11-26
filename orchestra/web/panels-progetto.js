@@ -1,10 +1,5 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-progetto")<0)window.__diagFiles.push("panels-progetto");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-progetto");}})();
-// ------------------------------------------------- goal, piani, scheduler, gate
-//
-// Il pannello goal era HTML morto: esisteva la barra ma nessuno la
-// collegava alle API. Qui si collega tutto: creazione con piano/retry/
-// criteri, lista con gate di accettazione visibile, scheduler manuale
-// (Prossimo) e polling solo a pannello aperto.
+// goal, piani, scheduler, gate: Il pannello goal era HTML morto: esisteva la barra ma nessuno la collegava alle API.
 
 const goalBar = $("goal-bar");
 const goalInput = $("goal-input");
@@ -30,10 +25,7 @@ function goalJson(testo) {
   return JSON.parse(t);
 }
 
-// Il gate visivo: traduce stato+errore+output in un badge. La regola e'
-// la stessa del backend (accettazione.py): done = gate ok, a meno che
-// l'output dichiari un parziale accettato; failed con "accettazione
-// fallita" = gate bocciato; il resto e' in attesa o fallito altrove.
+// Il gate visivo: traduce stato+errore+output in un badge.
 function goalGate(g) {
   const stato = g.status || "";
   const err = g.error || "";
@@ -207,7 +199,7 @@ on("goal-start", "click", async () => {
     goalSelezionato = d.id;
     if (goalInput) goalInput.value = "";
     if (goalBar) { goalBar.hidden = false; }
-    if (goalStatus) goalStatus.textContent = (corpo.kind === "piano" ? "piano creato: " : "avviato: ") + d.id + " — segui il progresso qui sotto";
+    if (goalStatus) goalStatus.textContent = (corpo.kind === "piano" ? "piano creato: " : "avviato: ") + d.id + ", segui il progresso qui sotto";
     goalPolling();
     caricaGoal();
   } catch (e) {
@@ -269,24 +261,11 @@ on("goal-sched", "click", async () => {
   }
 });
 
-// ------------------------------------------------------------- il progetto
-//
-// Il progetto dice su CHE COSA si sta lavorando, e DOVE. Non e' solo
-// un'etichetta: e' la cartella in cui l'agente scrive, e il confine
-// di sicurezza si sposta con lui.
-//
-// Il progetto attivo e' un menu a tendina: sceglierlo cambia subito
-// il progetto, niente bottone. Un select non puo' sembrare una ricerca
-// (era il difetto del vecchio input con "OK"), e l'azione e' immediata.
-// L'opzione "nessun progetto" CANCELLA l'etichetta: si puo' lavorare
-// senza progetto, e i fatti non vengono etichettati.
-//
-// Lo switch automatico (l'agente che riconosce il nome del progetto)
-// arriva dall'evento "progetto_cambiato", che chiama caricaProgetto():
-// qui il select viene aggiornato, cosi' resta coerente con quello che
-// l'agente ha scelto da solo.
+// il progetto: Il progetto dice su CHE COSA si sta lavorando, e DOVE.
 const progSelect = $("side-progetto-select");
 const progFatti = $("side-progetto-fatti");
+// Il progetto è la cartella in cui l'agente scrive: cambiarlo sposta anche il
+// confine di sicurezza. Il menu sceglie subito, senza pulsante "apri".
 
 // Il valore del select: vuoto = nessun progetto.
 function _progettoLabel() {
@@ -305,9 +284,8 @@ async function caricaProgetto() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return;
     const attivo = d.attivo || "";
-    // Ricostruisce il menu: "nessun progetto" + i progetti registrati.
-    // Solo se l'utente non sta scegliendo: altrimenti gli si cambia la
-    // selezione sotto le dita, nel momento stesso in cui la sta toccando.
+    // Ricostruisce il menu: "nessun progetto" + i progetti registrati. Solo se
+    // l'utente non sta scegliendo, altrimenti gli cambierebbe la selezione sotto le dita.
     if (document.activeElement !== progSelect) {
       progSelect.innerHTML = "";
       const vuoto = document.createElement("option");
@@ -367,15 +345,7 @@ if (progSelect) {
   progSelect.addEventListener("change", impostaProgetto);
 }
 
-// ------------------------------------------------- la sezione Progetti
-//
-// I progetti registrati, con la cartella di ciascuno e quanti file
-// hanno toccato. Registrare un progetto e' una cosa che fai una
-// volta; aprire un progetto e' una cosa che fai ogni volta che
-// inizi a lavorare. Per questo la sezione sta separata dal campo
-// qui sopra.
-// La sidebar tiene solo il menu a tendina del progetto attivo. Tutto il
-// resto — la lista, la cancellazione, la nuova <
+// la sezione Progetti: I progetti registrati, con la cartella di ciascuno e quanti file hanno toccato.
 const progModal = $("progetti-modal"),
   progModalLista = $("progetti-modal-lista"),
   progModalNome = $("progetti-modal-nome"),
@@ -413,9 +383,8 @@ async function caricaProgetti() {
       nome.textContent = p.nome;
       riga.appendChild(nome);
 
-      // Il pulsante "apri" non c'e' piu': il menu a tendina in alto
-      // sceglie il progetto attivo, e qui sarebbe ridondante. Restano
-      // "file" (vedi i file toccati) e "×" (dimentica il progetto).
+      // Il pulsante "apri" non c'e' piu': il menu a tendina in alto sceglie il progetto attivo, e qui sarebbe
+      // ridondante.
 
       const file = document.createElement("button");
       file.className = "ghost";
@@ -448,10 +417,7 @@ async function caricaProgetti() {
       perc.textContent = p.percorso || "";
       li.appendChild(perc);
 
-      // Gli alias: gli altri nomi dello stesso progetto. Si vedono
-      // perche' sono l'informazione che permette a Orchestra di
-      // capire "let's work on the restaurant site" — e se l'utente
-      // non li vede, non sa che quella frase funziona.
+      // Gli alias: gli altri nomi dello stesso progetto.
       const alias = p.alias || [];
       if (alias.length) {
         const al = document.createElement("div");
@@ -513,10 +479,7 @@ if (progModalOk) {
   progModalOk.addEventListener("click", async () => {
     const nome = (progModalNome && progModalNome.value || "").trim();
     const percorso = (progModalPercorso && progModalPercorso.value || "").trim();
-    // Gli alias: gli altri nomi dello stesso progetto. Vanno nel
-    // body, e senza di loro il riconoscimento in un'altra lingua
-    // non funziona — un progetto chiamato "Sito Ristorante" non
-    // contiene la parola "restaurant".
+    // Gli alias: gli altri nomi dello stesso progetto.
     const alias = (progModalAlias && progModalAlias.value || "").trim();
     if (!nome || !percorso) {
       if (progFatti) progFatti.textContent = "serve il nome e la cartella";
@@ -570,25 +533,11 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && progModal && !progModal.hidden) chiudiProgetti();
 });
 
-// Il primo caricamento. Lo script ha `defer`, quindi il DOM e' gia'
-// pronto qui: non serve aspettare nessun evento.
-//
-// Senza questo il campo parte vuoto anche se un progetto e' attivo —
-// e il peggio e' che sembra che non ce ne sia nessuno. Un progetto
-// attivo che non si vede e' un progetto che non esiste.
 caricaProgetto();
 caricaProgetti();
 
-// E la sidebar, che adesso puo' chiamare `caricaProgetti` senza
-// cadere nella temporal dead zone: `progElenco` e gli altri `prog*`
-// sono `const` dichiarate piu' sopra, e qui sono gia' inizializzate.
-//
-// Sta qui e non al suo posto naturale per la stessa ragione del
-// commento che c'e' piu' in alto: la funzione e' hoisted, ma le
-// variabili che tocca no. La lista dei progetti, infatti, si vedeva
-// vuota e la console diceva "Cannot access 'progElenco' before
-// initialization" — l'errore piu' rumoroso del gruppo, perche' la
-// promessa rifiutata parte da una riga che sembra innocua.
+// E la sidebar, che adesso puo' chiamare `caricaProgetti` senza cadere nella temporal dead zone: `progElenco` e gli
+// altri `prog*` sono `const` dichiarate piu' sopra, e qui sono gia' inizializzate.
 if (sidebar && !sidebar.hasAttribute("hidden")) {
   caricaSide();
 }

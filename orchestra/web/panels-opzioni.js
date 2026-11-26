@@ -89,10 +89,7 @@ function disegnaProvider(d) {
   for (const motore of d.motori || []) disponibili.add(motore);
 
   const corrente = d.provider || "";
-  // I selettori del servizio sono due — Opzioni e header della chat —
-  // e devono dire la stessa cosa. Se ne aggiungessi un terzo, questa
-  // lista e' il posto dove metterlo: due copie che possono divergere
-  // sono peggio di una sola che si aggiorna tardi.
+  // I selettori del servizio sono due — Opzioni e header della chat — e devono dire la stessa cosa.
   const selettori = [optProvider, $("provider-pick")].filter(Boolean);
   const utili = Array.from(disponibili).sort();
   for (const s of selettori) {
@@ -109,9 +106,7 @@ function disegnaProvider(d) {
   }
   const segnalato = [optMsg, $("provider-note")].filter(Boolean);
     for (const m of segnalato) {
-      // Solo quando qualcosa non torna. "ora: <nome>" e' il menu
-      // a tendina con un altro livello di affidabilita', e quando il
-      // servizio e' regolare la riga resta vuota.
+      // Solo quando qualcosa non torna.
       m.textContent = utili.length
         ? (utili.includes(corrente)
             ? ""
@@ -125,17 +120,13 @@ function disegnaProvider(d) {
         optReasoning.value = r;
         optReasoning.disabled = false;
       }
-      // Max iterazioni + limite contesto corrente. Il limite è calcolato
-      // dal modello in uso (tetto pratico, mai oltre il 75% della sua
-      // finestra): si mostra, non si imposta — cambiarlo a mano
-      // litigherebbe con l'allineamento automatico al cambio modello.
+      // Max iterazioni + limite contesto corrente.
       if (optMaxIters) {
         optMaxIters.value = d.max_iterations || "";
         optMaxIters.disabled = false;
       }
-      // Il server tiene i secondi (e' quello che conta il loop), il
-      // pannello ragiona in minuti: quindici minuti si leggono, 900
-      // secondi si calcolano. Zero resta zero: "nessun limite".
+      // Il server tiene i secondi, il pannello ragiona in minuti: 900 secondi si calcolano.
+      // Zero resta zero e vuol dire "nessun limite".
       if (optMaxMinuti && typeof d.max_secondi_turno === "number") {
         const m = Math.round(d.max_secondi_turno / 60);
         optMaxMinuti.value = d.max_secondi_turno > 0 ? (m || 1) : 0;
@@ -154,17 +145,8 @@ function disegnaProvider(d) {
         hdrReasoning.disabled = false;
       }
 
-      // Budget: i campi si riempiono con quello che il server HA
-      // salvato, non con quello che sembra.
-      //
-      // Qui c'era `b.task_tokens || ""`, e `0 || ""` fa stringa vuota:
-      // un limite messo a 0 — che in Orchestra vuol dire "illimitato",
-      // ed e' una scelta legittima — tornava a campo vuoto al riaprire
-      // il pannello, identico a "non configurato". Il valore era
-      // salvato (il server lo restituisce 0, e `check_limits` salta il
-      // confronto quando e' zero): mancava solo la riga che lo diceva.
-      // Vuoto resta vuoto per `null`: quello vuol dire davvero "non
-      // deciso", ed e' una cosa diversa da zero.
+      // Budget: i campi si riempiono con quello che il server HA salvato. Zero è
+      // un limite legittimo (illimitato); vuoto invece significa non configurato.
       if (d.budget) {
         const b = d.budget;
         const numero = (campo, v) => {
@@ -218,11 +200,7 @@ async function caricaModelli(prov, preseleziona) {
   }
 }
 
-// Il cambio di servizio e' una sola azione, richiamata dai due
-// selettori. Prima era legato solo a quello delle Opzioni, e dalla chat
-// si poteva cambiare il modello ma non il servizio: due modelli con lo
-// stesso nome ("qwen3-8b" su OpenRouter e su Groq) non si distinguevano,
-// e la richiesta andava a un servizio diverso da quello che credevi.
+// Il cambio di servizio e' una sola azione, richiamata dai due selettori.
 async function cambiaServizio(p) {
   if (!p) return;
   // invalida ogni caricaOpzioni() in volo: la sua risposta porta il
@@ -240,14 +218,7 @@ async function cambiaServizio(p) {
     const d = await r.json();
     if (!r.ok) {
       const testo = d.error || ("errore " + r.status);
-      // Lo stato VERO si rilegge dal server, non si indovina. Prima qui
-      // si ridisegnava con `{ chiavi: [], provider: "" }` quando la
-      // risposta non aveva `stato` — e il server non lo manda mai:
-      // quel ramo era codice morto. Il risultato era due menu fermi su
-      // valori vecchi e diversi fra loro (uno sul servizio fallito,
-      // l'altro su quello di prima), piu' il messaggio d'errore
-      // sovrascritto da "nessuna chiave API configurata" — che faceva
-      // sembrare le chiavi sparite.
+      // Lo stato VERO si rilegge dal server, non si indovina.
       await caricaOpzioni();
       // Dopo caricaOpzioni, che riscrive anche il messaggio: l'errore
       // va detto per ultimo, o non si vede.
@@ -257,13 +228,10 @@ async function cambiaServizio(p) {
       return;
     }
     const nome = NOME_PROVIDER[p] || p;
-    // Se il server ha dovuto cambiare anche il modello — quello vecchio
-    // non esiste su questo servizio — si dice, e si sceglie subito
-    // quello nuovo. Senza, la select mostra il modello di un servizio
-    // e l'agente chiama un altro: la divergenza si vede solo alla
-    // prima risposta, e sembra un errore di rete.
+    // Se il server ha dovuto cambiare anche il modello — quello vecchio non esiste su questo servizio — si dice, e si
+    // sceglie subito quello nuovo.
     if (d.modello_cambiato && d.modello) {
-      const msg = nome + " — modello " + d.modello;
+      const msg = nome + ": modello " + d.modello;
       optMsg.textContent = msg;
       if (nota) { nota.textContent = msg; nota.className = "small giallo"; }
       await caricaModelli(p, d.modello);
@@ -274,10 +242,8 @@ async function cambiaServizio(p) {
       if (d.ready && (typeof ready !== "undefined" && !ready)) location.reload();
       return;
     }
-    // Niente "ora: <nome>": il menu a tendina lo dice gia', e ripeterlo
-    // in una riga sotto e' la stessa informazione due volte con un
-    // diverso livello di affidabilita'. Resta solo il colore verde,
-    // che distingue "cambiato" da "non e' successo niente".
+    // Niente "ora: <nome>": il menu a tendina lo dice gia', e ripeterlo in una riga sotto e' la stessa informazione due
+    // volte con un diverso livello di affidabilita'.
     optMsg.textContent = "";
     optMsg.className = "small verde";
     if (nota) { nota.textContent = ""; nota.className = "small verde"; }
@@ -285,24 +251,14 @@ async function cambiaServizio(p) {
     for (const s of [optProvider, $("provider-pick")]) {
       if (s) s.value = p;
     }
-    // Si ricarica tutto, non solo il menu. /api/chiavi risponde con il
-    // provider VERO, e quella e' l'unica lettura che non puo' essere
-    // superata da una richiesta partita prima. Senza, il menu delle
-    // Opzioni restava sul servizio precedente mentre la chat era gia'
-    // su quello nuovo: misurato, non ipotizzato.
+    // Si ricarica tutto, non solo il menu. /api/chiavi risponde con il provider VERO, e quella e' l'unica lettura che
+    // non puo' essere superata da una richiesta partita prima.
     await caricaModelli(p, d.modello || null);
     await loadModels();
     await caricaOpzioni();
     if (d.ready && (typeof ready !== "undefined" && !ready)) location.reload();
   } catch (e) {
-    // Il select torna a quello che il server sta usando davvero. Prima
-    // restava sul valore nuovo: il menu diceva "Groq" e la chat
-    // rispondeva con OpenRouter, e la divergenza si vedeva solo alla
-    // prima risposta — sembrava un errore di rete.
-    //
-    // Il messaggio d'errore resta, perche' il select da solo non dice
-    // PERCHE'. Dopo il ripristino il menu e' la verita' e il testo e'
-    // la spiegazione: due cose diverse.
+    // Il select torna a quello che il server sta usando davvero.
     await caricaOpzioni();
     const testo = "cambio fallito: " + e;
     optMsg.textContent = testo;
@@ -422,7 +378,7 @@ on(hdrReasoning, "change", async () => {
   }
 });
 
-// Budget save
+// Salvataggio budget
 on(optBudgetSalva, "click", async () => {
   const body = {
     task_tokens: optBudgetTaskTokens.value ? parseInt(optBudgetTaskTokens.value) : 0,
@@ -455,7 +411,7 @@ on(optBudgetSalva, "click", async () => {
   }
 });
 
-// Budget reset
+// Ripristino budget
 on(optBudgetReset, "click", async () => {
   optBudgetMsg.textContent = "reset...";
   try {
@@ -475,9 +431,7 @@ on(optBudgetReset, "click", async () => {
   }
 });
 
-// Lo stesso gesto, nella chat. Il modello segue il servizio: e' quello
-// che ti aspetti, e senza questa sincronizzazione scegli un
-// modello su un servizio e lo scambi su un altro.
+// Lo stesso gesto, nella chat.
 on($("provider-pick"), "change", (e) => cambiaServizio(e.target.value));
 
 on(optModel, "change", async () => {
@@ -492,10 +446,7 @@ on(optModel, "change", async () => {
     });
     const d = await r.json();
     if (!r.ok) {
-      // Il select torna al modello vero: dopo un rifiuto restava
-      // quello nuovo, e il menu mentiva su quello che l'agente
-      // avrebbe usato davvero. `caricaOpzioni` preseleziona il modello
-      // del server, quindi è lei a rimettere quello giusto.
+      // Dopo un rifiuto torna al modello vero, quello che il server usa davvero.
       await caricaOpzioni();
       optMsg.textContent = d.error || ("errore " + r.status);
       optMsg.className = "small rosso";
@@ -515,15 +466,22 @@ on(optModel, "change", async () => {
 });
 
 
-// ------------------------------------------------------------------- memoria: modale
-// La sidebar tiene solo "Tutti i fatti" + aggiunta rapida: sfoglia,
-// cerca e correggi vivono qui dentro.
+// Memoria: modale. La sidebar tiene "Tutti i fatti" e l'aggiunta rapida;
+// sfoglia, cerca e correggi vivono qui dentro.
 const memModal = $("mem-modal"), memLista = $("mem-lista"),
   memStat = $("mem-stat"), memMsg = $("mem-msg"),
   memCerca = $("mem-cerca"), memAnnullaCerca = $("mem-annulla-cerca");
 
-function rigaMemoria(testo) {
+function rigaMemoria(testo, importante) {
   const r = el("div", "mem-item");
+  if (importante) {
+    // Stessi marcatori che il CSS `.mem-item.imp`/`.stella` gia' prevede:
+    // una regola che vale sempre non deve sembrare un fatto qualunque.
+    r.classList.add("imp");
+    const stella = el("span", "stella", "★");
+    stella.title = "Importante: sta nel prompt di ogni conversazione";
+    r.appendChild(stella);
+  }
   const t = el("span", "txt");
   t.textContent = testo;
   const btns = el("span", "btns");
@@ -567,7 +525,7 @@ function rigaMemoria(testo) {
   return r;
 }
 
-function disegnaMemoria(fatti) {
+function disegnaMemoria(fatti, importanti) {
   if (!memLista) return;
   memLista.replaceChildren();
   if (!fatti.length) {
@@ -576,7 +534,14 @@ function disegnaMemoria(fatti) {
     memLista.appendChild(p);
     return;
   }
-  for (const f of fatti) memLista.appendChild(rigaMemoria(typeof f === "string" ? f : f.testo));
+  const marcati = new Set(importanti || []);
+  for (const f of fatti) {
+    // Due forme: le stringhe dell'elenco (con `importanti` a parte) e gli
+    // oggetti dei risultati di ricerca, che dicono gia' `importante`.
+    const testo = typeof f === "string" ? f : f.testo;
+    const imp = typeof f === "string" ? marcati.has(testo) : !!f.importante;
+    memLista.appendChild(rigaMemoria(testo, imp));
+  }
 }
 
 async function ricaricaMemoria() {
@@ -584,8 +549,11 @@ async function ricaricaMemoria() {
   try {
     const d = await (await fetch("/api/memoria")).json();
     if (d.errore) throw new Error(d.errore);
-    disegnaMemoria(d.fatti || []);
-    if (memStat) memStat.textContent = (d.n_fatti || 0) + " fatti";
+    disegnaMemoria(d.fatti || [], d.importanti || []);
+    if (memStat) {
+      memStat.textContent = (d.n_fatti || 0) + " fatti"
+        + (d.n_importanti ? " · " + d.n_importanti + " importanti" : "");
+    }
   } catch (e) {
     if (memMsg) memMsg.textContent = "non raggiungibile: " + e;
   }
@@ -619,7 +587,7 @@ async function cercaMemoria() {
       body: JSON.stringify({ query: q, limite: 50 }),
     });
     const d = await r.json();
-    disegnaMemoria((d.risultati || []).map((x) => x.testo));
+    disegnaMemoria(d.risultati || []);
     if (memStat) memStat.textContent = (d.risultati || []).length + " risultati";
   } catch (e) {
     if (memMsg) memMsg.textContent = "ricerca fallita: " + e;
@@ -659,14 +627,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && memModal && !memModal.hidden) chiudiMemoria();
 });
 
-// ------------------------------------------------- fallback manuale
-// Prima la catena era automatica e costruita da una tabella di servizi
-// che chi usa Orchestra puo' non avere. Un 401 sul primario diventava
-// "nessun provider disponibile" dopo aver bussato a porte chiuse, e chi
-// usava un servizio fuori tabella (nous, google) non aveva ripieghi
-// affatto. Qui l'utente sceglie fino a tre modelli, su qualunque
-// servizio abbia una chiave; spento, la catena e' il solo modello in
-// uso e l'errore che arriva e' quello vero.
+// fallback manuale: Prima la catena era automatica e costruita da una tabella di servizi che chi usa Orchestra puo' non
+// avere.
 const fbAttivo = $("opt-fallback");
 const fbLista = $("opt-fallback-lista");
 const fbMsg = $("opt-fallback-msg");
@@ -747,9 +709,8 @@ async function fbSalva() {
         fbMsg.textContent = d.error || ("errore " + r.status);
         fbMsg.className = "small rosso";
       }
-      // Il pannello torna a dire quello che il server ha davvero:
-      // un rifiuto lasciato a schermo come se fosse accettato e' il
-      // modo in cui si crede di avere un fallback che non c'e'.
+      // Il pannello torna a dire quello che il server ha davvero: un rifiuto lasciato a schermo come se fosse accettato
+      // e' il modo in cui si crede di avere un fallback che non c'e'.
       await caricaFallback();
       return;
     }

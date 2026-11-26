@@ -1,27 +1,19 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-bot")<0)window.__diagFiles.push("panels-bot");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-bot");}})();
-// ---- Bot: identita' persistenti -------------------------------------------
-//
-// Un bot non e' una seconda applicazione: e' una sessione con un nome, un
-// modello, una persona e un progetto. La UI qui fa tre cose sole — scegliere
-// chi sta parlando, crearne uno, e dire con chi puo' parlare. Tutto il resto
-// (conversazione, storico, profondita' delle chiamate) vive nel server.
+// Bot: identita' persistenti. Un bot non e' una seconda applicazione, ma una
+// sessione con nome, modello, persona e progetto.
 
 let botElenco = [];
 let botScelto = 0;
 let botAttivoOra = false;
-// Il timer che guarda se la chat Telegram si e' collegata. Sta qui e non
-// accanto alle funzioni che lo usano perche' `riempiModuloBot` gira anche
-// durante il caricamento iniziale, prima che quel blocco sia eseguito.
+// Il timer che guarda se la chat Telegram si e' collegata.
 let tgTimer = null;
 // Il nome con cui l'agente principale si presenta. Vuoto = etichetta
 // storica "agente principale".
 let nomePrincipale = "agente principale";
 
 function aggiornaSelettoriBot() {
-  // Con un bot attivo il modello e il servizio arrivano dalla SUA
-  // configurazione: cambiarli dal menu in alto sarebbe un comando che
-  // sembra funzionare e non cambia quello che stai usando. Si
-  // disabilitano, e la nota dice dove si cambiano davvero.
+  // Con un bot attivo il modello e il servizio arrivano dalla SUA configurazione: cambiarli dal menu in alto sarebbe un
+  // comando che sembra funzionare e non cambia quello che stai usando.
   const bloccato = botAttivoOra;
   const pp = $("provider-pick");
   if (pp) {
@@ -105,10 +97,8 @@ function disegnaBot(d) {
     for (const b of botElenco) {
       const o = document.createElement("option");
       o.value = String(b.id);
-      // Lo stato anche nel menu in testa: se un bot sta lavorando (in
-      // background o in un turno che hai lasciato), l'utente lo vede
-      // senza aprire Opzioni. Il nome resta il valore; il suffisso e'
-      // solo informazione.
+      // Lo stato anche nel menu in testa: se un bot sta lavorando (in background o in un turno che hai lasciato),
+      // l'utente lo vede senza aprire Opzioni.
       const stato = b.busy ? " · lavora"
         : (b.coda ? " · +" + b.coda : "");
       o.textContent = b.nome + stato;
@@ -199,9 +189,6 @@ function disegnaBot(d) {
     riga.appendChild(sub);
     if (b.ultimo) {
       // L'ultima risposta del lavoro in background, in una riga sola.
-      // Senza, per sapere com'e' andata bisogna attivare il bot e
-      // aprire la conversazione — che e' proprio il passaggio che il
-      // lavoro in background voleva evitare.
       const u = document.createElement("div");
       const stato = b.ultimo.stato || (b.ultimo.ok ? "completato" : "fallito");
       const esito = b.ultimo.ok && b.ultimo.risposta
@@ -213,9 +200,7 @@ function disegnaBot(d) {
       riga.appendChild(u);
     }
     if (b.ultimo && b.ultimo.worktree && !b.ultimo.worktree.scartato) {
-      // Dove sono finiti i file del lavoro. Senza questa riga il bot
-      // scriverebbe "fatto" e l'utente non saprebbe dove guardare: il
-      // progetto aperto non contiene niente, ed e' il punto.
+      // Dove sono finiti i file del lavoro.
       const wt = b.ultimo.worktree;
       const w = document.createElement("div");
       w.className = "bot-worktree";
@@ -269,9 +254,8 @@ function disegnaBot(d) {
       }
     }
     if (b.riprovabile) {
-      // Un lavoro interrotto dal riavvio non deve sparire: e' proprio
-      // quello che l'esecuzione durevole e' venuta a salvare. Il
-      // pulsante lo rimette in coda senza doverlo riscrivere.
+      // Un lavoro interrotto dal riavvio non deve sparire: e' proprio quello che l'esecuzione durevole e' venuta a
+      // salvare.
       if (!b.ultimo || b.riprovabile.id !== b.ultimo.id) {
         const r = document.createElement("div");
         r.className = "bot-ultimo err";
@@ -282,9 +266,8 @@ function disegnaBot(d) {
       }
       if (b.riprovabile.worktree && !b.riprovabile.worktree.scartato
           && (!b.ultimo || b.riprovabile.id !== b.ultimo.id)) {
-        // Il checkout del lavoro da riprovare: senza questa riga, dopo
-        // un nuovo tentativo quello vecchio sparirebbe dal pannello e
-        // resterebbe su disco per sempre.
+        // Il checkout del lavoro da riprovare: senza questa riga, dopo un nuovo tentativo quello vecchio sparirebbe dal
+        // pannello e resterebbe su disco per sempre.
         const vecchio = document.createElement("div");
         vecchio.className = "bot-worktree";
         vecchio.textContent = "checkout da riprovare: "
@@ -310,9 +293,7 @@ function disegnaBot(d) {
       riga.appendChild(btn);
     }
     if (b.in_corso_id) {
-      // La coda e' su disco: un lavoro puo' restare in corso anche se la
-      // conversazione non e' quella attiva. Senza questo pulsante l'unico
-      // modo di fermarlo sarebbe aspettare o chiudere il server.
+      // La coda e' su disco: un lavoro puo' restare in corso anche se la conversazione non e' quella attiva.
       const btn = document.createElement("button");
       btn.className = "ghost bot-riprova";
       btn.textContent = "Annulla lavoro";
@@ -421,9 +402,8 @@ async function salvaIdentita() {
     if (d.error) { identitaNota(d.error, true); return; }
     nomePrincipale = (d.nome || "").trim() || "agente principale";
     identitaNota("identità salvata");
-    // Il menu in testa e la nota di attivazione leggono dai bot: si
-    // ricarica anche quello, altrimenti il nome nuovo resta invisibile
-    // finche' non si riapre la pagina.
+    // Il menu in testa e la nota di attivazione leggono dai bot: si ricarica anche quello, altrimenti il nome nuovo
+    // resta invisibile finche' non si riapre la pagina.
     await caricaBot();
   } catch (e) {
     identitaNota("errore di rete: identità non salvata", true);
@@ -546,10 +526,8 @@ async function attivaBotDaId(id) {
     }
     const nome = d.bot ? d.bot.nome : nomePrincipale;
     if (typeof addNote === "function") addNote("ora parli con " + nome);
-    // La connessione SSE e' legata alla sessione: senza riconnettere,
-    // continuerebbe a mostrare gli eventi del bot precedente mentre la
-    // chat e' gia' passata all'altro. La riconnessione manda anche lo
-    // snapshot nuovo, quindi il log si ricostruisce da solo.
+    // La connessione SSE e' legata alla sessione: senza riconnettere, continuerebbe a mostrare gli eventi del bot
+    // precedente mentre la chat e' gia' passata all'altro.
     if (typeof connect === "function") connect();
     caricaBot();
     if (typeof caricaProgetto === "function") caricaProgetto();
@@ -587,16 +565,8 @@ async function eliminaBotScelto() {
   }
 }
 
-// ---- Telegram: lo stesso bot, scritto dal telefono -------------------------
-//
-// Tre passi, nell'ordine in cui vanno fatti: il token di @BotFather, il QR da
-// inquadrare, e la chat che da quel momento riceve le risposte. Il QR lo
-// disegna il server (`orchestra/qr.py`): il codice di collegamento non passa
-// per un servizio esterno, perche' chi lo legge puo' collegarsi al bot.
-//
-// Il token non torna mai indietro dal server: il campo resta vuoto anche
-// dopo averlo salvato, e mostra solo "token salvato". Un token che si puo'
-// rileggere dal browser e' un token che finisce in uno screenshot.
+// Telegram: token di @BotFather, QR e chat. Il token non torna mai dal server:
+// il campo resta vuoto e mostra solo "token salvato", mai il valore.
 
 function tgNota(testo, errore) {
   const el = $("tg-stato");
@@ -613,16 +583,7 @@ function tgSvuotaQr() {
   if (tgTimer) { clearInterval(tgTimer); tgTimer = null; }
 }
 
-// A quale bot appartiene il token qui sotto. Non e' per forza `botScelto`:
-// l'agente principale non e' un bot salvato, e deve poter avere la sua
-// chat Telegram come gli altri — e' il caso di chi non ne ha mai creato
-// uno. E si vuole poter collegare un bot diverso da quello che si sta
-// modificando in questa schermata.
-// La scelta fatta a mano nel menu Telegram, se c'e'. E' `null` quando
-// nessuno l'ha toccato: in quel caso il destinatario e' il bot che si sta
-// modificando, o l'agente principale se non ce n'e' nessuno. Serve un
-// vero "nessuna scelta" perche' il menu si ridisegna ogni pochi secondi
-// mentre si aspetta il QR, e non deve riportare la selezione indietro.
+// A quale bot appartiene il token qui sotto.
 let tgScelto = null;
 
 function tgId() {
@@ -630,9 +591,6 @@ function tgId() {
   return botScelto || 0;
 }
 
-// Il menu dei destinatari. Ogni voce dice anche a che punto e' il
-// collegamento, cosi' si vede a colpo d'occhio quale bot scrive gia' sul
-// telefono: sono tanti bot e un token per uno.
 function tgElenca(voci) {
   const sel = $("tg-bot");
   if (!sel) return;
@@ -642,18 +600,15 @@ function tgElenca(voci) {
     const o = document.createElement("option");
     o.value = String(v.bot_id);
     const chi = v.principale ? "agente principale" : ("bot: " + v.nome);
-    const stato = v.token ? (v.collegato ? " — chat collegata" : " — token salvato")
-                          : " — non collegato";
+    const stato = v.token ? (v.collegato ? ", chat collegata" : ", token salvato")
+                          : ", non collegato";
     o.textContent = chi + stato;
     sel.appendChild(o);
   }
   if (voci.some((x) => String(x.bot_id) === attuale)) sel.value = attuale;
 }
 
-// L'elenco delle chat collegate, una riga per persona con la sua
-// revoca. "Scollega la chat" stacca tutte: con due persone sullo stesso
-// bot serve poter togliere quella che non deve piu' scrivere, senza
-// buttare fuori anche l'altra.
+// L'elenco delle chat collegate, una riga per persona con la sua revoca.
 function tgElencoChat(v) {
   const box = $("tg-chat");
   if (!box) return;
@@ -813,9 +768,8 @@ async function collegaTelegram() {
     if (d.error) { tgNota(d.error, true); return; }
     tgDisegnaQr(d);
     tgNota("in attesa che una chat mandi il codice...");
-    // Il collegamento avviene dall'altra parte (il telefono scrive al
-    // bot), quindi qui si guarda e basta: nessun pulsante da premere
-    // quando arriva.
+    // Il collegamento avviene dall'altra parte (il telefono scrive al bot), quindi qui si guarda e basta: nessun
+    // pulsante da premere quando arriva.
     const scadenza = Date.now() + 10 * 60 * 1000;
     if (tgTimer) clearInterval(tgTimer);
     tgTimer = setInterval(async () => {
@@ -867,9 +821,8 @@ async function scollegaTelegram() {
       await attivaBotDaId(v ? parseInt(v, 10) : null);
     });
   }
-  // Gli elementi si prendono una volta e si controllano prima di
-  // agganciare: un listener su null uccide il resto del bundle, e in un
-  // file concatenato "il resto" sono tutte le funzioni dopo questa riga.
+  // Gli elementi si prendono una volta e si controllano prima di agganciare: un listener su null uccide il resto del
+  // bundle, e in un file concatenato "il resto" sono tutte le funzioni dopo questa riga.
   const btnNuovo = $("bot-nuovo");
   const btnSalva = $("bot-salva");
   const btnAttiva = $("bot-attiva");

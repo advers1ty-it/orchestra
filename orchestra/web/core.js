@@ -4,27 +4,15 @@
 
 const $ = (id) => document.getElementById(id);
 
-// Aggancio un handler senza mai esplodere. Un elemento assente e' un
-// errore da segnalare, non un motivo per uccidere tutto lo script che
-// segue: e' successo tre volte, e ogni volta la pagina restava a meta'
-// senza dire perche'.
+// Aggancio un handler senza mai esplodere.
 const on = (el, evento, fn) => {
-  // Se arriva una stringa, e' un id: si risolve. Il motivo e' che
-  // passare l'id a on() e' l'errore piu' facile da fare — sembra
-  // funzionare perche' una stringa e' truthy e passa la guardia
-  // qui sotto, e si scopre solo quando la pagina muore con
-  // "addEventListener is not a function". Accettare l'id e
-  // risolverlo e' il comportamento che ti aspetteresti, e toglie
-  // una classe intera di difetti.
+  // Se arriva una stringa, e' un id: si risolve.
   const bersaglio = typeof el === "string" ? $(el) : el;
   if (!bersaglio) {
     console.warn("elemento assente, handler '" + evento + "' non agganciato");
     return false;
   }
   if (typeof bersaglio.addEventListener !== "function") {
-    // Non e' un elemento. Meglio dirlo con precisione che lasciare
-    // la pagina morire due righe dopo: un TypeError su
-    // addEventListener non dice quale handler e quale elemento.
     console.warn("non e' un elemento, handler '" + evento + "' non agganciato:",
                  bersaglio);
     return false;
@@ -174,12 +162,6 @@ function punteggioPerScope(m, scope) {
 let busy = false;
 let ready = false;
 
-// Non esiste un "blocco turno": ogni elemento appende direttamente a
-// `log`, in ordine di arrivo. Il blocco esisteva e veniva creato da
-// `turn_start`, che arriva PRIMA di `user_message`: finiva un contenitore
-// vuoto SOPRA il messaggio dell'utente, con la risposta dentro — e la
-// chat sembrava aver l'agente che rispondeva "sopra". In una chat
-// l'ordine di arrivo e' tutto, quindi basta appendere e basta.
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -187,9 +169,8 @@ function el(tag, cls, text) {
   return e;
 }
 
-// Legge una risposta come JSON, ma se il server manda HTML o testo
-// (proxy, errore grezzo, porta occupata da altro) l'errore dice lo
-// stato HTTP e l'inizio del corpo invece di un SyntaxError muto.
+// Legge una risposta come JSON, ma se il server manda HTML o testo (proxy, errore grezzo, porta occupata da altro)
+// l'errore dice lo stato HTTP e l'inizio del corpo invece di un SyntaxError muto.
 async function leggiJson(r) {
   const testo = await r.text();
   try { return JSON.parse(testo); }
@@ -199,26 +180,16 @@ async function leggiJson(r) {
 }
 
 function seiInFondo() {
-  // Il predicato da solo, perché a `tool_end` serve sapere DOVE era
-  // l'utente quando il tool è partito, non dove sta adesso che il
-  // risultato ha allungato il log di trecento righe.
+  // Il predicato da solo, perché a `tool_end` serve sapere DOVE era l'utente quando il tool è partito, non dove sta
+  // adesso che il risultato ha allungato il log di trecento righe.
   return main.scrollHeight - main.scrollTop - main.clientHeight < 140;
 }
 
-// L'ultima posizione impostata da noi. Serve a distinguere il nostro
-// salto da un gesto dell'utente quando arriva l'evento di scroll: gli
-// eventi sono asincroni, e senza questo il salto di `tool_end` seguito
-// subito da un'altra riga sembrerebbe un gesto dell'utente e spegnerebbe
-// l'intento di seguire a meta' turno.
+// Ultimo scroll impostato dal codice: distingue il nostro salto dal gesto utente.
 let scrollVoluto = null;
 
-// Salto in fondo che non passa da `seiInFondo()`. Serve dove l'intento
-// e' gia' registrato (`seguiTurno`, `eraInFondoPrima`) e la posizione
-// attuale non lo dice piu': o il log e' stato appena svuotato e
-// ricostruito — e il browser ha clampato scrollTop a 0 — o e' cresciuto
-// oltre la soglia dei 140 px. In tutti e due i casi chiedere "sei in
-// fondo adesso?" risponde no, ed e' il motivo per cui la chat restava a
-// inizio conversazione o lasciava la risposta appena sotto il bordo.
+// Salto in fondo che non passa da `seiInFondo()`: serve quando il log è stato
+// appena svuotato o è cresciuto, e "sei in fondo adesso" direbbe no.
 function vaiInFondo() {
   // Non scrollare se l'utente sta selezionando testo nella chat: lo
   // scroll forzato annulla la selezione e rende impossibile copiare.
@@ -230,19 +201,13 @@ function vaiInFondo() {
   scrollVoluto = main.scrollTop;
 }
 
-// L'utente stava seguendo quando questo turno è partito. Registrato a
-// `turn_start` e consumato dal messaggio finale: un tool da 200 righe
-// fa scendere "in fondo" per qualche secondo, e il messaggio che arriva
-// dopo non troverebbe più nessuno in fondo. Il flag ricorda l'intento.
+// L'utente stava seguendo quando il turno è partito. Un tool da 200 righe fa
+// scendere "in fondo" per qualche secondo: il flag ricorda l'intento.
 let seguiTurno = false;
 let primoSnapshot = true;
 let ultimaFirmaSnapshot = "";
-// La conversazione che il log sta mostrando. Il server la manda con ogni
-// snapshot (`sessione_id`): confrontarla e' l'unico modo per accorgersi
-// che lo snapshot appartiene a un'altra chat. La firma dei messaggi non
-// basta: due conversazioni diverse possono avere lo stesso numero di
-// messaggi e lo stesso ultimo testo, ed e' esattamente il caso in cui
-// aprire una chat dalla cronologia non cambiava niente a schermo.
+// La conversazione mostrata. La firma dei messaggi non basta: due chat possono
+// avere stesso numero e stesso ultimo testo, quindi conta `sessione_id`.
 let sessioneSnapshot = null;
 
 function scrollDown() {
@@ -250,11 +215,7 @@ function scrollDown() {
   if (seiInFondo()) vaiInFondo();
 }
 
-// L'intento di seguire segue lo sguardo: chi risale a leggere mentre un
-// tool o un turno sta lavorando non deve essere riportato giu' a
-// `tool_end` o alla risposta finale, e chi torna in fondo deve tornare a
-// essere seguito (una risposta piu' alta della soglia lo strattonerebbe
-// altrimenti). Per questo non e' solo una scadenza: si riarma.
+// Segue lo sguardo: chi risale a leggere non viene riportato giu', chi torna in fondo riprende a seguire.
 function intentoSegui(attivo) {
   seguiTurno = attivo;
   Array.from(log.children).forEach((n) => {
@@ -263,19 +224,15 @@ function intentoSegui(attivo) {
 }
 
 on(main, "scroll", () => {
-  // Il salto che abbiamo fatto noi non e' un gesto dell'utente: il suo
-  // evento arriva dopo, con la stessa posizione, e va consumato una volta
-  // sola — altrimenti un ritorno in fondo alla stessa quota verrebbe
-  // scambiato per il nostro salto e l'intento non si riarmerebbe.
+  // Il salto fatto da noi non e' un gesto dell'utente: l'evento va consumato una volta sola.
   const nostro = main.scrollTop === scrollVoluto;
   scrollVoluto = null;
   if (nostro) return;
   intentoSegui(seiInFondo());
 });
 
-// Gli snapshot contengono solo la conversazione server-side. Gli avvisi
-// mostrati dal client (es. cambio modello) vanno conservati al punto in cui
-// sono comparsi, non appesi in coda dopo aver ricostruito la conversazione.
+// Gli snapshot contengono solo la conversazione server-side: gli avvisi lato
+// client restano dove sono, ricostruire la chat non li sposta in coda.
 function raccogliNodiClient() {
   const nodi = [];
   let indice = 0;
@@ -302,21 +259,11 @@ function ripristinaNodiClient(nodi) {
   });
 }
 
-// ---- suggerimenti di fine turno ---------------------------------------
-// A turno finito il server propone tre o quattro mosse, ognuna con il
-// prompt gia' scritto: cosa puo' essersi rotto (con i file toccati e i test
-// che li coprono), la revisione del diff, il commit, e cosa resta aperto.
-// Premere un pulsante COMPILA il campo: non parte niente, perche' quel
-// prompt va riletto — e spesso corretto — prima di mandarlo.
-// Il turno appena finito ha gia' i suoi pulsanti? Serve a non chiedere due
-// volte la stessa cosa quando la fine del turno arriva da due strade (SSE e
-// polling), e a non far ricomparire i pulsanti a chi ne ha appena premuto
-// uno. Torna falso appena parte un turno nuovo.
+// A turno finito il server propone mosse con il prompt gia' scritto.
 let suggerimentiFatto = false;
 let suggerimentiInCorso = false;
-// Il modello scrive i consigli su misura DOPO la fine del turno: se non ha
-// ancora finito il server risponde `in_corso` e si riprova fra poco. Il
-// server non richiama il modello, legge la cache del turno.
+// Il modello scrive i consigli su misura DOPO la fine del turno: se non ha ancora finito il server risponde `in_corso`
+// e si riprova fra poco.
 let suggerimentiTimer = null;
 let suggerimentiTentativi = 0;
 const SUGGERIMENTI_RIPROVE = 10;
@@ -342,9 +289,7 @@ function suggerimentiMostra(lista) {
     // prima di premerlo, senza doverlo prima premere.
     b.title = p.prompt;
     b.onclick = () => {
-      // Se il campo ha gia' del testo non lo si butta: si accoda dopo una
-      // riga vuota. Chi ha scritto mezza frase e preme per errore non deve
-      // perderla.
+      // Se il campo ha gia' del testo non lo si butta: si accoda dopo una riga vuota.
       const gia = input.value.trim();
       input.value = gia ? gia + "\n\n" + p.prompt : p.prompt;
       if (typeof autoGrow === "function") autoGrow();
@@ -375,9 +320,7 @@ async function suggerimentiCarica() {
     if (busy) return;
     suggerimentiMostra(j.proposte || []);
     if (j.in_corso && suggerimentiTentativi < SUGGERIMENTI_RIPROVE) {
-      // Il modello sta ancora scrivendo i consigli su misura: si riprova
-      // fra poco e si sostituiscono appena pronti. Il primo giro mostra
-      // comunque i pulsanti veri ricavati dal turno, non una casella vuota.
+      // Il modello sta ancora scrivendo i consigli su misura: si riprova fra poco e si sostituiscono appena pronti.
       suggerimentiTentativi += 1;
       clearTimeout(suggerimentiTimer);
       suggerimentiTimer = setTimeout(suggerimentiCarica, SUGGERIMENTI_ATTESA);
@@ -402,10 +345,8 @@ function setBusy(v) {
     suggerimentiTentativi = 0;
     clearTimeout(suggerimentiTimer);
   }
-  // La fine del turno non arriva solo da `idle`: se il SSE e' morto e la
-  // UI sta leggendo /api/state, l'unico segnale e' questo, busy che torna
-  // falso. Si caricano qui e solo in polling — col SSE vivo lo fa `idle`,
-  // e caricare anche qui sarebbe una richiesta doppia per lo stesso turno.
+  // La fine del turno non arriva solo da `idle`: se il SSE è morto e la UI legge
+  // /api/state, l'unico segnale è busy falso. Col SSE vivo lo fa `idle`, senza doppie richieste.
   if (!v && eraOccupato && pollingTimer) suggerimentiCarica();
   dot.className = "dot" + (v ? " busy" : " ok");
   input.disabled = !ready || v;
@@ -413,18 +354,13 @@ function setBusy(v) {
   const micFloatEl = document.getElementById("mic-float");
   if (micFloatEl) micFloatEl.disabled = !ready || v;
   // Il pallino e' sempre li': verde a riposo, giallo mentre lavora.
-  // Durante il lavoro il form chat viene sostituito dalla steer bar:
-  // la stessa larghezza, la stessa posizione, niente scroll che
-  // sposta il layout.
   const chatForm = document.getElementById("chat-form");
   if (chatForm) chatForm.hidden = v;
   if (steerBar) steerBar.hidden = !v;
   if (steerStop) steerStop.disabled = !v;
   if (steerInput && v) steerInput.focus();
-  // Il bottone del modello segue il select: senza, durante un turno
-  // resterebbe cliccabile mentre il select e' disabilitato, e si
-  // potrebbe aprire un pannello su un catalogo che il server sta
-  // ricaricando.
+  // Il bottone del modello segue il select: senza, durante un turno resterebbe cliccabile mentre il select e'
+  // disabilitato, e si potrebbe aprire un pannello su un catalogo che il server sta ricaricando.
   const mpB = document.getElementById("model-btn");
   if (mpB) mpB.disabled = v || modelPick.disabled;
   if (typeof mpSincronizzaEtichetta === "function") {
@@ -433,9 +369,8 @@ function setBusy(v) {
 }
 
 function renderStats(s) {
-  // Costruito col DOM, non con innerHTML: i valori vengono dal nostro
-  // server ma restare strutturalmente immuni evita di doverlo ricordare
-  // ogni volta che qui compare un numero.
+  // Costruito col DOM, non con innerHTML: i valori vengono dal nostro server ma restare strutturalmente immuni evita di
+  // doverlo ricordare ogni volta che qui compare un numero.
   const parts = [];
   if (s.iterations) parts.push([s.iterations, "iter"]);
   if (s.tool_calls) parts.push([s.tool_calls, "tool"]);
@@ -444,16 +379,8 @@ function renderStats(s) {
   if (s.compactions) parts.push([s.compactions, "comp"]);
 
   stats.textContent = "";
-  if (!parts.length) { stats.textContent = "—"; return; }
-  // Barra di riempimento del contesto: mostra quanto manca alla
-  // compattazione. Il limite arriva dal server (non si calcola qui),
-  // e il colore dice se siamo vicini al limite. Senza questa barra,
-  // l'unica informazione è il numero di token — che si legge male
-  // quando il contesto è quasi pieno.
-  // La barra misura la FINESTRA (messaggi attuali), non il cumulato
-  // del turno: il totale cresce per sempre e la resterebbe rossa e
-  // piena anche a contesto vuoto. Se il server vecchio non manda
-  // context_tokens, si ripiega sul totale come prima.
+  if (!parts.length) { stats.textContent = "n/d"; return; }
+  // Barra di riempimento del contesto: mostra quanto manca alla compattazione.
   const finestra = (typeof s.context_tokens === "number")
     ? s.context_tokens : (s.total_tokens || 0);
   if (s.context_limit && finestra) {
@@ -466,9 +393,7 @@ function renderStats(s) {
     bar.appendChild(fill);
     stats.appendChild(bar);
   }
-  // `sep`, non `dot`: `dot` e' il nome della variabile globale che setBusy
-  // usa per lo stato di occupazione. Ombreggiarla qui funzionerebbe per
-  // caso, ma renderebbe ogni lettura futura di setBusy un bug.
+  // `sep`, non `dot`: `dot` e' il nome della variabile globale che setBusy usa per lo stato di occupazione.
   const sep = document.createTextNode(" · ");
   parts.forEach(([v, label, isErr], i) => {
     if (i) stats.appendChild(sep.cloneNode());
@@ -479,15 +404,7 @@ function renderStats(s) {
   });
 }
 
-// Non esiste un "blocco turno": tutto appende direttamente a `log`, in
-// ordine di arrivo. Il blocco esisteva e veniva creato da `turn_start`,
-// che arriva PRIMA di `user_message`: finiva cosi' un contenitore vuoto
-// sopra il messaggio dell'utente, con la risposta dentro. Sembrava che
-// l'agente rispondesse "sopra". In una chat l'ordine e' tutto.
-// Se il ragionamento è aperto, resta in fondo: ogni cosa che arriva
-// dopo (tool, testo, attesa) lo spingerebbe su, e dopo tre tool non si
-// vedrebbe più. Sposta il nodo CORRENTE, non il primo della pagina: con
-// un nodo per ciclo, "il primo" sarebbe un blocco storico già letto.
+// Non esiste un "blocco turno": tutto appende direttamente a `log`, in ordine di arrivo.
 function tieniRagionamentoInFondo() {
   if (typeof ragionamentoCorrente !== "undefined" && ragionamentoCorrente) {
     if (ragionamentoCorrente.parentNode === log) log.appendChild(ragionamentoCorrente);
@@ -497,14 +414,17 @@ function tieniRagionamentoInFondo() {
 
 function addText(role, text, markdown) {
   const m = el("div", "msg " + role);
-  m.appendChild(el("div", "role", role));
+  m.setAttribute("data-role", role);
+  // L'etichetta e' in italiano: "user" e "assistant" erano parole del
+  // protocollo mostrate all'utente, non della sua lingua.
+  const etichetta = role === "user" ? "tu"
+    : role === "assistant" ? "orchestra" : role;
+  m.appendChild(el("div", "role", etichetta));
   const corpo = el("div", "body");
   if (markdown) {
-    // Il modello parla markdown (`**grassetto**`, liste, codice): senza
-    // rendering si vedono gli asterischi crudi, come segnalato in uso.
-    // Solo i messaggi assistant: quelli user restano letterali (li hai
-    // scritti tu e si mostrano come li hai scritti), e gli output dei
-    // tool restano testo (potrebbero contenere `**` che non c'entrano).
+    // Il modello parla markdown: senza rendering si vedono gli asterischi crudi.
+    // Solo i messaggi assistant: user e output dei tool restano testo, i loro `**` non diventano HTML.
+    corpo.classList.add("md");
     corpo.innerHTML = renderMarkdown(text);
   } else {
     corpo.textContent = text;
@@ -515,11 +435,8 @@ function addText(role, text, markdown) {
   return m;
 }
 
-// Markdown minimo per i messaggi del modello. Regola d'ordine: prima
-// si scappa l'HTML (l'output del modello non è fidato: un `<script>`
-// dentro una risposta non deve eseguirsi), POI si applica il markdown.
-// Il codice viene estratto prima di tutto, o gli asterischi dentro un
-// blocco ``` verrebbero letti come grassetto.
+// Markdown minimo per i messaggi del modello. Prima si scappa l'HTML (l'output
+// non è fidato), poi si applica il markdown; il codice si estrae prima degli asterischi.
 function renderMarkdown(text) {
   let h = String(text == null ? "" : text)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -581,12 +498,6 @@ function addNote(text) {
 }
 
 // L'attesa: una riga sola che pulsa e sparisce quando arriva qualcosa.
-//
-// Il motivo di una riga sola invece di una per iterazione: dopo cinque
-// tool in un turno il pannello avrebbe cinque righe "sto pensando",
-// e cioe' cinque righe che dicono la stessa cosa e coprono quello che
-// e' successo davvero. E' lo stesso difetto del [tool?] su ottanta
-// righe: un'etichetta ripetuta smette di essere un'informazione.
 const FRASI_ATTESA = [
   "sto ragionando…",
   "sto ragionando, e' un modello lento",
@@ -608,9 +519,8 @@ function mostraAttesa() {
   attesaGiro += 1;
   const i = Math.min(attesaGiro - 1, FRASI_ATTESA.length - 1);
   attesaNodo.textContent = FRASI_ATTESA[i];
-  // Il ronzio: i puntini che si muovono dicono "vivo" senza dire
-  // nulla. Dopo quattro secondi il messaggio si fa piu' esplicito,
-  // perche' a quel punto non e' piu' un'attesa ma e' un'attesa lunga.
+  // Una sola riga che pulsa: un segnaposto per iterazione coprirebbe il lavoro.
+  // Dopo 4 secondi il testo diventa esplicito, perché l'attesa non è più breve.
   if (!attesaTimer) {
     attesaTimer = setInterval(() => {
       if (attesaNodo && !attesaNodo.textContent.endsWith("…")) {
@@ -633,12 +543,8 @@ function togliAttesa() {
 // Tool: intestazione cliccabile + output richiudibile.
 const openTools = new Set();
 
-// ------------------------------------------------------------- Permessi
-// L'agente si e' fermo e aspetta. Questa e' l'unica schermata in cui
-// il tempo conta: senza risposta, dopo cinque minuti il server nega
-// da solo. Chiudere la scheda NON e' "nega" — e' lasciare l'agente
-// appeso. Per questo la chiusura risponde "mai" esplicitamente, e i
-// pulsanti non si disattivano fino a quando la risposta non e' partita.
+// Permessi: l'agente si è fermo e aspetta. Senza risposta il server nega
+// dopo cinque minuti; chiudere la scheda non è un no.
 const permessoBox = $("permesso");
 let permessoAttivo = null;
 
@@ -690,18 +596,13 @@ on($("permesso-ses"), "click", () => rispondiPermesso("sessione"));
   on($("permesso-sempre"), "click", () => rispondiPermesso("sempre"));
 on($("permesso-mai"), "click", () => rispondiPermesso("mai"));
 
-// ---- Domande libere dell'agente (tool ask_user) --------------------
-// Il tool e' fermo in un thread: la modale e' l'unico modo di farlo
-// ripartire, quindi non si chiude con Escape e non si ignora. Le
-// opzioni riempiono il campo, non lo bloccano: la risposta resta
-// libera, perche' il modello ha chiesto un dato, non un permesso.
+// Domande libere dell'agente (tool ask_user): Il tool e' fermo in un thread: la modale e' l'unico modo di farlo
+// ripartire, quindi non si chiude con Escape e non si ignora.
 let domandaAttiva = null;
 
 function mostraDomanda(d) {
   domandaAttiva = d.id;
-  // Un piano non e' una domanda: ha dei passi da leggere e una decisione
-  // da prendere. Chiamarlo "L'agente chiede" fa sembrare che chieda un
-  // dettaglio, e il titolo e' la prima cosa che si legge.
+  // Un piano non e' una domanda: ha dei passi da leggere e una decisione da prendere.
   const ePiano = d.tipo === "piano";
   const titolo = $("domanda-titolo");
   if (titolo) titolo.textContent = ePiano ? "Piano proposto" : "L'agente chiede";
@@ -716,10 +617,8 @@ function mostraDomanda(d) {
     b.textContent = o;
     b.addEventListener("click", () => {
       $("domanda-input").value = o;
-      // Su un piano il clic E' la decisione: riempire il campo e
-      // aspettare un secondo clic trasforma "Approva" in due passaggi,
-      // e il secondo si dimentica. Sulle domande resta com'era, perche'
-      // li' l'opzione e' solo un punto di partenza per scrivere.
+      // Su un piano il clic E' la decisione: riempire il campo e aspettare un secondo clic trasforma "Approva" in due
+      // passaggi, e il secondo si dimentica.
       if (ePiano) inviaRisposta();
       else $("domanda-input").focus();
     });
@@ -775,13 +674,8 @@ on($("domanda-input"), "keydown", (e) => {
 // resta, non e' un avviso che si nasconde
 
 
-// Anteprime di un tool: immagini che il tool ha prodotto (per esempio
-// immagine). Non arrivano dentro `result` perché sono grandi e non sono
-// testo: viaggiano a parte in `images`, e qui diventano <img>.
-//
-// Solo data URL: un percorso del disco non è raggiungibile dal browser, e
-// un URL esterno dentro un evento SSE non è una cosa da caricare di
-// nascosto. Se il tool manda altro, si ignora.
+// Anteprime di un tool: immagini prodotte (per esempio immagine). Solo data URL:
+// un URL esterno dentro un evento SSE non va caricato di nascosto.
 function mostraAnteprime(out, immagini) {
   (immagini || []).forEach((src) => {
     if (typeof src !== "string" || !src.startsWith("data:image/")) return;
@@ -791,6 +685,10 @@ function mostraAnteprime(out, immagini) {
     img.loading = "lazy";
     out.appendChild(img);
   });
+}
+
+function testoLogTool(valore) {
+  return String(valore == null ? "" : valore).replace(/^errore:\s*/, "errore, ");
 }
 
 function addTool(name, args, key) {
@@ -814,28 +712,20 @@ function addTool(name, args, key) {
   t.appendChild(head);
   t.appendChild(out);
   log.appendChild(t);
-  // Si registra DOVE sta l'utente adesso: a `tool_end` il risultato avrà
-  // allungato il log e il controllo "sei in fondo" direbbe sempre no —
-  // ed è per quello che dopo un tool lungo la risposta arrivava senza
-  // che nessuno scrollasse, e toccava farlo a mano.
+  // Salva la posizione attuale: dopo il tool il log e' cresciuto e "sei in fondo" direbbe no.
   const seguiva = seiInFondo();
   t._segui = seguiva;
-  // Coerente col flag: se l'utente seguiva, il tool nuovo va in fondo;
-  // se era risalito a leggere, NON si scrolla — chiamare `scrollDown`
-  // qui ignorava proprio l'intento appena registrato e strattonava chi
-  // stava leggendo sopra. Il ragionamento (se c'è) resta ancorato a
-  // fondo solo quando si segue.
+  // Coerente col flag: se l'utente seguiva, il tool nuovo va in fondo; se era risalito a leggere, NON si scrolla —
+  // chiamare `scrollDown` qui ignorava proprio l'intento appena registrato e strattonava chi stava leggendo sopra.
   if (seguiva) { scrollDown(); }
   return { root: t, status: st, out };
 }
 
-// ---------------------------------------------------------------- SSE
+// SSE
 let es = null;
 
-// Polling di fallback: se il SSE non riceve eventi per 12s (tunnel
-// lento, mobile sospeso, Cloudflare che bufferizza), il client ricarica
-// lo snapshot da /api/state. Cosi' il telefono si sincronizza anche
-// quando il flusso live e' morto — e' il caso del tunnel remoto.
+// Polling di fallback: se il SSE non riceve eventi per 12s (tunnel lento, mobile sospeso, Cloudflare che bufferizza),
+// il client ricarica lo snapshot da /api/state.
 let ultimoEventoTs = Date.now();
 let pollingTimer = null;
 
@@ -849,9 +739,8 @@ function avviaPollingFallback() {
       // Applica lo snapshot solo se e' cambiato (evita flicker).
       const snap = j.snapshot || j;
       if (snap && snap.messages) {
-        // Mentre il turno e' in corso non ricostruire il DOM: evita
-        // flicker e salti di scroll. Si aggiorna solo busy/stats; il sync
-        // completo avviene a fine turno (busy=false).
+        // Mentre il turno è in corso non ricostruire il DOM: evita flicker e salti.
+        // Si aggiornano solo busy e stats; il sync completo arriva a fine turno.
         if (snap.busy) {
           setBusy(true);
           renderStats(snap);
@@ -859,9 +748,8 @@ function avviaPollingFallback() {
         }
         const firma = String(snap.messages.length) + "::" +
           String(snap.messages.length ? (snap.messages[snap.messages.length-1].content || "") : "");
-        // Anche qui il cambio conversazione va riconosciuto: due chat con
-        // la stessa firma hanno lo stesso numero di messaggi, e senza
-        // questo confronto il polling (tunnel lento) restava sulla vecchia.
+        // Anche qui il cambio conversazione va riconosciuto: due chat con la stessa firma hanno lo stesso numero di
+        // messaggi, e senza questo confronto il polling (tunnel lento) restava sulla vecchia.
         const cambiaSessione = ("sessione_id" in snap) &&
           snap.sessione_id !== sessioneSnapshot;
         if ("sessione_id" in snap) sessioneSnapshot = snap.sessione_id;
@@ -881,9 +769,8 @@ function avviaPollingFallback() {
             const text = (m && m.content != null) ? String(m.content) : "";
             if (m.role === "user") addText("user", text);
             else if (m.role === "assistant") {
-              // `if (m.reasoning)` lasciava passare i ragionamenti fatti di
-              // soli a capo: un blocco vuoto, identico a una riga bianca.
-              // Qui, e nello snapshot qui sopra, si guarda il testo vero.
+              // `if (m.reasoning)` lasciava passare i ragionamenti fatti di soli a capo: un blocco vuoto, identico a
+              // una riga bianca.
               if ((m.reasoning || "").trim()) {
                 const r = el("div", "ragionamento");
                 r.textContent = m.reasoning;
@@ -898,7 +785,7 @@ function avviaPollingFallback() {
                   const st = creato.root.querySelector(".tool-status");
                   st.className = "tool-status " + (male ? "err" : "ok");
                   st.textContent = male ? "errore" : "ok";
-                  creato.root.querySelector(".tool-out").textContent = ris.content || "";
+                  creato.root.querySelector(".tool-out").textContent = testoLogTool(ris.content);
                 }
               });
             }
@@ -906,12 +793,8 @@ function avviaPollingFallback() {
           ripristinaNodiClient(nodiClient);
           ultimaFirmaSnapshot = firma;
           setBusy(!!snap.busy);
-          // Conserva la posizione di lettura: se era in fondo, segui; altrimenti
-          // ripristina lo scroll precedente (evita il salto in cima).
-          // Su un'altra conversazione la posizione di prima non vale.
-          // Qui il fondo e' una decisione presa prima della ricostruzione:
-          // dopo non si puo' piu' dedurre (`log` svuotato ha portato
-          // scrollTop a 0).
+          // Conserva la posizione: se era in fondo segui, altrimenti ripristina lo scroll.
+          // Su un'altra conversazione la posizione precedente non vale.
           if (cambiaSessione || eraInFondoPrima) vaiInFondo();
           else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
         }
@@ -931,9 +814,8 @@ function fermaWatchdog() {
 function avviaWatchdog() {
   fermaWatchdog();
   watchdogTimer = setTimeout(() => {
-    // Se il SSE ha aperto la connessione ma non ha consegnato alcun
-    // evento (tipico del tunnel Cloudflare che bufferizza/blocca lo
-    // stream), passiamo al polling di fallback su /api/state.
+    // Se il SSE ha aperto la connessione ma non ha consegnato alcun evento (tipico del tunnel Cloudflare che
+    // bufferizza/blocca lo stream), passiamo al polling di fallback su /api/state.
     if (Date.now() - ultimoEventoTs > 7000) avviaPollingFallback();
     else avviaWatchdog(); // riprova: magari sta solo tardando
   }, 8000);
@@ -985,17 +867,11 @@ function handle(kind, d) {
       ready = true;
       renderStats(d);
       loadModels();
-      // Se lo snapshot e' di un'ALTRA conversazione, va ricostruito
-      // comunque e subito: aprire una chat dalla cronologia ha gia'
-      // cambiato l'id sul server, e senza questo il clic selezionava la
-      // riga ma la chat restava quella di prima fino al refresh.
+      // Snapshot di un'altra chat: va ricostruito subito, o il clic cambia solo la riga.
       const cambiaSessione = ("sessione_id" in d) &&
         d.sessione_id !== sessioneSnapshot;
       if ("sessione_id" in d) sessioneSnapshot = d.sessione_id;
-      // Durante un turno attivo non ricostruire il DOM: evita flicker e
-      // spostamenti del ragionamento. Il sync completo avviene a fine turno.
-      // (Un cambio conversazione durante un turno non e' possibile: il
-      // server risponde 409, quindi non c'e' nulla da proteggere qui.)
+      // Durante un turno attivo non ricostruire il DOM: evita flicker e spostamenti del ragionamento.
       const eraPrimoSnapshot = primoSnapshot;
       if (primoSnapshot) {
         primoSnapshot = false;
@@ -1006,14 +882,12 @@ function handle(kind, d) {
       const firma = String((d.messages || []).length) + "::" +
         String((d.messages && d.messages.length)
           ? (d.messages[d.messages.length - 1].content || "") : "");
-      // Se lo snapshot non e' cambiato, non ricostruire: evita il refresh
-      // forzato che cancella la selezione del testo e fa sparire i
-      // messaggi lato client (gateway, ragionamento).
+      // Se lo snapshot non e' cambiato, non ricostruire: evita il refresh forzato che cancella la selezione del testo e
+      // fa sparire i messaggi lato client (gateway, ragionamento).
       if (!cambiaSessione && firma === ultimaFirmaSnapshot) {
         setBusy(!!d.busy);
-        // Il piano non entra nella firma (non e' un messaggio), quindi
-        // puo' cambiare mentre lo snapshot e' "identico": senza questo,
-        // il toggle resterebbe indietro finche' non arriva un messaggio.
+        // Il piano non entra nella firma (non e' un messaggio), quindi puo' cambiare mentre lo snapshot e' "identico":
+        // senza questo, il toggle resterebbe indietro finche' non arriva un messaggio.
         if ("piano" in d && typeof aggiornaPiano === "function") {
           aggiornaPiano(!!d.piano);
         }
@@ -1023,11 +897,8 @@ function handle(kind, d) {
       primoSnapshot = false;
       const eraInFondoPrima = seiInFondo();
       const scrollTopPrima = main.scrollTop;
-      // Se la chat ha già contenuto (turno in corso o finito), non
-      // ricostruisco il DOM dallo snapshot: i nodi di sistema (errori,
-      // warning, steer, note) restano dove sono, non finiscono in fondo.
-      // Lo snapshot serve solo a popolare la UI quando è vuota (reload,
-      // prima apertura).
+      // Se la chat ha già contenuto (turno in corso o finito), non ricostruisco il DOM dallo snapshot: i nodi di
+      // sistema (errori, warning, steer, note) restano dove sono, non finiscono in fondo.
       if (log.children.length > 0 && !cambiaSessione) {
         setBusy(!!d.busy);
         if (eraInFondoPrima) scrollDown();
@@ -1039,11 +910,8 @@ function handle(kind, d) {
       // ricostruisci la conversazione
       log.innerHTML = "";
       if (typeof ragionamentoDimentica === "function") ragionamentoDimentica();
-      // I risultati dei tool, indicizzati per id: le chiamate (dentro i
-      // messaggi assistant) arrivano prima dei risultati (messaggi
-      // role="tool"), ma raccoglierli prima rende il rendering immune
-      // all'ordine. Stessa regola del live: si abbina per id, non
-      // "l'ultimo tool".
+      // I risultati dei tool, indicizzati per id: le chiamate (dentro i messaggi assistant) arrivano prima dei
+      // risultati (messaggi role="tool"), ma raccoglierli prima rende il rendering immune all'ordine.
       const risultatiTool = {};
       (d.messages || []).forEach((m) => {
         if (m && m.role === "tool" && m.tool_call_id) {
@@ -1051,9 +919,8 @@ function handle(kind, d) {
         }
       });
       (d.messages || []).forEach((m) => {
-        // `m.content` puo' essere null o mancante: `.trim()` su undefined
-        // solleva e blocca TUTTO il rendering della snapshot, lasciando la
-        // chat vuota senza alcun errore in console. Difesa esplicita.
+        // `m.content` puo' essere null o mancante: `.trim()` su undefined solleva e blocca TUTTO il rendering della
+        // snapshot, lasciando la chat vuota senza alcun errore in console.
         const text = (m && m.content != null) ? String(m.content) : "";
         if (m.role === "user") addText("user", text);
         else if (m.role === "assistant") {
@@ -1063,10 +930,8 @@ function handle(kind, d) {
             r.textContent = m.reasoning;
             log.appendChild(r);
           }
-          // Solo testo, niente riga bianca: un assistant con sole tool
-          // call non ha niente da dire, e il suo contenuto sono i tool
-          // sotto. La riga bianca era il motivo per cui questi messaggi
-          // venivano omessi dallo snapshot.
+          // Solo testo, niente riga bianca: un assistant con sole tool call non ha niente da dire, e il suo contenuto
+          // sono i tool sotto.
           if (text.trim()) addText("assistant", text, true);
           (m.tool_calls || []).forEach((tc) => {
             const creato = addTool(tc.name, tc.arguments, tc.id);
@@ -1076,7 +941,7 @@ function handle(kind, d) {
               const st = creato.root.querySelector(".tool-status");
               st.className = "tool-status " + (male ? "err" : "ok");
               st.textContent = male ? "errore" : "ok";
-              creato.root.querySelector(".tool-out").textContent = ris.content || "";
+              creato.root.querySelector(".tool-out").textContent = testoLogTool(ris.content);
             }
           });
         }
@@ -1084,17 +949,12 @@ function handle(kind, d) {
       // Ripristina gli avvisi locali vicino ai messaggi accanto a cui erano.
       ripristinaNodiClient(nodiClient);
       setBusy(!!d.busy);
-      // Lo stato della modalita' piano vive sul server: se il toggle non
-      // lo segue, dopo un refresh dice il contrario di quello che
-      // l'agente sta facendo.
+      // Lo stato della modalita' piano vive sul server: se il toggle non lo segue, dopo un refresh dice il contrario di
+      // quello che l'agente sta facendo.
       if ("piano" in d && typeof aggiornaPiano === "function") {
         aggiornaPiano(!!d.piano);
       }
-      // Il primo snapshot inizializza la chat: mostra subito gli ultimi
-      // messaggi. Gli aggiornamenti successivi conservano invece la lettura.
-      // Su un'altra conversazione la posizione di prima non significa
-      // niente: si parte dal fondo anche li'. Come nel polling, il fondo
-      // e' deciso da cosa c'era PRIMA della ricostruzione.
+      // Il primo snapshot inizializza la chat: mostra subito gli ultimi messaggi.
       if (eraPrimoSnapshot || cambiaSessione || eraInFondoPrima) vaiInFondo();
       else main.scrollTop = Math.min(scrollTopPrima, main.scrollHeight);
       break;
@@ -1115,22 +975,14 @@ function handle(kind, d) {
       if (typeof aggiornaPiano === "function") aggiornaPiano(!!d.attivo);
       break;
     case "model_changed":
-      // Il modello e' cambiato da solo (router o fallback): il bottone
-      // in alto deve dirlo, altrimenti mostra il vecchio mentre il
-      // nuovo sta gia' lavorando.
+      // Il modello e' cambiato da solo (router o fallback): il bottone in alto deve dirlo, altrimenti mostra il vecchio
+      // mentre il nuovo sta gia' lavorando.
       loadModels();
       addText("system", `modello → ${d.model || "?"} (automatico)`);
       break;
     case "turn_start":
-      // segnalava l'inizio del turno. Non crea piu' nulla: il blocco
-      // finiva sopra il messaggio dell'utente e la risposta finiva dentro.
-      //
-      // Qui si registra se l'utente stava seguendo quando il turno è
-      // partito. Non è la stessa cosa di "sei in fondo adesso": con un
-      // tool da 200 righe, il messaggio finale arriva secondi dopo e in
-      // quel lasso di tempo l'utente non è più esattamente in fondo —
-      // quindi `scrollDown` (che controlla "sei in fondo adesso") lo
-      // salta, e la risposta resta sotto. Il flag sopravvive ai tool.
+      // Non crea nodi: il blocco finirebbe sopra il messaggio utente. Registra se
+      // l'utente seguiva all'inizio, perché dopo un tool lungo "sei in fondo" direbbe no.
       seguiTurno = seiInFondo();
       suggerimentiNascondi();
       break;
@@ -1138,31 +990,15 @@ function handle(kind, d) {
       addText("user", d.text);
       break;
     case "thinking": {
-      // Il tempo piu' lungo e piu' vuoto dello schermo era quello
-      // fra "invio" e "prima risposta": 40 secondi per un modello che
-      // ragiona, e a schermo non succedeva niente. Sembrava che
-      // Orchestra avesse smesso di funzionare.
-      //
-      // UNA riga sola, che si aggiorna e sparisce: se ogni iterazione
-      // lasciasse un segnaposto, dopo cinque tool ci sarebbero cinque
-      // righe "sto pensando" e il pannello diventerebbe illeggibile —
-      // che e' il difetto che il [tool?] aveva.
+      // Il tempo piu' lungo e piu' vuoto dello schermo era quello fra "invio" e "prima risposta": 40 secondi per un
+      // modello che ragiona, e a schermo non succedeva niente.
       mostraAttesa();
-      // Nuovo ciclo di thinking = il ragionamento di prima è finito. Si
-      // chiude il nodo, così il prossimo pezzo di ragionamento ne apre
-      // uno nuovo in fondo (sotto i tool, non sopra). Senza questo, un
-      // modello che ragiona, chiama un tool e ragiona ancora riempirebbe
-      // il blocco iniziale, che i tool hanno già spinto in cima.
-      // Il flag va azzerato insieme, o il prossimo pezzo crederebbe che
-      // un blocco sia già aperto e non ne aprirebbe uno nuovo.
+      // Nuovo ciclo di thinking = il ragionamento di prima è finito.
       ragionamentoVisibile = false;
       ragionamentoChiudi();
       break;
     }
     case "ragionamento": {
-      // Il ragionamento arriva a pezzi. La riga d'attesa sparisce al primo
-      // pezzo: da lì in poi c'è qualcosa da leggere, e tenerle tutte e due
-      // direbbe due volte la stessa cosa.
       togliAttesa();
       if (!ragionamentoVisibile) {
         ragionamentoVisibile = true;
@@ -1175,18 +1011,10 @@ function handle(kind, d) {
       ragionamentoVisibile = false;
       ragionamentoChiudi();
       togliAttesa();
-      // `d.content` puo' essere fatto di soli spazi: con `if (d.content)`
-      // bastava quello per creare una bolla vuota. Lo snapshot usa gia'
-      // `.trim()`, quindi la bolla spariva al reload — un difetto che
-      // sembrava casuale proprio per questo.
+      // `d.content` puo' essere fatto di soli spazi: con `if (d.content)` bastava quello per creare una bolla vuota.
       if ((d.content || "").trim()) {
         addText("assistant", d.content, true);
-        // La risposta vera va in fondo SE l'utente stava seguendo il
-        // turno — non "se è in fondo adesso". Con un tool da 200 righe,
-        // quando la risposta arriva secondi dopo, nessuno è più in fondo
-        // e `scrollDown` la lascia sotto. Questo è il "devo scrollare
-        // io" segnalato in uso. Se l'utente era risalito a leggere, il
-        // flag è falso e nessuno lo strattona.
+        // La risposta vera va in fondo SE l'utente stava seguendo il turno — non "se è in fondo adesso".
         if (seguiTurno) { seguiTurno = false; vaiInFondo(); }
       }
       (d.tool_calls || []).forEach((tc) => {
@@ -1198,33 +1026,22 @@ function handle(kind, d) {
     }
     case "tool_end": {
       togliAttesa();
-      // abbiniamo per id, non "l'ultimo tool". Con due tool nello stesso
-      // turno il risultato finiva sempre sulla stessa riga e l'altro
-      // restava appeso su "..." per sempre. I tool vivono in `log`, non in
-      // un blocco: per questo si cercano li'.
+      // abbiniamo per id, non "l'ultimo tool".
       const node = d.id ? log.querySelector('[data-key="' + CSS.escape(d.id) + '"]') : null;
       if (node) {
         const st = node.querySelector(".tool-status");
         st.className = "tool-status " + (d.ok ? "ok" : "err");
         st.textContent = d.ok ? "ok" : "errore";
         const out = node.querySelector(".tool-out");
-        out.textContent = d.result || "";
+        out.textContent = testoLogTool(d.result);
         mostraAnteprime(out, d.images);
-        // Un'immagine dentro un riquadro chiuso non si vede: il tool card
-        // nasce chiuso, quindi un risultato visivo lo apre da solo. Il
-        // testo resta apribile e richiudibile come gli altri.
+        // Un'immagine dentro un riquadro chiuso non si vede: il tool card nasce chiuso, quindi un risultato visivo lo
+        // apre da solo.
         if ((d.images || []).length) {
           node.classList.add("open");
           if (d.id) openTools.add(d.id);
         }
         // Il risultato ha allungato il log anche di centinaia di righe.
-        // Se l'utente stava seguendo (registrato a `tool_start`), lo si
-        // riporta in fondo: senza, il controllo di `scrollDown` direbbe
-        // "non sei in fondo" da qui in poi — risposta finale inclusa — e
-        // toccherebbe scrollare a mano. Se aveva scrollato su da solo, il
-        // flag è falso e nessuno lo disturba.
-        // Il fondo si imposta diretto: il risultato appena scritto ha gia'
-        // superato la soglia di `seiInFondo`, che da qui risponderebbe no.
         if (node._segui) vaiInFondo();
       }
       break;
@@ -1237,9 +1054,7 @@ function handle(kind, d) {
       addNote(`contesto compattato: ${d.tokens_before} → ${d.tokens_after} token ` +
               `(potati ${d.tools_pruned} tool, fusi ${d.history_merged} turni)`);
       break;
-    // La risposta e' stata tagliata dal tetto di output. Senza una riga
-    // qui l'utente vede un testo che si interrompe a meta' e un
-    // "completato" sopra, senza niente in mezzo che spieghi perche'.
+    // La risposta e' stata tagliata dal tetto di output.
     case "troncato":
       if ((d.tentativo || 0) <= 2) {
         addNote(`risposta troncata dal limite di token (${d.motivo || "length"}): ` +
@@ -1250,21 +1065,16 @@ function handle(kind, d) {
                 `lavoro piu' piccolo.`);
       }
       break;
-    // Niente nota quando non c'e' nulla da potare: era rumore a ogni
-    // turno ("sotto soglia... sta lavorando") e si confondeva con un
-    // vero avanzamento. Solo la compattazione vera merita una riga.
+    // Niente nota quando non c'e' nulla da potare: era rumore a ogni turno ("sotto soglia... sta lavorando") e si
+    // confondeva con un vero avanzamento.
 
     // Self-correzione: il loop "agisci → verifica oggettiva → correggi".
-    // Va detto a schermo quando scatta: un controllo automatico che non
-    // si vede è indistinguibile da uno che non esiste — e qui il modello
-    // potrebbe "correggersi" e l'utente deve sapere che è stato rimandato
-    // indietro, non che l'agente ha risposto due volte a caso.
     case "verifica": {
       if (d.ok) {
         addNote(`verifica superata (tentativo ${d.tentativo})`);
       } else {
         addNote(`verifica FALLITA (tentativo ${d.tentativo}): ${d.motivo} ` +
-                `— rimando al modello con il motivo esatto`);
+                `Rimando al modello con il motivo esatto`);
       }
       break;
     }
@@ -1281,22 +1091,15 @@ function handle(kind, d) {
       break;
 
     // Instradamento e delega: le due cose che Orchestra fa da sola.
-    // Senza una riga qui, l'agente cambia modello e chiede a un
-    // sub-agente senza che nulla lo dica, e un comportamento
-    // automatico che non si vede e' indistinguibile da uno che non
-    // esiste.
     case "routing": {
       const chi = d.modello ? `${d.categoria || "?"} → ${d.modello}` : "routing";
       const p = (d.punteggio !== null && d.punteggio !== undefined)
         ? ` (${Math.round(d.punteggio)}% su ${Math.round(d.prove || 0)} prove)` : "";
-      addNote(`instradamento: ${chi}${p} — ${d.motivo || ""}`);
+      addNote(`instradamento: ${chi}${p}, ${d.motivo || ""}`);
       break;
     }
     case "figlio": {
       // Il sub-agente lavora: mostro i suoi passi, annotati come "figlio".
-      // Solo l'essenziale — tool chiamati e testo — non ogni evento, o il
-      // log del padre si riempie dei passi del figlio e non si distingue
-      // più chi sta facendo cosa.
       const t = d.tipo || "";
       if (t === "tool_start") {
         addNote(`figlio → ${d.name}`);
@@ -1313,18 +1116,12 @@ function handle(kind, d) {
                      errore: "errore"}[d.esito] || d.esito;
       const quale = d.indice ? ` [${d.indice}/${d.totale || "?"}]` : "";
       addNote(`delega${quale} a un sub-agente (${d.modello || "senza modello"}, ` +
-              `${d.passi || 0} passi): ${esito} — "${String(d.obiettivo || "").slice(0, 70)}"`);
+              `${d.passi || 0} passi): ${esito}: "${String(d.obiettivo || "").slice(0, 70)}"`);
       break;
     }
     case "progetto_cambiato": {
-      // Il progetto non e' un'etichetta: e' la cartella in cui si
-      // scrive. Se cambia senza dirlo, l'utente crede di stare
-      // lavorando da una parte e i file finiscono dall'altra — e il
-      // danno e' nel suo progetto.
-      //
-      // Per questo il messaggio dice DOVE, non solo quale progetto:
-      // la cartella e' la cosa che l'utente deve poter controllare.
-      const dove = d.percorso ? ` — ${d.percorso}` : "";
+      // Il progetto non e' un'etichetta: e' la cartella in cui si scrive.
+      const dove = d.percorso ? `, ${d.percorso}` : "";
       addNote(`progetto: ${d.progetto || "?"}${dove}`);
       // Il campo della sidebar mostra il progetto attivo: se non
       // viene aggiornato qui, resta quello vecchio e la UI mente.
@@ -1347,15 +1144,11 @@ function handle(kind, d) {
       ragionamentoCorrente = null;
       break;
     case "riepilogo":
-      // La riga di fine turno: esito, durata, file, token, costo. Un
-      // turno lungo finisce spesso fuori dallo schermo, e questa e' la
-      // sola cosa che dice "e' finito, ed ecco il conto".
+      // La riga di fine turno: esito, durata, file, token, costo.
       addNote("fine turno · " + (d.riga || d.esito_testo || "fatto"));
       notificaTurno(d);
       break;
-    // La risposta e' arrivata senza una parola di testo. In chat non c'e'
-    // niente da leggere: senza questa riga resterebbe un turno chiuso col
-    // vuoto dentro, che e' peggio di un messaggio che spiega.
+    // La risposta e' arrivata senza una parola di testo.
     case "risposta_vuota":
       addNote(d.chiuso
         ? "il modello ha chiuso senza scrivere niente: nessuna risposta da mostrare."
@@ -1368,45 +1161,39 @@ function handle(kind, d) {
       addNote("annullamento richiesto, il turno in corso finirà");
       break;
     case "steer": {
-      // Conferma che la guida e' stata ricevuta e verra' letta al
-      // prossimo tool. Senza questa riga il messaggio restava in coda
-      // in silenzio e l'utente non sapeva se fosse arrivato.
+      // Conferma che la guida e' stata ricevuta e verra' letta al prossimo tool.
       const _t = String(d.testo || "");
       const _anteprima = _t.length > 80 ? _t.slice(0, 80) + "…" : _t;
-      addNote(`guida ricevuta (#${d.count || "?"}): «${_anteprima}» — letta al prossimo tool`);
+      addNote(`guida ricevuta (#${d.count || "?"}): «${_anteprima}»: letta al prossimo tool`);
       break;
     }
     case "reset":
       log.innerHTML = "";
       if (typeof ragionamentoDimentica === "function") ragionamentoDimentica();
-      stats.textContent = "—";
+      stats.textContent = "n/d";
       break;
     case "idle":
       setBusy(false);
-      // E' qui e non su `riepilogo` perche' `idle` arriva sempre, anche
-      // quando il riepilogo non si e' potuto costruire: un turno finito
-      // senza pulsanti lascerebbe l'utente senza la cosa piu' utile.
+      // E' qui e non su `riepilogo` perche' `idle` arriva sempre, anche quando il riepilogo non si e' potuto costruire:
+      // un turno finito senza pulsanti lascerebbe l'utente senza la cosa piu' utile.
       suggerimentiCarica();
       // A fine turno arrivano i totali: la barra del contesto si
       // aggiorna qui, non solo al reload della pagina.
       if (typeof d.total_tokens === "number") renderStats(d);
-      // Congela anche qui: se il turno finisce senza turn_end (es.
-      // cancellazione o errore gestito), il reasoning non deve restare
-      // "corrente" e inseguire il fondo.
+      // Congela anche qui: se il turno finisce senza turn_end (es. cancellazione o errore gestito), il reasoning non
+      // deve restare "corrente" e inseguire il fondo.
       ragionamentoCorrente = null;
       break;
   }
 }
 
 function notificaTurno(d) {
-  // Solo se la scheda non e' visibile: una notifica di sistema mentre
-  // l'utente sta guardando la risposta e' un doppione fastidioso, e il
-  // browser la mostra sopra la finestra che sta gia' mostrando la stessa
-  // cosa.
+  // Solo se la scheda non e' visibile: una notifica di sistema mentre l'utente sta guardando la risposta e' un doppione
+  // fastidioso, e il browser la mostra sopra la finestra che sta gia' mostrando la stessa cosa.
   try {
     if (!document.hidden) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const n = new Notification("Orchestra — " + (d.esito_testo || "turno finito"), {
+    const n = new Notification("Orchestra: " + (d.esito_testo || "turno finito"), {
       body: d.riga || "",
       tag: "orchestra-turno",
       silent: false,
@@ -1416,9 +1203,8 @@ function notificaTurno(d) {
   } catch (e) { /* le notifiche sono un extra */ }
 }
 
-// Il permesso si chiede su un gesto dell'utente (l'invio), non a fine
-// turno: un prompt di permesso che compare da solo dopo dieci minuti di
-// lavoro viene negato per riflesso, e poi non si puo' piu' chiedere.
+// Il permesso si chiede su un gesto dell'utente (l'invio), non a fine turno: un prompt di permesso che compare da solo
+// dopo dieci minuti di lavoro viene negato per riflesso, e poi non si puo' piu' chiedere.
 function chiediPermessoNotifiche() {
   try {
     if (!("Notification" in window)) return;
@@ -1433,11 +1219,8 @@ function showBanner(msg) {
   log.appendChild(b);
 }
 
-// ------------------------------------------------------- selettore modello
-// Il modello si cambia SENZA riavviare il server. Il contesto della
-// conversazione resta: è un cambio di "chi risponde", non di "di cosa si
-// parla". Cambiarlo a metà turno è vietato dal server (409) perché
-// lascerebbe una conversazione con due modelli diversi e nessun senso.
+// selettore modello: si cambia senza riavviare il server; a metà turno il
+// server risponde 409, perché la conversazione avrebbe due modelli.
 
 async function loadModels() {
   try {
@@ -1445,93 +1228,46 @@ async function loadModels() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    // svuota con replaceChildren, non textContent: su un <select> alcuni
-    // browser trattano textContent="" come "nessuna opzione valida" e
-    // rifiutano di accettarne altre. replaceChildren è esplicito.
+    // svuota con replaceChildren, non textContent: su un <select> alcuni browser trattano textContent="" come "nessuna
+    // opzione valida" e rifiutano di accettarne altre. replaceChildren è esplicito.
     modelPick.replaceChildren();
-    // i gratuiti per primi: sono quelli che si possono provare senza
-    // pensarci, e sono la maggior parte di quello che c'è
-    // Il servizio dichiara il tool-calling? Vera se ALMENO UN modello
-    // lo dichiara: su OpenRouter tutti, su NVIDIA nessuno, su Groq
-    // nessuno. E li' la differenza la fa solo se qualcuno dichiara
-    // qualcosa — altrimenti non c'e' niente da distinguere e il
-    // "forse" sarebbe identico su tutte le righe.
+    // I gratuiti per primi: si provano senza pensarci. Il servizio dichiara il
+    // tool-calling se almeno un modello lo dichiara.
     const _tutti = d.models || [];
     const _dichiarati = _tutti.filter(
       (m) => m.tool_calling !== null && m.tool_calling !== undefined).length;
     servizioDichiaraTool = _dichiarati > 0;
-    // Se il servizio NON dichiara niente, il piede del menu lo dice
-    // una volta sola. E' l'unica parte che un utente deve leggere
-    // prima di scegliere un modello su quel servizio.
+    // Se il servizio NON dichiara niente, il piede del menu lo dice una volta sola.
     servizioTace = _tutti.length > 0 && _dichiarati === 0;
     const sorted = _tutti.slice().sort((a, b) =>
       (a.free === b.free) ? a.id.localeCompare(b.id) : (a.free ? -1 : 1));
-    // Indicizzati per id: il popup del selettore cerca il punteggio di
-    // una riga, e rileggere il testo dell'option per ognuna significa
-    // cercare fra 400 elementi 400 volte. Una mappa costa una riga e
-    // toglie 160.000 confronti ogni volta che si apre il menu.
+    // Indicizzati per id: il popup del selettore cerca il punteggio di una riga, e rileggere il testo dell'option per
+    // ognuna significa cercare fra 400 elementi 400 volte.
     modelliPerId = {};
     for (const m of sorted) modelliPerId[m.id] = m;
 
     for (const m of sorted) {
-      // new Option(...) invece di createElement("option"): costruisce
-      // un <option> vero, con value e testo impostati nel modo giusto.
-      // Con createElement + appendChild il <select> restava vuoto in
-      // alcuni browser, perche' mancava l'attributo implicito.
-      //
-      // Il punteggio va nell'opzione, non in una tabella a parte: e'
-      // la domanda che stai facendo ("quanto e' bravo su QUELLO che devo
-      // fare") e la risposta deve stare dove scegli.
-      //
-      // "tool?" per i modelli di cui il provider NON dichiara il
-      // tool-calling. Non e' un difetto: e' una domanda aperta, e
-      // segnalarla vale piu' di fingere certezze. Su un "sconosciuto"
-      // non si fa affidamento — ma non si nasconde nemmeno, perche' un
-      // modello che nasconde le sue carte peggio di uno che ammette di
-      // non sapere.
-      // Tool: tre stati, e uno solo si ripete.
-      //
-      // "tool?" dice "non lo so". Su NVIDIA lo dicevano 80 righe su 80, e
-      // su Groq 8 su 11: un'etichetta identica ovunque non distingue niente,
-      // e insegnava a leggerla senza leggerla. Il dubbio è onesto su una
-      // riga e rumore su ottanta.
-      //
-      // Quindi: il "forse" resta SOLO dove qualche modello lo dichiara e
-      // qualche altro no — li' distingue davvero. Se il servizio non
-      // dichiara niente, non si mette niente, e si dice UNA volta cosa
-      // significa, nel piede del menu.
-      //
-      // "[niente tool]" invece resta su ogni riga: è un no definitivo e un
-      // modello senza tool-calling non è Orchestra.
+      // new Option(...) invece di createElement("option"): costruisce un <option> vero, con value e testo impostati nel
+      // modo giusto.
       const tc = m.tool_calling;
       const tool = tc === true ? ""
         : (tc === false ? "  [niente tool]" : (servizioDichiaraTool ? "  [tool?]" : ""));
       const punteggio = punteggioPerScope(m, scopeAttivo);
-      // Il costo per 10k token va nell'opzione insieme al prezzo per
-      // milione. Sono due numeri che dicono cose diverse: $0.01/1M e
-      // $30/1M su un turno da 10k token sono un centesimo e trenta
-      // centesimi, ma nel menu sembrano lontanissimi. Il costo della
-      // richiesta e' quello che decide, quindi e' quello che si vede.
+      // Il costo per 10k token va nell'opzione insieme al prezzo per milione.
       const o = new Option(
         m.short + tool + (punteggio ? "  " + punteggio : "") +
         ctx_label(m.context) + " · " + price_label(m) +
         costo_breve(m, 10000), m.id);
       modelPick.appendChild(o);
     }
-    // il modello corrente: si mette in mezzo solo se esiste davvero
-    // nella lista. Senza questo controllo, cambiando servizio la select
-    // si posiziona su un id che quel servizio non ha: si vede il
-    // modello vecchio mentre il backend sta chiamando un altro, e la
-    // divergenza si vede solo alla prima risposta.
+    // il modello corrente: si mette in mezzo solo se esiste davvero nella lista.
     if (d.current && sorted.some((m) => m.id === d.current)) {
       modelPick.value = d.current;
     } else {
       const primo = sorted.find((m) => m.free) || sorted[0];
       modelPick.value = primo ? primo.id : "";
       if (d.current && primo && primo.id !== d.current) {
-        // il modello in uso non esiste piu' su questo servizio: lo
-        // diciamo. Un cambio silenzioso lascia l'utente convinto di
-        // stare usando quello che ha scelto.
+        // il modello in uso non esiste piu' su questo servizio: lo diciamo.
         const nota = $("provider-note");
         if (nota) {
           nota.textContent = "modello non disponibile su questo servizio, uso " + primo.id;
@@ -1541,21 +1277,12 @@ async function loadModels() {
     }
     modelPick.disabled = false;
     mpSincronizzaEtichetta();
-    // Con un bot attivo servizio e modello sono SUOI: i menu globali
-    // non devono poterli cambiare di nascosto. La funzione vive in
-    // panels.js e si chiama solo se c'e' — il core non deve dipendere
-    // da un pannello per funzionare.
+    // Con un bot attivo servizio e modello sono SUOI: i menu globali non devono poterli cambiare di nascosto.
     if (typeof aggiornaSelettoriBot === "function") aggiornaSelettoriBot();
-    // le liste del pannello benchmark e della prova manuale usano lo
-    // stesso catalogo. Popolarle qui evita un secondo fetch e fa si'
-    // che i tre selettori non possano contraddirsi.
+    // le liste del pannello benchmark e della prova manuale usano lo stesso catalogo.
     if (typeof aggiornaCatalogoUI === "function") {
-      // in un try separato: se il pannello benchmark non c'esso' — una
-      // pagina vecchia, un elemento rimosso, un test con un DOM
-      // ridotto — la lista modelli deve restare comunque piena. Un
-      // pannello opzionale che uccide il caricamento principale e' la
-      // stessa classe di difetto di un pannello sparito dal parser:
-      // si perde tutto per un pezzo che manca.
+      // in un try separato: se il pannello benchmark non c'esso' — una pagina vecchia, un elemento rimosso, un test con
+      // un DOM ridotto — la lista modelli deve restare comunque piena.
       try {
         aggiornaCatalogoUI(sorted, d.current);
       } catch (e) {
@@ -1574,51 +1301,23 @@ async function loadModels() {
 function ctx_label(context) {
   return context ? " " + Math.round(context / 1000) + "k" : "";
 }
-// I prezzi OpenRouter sono per TOKEN, non per milione. 5e-07 non e'
-// "gratis con qualche cifra": e' $0.50 per un milione di token. Il
-// codice prima lo stampava cosi' com'era e con toFixed(4), e il
-// risultato era che 377 modelli su 379 dicevano "0.0000" — il 99% del
-// menu diceva la stessa cosa, quindi non diceva niente.
-//
-// Perche' succedeva: i prezzi reali vanno da 7e-08 a 3e-05, e quattro
-// decimali su 5e-07 danno 0.0000. Non era un problema di arrotondamento:
-// era un problema di unita' di misura, e stavamo mostrando arrotondati
-// dei centesimi di centesimo.
-//
-// Si divide per un milione e si sceglie il formato sul valore COSI'.
-// Sotto 0.01 servono 4 decimali per non perdere il senso; sopra, 2
-// bastano e 4 fanno solo rumore.
+// I prezzi OpenRouter sono per TOKEN, non per milione. 5e-07 non e' "gratis con qualche cifra": e' $0.50 per un milione
+// di token.
 function price_label(m) {
   const p = Number(m.prompt_price);
   if (m.free || !isFinite(p) || p === 0) return "free";
-  // -1 e' il prezzo di OpenRouter per "variabile": non e' gratis, e non
-  // e' nemmeno un numero. Mostrarlo come -1 fa sembrare un modello a
-  // pagamento quando puo' costare quanto vuole.
+  // -1 e' il prezzo di OpenRouter per "variabile": non e' gratis, e non e' nemmeno un numero.
   if (p < 0) return "prezzo variabile";
   const per_milione = p * 1_000_000;
   const cifre = per_milione < 0.01 ? 4 : (per_milione < 1 ? 3 : 2);
   return "$" + per_milione.toFixed(cifre) + "/1M";
 }
 
-// Quanto costa UNA richiesta, non quanto costa il milione. E' il numero
-// che decide: 30 $/1M su un turno da 10k token sono 30 centesimi, e
-// 0.01 $/1M sono un centesimo. Senza questo, confrontare due modelli
-// significa fare conti a mente dentro la testa.
-//
-// Il formato segue il numero, non l'abitudine: sotto un centesimo si
-// vedono i decimali (un centesimo arrotondato a zero e' un centesimo
-// che sembra gratis), sopra si no.
+// Quanto costa UNA richiesta, non quanto costa il milione.
 function costo_stimato(m, token) {
   const p = Number(m.prompt_price);
   if (m.free || !isFinite(p) || p <= 0) return null;
-  // p e' $/TOKEN. Il costo e' semplicemente prezzo per token per numero
-  // di token: 0.8 $/1M = 8e-07 $/token, e su 10000 token fa 0.008 $.
-  //
-  // Prima c'era una divisione per 1000 in piu', e il risultato era
-  // 0.000008 — mille volte troppo piccolo, e con la formattazione
-  // diventava "0.0000" per ogni modello sotto i 3 $/1M. Il numero
-  // sembrava plausibile, quindi il difetto non si vedeva: sembrava
-  // solo un prezzo basso.
+  // p e' $/TOKEN.
   return p * (token || 0);
 }
 
@@ -1626,16 +1325,6 @@ function costo_breve(m, token) {
   const c = costo_stimato(m, token);
   if (c === null) return "";
   // Le cifre seguono il numero, e non basta fermarsi a 4.
-  //
-  // Un modello a 0.0038 $/1M, su 10k token, costa 0.000038 $: con
-  // toFixed(4) diventava "0.0000", cioe' "gratis". Non e' un
-  // arrotondamento, e' un costo reale stampato come zero — che e' la
-  // cosa piu' dannosa che si possa fare con un prezzo, perche' il
-  // confronto fra due modelli parte gia' sbagliato.
-  //
-  // Meglio mostrare un numero che sembra piccolo che mentire sul
-  // piccolo: sotto 1e-04 si passa alla notazione esponenziale, che e'
-  // scomoda da leggere ma non mente.
   let testo;
   if (c >= 0.01) testo = "$" + c.toFixed(2);
   else if (c >= 0.0001) testo = c.toFixed(5);
@@ -1657,14 +1346,11 @@ on(modelPick, "change", async () => {
     });
     const d = await r.json();
     if (!r.ok) { addText("error", d.error || `errore ${r.status}`); return; }
-    // la conversazione continua, ma annotiamo il cambio: senza, domani non
-    // si sa che metà della chat l'ha scritta un modello diverso.
-    // La scelta manuale spegne l'automatico (vedi /api/model): lo si
-    // scrive, o sembra che il menu non faccia niente al turno dopo.
+    // la conversazione continua, ma annotiamo il cambio: senza, domani non si sa che metà della chat l'ha scritta un
+    // modello diverso.
     addText("system", d.routing === false ? `modello → ${id} (automatico spento)` : `modello → ${id}`);
-    // Il limite di compattazione segue il modello (75% della sua
-    // finestra): senza ricaricare, la nota nelle Opzioni mostra il
-    // valore vecchio e sembra che il cambio non faccia niente.
+    // Il limite di compattazione segue il modello (75% della sua finestra): senza ricaricare, la nota nelle Opzioni
+    // mostra il valore vecchio e sembra che il cambio non faccia niente.
     if (typeof caricaOpzioni === "function") caricaOpzioni();
   } catch (e) {
     addText("error", String(e));

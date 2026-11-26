@@ -1,9 +1,6 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-lavoro")<0)window.__diagFiles.push("panels-lavoro");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-lavoro");}})();
-// ---- Permessi: stato e prova del canale
-// Lo stato serve a non dare l'idea che "per questa sessione" voglia
-// dire "per sempre": ogni concessione mostra quando scade, e si revoca
-// con un clic. Un permesso che non si vede è un permesso che hai
-// dimenticato di dare.
+// Permessi: stato e prova del canale. Ogni concessione mostra quando scade,
+// perche' "per questa sessione" non vuol dire "per sempre".
 const permessiStato = $("permessi-stato");
 const permessiMsg = $("permessi-msg");
 
@@ -24,7 +21,7 @@ function disegnaPermessi(st) {
   }
   for (const s of st.sessione || []) {
     const minuti = Math.max(1, Math.round(s.scade_tra / 60));
-    const riga = aggiungi("Concesso: " + s.percorso + " — scade fra " + minuti + " min", "ok");
+    const riga = aggiungi("Concesso: " + s.percorso + ", scade fra " + minuti + " min", "ok");
     const rev = el("button", "ghost piccolo", "Revoca");
     riga.appendChild(rev);
     on(rev, "click", async () => {
@@ -119,22 +116,17 @@ on($("permessi-prova"), "click", async () => {
   }
 });
 
-// lo stato dei permessi si ricarica insieme al resto del pannello:
-// un permesso concesso durante un turno deve comparire qui, non al
-// prossimo avvio
+// lo stato dei permessi si ricarica insieme al resto del pannello: un permesso concesso durante un turno deve comparire
+// qui, non al prossimo avvio
 
 
-// Le liste dei servizi e delle chiavi. Stanno qui e non in
-// panels-opzioni.js perche' e' qui che vengono disegnate: una costante
-// in un file e il suo uso in un altro e' il modo per lasciare, un
-// giorno, un selettore che punta a un id che non esiste piu'.
+// Le liste dei servizi e delle chiavi.
 const serviziLista = $("servizi-lista");
 const serviziRiepilogo = $("servizi-riepilogo");
 const opzioniNota = $("opzioni-nota");
 
-// riga di una chiave: stato, campo vuoto, due pulsanti. `senzaNome` serve
-// quando la riga sta dentro la scheda di un servizio: li' il nome e la
-// descrizione ci sono gia' sopra, e ripeterlo e' rumore.
+// riga di una chiave: stato, campo vuoto, due pulsanti. `senzaNome` serve quando la riga sta dentro la scheda di un
+// servizio: li' il nome e la descrizione ci sono gia' sopra, e ripeterlo e' rumore.
 function rigaChiave(k, senzaNome) {
   const riga = el("div", senzaNome ? "chiave-campo" : "chiave-riga");
   const testa = el("div", "chiave-testa");
@@ -144,14 +136,9 @@ function rigaChiave(k, senzaNome) {
     testa.appendChild(nome);
   }
   const statoEl = el("span", "chiave-stato " + (k.presente ? "ok" : "vuota"));
-  // Solo le chiavi si nascondono mentre si scrivono. Un indirizzo o un
-  // numero di secondi no: nasconderli rende impossibile accorgersi di un
-  // errore di battitura, che e' l'unico motivo per cui li guardi.
+  // Solo le chiavi si nascondono mentre si scrivono.
   const segreta = /(_API_KEY|_TOKEN|_KEY)$/.test(k.chiave);
-  // l'indizio sono 4 caratteri, mai di piu': serve a distinguere due
-  // chiavi, non a usarne una. E il testo cambia con la cosa: "manca la
-  // chiave" su un indirizzo locale o su un numero di secondi e' falso,
-  // e fa cercare una credenziale che non esiste.
+  // l'indizio sono 4 caratteri, mai di piu': serve a distinguere due chiavi, non a usarne una.
   statoEl.textContent = k.presente
     ? ((segreta ? "configurata " : "impostato: ") + k.indizio)
     : (segreta ? "manca la chiave" : "non impostato");
@@ -164,6 +151,7 @@ function rigaChiave(k, senzaNome) {
     : (segreta ? "incolla qui la chiave" : "scrivi il valore");
   campo.autocomplete = "off";
   campo.spellcheck = false;
+  campo.setAttribute("aria-label", k.etichetta || "Valore");
 
   const azioni = el("div", "chiavi-azioni");
   const salva = el("button", "primary", "Salva");
@@ -229,10 +217,8 @@ function rigaChiave(k, senzaNome) {
   return riga;
 }
 
-// scheda di un servizio: cosa offre, cosa costa, come iniziare e — se
-// il servizio ha una chiave — il campo per metterla. Descrizione e
-// campo stanno nella stessa scheda perche' rispondono alla stessa
-// domanda: "questo che cos'e', e cosa mi serve per usarlo?".
+// scheda di un servizio: cosa offre, cosa costa, come iniziare e — se il servizio ha una chiave — il campo per
+// metterla.
 function schedaServizio(s, chiave) {
   const d = el("div", "gratis-scheda" +
     (chiave && chiave.presente ? " pronta" : (s.chiave ? "" : " senza-chiave")));
@@ -261,9 +247,7 @@ function schedaServizio(s, chiave) {
   cosa.textContent = s.cosa;
   const req = el("div", "gratis-req dim small");
   req.textContent = s.requisiti;
-  // Dove si prende la chiave: se il testo e' un indirizzo deve essere
-  // cliccabile. Prima era un <code>, e un dominio scritto in un blocco
-  // di codice sembra qualcosa da copiare a mano invece di un link.
+  // Dove si prende la chiave: se il testo e' un indirizzo deve essere cliccabile.
   const dove = (s.come || "").trim();
   const eUrl = /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(dove);
   const come = el(eUrl ? "a" : "span", "gratis-come");
@@ -292,15 +276,14 @@ function schedaServizio(s, chiave) {
     const box = el("div", "nous-auth");
     const stato = el("span", "dim small");
     const gia = !!s.connesso;
-    stato.textContent = gia ? "collegato — se qualcosa non va, ricollega" : "per collegare: usa il pulsante e conferma nel browser";
+    stato.textContent = gia ? "collegato: se qualcosa non va, ricollega" : "per collegare: usa il pulsante e conferma nel browser";
     const btn = el("button", "primary", gia ? "Ricollega" : "Collega Nous");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       stato.textContent = "avvio…";
       try {
-        // Ricollega deve ripartire da zero: senza force, il server
-        // vede il token vecchio e risponde "già collegato" — il
-        // bottone sembrava solo ricaricare la pagina.
+        // Ricollega deve ripartire da zero: senza force, il server vede il token vecchio e risponde "già collegato" —
+        // il bottone sembrava solo ricaricare la pagina.
         const corpo = gia ? { force: true } : {};
         const r = await fetch("/api/nous/auth/start", {
           method: "POST",
@@ -321,7 +304,7 @@ function schedaServizio(s, chiave) {
           return;
         }
         try { window.open(dd.verification_url, "_blank"); } catch (e) {}
-        stato.textContent = "codice " + dd.user_code + " — conferma nel browser…";
+        stato.textContent = "codice " + dd.user_code + ": conferma nel browser…";
         const poll = async () => {
           const rr = await fetch("/api/nous/auth/status");
           const d2 = await leggiJson(rr);
@@ -375,16 +358,7 @@ function schedaServizio(s, chiave) {
   return d;
 }
 
-// Una risposta in volo non deve poter sovrascrivere una scelta piu'
-// recente. caricaOpzioni() parte all'avvio e arriva DOPO un cambio
-// servizio: senza questo contatore, la sua risposta — che contiene il
-// provider di quando e' partita — rimetteva il menu a openrouter
-// mentre la chat era gia' su groq. Due menu che dicono cose diverse
-// e' peggio di un menu che non si aggiorna: l'utente sceglie, crede
-// di aver scelto, e non e' successo niente.
-//
-// Non e' una paranoia: e' successo, misurato, con i due selettori a
-//perti su servizi diversi.
+// Una risposta in volo non deve sovrascrivere una scelta piu' recente.
 let generazioneChiavi = 0;
 
 if (optToolProfile) {
@@ -403,20 +377,14 @@ if (optToolProfile) {
   });
 }
 
-// I gruppi come li legge chi apre il pannello: gratis, a pagamento,
-// sul tuo computer. I nomi nei dati sono piu' fini — un servizio gratis
-// "con chiave" e uno "a collegamento diretto" sono due cose diverse per
-// chi li implementa, non per chi li usa.
+// I gruppi come li legge chi apre il pannello: gratis, a pagamento, sul tuo computer.
 const GRUPPI_SERVIZI = [
   { nome: "Gratis", da: ["Gratis con chiave", "Collegamento diretto"] },
   { nome: "A pagamento", da: ["A pagamento"] },
   { nome: "Sul tuo computer", da: ["Sul tuo computer"] },
 ];
 
-// Una chiave che non e' un servizio: un'impostazione, o una chiave per
-// un pezzo che non compare fra i servizi. Resta visibile e modificabile:
-// un campo che c'era e sparisce fa pensare che la chiave sia stata
-// cancellata.
+// Una chiave che non e' un servizio: un'impostazione, o una chiave per un pezzo che non compare fra i servizi.
 function schedaChiave(k) {
   const d = el("div", "gratis-scheda senza-chiave");
   const capo = el("div", "gratis-capo");
@@ -436,9 +404,8 @@ async function caricaOpzioni() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    // una risposta vecchia non disegna niente: il provider e' cambiato
-    // mentre questa era in volo, e ridisegnere rimetterebbe il valore
-    // superato
+    // una risposta vecchia non disegna niente: il provider e' cambiato mentre questa era in volo, e ridisegnere
+    // rimetterebbe il valore superato
     if (mia !== generazioneChiavi) return;
     opzioniNota.textContent = d.nota_gratis || "";
     if (optToolProfile) {
@@ -447,26 +414,17 @@ async function caricaOpzioni() {
 
     caricaPermessi();
     caricaAutostart();
-    // Le skill anche. Una chiamata in piu' a /api/skill durante
-    // l'apertura del pannello, e su 103 file la costruzione dell'indice
-    // richiede qualche decimo di secondo: per quello NON aspetta il
-    // resto del pannello. Se il server non risponde, la sezione resta
-    // muta e Opzioni funziona lo stesso.
+    // Le skill anche.
     caricaSkill();
     caricaFallback();
 
     // provider e modello: due menu in alto, non due righe di chiavi
     disegnaProvider(d);
-    // Il modello vero preselezionato, non il primo free: senza, aprire
-    // il pannello (o ricaricarlo dopo un cambio) rimette il menu sul
-    // primo free e sembra che il cambio non abbia funzionato — mentre
-    // il server ha già cambiato e risponde col modello nuovo.
+    // Preseleziona il modello vero, non il primo free, o il menu sembra non cambiato.
     caricaModelli(d.provider || optProvider.value, d.model || null);
 
-    // i motori locali arrivano in una richiesta separata: sono una
-    // domanda di rete a localhost e possono costare un timeout. Se
-    // aspettassimo, il pannello si aprirebbe dopo due secondi per
-    // mostrare che non c'e' nessun motore locale.
+    // i motori locali arrivano in una richiesta separata: sono una domanda di rete a localhost e possono costare un
+    // timeout.
     const bottoni = d.motori || [];
     if (bottoni.length) {
       fetch("/api/locali")
@@ -479,7 +437,7 @@ async function caricaOpzioni() {
           avviso.style.display = "block";
           avviso.textContent = nomi.length
             ? "Motore locale attivo: " + nomi.join(", ") +
-              " — questi modelli sono gia' disponibili, senza chiave e senza rete."
+              ", questi modelli sono gia' disponibili, senza chiave e senza rete."
             : "Nessun motore locale in ascolto. Serve installarlo una volta: " +
               bottoni.join(" o ") + ".";
         })
@@ -492,11 +450,7 @@ async function caricaOpzioni() {
         " modelli, " + (cat.gratuiti || 0) + " gratuiti con tool-calling.";
     }
 
-    // Un elenco solo, in tre gruppi. Prima erano due sezioni e la stessa
-    // cosa stava in tutte e due: il campo della chiave in una, la
-    // descrizione del servizio nell'altra. Chi voleva sapere cosa fosse
-    // NVIDIA doveva cambiare sezione, e chi metteva una chiave non
-    // sapeva cosa stava attivando.
+    // Un elenco solo, in tre gruppi.
     const schede = d.servizi_gratis || [];
     const chiavi = d.chiavi || [];
     const usate = new Set();
@@ -506,9 +460,8 @@ async function caricaOpzioni() {
     for (const gruppo of GRUPPI_SERVIZI) {
       const del = schede
         .filter((s) => gruppo.da.includes(s.gruppo || "Gratis con chiave"))
-        // Prima quelli che funzionano senza niente: sono la risposta a
-        // "da dove parto", che e' la prima domanda di chi apre questa
-        // sezione. Chi ha gia' una chiave sa gia' cosa cerca.
+        // Prima quelli che funzionano senza niente: sono la risposta a "da dove parto", che e' la prima domanda di chi
+        // apre questa sezione.
         .sort((a, b) => (a.chiave ? 1 : 0) - (b.chiave ? 1 : 0));
       if (!del.length) continue;
       serviziLista.appendChild(el("div", "gratis-gruppo", gruppo.nome));
@@ -525,12 +478,8 @@ async function caricaOpzioni() {
       serviziLista.appendChild(schedaServizio(s, k));
     }
 
-    // Le chiavi che non appartengono a nessun servizio (impostazioni e
-    // token di servizi esterni) in fondo, con il loro campo. Quelle che
-    // il pannello mostra gia' da un'altra parte no: il tempo massimo per
-    // turno ha il suo campo in Modello, e ripeterlo qui in secondi invece
-    // che in minuti vuol dire due valori per la stessa impostazione, con
-    // l'utente che guarda quello sbagliato. Il server dice quale: `dove`.
+    // Le chiavi che non appartengono a nessun servizio in fondo, con il loro campo.
+    // Quelle già mostrate altrove non si ripetono: il tempo massimo per turno ha il suo campo in Modello.
     const altre = chiavi.filter((k) => !usate.has(k.chiave) && !k.dove);
     if (altre.length) {
       serviziLista.appendChild(el("div", "gratis-gruppo", "Altre chiavi"));
@@ -541,17 +490,8 @@ async function caricaOpzioni() {
   }
 }
 
-// ------------------------------------------------- scegli per tipo di lavoro
-// La domanda vera non e' "quale modello e' il migliore" ma "quale
-// modello e' il migliore PER QUELLO CHE DEVO FARE". Un modello puo'
-// essere ottimo in ragionamento e mediocre in React Native, e scegliere
-// il migliore in assoluto e' scegliere quello sbagliato.
-//
-// Regola che non si negozia: si sceglie solo fra i modelli MISURATI in
-// quella categoria. Se non ce ne sono, si dice che non ce ne sono. Un
-// modello non misurato non e' il migliore, e' sconosciuto, e su un
-// impianto dove si paga la differenza e' una decisione, non una
-// arrotondatura.
+// scegli per tipo di lavoro: La domanda vera non e' "quale modello e' il migliore" ma "quale modello e' il migliore PER
+// QUELLO CHE DEVO FARE".
 const CAT_ETICHETTE = {
   code: "Codice in generale",
   js: "Coding JavaScript",
@@ -567,19 +507,12 @@ const routingCat = $("routing-cat");
 const routingOut = $("routing-out");
 const routingTop = $("routing-top");
 
-// Lo scope dell'header e il selettore del pannello sono lo stesso
-// controllo in due posti. Se potessero divergere, la raccomandazione
-// mostrerebbe una categoria e i punteggi nell'header un'altra — quindi
-// qui si tiene il sincrone, non si duplica lo stato.
+// Lo scope dell'header e il selettore del pannello sono lo stesso controllo in due posti.
 const scopePick = $("scope-pick");
 const scopeNote = $("scope-note");
 
-// ---- lo scope nell'header: scegli il lavoro, il modello si sceglie da solo
-// Con quanti modelli misurati una raccomandazione e' credibile? Con uno
-// solo non lo e': e' un'anomalia, non un primato. "web" e "app" hanno
-// una misurazione ciascuna perche' una sola corsa su tutte le categorie
-// le ha sfiorate, e consigliare quel modello con tanta sicurezza
-// mentirebbe. Sopra due misurazioni si parla; sotto, si avverte.
+// Scope nell'header: scegli il lavoro, il modello si sceglie da solo.
+// Una raccomandazione serve solo con almeno due modelli misurati.
 const MIN_PER_CONSIGLIARE = 2;
 
 function misuratiPer(scope) {
@@ -632,9 +565,8 @@ function applicaScope(scope) {
   const best = candidati[0];
   const attuale = modelPick.value;
   const punteggioAttuale = (attuale && (tuttiModelli.find((m) => m.id === attuale) || {}).scores || {})[scope];
-  // a parità (o se l'attuale ha già il massimo) non c'è motivo di proporre
-  // un cambio: spostarsi su un modello con lo stesso punteggio non migliora
-  // nulla e genera confusione
+  // a parità (o se l'attuale ha già il massimo) non c'è motivo di proporre un cambio: spostarsi su un modello con lo
+  // stesso punteggio non migliora nulla e genera confusione
   if (attuale === best.id ||
       (typeof punteggioAttuale === "number" && punteggioAttuale >= best.scores[scope])) {
     scopeNote.textContent = "già il migliore per " + nome;
@@ -668,15 +600,7 @@ function applicaScope(scope) {
 
 on(scopePick, "change", () => applicaScope(scopePick.value));
 
-// Quante task ha ogni categoria lo SA il server: /api/categorie
-// risponde dai task realmente registrati. La lista qui sotto e' solo
-// l'ordine di visualizzazione.
-//
-// Prima la lista era anche l'unica fonte di verita', e cosi' due
-// categorie senza nessun task comparivano come "non ancora misurato"
-// — cioe' come se aspettassero solo qualcuno che le misurasse. Non
-// e' vero: non esiste nulla da misurare. La differenza e' tutta qui,
-// ed e' la differenza fra "non l'ho ancora fatto" e "non posso farlo".
+// Quante task ha ogni categoria lo SA il server: /api/categorie risponde dai task realmente registrati.
 let categorieServer = [];
 
 async function caricaCategorie() {
@@ -690,9 +614,7 @@ async function caricaCategorie() {
   }
 }
 
-// L'etichetta la sa il server: CAT_ETICHETTE e' un fallback per
-// quando non ha ancora risposto. Se le due divergono, vince il
-// server — e' lui che conta i task.
+// L'etichetta la sa il server: CAT_ETICHETTE e' un fallback per quando non ha ancora risposto.
 function etichettaCategoria(id, fallback) {
   const c = categorieServer.find((x) => x.id === id);
   return (c && (c.label || c.nome)) || CAT_ETICHETTE[id] || fallback || id;
@@ -709,19 +631,12 @@ function disegnaCategorieRouting() {
   for (const m of tuttiModelli) {
     for (const c of Object.keys(m.scores || {})) misurate.add(c);
   }
-  // L'ordine viene dal server, non da una lista scritta qui. Prima
-  // c'era un array con tutte e nove le categorie: se ne avessi
-  // aggiunta una decima al backend, questo menu — e quello del
-  // benchmark — avrebbero continuato a non mostrarla, e nessuno
-  // avrebbe detto niente. Un elenco statico invecchia da solo e
-  // mente quando succede.
+  // L'ordine viene dal server, non da una lista scritta qui.
   const ordine = categorieServer.map((c) => c.id);
   const utili = ordine.filter((c) => misurate.has(c));
 
-  // Il menu del benchmark mostra TUTTE le categorie, misurate o no:
-  // se ne manca una dal menu, non esiste un modo per misurarla. E
-  // accanto al nome dice quanti task ha, perche' "estrazione" senza
-  // quel numero sembra una categoria minore.
+  // Il menu del benchmark mostra TUTTE le categorie, misurate o no: se ne manca una dal menu, non esiste un modo per
+  // misurarla.
   if (benchCat) {
     const scelto = benchCat.value;
     benchCat.replaceChildren();
@@ -758,13 +673,6 @@ function disegnaCategorieRouting() {
 
   if (routingOut) {
     // Due cose diverse, e dirle insieme e' mentire.
-    //
-    // "non ancora misurato" = ci sono task, nessuno e' stato misurato.
-    //   E' una promessa: basta lanciare il benchmark.
-    // "nessun test" = non esiste task per questa categoria. Non e' una
-    //   promessa, e' un buco: finche' non se ne scrive uno, quella
-    //   categoria non e' confrontabile con nessuna altra, e il modello
-    //   "migliore per scrittura" non esiste.
     const mancanti = ordine.filter((c) => !misurate.has(c));
     const vuote = mancanti.filter((c) => taskDi(c) === 0);
     const daMisurare = mancanti.filter((c) => taskDi(c) !== 0);
@@ -774,7 +682,7 @@ function disegnaCategorieRouting() {
     }
     if (vuote.length) {
       parti.push("senza test: " + vuote.join(", ")
-        + " — non confrontabili finche' non si scrivono i task");
+        +", non confrontabili finche' non si scrivono i task");
     }
     routingOut.textContent = parti.join(" · ");
     routingOut.className = vuote.length ? "avviso-grave" : "";
@@ -797,7 +705,7 @@ function scegliModello() {
   }
   const migliore = candidati[0];
   const riga = el("div", "routing-vincitore");
-  riga.textContent = migliore.short + " — " + migliore.scores[cat].toFixed(2) +
+  riga.textContent = migliore.short + ": " + migliore.scores[cat].toFixed(2) +
     (migliore.free ? " (free)" : "");
   routingTop.appendChild(riga);
   if (candidati.length > 1) {
@@ -867,13 +775,8 @@ on($("routing-auto"), "change", async () => {
   }
 });
 
-// -------------------------------------------------------------- Prior
-// L'API /api/prior esisteva da prima ma nessuno la chiamava: la
-// chiave era nel .env, il bottone non c'era, e i 158 prior che
-// Orchestra scaricava non arrivavano a schermo da nessuna parte.
-//
-// Un dato scaricato e non mostrato non e' un dato: e' lavoro sprecato
-// e una promessa non mantenuta.
+// Prior: L'API /api/prior esisteva da prima ma nessuno la chiamava: la chiave era nel .env, il bottone non c'era, e i
+// 158 prior che Orchestra scaricava non arrivavano a schermo da nessuna parte.
 on($("prior-go"), "click", async () => {
   const out = $("prior-out"), cop = $("prior-copertura");
   if (!out) return;
@@ -895,7 +798,7 @@ on($("prior-go"), "click", async () => {
     for (const [k, v] of righe) {
       const tr = el("tr");
       tr.appendChild(el("td", "dim", k));
-      tr.appendChild(el("td", "", String(v ?? "—")));
+      tr.appendChild(el("td", "", String(v ?? "n/d")));
       t.appendChild(tr);
     }
     cop.replaceChildren(t);
@@ -910,9 +813,7 @@ function aggiornaCatalogoUI(elenco, corrente) {
   // il routing si riempia qui: i punteggi arrivano con il catalogo, e
   // ricalcolarli qui evita che mostri categorie vecchie dopo un benchmark
   disegnaCategorieRouting();
-  // il totale delle categorie viene dal server. Una costante nel
-  // frontend invecchia in silenzio: un giorno "4/6" con nove categorie
-  // e nessuno che se ne accorge.
+  // il totale delle categorie viene dal server.
   fetch("/api/categorie")
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {

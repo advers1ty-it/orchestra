@@ -1,21 +1,5 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-skill")<0)window.__diagFiles.push("panels-skill");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-skill");}})();
-// ------------------------------------------------------------------ skill
-//
-// Il pannello delle skill, dentro il modale Capacita'.
-//
-// Sta qui e non nelle Opzioni perche' e' li' che si va a guardare: tre
-// sezioni — quante sono, da dove vengono, e le due liste. Le generate
-// sono separate dalle scaricate perche' non hanno la stessa affidabilita' —
-// una e' scritta da qualcun altro, l'altra e' un'affermazione dello stesso
-// agente che la usa, e tu devi poter distinguere le due cose.
-//
-// Con 103 skill la lista non entra in una schermata. Il filtro c'e' per
-// quello, e filtra mentre scrivi: attendere un tasto e poi scorrere
-// cento righe e' piu' lento di quello che stai facendo.
-//
-// Il pulsante "Aggiorna" esiste perche' l'indice puo' cambiare fuori dal
-// browser: l'agente genera una skill mentre tu stai guardando la pagina,
-// e senza un ricaricamento la lista mente per trenta secondi.
+// skill: Il pannello delle skill, dentro il modale Capacita'.
 
 let skillDati = { scaricate: [], generate: [], proposte: [], categorie: [],
                   totale: 0, scaricate_n: 0, generate_n: 0, proposte_n: 0,
@@ -48,9 +32,7 @@ async function caricaSkill() {
       disegnaSkill();
     }
   } catch (e) {
-    // Le skill non sono un requisito. Se questo fallisce, il modale si
-    // apre lo stesso e la sezione resta vuota: meglio un pannello
-    // muto che un pannello che impedisce di cambiare modello.
+    // Le skill non sono un requisito.
     const r = $("skill-riepilogo");
     if (r) r.textContent = "non raggiungibile: " + (e.message || e);
   }
@@ -65,17 +47,13 @@ function skillCorrisponde(s, testo) {
 }
 
 function skillCarta(s, generata) {
-  // Una scheda, non una riga. Con cento skill in lista si scorreva per
-  // metri; in griglia se ne vedono tre o quattro per riga e confrontare
-  // i nomi diventa immediato — che e' la ragione per cui uno cerca
-  // una skill: capire se quella che serve c'e' gia'.
+  // Una scheda, non una riga.
   const carta = el("div", "skill-carta");
   if (generata) carta.classList.add("skill-carta-generata");
 
   const capo = el("div", "skill-carta-capo");
-  // Il '+' e' lo stesso segno del prompt: due posti che parlano lo
-  // stesso linguaggio, e uno sguardo basta per capire se una procedura
-  // e' stata scritta da qualcun altro o dall'agente che la usa.
+  // Il '+' e' lo stesso segno del prompt: due posti che parlano lo stesso linguaggio, e uno sguardo basta per capire se
+  // una procedura e' stata scritta da qualcun altro o dall'agente che la usa.
   if (generata) {
     const segno = el("span", "skill-segno");
     segno.textContent = "+";
@@ -126,9 +104,8 @@ function skillCarta(s, generata) {
 }
 
 function skillCartaProposta(s) {
-  // Una proposta ha due pulsanti e non uno: "Apri" da solo lascerebbe
-  // il dubbio se accettarla o no, e "Cestino" e' una parola ambigua per
-  // una cosa che non esiste ancora. Tieni / Scarta dicono cosa succede.
+  // Una proposta ha due pulsanti e non uno: "Apri" da solo lascerebbe il dubbio se accettarla o no, e "Cestino" e' una
+  // parola ambigua per una cosa che non esiste ancora.
   const carta = el("div", "skill-carta skill-carta-proposta");
   const capo = el("div", "skill-carta-capo");
   const segno = el("span", "skill-segno");
@@ -234,10 +211,7 @@ async function skillRipristina(nome) {
   }
 }
 
-// Chiede una parola, non un si'/'no'. La cancellazione definitiva non ha
-// ritorno, e un pulsante "Cancella" che cancella quello che si voleva
-// tenere e' il modo migliore per perdere roba. Un prompt che chiede
-// di scrivere CANCELLA costa due secondi e ferma i diti sbagliati.
+// Chiede una parola, non un sì/no: la cancellazione è definitiva e non ha ritorno.
 function chiediConferma(nome) {
   const r = window.prompt(
     "Cancellare DEFINITIVAMENTE " + nome + "?\n\nNon si recupera.",
@@ -285,9 +259,8 @@ async function skillSvuotaTutto() {
 
 async function skillApri(s) {
   try {
-    // Il nome, non il percorso: il percorso lo risolve il server dentro
-    // la radice delle skill. Passargliero significherebbe accettare
-    // un percorso qualunque, e questa rotta non ha autenticazione.
+    // Il nome, non il percorso: lo risolve il server dentro la radice delle skill.
+    // Passare un percorso accetterebbe qualunque file, e questa rotta non ha autenticazione.
     const r = await fetch("/api/skill/file?nome=" + encodeURIComponent(s.nome));
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
@@ -353,9 +326,8 @@ async function skillCancella(nome) {
   try {
     const d = await skillPost({ azione: "cancella", nome });
     if (d && d.ok) {
-      // La risposta porta il cestino aggiornato: senza, la lista a
-      // schermo e quella vera divergono, e il pannello mente proprio
-      // dove deve rassicurare che niente e' andato perso.
+      // La risposta porta il cestino aggiornato: senza, la lista a schermo e quella vera divergono, e il pannello mente
+      // proprio dove deve rassicurare che niente e' andato perso.
       aggiornaDa(d.elenco, d.cestino);
       skillMossa(nome + " nel cestino");
     } else {
@@ -410,9 +382,8 @@ function disegnaSkill() {
       for (const s of proposte) gen.appendChild(skillCartaProposta(s));
     }
     if (!skillDati.generate.length && !proposte.length) {
-      // Il vuoto e' un messaggio, non uno spazio — e deve dire il vero:
-      // prima diceva "lavora con lui e guarda qui dopo", che era falso,
-      // perche' nessuno generava niente se non chiamato apposta.
+      // Il vuoto e' un messaggio, non uno spazio — e deve dire il vero: prima diceva "lavora con lui e guarda qui
+      // dopo", che era falso, perche' nessuno generava niente se non chiamato apposta.
       gen.appendChild(el("div", "skill-vuota",
         "Nessuna ancora. Quando una sequenza di comandi ti funziona " +
         "tre volte, Orchestra te la propone qui: la leggi, la tieni o " +
@@ -430,11 +401,7 @@ function disegnaSkill() {
     }
   }
 
-  // Il cestino si disegna insieme al resto. Sta qui e non in una
-  // funzione sua perche' l'elenco e il cestino cambiano insieme —
-  // rimettere una skill modifica l'uno E l'altro, e due funzioni
-  // chiamate separatamente possono mostrare uno il nuovo elenco e
-  // l'altro il cestino vecchio.
+  // Il cestino si disegna insieme al resto.
   const cest = $("skill-cestino");
   if (cest) {
     cest.replaceChildren();
@@ -473,11 +440,8 @@ function disegnaSkill() {
 }
 
 function collegaSkill() {
-  // on() vuole l'ELEMENTO, non l'id: passargli la stringa faceva
-  // fallire la riga di addEventListener — una stringa e' truthy, quindi
-  // la guardia "elemento assente" passava, e il pulsante restava
-  // scollegato senza che nulla lo dicesse. Con l'errore in pagina,
-  // pero', si vedeva subito.
+  // on() vuole l'ELEMENTO, non l'id: passargli la stringa faceva fallire la riga di addEventListener — una stringa e'
+  // truthy, quindi la guardia "elemento assente" passava, e il pulsante restava scollegato senza che nulla lo dicesse.
   on($("skill-ricarica"), "click", caricaSkill);
   on($("skill-svuota"), "click", skillSvuotaTutto);
   on($("skill-importa"), "click", async () => {
@@ -515,41 +479,22 @@ function collegaSkill() {
   }
 }
 
-// Si collega qui, in fondo al file, e non da un bootstrap centrale:
-// in questo file gli handler sono registrati in linea appena sono
-// definiti. Una funzione che nessuno chiama e' la stessa cosa dei
-// selettori disabilitati di due giorni fa — la funzione c'e', il
-// lavoro no, e la pagina sembra rotta.
+// Si collega qui, in fondo al file, e non da un bootstrap centrale: in questo file gli handler sono registrati in linea
+// appena sono definiti.
 collegaSkill();
 
-// ---------------------------------------------------------- sezioni Opzioni
-//
-// Cinque sezioni, una per volta. Il nome intero nella barra, perche' sono
-// nomi che significano qualcosa e abbreviarli costerebbe una decodifica a
-// ogni clic.
-//
-// Le sezioni restano tutte nel DOM e si nascondono: ricaricare il
-// contenuto a ogni cambio e' la via per perdere lo stato, e il filtro
-// sulle skill finirebbe svuotato a ogni passaggio.
-//
-// Il primo caricamento e' pigro. Aprire Opzioni non deve scaricare
-// l'indice di cento skill se poi vai solo a cambiare modello: le skill
-// ora si chiedono all'apertura del modale Capacita', che e' il posto
-// dove le guardi.
+// sezioni Opzioni: Cinque sezioni, una per volta.
 
 function mostraSezione(nome) {
   const sezioni = document.querySelectorAll(".opz-sez");
   const daMostrare = Array.from(sezioni).find((s) => s.dataset.sez === nome);
-  // Una sezione inesistente non deve nascondere tutto: senza questo
-  // controllo un nome sbagliato lasciava il pannello vuoto, senza dire
-  // perche'. Prima si verifica che esista, poi si tocca il DOM.
+  // Una sezione inesistente non deve nascondere tutto: senza questo controllo un nome sbagliato lasciava il pannello
+  // vuoto, senza dire perche'.
   if (!daMostrare) return;
   for (const s of sezioni) {
     const mostra = s.dataset.sez === nome;
-    // hidden e' l'attributo, non lo stile: e' quello che il DOM finto
-    // dei test rispetta, ed e' lo stesso che il browser usa per
-    // l'accessibilita' (un display:none a mano lascia la sezione
-    // leggibile dagli screen reader senza motivo).
+    // hidden e' l'attributo, non lo stile: e' quello che il DOM finto dei test rispetta, ed e' lo stesso che il browser
+    // usa per l'accessibilita' (un display:none a mano lascia la sezione leggibile dagli screen reader senza motivo).
     if (mostra) s.removeAttribute("hidden");
     else s.setAttribute("hidden", "");
   }
@@ -558,10 +503,7 @@ function mostraSezione(nome) {
     if (t.dataset.sez === nome) t.classList.add("attiva");
     else t.classList.remove("attiva");
   }
-  // Storico e memoria idem: si caricano quando si aprono, non
-  // all'avvio. Caricarli sempre aggiungerebbe due richieste a ogni
-  // apertura del pannello Opzioni, anche quando si va a cambiare solo
-  // il modello.
+  // Storico e memoria idem: si caricano quando si aprono, non all'avvio.
   if (nome === "storico") caricaStorico();
   if (nome === "identita") caricaIdentita();
   if (nome === "bot") caricaBot();
@@ -569,10 +511,8 @@ function mostraSezione(nome) {
   if (nome === "remoto") caricaRemoto();
   if (nome === "autostart") caricaAutostart();
   if (nome === "benchmark") { /* il benchmark resta nel suo pannello */ }
-  // Il backup si carica quando lo apri: elencare installazioni e archivi
-  // all'avvio aggiungerebbe una richiesta (e una scansione di cartelle)
-  // a ogni apertura del pannello, anche quando si va solo a cambiare
-  // modello.
+  // Il backup si carica quando lo apri: elencare installazioni e archivi all'avvio aggiungerebbe una richiesta (e una
+  // scansione di cartelle) a ogni apertura del pannello, anche quando si va solo a cambiare modello.
   if (nome === "backup" && typeof caricaBackup === "function") caricaBackup();
 }
 
@@ -666,10 +606,7 @@ function collegaSezioni() {
   for (const t of tabs) {
     t.addEventListener("click", () => mostraSezione(t.dataset.sez));
   }
-  // I tasti freccia passano da una sezione all'altra. Non e' un
-  // vezzo da aggiungere: senza, con cinque sezioni e nessun tab
-  // premuto, il passaggio costa cinque clic, e il modo normale in cui
-  // ci si muove in un'interfaccia a sezioni e' la tastiera.
+  // I tasti freccia passano da una sezione all'altra.
   const nav = document.querySelector(".opzioni-nav");
   if (nav) {
     nav.addEventListener("keydown", (e) => {

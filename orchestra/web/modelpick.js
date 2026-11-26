@@ -1,22 +1,5 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("modelpick")<0)window.__diagFiles.push("modelpick");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"modelpick");}})();
-// ------------------------------------------------ il selettore dei modelli
-//
-// Il <select> nativo non si vede e non si tocca: porta solo il value
-// al server. Quello che si vede è un bottone che sembra un select, e il
-// pannello che si apre sotto è questo.
-//
-// PERCHE' IL SELECT E' NASCOSTO, e non "coperto"
-//
-// La prima versione lo lasciava VISIBILE e apriva il pannello sopra.
-// Non si vedeva niente, e non per un motivo di cache: al click il
-// browser apre il SUO menu, disegnato dal sistema, e quel popup sta
-// sempre sopra qualsiasi elemento della pagina. Il pannello era sotto,
-// funzionante, e invisibile. Ctrl+F5 non lo avrebbe cambiato: non era
-// un problema di caricamento.
-//
-// Nascosto con visually-hidden, non con display:none: display:none
-// toglie l'elemento anche dal percorso di tabulazione, e il value che
-// porta al server verrebbe da un campo che nessuno puo' raggiungere.
+// il selettore dei modelli: Il <select> nativo non si vede e non si tocca: porta solo il value al server.
 
 const mpWrap = document.querySelector(".mp-wrap");
 const mpBtn = document.getElementById("model-btn");
@@ -26,9 +9,7 @@ let mpVoci = [];
 let mpCursore = -1;
 let mpAperto = false;
 
-// L'etichetta segue il value. Va chiamata OVUNQUE il value cambia:
-// senza, il bottone direbbe un modello mentre il select ne porta un
-// altro, e la divergenza si vedrebbe solo alla prima risposta.
+// L'etichetta segue il value.
 function mpSincronizzaEtichetta() {
   if (!mpEtichetta || !mpBtn) return;
   const id = modelPick.value;
@@ -45,12 +26,7 @@ function mpChiudi() {
   if (mpBtn) mpBtn.setAttribute("aria-expanded", "false");
 }
 
-// `servizioTaceArrivato` dice se il servizio non dichiara il supporto
-// tool. Va PASSATO, non letto da un altro file: il popup non ha un
-// catalogo suo, e andare a prenderlo da core.js funziona solo finche'
-// i file restano concatenati in quest'ordine. Il default e' false
-// perche' il silenzio e' il caso normale: un servizio che non dice
-// niente non deve interrompere il menu con un avviso che non serve.
+// `servizioTaceArrivato` dice se il servizio non dichiara il supporto tool.
 function mpApri(servizioTaceArrivato) {
   const servizioNonDichiaraTool = servizioTaceArrivato === true;
   if (mpAperto || modelPick.disabled) return;
@@ -74,12 +50,10 @@ function mpApri(servizioTaceArrivato) {
     nodo.dataset.id = o.value;
     nodo.dataset.testo = (o.textContent || o.value).toLowerCase();
     if (o.value === corrente) nodo.classList.add("corrente");
-    // Il badge dice DA DOVE viene il numero. Un numero senza
-    // etichetta sembra parte del nome del modello, e su 400 righe
-    // nessuno saprebbe di che cosa sia.
+    // Il badge dice DA DOVE viene il numero.
     const p = punteggioDiOpzione(o.value);
     const b = el("span", "mp-bench" + (p !== null ? " " + fasciaPunteggio(p) : ""),
-                 p !== null ? String(p) : "—");
+                 p !== null ? String(p) : "n/d");
     b.title = (p !== null)
       ? "punteggio di benchmark: " + p + " su 100, misurato sui task di Orchestra"
       : "non misurato: nessun benchmark su questo modello";
@@ -92,11 +66,8 @@ function mpApri(servizioTaceArrivato) {
 
   const piede = el("div", "mp-piede");
     piede.textContent = opzioni.length +
-      " modelli · il numero è il punteggio di benchmark (su 100) · «—» = non misurato";
-    // Se il servizio non dichiara il supporto tool, si dice QUI, una
-    // volta sola. Lo stesso ragionamento del menu: se il dubbio è
-    // identico su ogni riga, non è un'informazione per riga — è
-    // un'informazione sul servizio, e va detta una volta.
+      " modelli · il numero è il punteggio di benchmark (su 100) · «n/d» = non misurato";
+    // Se il servizio non dichiara il supporto tool, si dice QUI, una volta sola.
     if (servizioNonDichiaraTool) {
       piede.textContent += " · questo servizio non dichiara il supporto tool: "
         + "non lo sappiamo, e lo scopriamo dal benchmark";
@@ -107,10 +78,7 @@ function mpApri(servizioTaceArrivato) {
   mpPop.appendChild(piede);
   mpWrap.appendChild(mpPop);
 
-  // mp-wrap ha position:relative, quindi top:100% è il bordo
-  // inferiore del bottone. Senza quella riga di CSS il riferimento
-  // sarebbe la pagina, e il pannello comparirebbe nell'angolo in alto
-  // a sinistra invece che sotto il bottone.
+  // mp-wrap ha position:relative, quindi top:100% è il bordo inferiore del bottone.
   mpPop.style.top = "100%";
   mpPop.style.left = "0";
 
@@ -122,10 +90,8 @@ function mpApri(servizioTaceArrivato) {
       v.nodo.style.display = ok ? "" : "none";
       if (ok) visibili++;
     }
-    // La riga "nessun risultato" si crea e si toglie: tenerla sempre
-    // nel DOM e spegnerla con display:none lascia un nodo morto nel
-    // mezzo della lista, e un nodo morto in una lista filtrata e'
-    // quello che rende strano il conteggio.
+    // La riga "nessun risultato" si crea e si toglie: tenerla sempre nel DOM e spegnerla con display:none lascia un
+    // nodo morto nel mezzo della lista, e un nodo morto in una lista filtrata e' quello che rende strano il conteggio.
     let vuota = lista.querySelector(".mp-vuoto");
     if (visibili === 0) {
       if (!vuota) lista.appendChild(el("div", "mp-vuoto", "nessun modello con questo nome"));
@@ -199,10 +165,7 @@ function mpMuovi(d, visibili) {
 
 function mpScegli(id) {
   if (!id) return;
-  // Il value E il change. Scrivere il value da solo non basterebbe:
-  // nessuno riceverebbe la notifica, il select mostrerebbe un modello
-  // e il backend continuerebbe a chiamarne un altro — la chat
-  // risponderebbe col vecchio senza che nulla lo dica.
+  // Il value E il change.
   modelPick.value = id;
   modelPick.dispatchEvent(new Event("change", { bubbles: true }));
   mpChiudi();
@@ -229,17 +192,12 @@ function metaDiOpzione(testo) {
 // Il bottone al posto del select.
 on(mpBtn, "click", (ev) => {
   ev.stopPropagation();
-  // `typeof servizioTace === "undefined"` invece di leggerlo e basta:
-  // il bundle mette questo file DOPO core.js, ma un test puo' caricare
-  // solo questo, e un ReferenceError qui significa che il menu non si
-  // apre piu' — il difetto peggiore possibile per un selettore.
+  // Il test puo' caricare solo questo file: un ReferenceError qui blocca il menu.
   const sa = (typeof servizioTace !== "undefined") ? servizioTace : false;
   if (mpAperto) mpChiudi(); else mpApri(sa);
 });
 
-// La tastiera sul bottone chiuso: giu'/Invio apre. Sul select nativo e'
-// gratis; qui va rifatto, ed e' la ragione per cui il pannello non e'
-// una scorciatoia.
+// La tastiera sul bottone chiuso: giu'/Invio apre.
 on(mpBtn, "keydown", (ev) => {
   if (mpAperto) return;
   if (ev.key === "ArrowDown" || ev.key === "Enter" || ev.key === " ") {

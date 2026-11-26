@@ -120,7 +120,8 @@
        decide il modello, la persona e la cartella, quindi e' la prima
        scelta, non una decorazione. Vuoto = agente principale. -->
   <select id="bot-pick" class="h-sec"
-          title="Identita' con cui stai lavorando">
+          title="Identita' con cui stai lavorando"
+          aria-label="Bot con cui stai lavorando">
     <option value="">agente principale</option>
   </select>
   <label class="scope-wrap" title="Che lavoro stai facendo">
@@ -129,7 +130,8 @@
       <option value="">tutto</option>
     </select>
   </label>
-  <select id="provider-pick" class="h-sec" title="Servizio in uso" disabled>
+  <select id="provider-pick" class="h-sec" title="Servizio in uso"
+          aria-label="Servizio in uso" disabled>
     <option value="">servizio…</option>
   </select>
   <span id="provider-note" class="provider-note h-sec"></span>
@@ -148,7 +150,8 @@
           <span id="model-label">modello…</span>
         </button>
       </div>
-      <select id="reasoning-pick" class="h-sec" title="Livello reasoning" disabled>
+      <select id="reasoning-pick" class="h-sec" title="Livello reasoning"
+              aria-label="Livello di reasoning" disabled>
         <option value="">auto</option>
         <option value="none">none</option>
         <option value="minimal">minimal</option>
@@ -175,9 +178,9 @@
      una frase da interpretare. I percorsi vietati non arrivano qui:
      vengono negati prima e senza domanda, perche' accettarli sarebbe
      una sciocchezza. -->
-<div id="permesso" class="permesso hidden">
+<div id="permesso" class="permesso hidden" role="dialog" aria-modal="true" aria-labelledby="permesso-titolo">
   <div class="permesso-box">
-    <b>L'agente chiede di uscire dalla cartella di lavoro</b>
+    <b id="permesso-titolo">L'agente chiede di uscire dalla cartella di lavoro</b>
     <div class="permesso-percorso" id="permesso-percorso"></div>
     <div class="permesso-riga dim small" id="permesso-dettaglio"></div>
     <div class="permesso-permetti">
@@ -195,13 +198,13 @@
      l'agente e' fermo e aspetta, e questo deve vedersi subito. Qui la
      risposta e' testo libero; le opzioni sono scorciatoie che
      riempiono il campo, non una scelta chiusa. -->
-<div id="domanda" class="permesso hidden">
+<div id="domanda" class="permesso hidden" role="dialog" aria-modal="true" aria-labelledby="domanda-titolo">
   <div class="permesso-box">
     <b id="domanda-titolo">L'agente chiede</b>
     <div class="permesso-percorso" id="domanda-testo"></div>
     <div class="permesso-permetti" id="domanda-opzioni"></div>
     <div class="domanda-campo">
-      <input id="domanda-input" type="text" placeholder="Scrivi la risposta…"
+      <input id="domanda-input" type="text" aria-label="Risposta alla domanda" placeholder="Scrivi la risposta…"
              autocomplete="off">
       <button id="domanda-invia" class="primary">Rispondi</button>
     </div>
@@ -214,11 +217,11 @@
      Il pannello piu' sensibile dell'app, perche' qui si scrivono le
      credenziali. Per questo non mostra mai un valore gia' salvato: solo
      se c'e' e gli ultimi 4 caratteri. -->
-<div id="opzioni" class="panel hidden">
+<div id="opzioni" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="opzioni-titolo">
   <div class="panel-box">
     <div class="panel-head">
       <div>
-        <b>Opzioni</b>
+        <b id="opzioni-titolo">Opzioni</b>
         <span class="dim">chiavi dei servizi e modelli locali</span>
       </div>
       <button id="opzioni-close" class="ghost">Chiudi</button>
@@ -384,22 +387,22 @@
                     <b>Limiti di spesa</b>
                     <span class="dim">token e costo per task e sessione. Zero = nessun limite.</span>
                     <div class="budget-campi">
-                      <label>Task — max token
+                      <label>Task: max token
                         <input id="budget-task-tokens" type="number" min="0" step="1000" placeholder="es. 10000">
                       </label>
-                      <label>Task — max costo ($)
+                      <label>Task: max costo ($)
                         <input id="budget-task-cost" type="number" min="0" step="0.1" placeholder="es. 1.0">
                       </label>
-                      <label>Task — max iterazioni
+                      <label>Task: max iterazioni
                         <input id="budget-task-iters" type="number" min="0" step="1" placeholder="es. 50">
                       </label>
-                      <label>Sessione — max token
+                      <label>Sessione: max token
                         <input id="budget-sess-tokens" type="number" min="0" step="1000" placeholder="es. 50000">
                       </label>
-                      <label>Sessione — max costo ($)
+                      <label>Sessione: max costo ($)
                         <input id="budget-sess-cost" type="number" min="0" step="0.1" placeholder="es. 5.0">
                       </label>
-                      <label>Sessione — max richieste
+                      <label>Sessione: max richieste
                         <input id="budget-sess-reqs" type="number" min="0" step="1" placeholder="es. 500">
                       </label>
                     </div>
@@ -411,10 +414,10 @@
                     <details class="budget-globali">
                       <summary>Budget globali (giorno/mese)</summary>
                       <div class="budget-globali-valori">
-                        <label>Giorno — max costo ($)
+                        <label>Giorno: max costo ($)
                           <input id="budget-day-cost" type="number" min="0" step="1" placeholder="es. 50">
                         </label>
-                        <label>Mese — max costo ($)
+                        <label>Mese: max costo ($)
                           <input id="budget-month-cost" type="number" min="0" step="1" placeholder="es. 200">
                         </label>
                       </div>
@@ -488,7 +491,7 @@
             </label>
             <button id="diag-run" class="primary">Esegui</button>
           </div>
-          <textarea id="diag-out" rows="14" readonly spellcheck="false"
+          <textarea id="diag-out" rows="14" aria-label="Output del comando" readonly spellcheck="false"
                     placeholder="L'output del comando compare qui."></textarea>
         </section>
 
@@ -630,7 +633,7 @@
           <div class="bot-telegram">
             <div class="opzioni-servizi-testa">
               <b>Telegram</b>
-              <span class="dim">scegli quale bot risponde su Telegram —
+              <span class="dim">scegli quale bot risponde su Telegram:
                 anche l'agente principale: gli scrivi dal telefono e
                 risponde lui, con la sua persona, i suoi tool e i suoi
                 permessi.</span>
@@ -643,7 +646,7 @@
               </label>
             </div>
             <div class="goal-bar-inner" style="margin-top:8px">
-              <input id="tg-token" type="password" autocomplete="off"
+              <input id="tg-token" type="password" aria-label="Token del bot Telegram" autocomplete="off"
                      placeholder="token di @BotFather (123456789:AAA...)"
                      style="flex:1;min-width:220px">
               <button id="tg-salva" class="ghost">Salva token</button>
@@ -719,11 +722,11 @@
 </div>
 
 <!-- pannello benchmark: overlay, non una pagina a se' -->
-<div id="bench" class="panel hidden">
+<div id="bench" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="bench-titolo">
   <div class="panel-box">
     <div class="panel-head">
       <div>
-        <b>Benchmark</b>
+        <b id="bench-titolo">Benchmark</b>
         <span class="dim">misura cosa sa fare ogni modello, per categoria</span>
         <!-- Stato e avanzamento: senza questo non si capiva se stesse
              girando. Il risultato e' in fondo al pannello, quindi il
@@ -770,7 +773,7 @@
 
     <div class="prova-box">
       <b>Che lavoro stai facendo?</b>
-      <span class="dim">scegli il tipo di richiesta: Orchestra sceglie il modello migliore in base ai benchmark gia' fatti. Se non e' misurato, lo dice — non indovina.</span>
+      <span class="dim">scegli il tipo di richiesta: Orchestra sceglie il modello migliore in base ai benchmark gia' fatti. Se non e' misurato, lo dice: non indovina.</span>
       <div class="bench-controls">
         <label>Tipo di lavoro
           <select id="routing-cat"></select>
@@ -794,7 +797,7 @@
     <div class="prova-box">
       <b>Prova a mano</b>
       <span class="dim">un compito, un modello, tutta la trascrizione. Serve a capire perché un modello perde un task.</span>
-      <textarea id="prova-prompt" rows="3" placeholder="es: leggi il file X, dimmi cosa contiene e crea Y.txt con la data"></textarea>
+      <textarea id="prova-prompt" rows="3" aria-label="Compito della prova manuale" placeholder="es: leggi il file X, dimmi cosa contiene e crea Y.txt con la data"></textarea>
       <div class="bench-controls">
         <label>Modello
           <select id="prova-model"></select>
@@ -816,10 +819,10 @@
      e il secondo era quello vero. Adesso il modale e' il posto: le
      skill con le proposte, il cestino, e gli strumenti. Le Opzioni si
      occupano di configurazione, non di consultazione. -->
-<div id="capacita" class="panel hidden">
+<div id="capacita" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="capacita-titolo">
   <div class="panel-box capacita-box">
     <div class="panel-head">
-      <div><b>Capacit&agrave;</b> <span class="dim">&mdash; quello che so fare, e quello che l'agente mi ha proposto</span></div>
+      <div><b id="capacita-titolo">Capacit&agrave;</b> <span class="dim">: quello che so fare, e quello che l'agente mi ha proposto</span></div>
       <button id="capacita-close" class="ghost">Chiudi</button>
     </div>
     <nav class="capacita-nav">
@@ -839,7 +842,7 @@
           <span class="dim" id="skill-riepilogo">procedure che l'agente puo' usare</span>
         </div>
         <div class="opzioni-skill-azioni">
-          <input id="skill-cartella" type="text" class="skill-input"
+          <input id="skill-cartella" type="text" aria-label="Cartella dello store delle skill" class="skill-input"
                  placeholder="Cartella dello store (un percorso)" spellcheck="false">
           <button id="skill-importa" class="ghost">Importa</button>
           <button id="skill-ricarica" class="ghost" title="Rilegge da disco">Aggiorna</button>
@@ -852,7 +855,7 @@
         <div id="skill-generate" class="skill-griglia"></div>
         <div class="skill-sottotitolo"><span>Scaricate</span></div>
         <div class="skill-filtro">
-          <input id="skill-filtro" type="text" class="skill-input"
+          <input id="skill-filtro" type="text" aria-label="Filtra le skill" class="skill-input"
                  placeholder="Filtra per nome, categoria o descrizione" spellcheck="false">
         </div>
         <div id="skill-scaricate" class="skill-griglia"></div>
@@ -878,7 +881,7 @@
     </div>
 
     <div id="cap-sez-tool" class="cap-sez" hidden>
-      <input id="cap-filtro" type="text" class="cap-filtro"
+      <input id="cap-filtro" type="text" aria-label="Filtra gli strumenti" class="cap-filtro"
              placeholder="Filtra per nome o descrizione..." spellcheck="false" />
       <div id="cap-lista" class="cap-lista"></div>
       <p id="cap-msg" class="small dim"></p>
@@ -893,11 +896,11 @@
     <!-- Ridotta, la sidebar diventa questa rotaia: un'icona per sezione.
          Il clic riapre e porta alla sezione. -->
     <nav id="side-rail" class="side-rail" aria-label="Sezioni del pannello">
-      <button data-sez="side-elenco" title="Cronologia">🕘</button>
-      <button data-sez="side-sez-progetti" title="Progetti">📁</button>
-      <button data-sez="side-sez-memoria" title="Memoria">🧠</button>
-      <button data-sez="side-sez-skill" title="Capacità">🧰</button>
-      <button data-sez="side-sez-tracce" title="Tracce">📼</button>
+      <button data-sez="side-elenco" title="Cronologia" aria-label="Cronologia"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></button>
+      <button data-sez="side-sez-progetti" title="Progetti" aria-label="Progetti"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></button>
+      <button data-sez="side-sez-memoria" title="Memoria" aria-label="Memoria"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6"/></svg></button>
+      <button data-sez="side-sez-skill" title="Capacità" aria-label="Capacità"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/></svg></button>
+      <button data-sez="side-sez-tracce" title="Tracce" aria-label="Tracce"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/></svg></button>
     </nav>
     <div class="side-testa">
       <div class="side-testata">
@@ -907,13 +910,13 @@
 
     <div class="side-azioni">
       <button id="side-nuova" class="primary">Nuova</button>
-      <button id="side-ricarica" class="ghost" title="Ricarica">&#8635;</button>
+      <button id="side-ricarica" class="ghost" title="Ricarica" aria-label="Ricarica la cronologia">&#8635;</button>
     </div>
 
     <ul id="side-elenco" class="side-elenco"></ul>
 
     <div class="side-cerca-campi">
-      <input id="side-cerca" type="text"
+      <input id="side-cerca" type="text" aria-label="Cerca nelle conversazioni"
              placeholder="Cerca nelle conversazioni..." spellcheck="false" />
     </div>
 
@@ -947,8 +950,8 @@
         <button id="side-mem-tutti" class="side-cap-btn" title="Sfoglia, cerca e correggi tutti i fatti indicizzati">Tutti i fatti</button>
       </div>
       <div class="side-mem-campi">
-        <input id="side-mem-input" type="text" placeholder="Fatto da ricordare..." />
-         <button id="side-mem-aggiungi" class="primary">+</button>
+        <input id="side-mem-input" type="text" aria-label="Fatto da ricordare" placeholder="Fatto da ricordare..." />
+         <button id="side-mem-aggiungi" class="primary" aria-label="Aggiungi un fatto alla memoria">+</button>
             <div hidden aria-hidden="true">
               <div id="storico-elenco"></div>
               <div id="storico-msg"></div>
@@ -989,7 +992,21 @@
     <p id="side-msg" class="small dim side-msg"></p>
   </aside>
   <main id="main">
-  <div class="wrap" id="log"></div>
+  <div class="wrap" id="log" aria-live="polite" aria-relevant="additions text"></div>
+  <!-- Stato vuoto: compare solo quando la chat non ha ancora messaggi
+       (`#log:empty`), quindi non e' un elemento in piu' da mantenere —
+       e' il modo di dire cosa sa fare l'assistente senza un pannello. -->
+  <div class="vuoto">
+    <div class="vuoto-segno" aria-hidden="true"></div>
+    <h2>Pronta quando vuoi</h2>
+    <p>Scrivi un compito qui sotto: posso leggere e scrivere file, eseguire
+      comandi, cercare sul web e verificare il risultato.</p>
+    <p class="vuoto-riga">
+      <kbd>Invio</kbd> invia
+      <span aria-hidden="true">·</span> <b>Allega</b> un file
+      <span aria-hidden="true">·</span> <kbd>Δ</kbd> mostra le modifiche
+    </p>
+  </div>
 </main>
   </div>
 
@@ -1002,19 +1019,19 @@
     <div class="row">
       <div class="chat-form" id="chat-form">
         <button id="btn-allega" class="ghost" title="Allega una foto, un PDF o un file di testo" disabled>
-          <span aria-hidden="true">📎</span><span class="sr">Allega un file</span>
+          <span aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M20.5 11.5 11.9 20a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></span><span class="sr">Allega un file</span>
         </button>
         <button id="btn-verifica" class="ghost" title="Verifica il lavoro: controlla il risultato in modo oggettivo e, se non torna, rimanda indietro" disabled>
           <span aria-hidden="true">✓</span><span class="sr">Verifica</span>
         </button>
-        <textarea id="input" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
+        <textarea id="input" aria-label="Scrivi un compito" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
         <div class="dot" id="dot" title="verde = pronto, giallo = al lavoro"></div>
-        <button class="primary" id="btn-send" disabled title="Invia (Invio per inviare, Shift+Invio a capo)">→</button>
+        <button class="primary" id="btn-send" disabled aria-label="Invia" title="Invia (Invio per inviare, Shift+Invio a capo)">→</button>
       </div>
     </div>
       <!-- steer: messaggio al modello mentre lavora (barra visibile solo durante il lavoro) -->
       <div id="steer-bar" class="steer-bar" hidden>
-        <input id="steer-input" placeholder="Guida il modello mentre lavora…" autocomplete="off">
+        <input id="steer-input" aria-label="Guida il modello mentre lavora" placeholder="Guida il modello mentre lavora…" autocomplete="off">
         <button id="steer-send" class="ghost">Guida</button>
         <button id="steer-stop" class="ghost" title="Ferma il lavoro" aria-label="Ferma il lavoro">■</button>
       </div>
@@ -1035,12 +1052,12 @@
            selettori di servizio e scopo verso il basso. Qui non
            rubano niente: sotto la chat, dove guardi quando hai
            finito. -->
-      <span class="stat" id="stats">—</span>
+      <span class="stat" id="stats">n/d</span>
     </div>
   </div>
 
   <button id="btn-mic-float" class="mic-float" title="Dittazione vocale (faster-whisper)" aria-label="Dittazione vocale" hidden>
-    <span aria-hidden="true">🎤</span>
+    <span class="icona-mic" aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span><span class="icona-stop" aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></span>
   </button>
 </footer>
 
@@ -1086,9 +1103,9 @@
 <!-- Schermata dettagli dopo scelta categoria -->
 <div id="onboard-details" class="onboard-backdrop" hidden>
   <div class="onboard">
-    <h2>Dettagli per: <span id="onboard-details-cat">—</span></h2>
-    <p class="sotto">Descrivi come vuoi il tuo <span id="onboard-details-cat2">—</span>: sezioni, stile, funzionalità, lingua, vincoli, ecc.</p>
-    <textarea id="onboard-details-input" placeholder="es. Sito web per ristorante, con menu online, sezioni: home, menu, contatti, prenotazioni. Stile moderno, colori caldi, italiano." rows="4"></textarea>
+    <h2>Dettagli per: <span id="onboard-details-cat">…</span></h2>
+    <p class="sotto">Descrivi come vuoi il tuo <span id="onboard-details-cat2">…</span>: sezioni, stile, funzionalità, lingua, vincoli, ecc.</p>
+    <textarea id="onboard-details-input" aria-label="Dettagli del compito di esempio" placeholder="es. Sito web per ristorante, con menu online, sezioni: home, menu, contatti, prenotazioni. Stile moderno, colori caldi, italiano." rows="4"></textarea>
     <div class="onboard-foot">
       <button id="onboard-back" class="ghost">← Indietro</button>
       <button id="onboard-avvia" class="primary">Avvia obiettivo</button>
@@ -1097,7 +1114,7 @@
 </div>
 <div id="goal-bar" class="goal-bar" hidden>
   <div class="goal-bar-inner">
-    <input id="goal-input" type="text" placeholder="Obiettivo (es. creare un sito web completo...)" />
+    <input id="goal-input" type="text" aria-label="Obiettivo autonomo" placeholder="Obiettivo (es. creare un sito web completo...)" />
     <button id="goal-start" class="primary">Avvia</button>
     <button id="goal-run-next" class="ghost" title="Esegue il prossimo goal pronto">Prossimo</button>
     <button id="goal-stop" class="ghost">Stop</button>
@@ -1118,7 +1135,7 @@
         <option value="piano">piano</option>
       </select>
       <input id="goal-priority" type="number" value="0" title="Priorità scheduler (più alto parte prima)" />
-      <input id="goal-depends" type="text" placeholder="Dipendenze: id separati da virgola" title="Parte solo quando sono done" />
+      <input id="goal-depends" type="text" aria-label="Dipendenze del goal" placeholder="Dipendenze: id separati da virgola" title="Parte solo quando sono done" />
       <input id="goal-maxiters" type="number" value="60" title="Massimo iterazioni agente" />
       <input id="goal-attempts" type="number" value="1" min="1" title="Tentativi totali prima di failed" />
       <label class="goal-check" title="Accetta anche un completamento parziale dopo stop anomalo">
@@ -1126,8 +1143,8 @@
       </label>
     </div>
     <div class="goal-bar-inner">
-      <textarea id="goal-criteri" rows="2" placeholder='Criteri JSON, es. [{"tipo":"file_contiene","percorso":"report.md","testo":"totale"}]' title="Criteri di accettazione dichiarativi"></textarea>
-      <textarea id="goal-recovery" rows="2" placeholder='Recovery JSON, es. {"max_retry":1,"modelli_alternativi":["..."]}' title="Retry della delega con modelli alternativi"></textarea>
+      <textarea id="goal-criteri" rows="2" aria-label="Criteri del goal in JSON" placeholder='Criteri JSON, es. [{"tipo":"file_contiene","percorso":"report.md","testo":"totale"}]' title="Criteri di accettazione dichiarativi"></textarea>
+      <textarea id="goal-recovery" rows="2" aria-label="Recovery del goal in JSON" placeholder='Recovery JSON, es. {"max_retry":1,"modelli_alternativi":["..."]}' title="Retry della delega con modelli alternativi"></textarea>
     </div>
   </details>
   <div class="goal-bar-inner">
@@ -1142,7 +1159,7 @@
 </div>
 <div id="cron-bar" class="goal-bar" hidden>
   <div class="goal-bar-inner">
-    <input id="cron-nome" type="text" placeholder="Nome job (es. report giornaliero)" />
+    <input id="cron-nome" type="text" aria-label="Nome del job programmato" placeholder="Nome job (es. report giornaliero)" />
     <select id="cron-preset" title="Frequenza">
       <option value="*/5 * * * *">Ogni 5 minuti</option>
       <option value="*/10 * * * *">Ogni 10 minuti</option>
@@ -1153,10 +1170,10 @@
       <option value="at">A un orario preciso…</option>
       <option value="custom">Personalizzato (cron)…</option>
     </select>
-    <input id="cron-at-hour" type="number" min="0" max="23" value="9" placeholder="ora" hidden />
+    <input id="cron-at-hour" type="number" aria-label="Ora di esecuzione" min="0" max="23" value="9" placeholder="ora" hidden />
     <span class="small dim" id="cron-at-sep" hidden>:</span>
-    <input id="cron-at-min" type="number" min="0" max="59" value="0" placeholder="min" hidden />
-    <input id="cron-schedule" type="text" placeholder="Schedule cron (es. 0 9 * * *)" hidden />
+    <input id="cron-at-min" type="number" aria-label="Minuti di esecuzione" min="0" max="59" value="0" placeholder="min" hidden />
+    <input id="cron-schedule" type="text" aria-label="Espressione cron" placeholder="Schedule cron (es. 0 9 * * *)" hidden />
     <select id="cron-type" title="Tipo azione">
       <option value="goal">goal</option>
       <option value="shell">shell</option>
@@ -1166,8 +1183,8 @@
     <span id="cron-status" class="small dim"></span>
   </div>
   <div class="goal-bar-inner">
-    <input id="cron-objective" type="text" placeholder="Obiettivo (se goal)" />
-    <input id="cron-command" type="text" placeholder="Comando (se shell)" />
+    <input id="cron-objective" type="text" aria-label="Obiettivo del job" placeholder="Obiettivo (se goal)" />
+    <input id="cron-command" type="text" aria-label="Comando del job" placeholder="Comando (se shell)" />
     <select id="cron-profile" title="Profilo">
       <option value="auto">auto</option>
       <option value="base">base</option>
@@ -1186,21 +1203,21 @@
 </div>
 <div id="mcp-bar" class="goal-bar" hidden>
   <div class="goal-bar-inner">
-    <input id="mcp-preset-cerca" type="search" placeholder="Cerca preset (es. postgres, unity, github...)" />
+    <input id="mcp-preset-cerca" type="search" aria-label="Cerca un preset MCP" placeholder="Cerca preset (es. postgres, unity, github...)" />
     <select id="mcp-preset" title="Preset pronti: servizi e programmi locali">
       <option value="">Personalizzato (manuale)</option>
     </select>
-    <input id="mcp-nome" type="text" placeholder="Nome server (es. supabase)" />
+    <input id="mcp-nome" type="text" aria-label="Nome del server MCP" placeholder="Nome server (es. supabase)" />
     <select id="mcp-transport" title="Transport">
       <option value="stdio">stdio</option>
       <option value="http">http</option>
       <option value="sse">sse</option>
     </select>
-    <input id="mcp-command" type="text" placeholder="Comando (es. npx -y @supabase/mcp-server...)" />
-    <input id="mcp-args" type="text" placeholder="Argomenti (separati da spazio)" />
+    <input id="mcp-command" type="text" aria-label="Comando del server MCP" placeholder="Comando (es. npx -y @supabase/mcp-server...)" />
+    <input id="mcp-args" type="text" aria-label="Argomenti del server MCP" placeholder="Argomenti (separati da spazio)" />
     <!-- Per http/sse il comando non serve: serve l'URL. Sono due campi
          diversi perche' i due trasporti sono diversi. -->
-    <input id="mcp-url" type="text" placeholder="URL (http/sse: https://host/mcp)" />
+    <input id="mcp-url" type="text" aria-label="URL del server MCP" placeholder="URL (http/sse: https://host/mcp)" />
     <button id="mcp-add" class="primary">Aggiungi</button>
     <button id="mcp-refresh" class="ghost">Aggiorna</button>
     <span id="mcp-status" class="small dim"></span>
@@ -1209,8 +1226,8 @@
        della configurazione lo scrive il server, non l'utente. -->
   <div id="mcp-preset-campi" class="goal-bar-inner" hidden></div>
   <div class="goal-bar-inner">
-    <input id="mcp-env" type="text" placeholder="Env (KEY=val, separati da ;)" />
-    <input id="mcp-headers" type="text" placeholder="Headers HTTP (Authorization=Bearer ..., separati da ;)" />
+    <input id="mcp-env" type="text" aria-label="Variabili d'ambiente del server MCP" placeholder="Env (KEY=val, separati da ;)" />
+    <input id="mcp-headers" type="text" aria-label="Header HTTP del server MCP" placeholder="Headers HTTP (Authorization=Bearer ..., separati da ;)" />
     <span class="grow"></span>
     <button id="mcp-connect-all" class="ghost">Connetti tutti</button>
   </div>
@@ -1242,10 +1259,11 @@
 <!-- Le tracce: una riga per turno, e il dettaglio in un modale.
      Aprirlo sotto la lista lo nascondeva sotto lo schermo: la lista
      puo' essere lunga e il dettaglio finiva fuori dal viewport. -->
-<div id="traccia-modal" class="traccia-modal" hidden>
+<div id="traccia-modal" class="traccia-modal" hidden
+     role="dialog" aria-modal="true" aria-labelledby="traccia-titolo">
   <div class="traccia-modal-box">
     <div class="panel-head">
-      <div><b>Traccia</b> <span class="dim">la sequenza esatta degli eventi di quel turno</span></div>
+      <div><b id="traccia-titolo">Traccia</b> <span class="dim">la sequenza esatta degli eventi di quel turno</span></div>
       <button id="traccia-chiudi" class="ghost">Chiudi</button>
     </div>
     <div class="traccia-modal-corpo">
@@ -1253,10 +1271,11 @@
     </div>
   </div>
 </div>
-<div id="diff-modal" class="traccia-modal" hidden>
+<div id="diff-modal" class="traccia-modal" hidden
+     role="dialog" aria-modal="true" aria-labelledby="diff-titolo">
   <div class="traccia-modal-box diff-modal-box">
     <div class="panel-head">
-      <div><b>Modifiche del turno</b> <span class="dim">cosa ha toccato l'agente, riga per riga</span></div>
+      <div><b id="diff-titolo">Modifiche del turno</b> <span class="dim">cosa ha toccato l'agente, riga per riga</span></div>
       <div>
         <button id="diff-aggiorna" class="ghost" title="Rileggi i file adesso">&#8634;</button>
         <button id="diff-chiudi" class="ghost">Chiudi</button>
@@ -1265,10 +1284,11 @@
     <div class="traccia-modal-corpo" id="diff-corpo"></div>
   </div>
 </div>
-<div id="mem-modal" class="mem-modal" hidden>
+<div id="mem-modal" class="mem-modal" hidden
+     role="dialog" aria-modal="true" aria-labelledby="mem-titolo">
   <div class="mem-modal-box">
     <div class="panel-head">
-      <div><b>Memoria</b> <span class="dim">fatti indicizzati, sfoglia, cerca e correggi</span></div>
+      <div><b id="mem-titolo">Memoria</b> <span class="dim">fatti indicizzati, sfoglia, cerca e correggi</span></div>
       <div>
         <button id="mem-trova" class="ghost" title="Cerca">&#8634;</button>
         <button id="mem-chiudi" class="ghost">Chiudi</button>
@@ -1276,7 +1296,7 @@
     </div>
     <div class="mem-modal-corpo">
       <div class="mem-cerca-riga">
-        <input id="mem-cerca" type="text" placeholder="Cerca nella memoria..." spellcheck="false" />
+        <input id="mem-cerca" type="text" aria-label="Cerca nella memoria" placeholder="Cerca nella memoria..." spellcheck="false" />
         <button id="mem-annulla-cerca" class="ghost" title="Pulisci" hidden>&times;</button>
       </div>
       <p class="small dim" id="mem-stat"></p>
@@ -1286,10 +1306,11 @@
   </div>
 </div>
     <!-- Il modal dei progetti: lista, cancellazione e nuova registrazione. -->
-         <div class="progetti-modal" id="progetti-modal" hidden>
+         <div class="progetti-modal" id="progetti-modal" hidden
+              role="dialog" aria-modal="true" aria-labelledby="progetti-titolo">
       <div class="progetti-modal-box">
         <div class="progetti-modal-head">
-          <span class="progetti-modal-titolo">Gestione progetti</span>
+          <span class="progetti-modal-titolo" id="progetti-titolo">Gestione progetti</span>
           <button id="progetti-modal-chiudi" class="ghost" title="Chiudi (Esc)">×</button>
         </div>
         <div class="progetti-modal-body">
@@ -1298,9 +1319,9 @@
             <ul id="progetti-modal-lista" class="progetti-modal-lista"></ul>
             <div class="progetti-modal-titolo-col">Nuovo progetto</div>
             <div class="progetti-modal-campi">
-              <input id="progetti-modal-nome" type="text" placeholder="Nome del progetto" spellcheck="false" />
-              <input id="progetti-modal-percorso" type="text" placeholder="Cartella (D:\lavori\mio-progetto)" spellcheck="false" />
-              <input id="progetti-modal-alias" type="text" placeholder="Alias: restaurant site, menu, sito" spellcheck="false" />
+              <input id="progetti-modal-nome" type="text" aria-label="Nome del progetto" placeholder="Nome del progetto" spellcheck="false" />
+              <input id="progetti-modal-percorso" type="text" aria-label="Cartella del progetto" placeholder="Cartella (D:\lavori\mio-progetto)" spellcheck="false" />
+              <input id="progetti-modal-alias" type="text" aria-label="Alias del progetto" placeholder="Alias: restaurant site, menu, sito" spellcheck="false" />
               <button id="progetti-modal-registra" class="primary">Registra</button>
             </div>
           </div>
@@ -1318,17 +1339,17 @@
     </div>
 <div class="backdrop" id="side-backdrop"></div>
 <button id="mic-float" class="mic-float" title="Dettatura vocale (microfono)" aria-label="Dettatura vocale" hidden>
-  <span aria-hidden="true">🎤</span>
+  <span class="icona-mic" aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span><span class="icona-stop" aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></span>
 </button>
 
-<div id="council-panel" class="panel hidden">
+<div id="council-panel" class="panel hidden" role="dialog" aria-modal="true" aria-labelledby="council-titolo">
   <div class="panel-box" style="max-width:900px">
     <div class="panel-head">
-      <h2>Consiglio (Roast Room)</h2>
+      <h2 id="council-titolo">Consiglio (Roast Room)</h2>
       <button id="council-close" class="ghost">Chiudi</button>
     </div>
     <div class="panel-body">
-      <textarea id="council-decision" rows="4" style="width:100%" placeholder="La decisione da dibattere (con opzioni, numeri, vincoli, lean)..."></textarea>
+      <textarea id="council-decision" rows="4" aria-label="Decisione da dibattere" style="width:100%" placeholder="La decisione da dibattere (con opzioni, numeri, vincoli, lean)..."></textarea>
       <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <label>Rounds: <select id="council-rounds"><option value="2">2</option><option value="3" selected>3</option></select></label>
         <button id="council-consiglia" class="ghost" title="Il Chair legge la decisione e propone chi deve sedere">Consiglia tavolo</button>

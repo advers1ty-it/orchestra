@@ -1,5 +1,5 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-automazioni")<0)window.__diagFiles.push("panels-automazioni");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-automazioni");}})();
-// ============================== CRON ==============================
+// Cron
 const cronBar = $("cron-bar");
 const cronNome = $("cron-nome");
 const cronSchedule = $("cron-schedule");
@@ -53,7 +53,7 @@ function cronRiga(j) {
   const nome = document.createElement("span");
   nome.className = "goal-obj";
   nome.textContent = (j.nome || "") + "  [" + (j.schedule_human || j.schedule || "") + "]";
-  nome.title = (j.nome || "") + " — " + (j.schedule || "");
+  nome.title = (j.nome || "") + ": " + (j.schedule || "");
   riga.appendChild(nome);
   const st = document.createElement("span");
   st.className = "goal-stato stato-" + (j.enabled ? "done" : "pending");
@@ -172,7 +172,7 @@ on("cron-sched", "click", async () => {
   } catch (e) { if (cronStatus) cronStatus.textContent = "errore: " + e; }
 });
 
-// ============================== AUTOSTART ==============================
+// Autostart
 const autostartStat = $("autostart-stat");
 const autostartToggle = $("autostart-toggle");
 
@@ -184,9 +184,8 @@ async function caricaAutostart() {
       if (autostartToggle) autostartToggle.hidden = true;
       return;
     }
-    // "attivo" vuol dire che la voce esiste, non che partira': se il
-    // programma registrato non c'e' piu', lo si dice invece di far
-    // credere che l'avvio automatico funzioni.
+    // "attivo" vuol dire che la voce esiste, non che partira': se il programma registrato non c'e' piu', lo si dice
+    // invece di far credere che l'avvio automatico funzioni.
     if (autostartStat) {
       autostartStat.textContent = !r.attivo
         ? "disattivo"
@@ -216,7 +215,7 @@ caricaCron = async function() {
   caricaAutostart();
 };
 
-// ============================== MCP ==============================
+// MCP
 const mcpBar = $("mcp-bar");
 const mcpPreset = $("mcp-preset");
 const mcpPresetCerca = $("mcp-preset-cerca");
@@ -511,11 +510,8 @@ async function mcpInvia(cfg, preset) {
       if (mcpStatus) mcpStatus.textContent = d.error || ("errore " + r.status);
       return;
     }
-    // Un preset potente resta spento: la conferma autorizza a scrivere la
-    // configurazione, non ad avviare il processo. La connessione e' un
-    // secondo gesto esplicito dalla lista. Per OAuth il primo connect apre
-    // il browser e puo' aspettare piu' del timeout, quindi si connette
-    // sempre dall'utente.
+    // Un preset potente resta spento: la conferma autorizza a scrivere la configurazione,
+    // non ad avviare il processo. OAuth può superare il timeout, quindi si connette solo su gesto utente.
     const potente = !!(preset && preset.richiede_conferma);
     let cr = null;
     if (!potente && (!preset || !preset.oauth)) {
@@ -712,7 +708,7 @@ on("mcp-connect-all", "click", async () => {
 });
 
 
-// --- Consiglio (Roast Room) ---
+// Consiglio (Roast Room)
 (function(){
   const btn = document.getElementById('btn-council');
   const panel = document.getElementById('council-panel');

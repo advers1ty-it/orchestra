@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orchestra — Guida {{versione}}</title>
+<title>Orchestra: Guida {{versione}}</title>
 <style>
   :root {
     --bg: #0c1018;
@@ -59,7 +59,7 @@
 </head>
 <body>
 <header>
-  <h1>Orchestra — Guida</h1>
+  <h1>Orchestra: Guida</h1>
   <div class="sub">Versione {{versione}} · un assistente che lavora sui tuoi file, dal tuo computer</div>
   <div style="margin-top:10px;"><a href="/" class="btn">Apri app</a><a href="/docs" class="btn" style="background:transparent;color:var(--accent);border:1px solid var(--accent)">Ricarica guida</a></div>
 </header>
@@ -131,11 +131,11 @@
 
 <section id="schermata">
 <h2>Cosa c'è sullo schermo</h2>
-<p>Dall'alto: una barra con le azioni, la conversazione, e in fondo il campo dove scrivi. La barra laterale (pulsante <span class="kbd">☰</span>, oppure <span class="kbd">Ctrl+B</span>) contiene la cronologia, i progetti, la memoria, le capacità e le tracce.</p>
+<p>Dall'alto: una barra con le azioni, la conversazione, e in fondo il campo dove scrivi. La barra laterale (pulsante di menu, oppure <span class="kbd">Ctrl+B</span>) contiene la cronologia, i progetti, la memoria, le capacità e le tracce.</p>
 <div class="grid">
   <div class="box">
     <h3>In alto a sinistra</h3>
-    <p><b>☰</b> apre la barra laterale. <b>↶</b> annulla l'ultima modifica ai file. <b>Δ</b> mostra le modifiche del turno. <b>Piano</b> è un interruttore: acceso, l'agente legge e propone invece di modificare.</p>
+    <p>Il <b>pulsante di menu</b> apre la barra laterale. <b>↶</b> annulla l'ultima modifica ai file. <b>Δ</b> mostra le modifiche del turno. <b>Piano</b> è un interruttore: acceso, l'agente legge e propone invece di modificare.</p>
   </div>
   <div class="box">
     <h3>I pannelli</h3>
@@ -151,7 +151,7 @@
   </div>
   <div class="box">
     <h3>In fondo</h3>
-    <p><b>📎</b> allega un file, <b>✓</b> attiva un controllo automatico sul risultato, il campo di testo, il pallino (verde = pronto, giallo = al lavoro) e <b>→</b> per inviare. Accanto, se disponibile, c'è il microfono per dettare.</p>
+    <p><b>Allega</b> allega un file, <b>Verifica</b> attiva un controllo automatico sul risultato, il campo di testo serve a scrivere, il pallino (verde = pronto, giallo = al lavoro) indica lo stato e <b>Invia</b> manda. Accanto, se disponibile, c'è il microfono per dettare.</p>
   </div>
 </div>
 </section>
@@ -169,7 +169,7 @@
 <p class="dim">Entrambi i tetti si applicano subito, senza riavviare, e restano salvati per la volta dopo. Vanno di pari passo con il Budget: le iterazioni limitano i passi, il tempo limita l'attesa, il budget limita la spesa.</p>
 
 <h3>Identità</h3>
-<p>Nome e istruzioni personali dell'<b>agente principale</b> (quello che risponde quando non è attivo un bot). La persona è testo libero — ruolo, tono, cosa tenere presente — e viene aggiunta <b>dopo</b> le regole di sistema, quindi non può disattivare divieti o permessi. Il nome sostituisce «agente principale» nel menu in alto. Svuotare i campi e salvare riporta tutto come prima.</p>
+<p>Nome e istruzioni personali dell'<b>agente principale</b> (quello che risponde quando non è attivo un bot). La persona è testo libero: ruolo, tono, cosa tenere presente, e viene aggiunta <b>dopo</b> le regole di sistema, quindi non può disattivare divieti o permessi. Il nome sostituisce «agente principale» nel menu in alto. Svuotare i campi e salvare riporta tutto come prima.</p>
 
 <h3>Budget</h3>
 <p>Tetti di spesa per <b>task</b> (token, costo in dollari, iterazioni) e per <b>sessione</b> (token, costo, numero di richieste). Sotto «Budget globali (giorno/mese)» ci sono i tetti complessivi di costo: quando sono raggiunti Orchestra si ferma e te lo dice, invece di continuare a spendere. Zero in un campo significa «nessun limite».</p>
@@ -192,7 +192,7 @@
 
 <h3>Avvio automatico</h3>
 <p>Un interruttore che fa partire il server al login di Windows, senza privilegi di amministratore. Comodo se vuoi rispondere dal telefono senza accendere il computer a mano. Spegnilo se preferisci decidere tu quando parte.</p>
-<p>La voce registrata usa il Python che sta eseguendo Orchestra in quel momento, non il launcher <code>py</code>: il launcher sceglie da sé la versione predefinita, e se quella è stata disinstallata o sostituita l'avvio non parte più. Quando succede il pannello non scrive più «attivo» e basta — dice che cosa non troverebbe e mostra <b>Ripara</b>, che riscrive la voce con l'interprete di adesso.</p>
+<p>La voce registrata usa il Python che sta eseguendo Orchestra in quel momento, non il launcher <code>py</code>: il launcher sceglie da sé la versione predefinita, e se quella è stata disinstallata o sostituita l'avvio non parte più. Quando succede il pannello non scrive più «attivo» e basta: dice che cosa non troverebbe e mostra <b>Ripara</b>, che riscrive la voce con l'interprete di adesso.</p>
 
 <h3>Bot</h3>
 <p>Le identità alternative: nome, servizio, modello, persona, progetto e conversazione propri, più i limiti di cosa possono fare. Vedi <a href="#bot">Bot</a>.</p>
@@ -203,15 +203,15 @@
 
 <section id="capacita">
 <h2>Il pannello Capacità</h2>
-<p>Si apre dal pulsante <b>Apri tutte le capacità</b> nella barra laterale (icona 🧰): è il posto dove si guarda cosa l'agente sa fare, e l'unico. Tre tab.</p>
+<p>Si apre dal pulsante <b>Apri tutte le capacità</b> nella barra laterale: è il posto dove si guarda cosa l'agente sa fare, e l'unico. Tre tab.</p>
 
 <h3>Skill</h3>
 <p>Le procedure che l'agente può seguire quando il compito lo richiede. Ce ne sono di due tipi: <b>scaricate</b> (importate da una cartella di store: scrivi il percorso e premi <b>Importa</b>) e <b>imparate dall'agente</b>.</p>
-<p>L'apprendimento funziona così: quando una <b>sequenza di comandi</b> ti riesce tre volte, Orchestra non la salva di nascosto — te la <b>propone</b> qui, in cima, con le tre esecuzioni come prove. La apri, la leggi, e scegli: <b>Tieni</b> la fa entrare nel prompt per i compiti simili, <b>Scarta</b> la mette nel cestino e non te la ripropone. Finché non scegli, quella procedura <b>non entra nel prompt</b>: una procedura sbagliata nel prompt non è un errore visibile, è un'istruzione che viene seguita.</p>
-<p>Puoi anche chiederglielo esplicitamente («salva questa procedura come skill»): in quel caso non c'è soglia, ma servono comunque i comandi eseguiti — una procedura senza prove è un'affermazione. Un filtro cerca per nome, categoria o descrizione, e <b>Aggiorna</b> rilegge da disco quando l'agente scrive qualcosa mentre guardi.</p>
+<p>L'apprendimento funziona così: quando una <b>sequenza di comandi</b> ti riesce tre volte, Orchestra non la salva di nascosto: te la <b>propone</b> qui, in cima, con le tre esecuzioni come prove. La apri, la leggi, e scegli: <b>Tieni</b> la fa entrare nel prompt per i compiti simili, <b>Scarta</b> la mette nel cestino e non te la ripropone. Finché non scegli, quella procedura <b>non entra nel prompt</b>: una procedura sbagliata nel prompt non è un errore visibile, è un'istruzione che viene seguita.</p>
+<p>Puoi anche chiederglielo esplicitamente («salva questa procedura come skill»): in quel caso non c'è soglia, ma servono comunque i comandi eseguiti: una procedura senza prove è un'affermazione. Un filtro cerca per nome, categoria o descrizione, e <b>Aggiorna</b> rilegge da disco quando l'agente scrive qualcosa mentre guardi.</p>
 
 <h3>Cestino</h3>
-<p>Le skill cancellate finiscono qui: le vedi, le rimetti, oppure le elimini davvero con <b>Cancella tutto</b>. Nessuna cancellazione è definitiva senza questo secondo passaggio — ed è per questo che il cestino sta accanto alle skill invece che in una stanza sua.</p>
+<p>Le skill cancellate finiscono qui: le vedi, le rimetti, oppure le elimini davvero con <b>Cancella tutto</b>. Nessuna cancellazione è definitiva senza questo secondo passaggio, ed è per questo che il cestino sta accanto alle skill invece che in una stanza sua.</p>
 
 <h3>Strumenti</h3>
 <p>Quello che l'agente può chiamare adesso: file, comandi, ricerca, memoria, browser. Si legge soltanto, e si filtra per nome o descrizione. Se uno strumento che ti aspetti non c'è, la causa è nel profilo strumenti (Opzioni → Modello) o nei permessi.</p>
@@ -227,13 +227,13 @@
 <p>Il pulsante <b>■</b> accanto a Invia ferma il turno. Il controllo avviene prima di ogni comando: se il modello ne aveva chiesti dieci e ne sono partiti tre, i sette rimanenti ricevono «annullato» e la sequenza resta pulita. Il turno si chiude come annullato, e lo vedi nelle Tracce.</p>
 
 <h3>Allegare file</h3>
-<p>Con <b>📎</b> puoi passare immagini, PDF, testo e documenti Office (<code>.docx</code>, <code>.xlsx</code>, <code>.pptx</code>). Di un foglio Excel si legge il valore calcolato e il nome del foglio; di una presentazione, le diapositive in ordine. Il limite per file è 12 MB, e prima dell'invio Orchestra ti dice quanto costerà in token: un allegato grande si paga.</p>
+<p>Con <b>Allega</b> puoi passare immagini, PDF, testo e documenti Office (<code>.docx</code>, <code>.xlsx</code>, <code>.pptx</code>). Di un foglio Excel si legge il valore calcolato e il nome del foglio; di una presentazione, le diapositive in ordine. Il limite per file è 12 MB, e prima dell'invio Orchestra ti dice quanto costerà in token: un allegato grande si paga.</p>
 
 <h3>Dettatura vocale</h3>
 <p>Il microfono compare accanto al campo quando il tuo browser lo permette. Parla, e il testo finisce nel campo; puoi correggerlo prima di inviare. Nei browser senza riconoscimento vocale l'audio viene trascritto dal server, se è installato il componente apposito (Opzioni → Diagnosi → dipendenze te lo dice).</p>
 
 <h3>Chiedere una verifica oggettiva</h3>
-<p>Il pulsante <b>✓</b> si accende e chiede: che tipo di controllo, su quale file. I controlli sono verificabili senza interpretazione — il file esiste e non è vuoto, ha una lunghezza minima, contiene certi pezzi, il JSON ha certi campi, la somma di un campo torna. Se il controllo non passa, Orchestra rimanda il modello al lavoro con il motivo esatto, fino a tre volte. Si accende e si spegne: da spento il turno gira normale.</p>
+<p>Il pulsante <b>Verifica</b> si accende e chiede: che tipo di controllo, su quale file. I controlli sono verificabili senza interpretazione: il file esiste e non è vuoto, ha una lunghezza minima, contiene certi pezzi, il JSON ha certi campi, la somma di un campo torna. Se il controllo non passa, Orchestra rimanda il modello al lavoro con il motivo esatto, fino a tre volte. Si accende e si spegne: da spento il turno gira normale.</p>
 
 <h3>Fine turno</h3>
 <p>Quando il turno finisce arriva un riepilogo: esito in parole, durata, file toccati con righe aggiunte e tolte, token e costo stimato. Compare come riga in chat; se stai guardando un'altra scheda diventa una notifica di sistema. Lo stesso riepilogo resta disponibile all'indirizzo <code>/api/riepilogo</code>.</p>
@@ -253,7 +253,7 @@
 <section id="backup">
 <h2>Backup e ripristino</h2>
 <p>Memoria, cronologia, bot, lavori, collegamenti Telegram, budget e cron stanno in una cartella dati fuori dal progetto. Reinstallare Orchestra su un altro computer non li porta con sé: per questo esiste un comando che li mette in un archivio, uno che li rimette, e il pannello <b>Opzioni → Backup</b>.</p>
-<p>Ogni <b>installazione</b> ha la sua cartella dati: quella in AppData, una copia su un altro disco, un server di prova. La cartella si chiama con un codice ricavato dal percorso, e quel codice non dice niente a nessuno: per questo nel pannello le installazioni si leggono <b>per percorso</b>, con quanti file hanno e da quanto non le usi. Se il percorso non è ancora registrato compare la cartella dati: il percorso si scrive quando Orchestra parte <b>dalla propria cartella</b> la prima volta dopo l'aggiornamento. Non si registra avviando un'altra copia con <code>ORCHESTRA_HOME</code> puntato su quei dati — il percorso del codice non sarebbe quello dell'installazione, e una mappatura sbagliata è peggio di una mancante.</p>
+<p>Ogni <b>installazione</b> ha la sua cartella dati: quella in AppData, una copia su un altro disco, un server di prova. La cartella si chiama con un codice ricavato dal percorso, e quel codice non dice niente a nessuno: per questo nel pannello le installazioni si leggono <b>per percorso</b>, con quanti file hanno e da quanto non le usi. Se il percorso non è ancora registrato compare la cartella dati: il percorso si scrive quando Orchestra parte <b>dalla propria cartella</b> la prima volta dopo l'aggiornamento. Non si registra avviando un'altra copia con <code>ORCHESTRA_HOME</code> puntato su quei dati: il percorso del codice non sarebbe quello dell'installazione, e una mappatura sbagliata è peggio di una mancante.</p>
 <pre><code>python -m orchestra.cli backup --elenco             # quali installazioni ci sono, con i percorsi
 python -m orchestra.cli backup                      # l'installazione corrente
 python -m orchestra.cli backup --tutte              # un archivio per ciascuna
@@ -261,7 +261,7 @@ python -m orchestra.cli backup --profilo D:\orchestra
 python -m orchestra.cli backup --senza-chiavi       # solo i dati, nessun segreto
 python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --profilo
 </code></pre>
-<p>L'archivio contiene i file così come sono, più un manifesto con la versione che l'ha creato. I database non vengono copiati a mano: si usa il backup di sqlite, perché con il journal WAL il solo <code>.db</code> può non contenere le ultime scritture — e un backup incompleto si scopre al ripristino, cioè nel momento peggiore.</p>
+<p>L'archivio contiene i file così come sono, più un manifesto con la versione che l'ha creato. I database non vengono copiati a mano: si usa il backup di sqlite, perché con il journal WAL il solo <code>.db</code> può non contenere le ultime scritture, e un backup incompleto si scopre al ripristino, cioè nel momento peggiore.</p>
 <p>Nel pannello ogni installazione ha <b>Salva questa</b>, e in cima <b>Salva tutti</b> fa un archivio per ciascuna senza fermarsi alla prima che va male: l'esito dice quali sono riuscite e quali no. Sotto, gli archivi già presenti si possono ripristinare con un clic, dopo una conferma che dice <b>dove</b> si va a scrivere. Il ripristino si rifiuta se c'è un turno in corso: sostituire i database mentre l'agente scrive non è una corsa che si vince.</p>
 <p>Il ripristino <b>salva prima lo stato attuale</b> e poi sovrascrive: se l'archivio è quello sbagliato, il file di prima è nella stessa cartella <code>backup</code>. Un archivio che non ha il manifesto, o che contiene percorsi fuori dalla cartella dati, viene rifiutato invece di essere aperto «sperando che vada». Dopo un ripristino va riavviata Orchestra, perché i dati si leggono all'avvio.</p>
 <div class="nota"><b>Le chiavi:</b> con il <code>.env</code> dentro, l'archivio contiene le tue chiavi API. Serve per non doverle reinserire una per una su un computer nuovo, ma quel file va tenuto come un portachiavi: non condividerlo e non metterlo in un repository.</div>
@@ -290,11 +290,11 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <p>La lettura è in sola lettura, quindi non sposta i messaggi né li segna come letti. L'invio parte solo quando glielo chiedi: il messaggio, i destinatari e gli allegati sono quelli che hai indicato, e un allegato che non esiste ferma l'invio invece di mandare la mail senza il file.</p>
 
 <h3>La cartella di lavoro è un confine</h3>
-<p>Dentro il progetto l'agente lavora liberamente. Fuori, no: compare una domanda con quattro scelte — <b>Solo questa volta</b>, <b>Per questa sessione</b> (due ore), <b>Sempre</b>, <b>Mai</b>. Le cartelle di sistema non sono autorizzabili e vengono negate senza domanda. «Mai» resta ricordato e si revoca da Opzioni → Permessi.</p>
+<p>Dentro il progetto l'agente lavora liberamente. Fuori, no: compare una domanda con quattro scelte: <b>Solo questa volta</b>, <b>Per questa sessione</b> (due ore), <b>Sempre</b>, <b>Mai</b>. Le cartelle di sistema non sono autorizzabili e vengono negate senza domanda. «Mai» resta ricordato e si revoca da Opzioni → Permessi.</p>
 <p>I file di credenziali (<code>.env</code>, <code>.ssh</code>, <code>id_rsa</code>, <code>.git/config</code>) sono negati agli strumenti <b>anche dentro</b> la cartella di lavoro. I modelli di esempio (<code>.env.example</code>) restano leggibili.</p>
 
 <h3>Modalità piano</h3>
-<p>Il pulsante <b>Piano</b> in alto inverte il comportamento: gli strumenti che modificano qualcosa — scritture, comandi, test, cron, MCP — restano fermi, e l'agente deve prima leggere, poi proporre i passi. Il piano arriva in una finestra con <b>Approva il piano</b> e <b>Rifiuta</b>; l'approvazione vale per quel turno e non per quelli dopo, e un rifiuto con una nota torna al modello come indicazione. Serve quando vuoi vedere l'idea prima che diventi file.</p>
+<p>Il pulsante <b>Piano</b> in alto inverte il comportamento: gli strumenti che modificano qualcosa restano fermi. Scritture, comandi, test, cron e MCP devono aspettare; l'agente deve prima leggere, poi proporre i passi. Il piano arriva in una finestra con <b>Approva il piano</b> e <b>Rifiuta</b>; l'approvazione vale per quel turno e non per quelli dopo, e un rifiuto con una nota torna al modello come indicazione. Serve quando vuoi vedere l'idea prima che diventi file.</p>
 
 <h3>Automazione di browser e computer</h3>
 <p>L'agente può aprire una pagina e leggerne il contenuto, fare uno screenshot e guardarlo davvero, cliccare e scrivere in un browser. Usa solo componenti già presenti nel sistema (Chrome o Edge). L'automazione di mouse e tastiera sul computer richiede un permesso esplicito ed è spenta finché non la abiliti.</p>
@@ -320,7 +320,7 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 
 <section id="cron">
 <h2>Cron (lavori programmati)</h2>
-<p>Pulsante <b>Cron</b>: programmi un lavoro perché parta da solo, ogni tanto o a un'ora precisa. La frequenza si sceglie da un menu in parole — ogni 5, 10 o 30 minuti, ogni ora, due volte al giorno, una volta al giorno, a un orario, oppure un'espressione cron scritta a mano.</p>
+<p>Pulsante <b>Cron</b>: programmi un lavoro perché parta da solo, ogni tanto o a un'ora precisa. La frequenza si sceglie da un menu in parole: ogni 5, 10 o 30 minuti, ogni ora, due volte al giorno, una volta al giorno, a un orario, oppure un'espressione cron scritta a mano.</p>
 <ul>
   <li>Il lavoro può essere un <b>obiettivo</b> oppure un <b>comando</b> da eseguire.</li>
   <li>Lo scheduler parte con il server e riprende dopo un riavvio: i lavori sono salvati su disco.</li>
@@ -350,24 +350,24 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 
 <section id="telegram">
 <h2>Telegram: scrivere al bot dal telefono</h2>
-<p>L'agente principale e ogni bot possono avere <b>un bot Telegram loro</b>: in <b>Opzioni → Bot → Telegram</b> il menu «Bot da collegare» sceglie chi risponde — l'agente principale c'è anche se non hai mai creato un bot. Serve un bot creato da te con <b>@BotFather</b>: alla fine dà un token, e quello si incolla lì e si salva. Il token viene verificato subito con Telegram, quindi un token sbagliato si scopre lì e non dopo.</p>
+<p>L'agente principale e ogni bot possono avere <b>un bot Telegram loro</b>: in <b>Opzioni → Bot → Telegram</b> il menu «Bot da collegare» sceglie chi risponde: l'agente principale c'è anche se non hai mai creato un bot. Serve un bot creato da te con <b>@BotFather</b>: alla fine dà un token, e quello si incolla lì e si salva. Il token viene verificato subito con Telegram, quindi un token sbagliato si scopre lì e non dopo.</p>
 <p>Poi <b>Mostra il QR per collegare</b>: inquadri il codice col telefono, Telegram apre la chat e manda il codice al bot da solo. Il pannello passa a «chat collegata» senza che tu debba premere altro. Il codice vale dieci minuti, una volta sola, e si può anche scrivere a mano come <code>/start &lt;codice&gt;</code>.</p>
 <ul>
   <li><b>Risponde solo la chat collegata.</b> Chiunque altro trovi il bot riceve una spiegazione, non un turno: nessun tool, nessuna spesa.</li>
   <li>Il bot su Telegram <b>è lo stesso bot</b>: persona, modello, progetto, profilo, policy, cronologia. Cambia solo il filo.</li>
-  <li><b>Foto e documenti</b> arrivano al turno come se li avessi allegati nella finestra, e la didascalia è la richiesta. Quello che non si può leggere — un video, un archivio — viene rifiutato dicendo perché. I <b>vocali</b> si trascrivono e diventano il testo della richiesta, se il motore vocale è installato: è il componente <b>faster-whisper</b>, dal pulsante <b>Dipendenze</b> in Opzioni.</li>
+  <li><b>Foto e documenti</b> arrivano al turno come se li avessi allegati nella finestra, e la didascalia è la richiesta. Quello che non si può leggere, un video o un archivio, viene rifiutato dicendo perché. I <b>vocali</b> si trascrivono e diventano il testo della richiesta, se il motore vocale è installato: è il componente <b>faster-whisper</b>, dal pulsante <b>Dipendenze</b> in Opzioni.</li>
   <li><b>Mentre lavora</b> appare un messaggio solo che si aggiorna: secondi, giro, tool in corso e la coda di quello che sta scrivendo o pensando. A turno finito sparisce e resta la risposta; le risposte lunghe si spezzano in più messaggi.</li>
-  <li><b>Ogni risposta porta i consigli di fine turno.</b> Sotto l'<b>ultimo pezzo della risposta</b> compaiono fino a quattro pulsanti con il prompt già scritto. Non sono frasi fisse: il modello rilegge l'ultimo scambio e propone le mosse che servono adesso — la scelta di progetto ancora aperta, le parole giuste per un messaggio, il caso che nessuno ha provato. Se il modello non risponde, restano quattro proposte ricavate dai fatti del turno (file modificati, test col nome che corrisponde, stato di git), così i pulsanti ci sono lo stesso. Quando ci sono modifiche non committate, il pulsante del <b>commit</b> c'è sempre, accodato dopo i consigli: non toglie loro spazio. Non è un messaggio in più, quindi la chat non raddoppia. Sono <b>facoltativi</b>: premendone uno parte lo stesso testo che avresti potuto scrivere, e i pulsanti spariscono da quel messaggio <b>senza riscriverlo</b> (nessun secondo tocco vale, e la risposta resta com'era). Ogni pulsante appartiene al suo messaggio: uno rimasto su una risposta di due turni fa fa partire il suo prompt, non quello dell'ultimo turno. Quando <b>scolleghi la chat</b>, Orchestra butta via anche i prompt che teneva per lei.</li>
+  <li><b>Ogni risposta porta i consigli di fine turno.</b> Sotto l'<b>ultimo pezzo della risposta</b> compaiono fino a quattro pulsanti con il prompt già scritto. Non sono frasi fisse: il modello rilegge l'ultimo scambio e propone le mosse che servono adesso: la scelta di progetto ancora aperta, le parole giuste per un messaggio, il caso che nessuno ha provato. Se il modello non risponde, restano quattro proposte ricavate dai fatti del turno (file modificati, test col nome che corrisponde, stato di git), così i pulsanti ci sono lo stesso. Quando ci sono modifiche non committate, il pulsante del <b>commit</b> c'è sempre, accodato dopo i consigli: non toglie loro spazio. Non è un messaggio in più, quindi la chat non raddoppia. Sono <b>facoltativi</b>: premendone uno parte lo stesso testo che avresti potuto scrivere, e i pulsanti spariscono da quel messaggio <b>senza riscriverlo</b> (nessun secondo tocco vale, e la risposta resta com'era). Ogni pulsante appartiene al suo messaggio: uno rimasto su una risposta di due turni fa fa partire il suo prompt, non quello dell'ultimo turno. Quando <b>scolleghi la chat</b>, Orchestra butta via anche i prompt che teneva per lei.</li>
   <li><b>Comandi</b>: <code>/aiuto</code> (la lista), <code>/stato</code> (modello, turno, collegamento), <code>/steer &lt;testo&gt;</code> (guida il turno), <code>/stop</code> (ferma il turno), <code>/nuova</code> (nuova conversazione), <code>/modello</code> (il menu dei modelli), <code>/reasoning</code> o <code>/ragionamento</code> (mostra o nasconde il ragionamento dell'agente: senza argomento accende e spegne), <code>/aggiorna</code> o <code>/update</code> (scarica l'ultima release e riavvia il server se c'è), <code>/riavvia</code> o <code>/restart</code> (riavvia il server senza aggiornare: entrambi rifiutano se c'è un turno in corso, <code>/stop</code> prima), <code>/scollega</code> (stacca la chat), <code>/start &lt;codice&gt;</code> (collega).</li>
   <li><b>Il menu dei comandi è di Orchestra.</b> Quello che appare premendo <code>/</code> vive sul bot, non nell'applicazione: un bot usato prima con un'altra app si portava dietro i suoi comandi. Orchestra lo riscrive all'avvio e quando colleghi la chat, quindi restano solo i comandi veri. Il client può tenerlo in cache per un minuto: chiudi e riapri la chat se non lo vedi subito.</li>
   <li><b><code>/modello</code> apre un menu a bottoni</b>: prima i servizi collegati, poi i modelli di quello scelto, e si attiva toccandolo. Non serve ricordarsi un nome a memoria, e un nome che non esiste non si può scegliere. Il menu si riscrive a ogni tocco invece di lasciare dietro messaggi con bottoni vecchi; i modelli vengono prima per utilità (quello in uso, poi i gratuiti con i tool) e a pagine di otto. Con <code>/modello &lt;parte del nome&gt;</code> si cerca per nome, come prima.</li>
   <li>Mentre l'agente lavora, <b>quello che scrivi è una guida</b> al turno in corso, come <code>/steer</code>: per una richiesta nuova, <code>/stop</code> e riscrivi.</li>
   <li>Il modello scelto con <code>/modello</code> è <b>di quel bot</b>, che da lì in poi non segue più il default di Opzioni. Vale dal messaggio successivo, e la conversazione resta. Un servizio senza chiave non compare nel menu: meglio non proporlo che farlo scegliere e poi non poterlo chiamare.</li>
   <li>Il ponte parte col server e usa il <b>polling</b>: nessun indirizzo pubblico, nessun webhook, nessuna porta aperta. Con il PC spento il bot non risponde e non trattiene i messaggi.</li>
-  <li><b>Le domande arrivano anche in chat, con i pulsanti.</b> Un permesso, una domanda dell'agente o una proposta di piano compaiono qui: quattro scelte per il permesso (una volta, sessione, sempre, mai), un pulsante per opzione per le domande. Per una domanda puoi anche scrivere — la riga che mandi mentre è aperta è la risposta, non una guida al turno, e per un piano correggere a parole è spesso il modo migliore. Per un permesso il testo non basta e il bot lo dice: «sì» non dice per quanto vale. Senza risposta entro cinque minuti il permesso scade come un no. Un pulsante rimasto in chat da ieri non decide niente: ogni modulo porta il segno della sua richiesta.</li>
+  <li><b>Le domande arrivano anche in chat, con i pulsanti.</b> Un permesso, una domanda dell'agente o una proposta di piano compaiono qui: quattro scelte per il permesso (una volta, sessione, sempre, mai), un pulsante per opzione per le domande. Per una domanda puoi anche scrivere: la riga che mandi mentre è aperta è la risposta, non una guida al turno, e per un piano correggere a parole è spesso il modo migliore. Per un permesso il testo non basta e il bot lo dice: «sì» non dice per quanto vale. Senza risposta entro cinque minuti il permesso scade come un no. Un pulsante rimasto in chat da ieri non decide niente: ogni modulo porta il segno della sua richiesta.</li>
   <li><b>I file tornano indietro.</b> Se il turno produce un PDF, un'immagine, un foglio o un archivio, arriva allegato alla risposta: fino a cinque file da 50 MB, che è il tetto di Telegram. Le immagini come foto, il resto come documento. Se un file è troppo grande non parte, ma il messaggio dice dove sta.</li>
 </ul>
-<div class="nota"><b>Da sapere:</b> la chat di Telegram è una porta su questa macchina. Da lì hai gli stessi poteri che hai nella finestra — se il bot può usare la shell, può usarla anche chi scrive su Telegram. Per questo il collegamento vuole un codice che si vede solo sul tuo schermo, e per questo il QR lo disegna Orchestra in casa invece di farlo disegnare a un servizio esterno.</div>
+<div class="nota"><b>Da sapere:</b> la chat di Telegram è una porta su questa macchina. Da lì hai gli stessi poteri che hai nella finestra: se il bot può usare la shell, può usarla anche chi scrive su Telegram. Per questo il collegamento vuole un codice che si vede solo sul tuo schermo, e per questo il QR lo disegna Orchestra in casa invece di farlo disegnare a un servizio esterno.</div>
 </section>
 
 <section id="lavori">
@@ -393,7 +393,7 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <h2>Tracce dei turni</h2>
 <p>Ogni turno lascia una traccia: esito, modello, iterazioni, strumenti usati, token, durata e la sequenza degli eventi. Serve a rispondere a «perché quel lavoro è andato così» senza rifarlo.</p>
 <ul>
-  <li>Nella barra laterale, sezione <b>Tracce</b> (📼), ci sono le ultime 50, con l'esito in parole: «completato», «fermato al limite», «annullato», «budget finito», «girava a vuoto», «troppi errori», «verifica fallita», «solo parole, niente fatti», «fermato su un annuncio», «nessuna risposta scritta», «tempo scaduto».</li>
+  <li>Nella barra laterale, sezione <b>Tracce</b>, ci sono le ultime 50, con l'esito in parole: «completato», «fermato al limite», «annullato», «budget finito», «girava a vuoto», «troppi errori», «verifica fallita», «solo parole, niente fatti», «fermato su un annuncio», «nessuna risposta scritta», «tempo scaduto».</li>
   <li>Puoi filtrare per esito o mostrare <b>solo gli errori</b>: il filtro lo applica il database, quindi un turno fallito di ieri non sparisce dietro cinquanta turni riusciti di oggi.</li>
   <li>Cliccando una riga si apre la sequenza esatta, e ogni evento si espande nel contenuto grezzo: argomenti degli strumenti, risultati, motivo della verifica.</li>
 </ul>
@@ -535,7 +535,7 @@ gh release create vX.Y.Z --generate-notes</code></pre>
   </main>
 </div>
 <footer>
-  Orchestra — versione {{versione}} · guida servita da <code>/docs</code>.
+  Orchestra, versione {{versione}} · guida servita da <code>/docs</code>.
 </footer>
 </body>
 </html>

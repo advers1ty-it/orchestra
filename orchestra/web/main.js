@@ -1,10 +1,8 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("main")<0)window.__diagFiles.push("main");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"main");}})();
-// ------------------------------------------------------------- azioni
 async function send() {
   const text = input.value.trim();
-  // Solo gli allegati caricati: uno rimasto "carico..." o con un
-  // errore non ha un id, e mandarlo cosi' fa fallire l'invio con un
-  // messaggio che parla di registro — che a te non dice niente.
+  // Solo gli allegati caricati: uno rimasto "carico..." o con un errore non ha un id, e mandarlo cosi' fa fallire
+  // l'invio con un messaggio che parla di registro — che a te non dice niente.
   const daMando = allegatiInAttesa.filter((a) => !a.errore && a.id && !a.in_caricamento);
   const nonPronti = allegatiInAttesa.filter((a) => a.in_caricamento && !a.errore);
   if (nonPronti.length) {
@@ -21,20 +19,16 @@ async function send() {
     const r = await fetch("/api/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // Gli allegati viaggiano con il messaggio, non da soli: li
-      // manda chi preme Invio, e vengono svuotati solo se la richiesta
-      // e' andata a buon fine. Se fallisce restano attaccati al
-      // campo, perche' altrimenti perdi un file da 40.000 token
-      // premendo due volte per errore.
+      // Gli allegati viaggiano col messaggio e si svuotano solo dopo l'invio riuscito;
+      // non vanno su disco: data URL al server, vivono quanto la richiesta.
       body: JSON.stringify({
               text,
               // Solo gli id: il file e' gia' al server, che lo ha validato
               // quando e' stato caricato.
               allegati: daMando.map((a) => a.id).filter(Boolean),
               scope: scopeAttivo || null,
-              // Self-correzione: se il toggle ✓ e' attivo e c'e' un file da
-              // controllare, si chiede al server di verificare il lavoro prima
-              // di accettarlo. Lista vuota = nessuna verifica, come prima.
+              // Self-correzione: se il toggle ✓ e' attivo e c'e' un file da controllare, si chiede al server di
+              // verificare il lavoro prima di accettarlo.
               verifica: verificaPayload(),
             }),
     });
@@ -46,9 +40,8 @@ async function send() {
       // doverlo cercare di nuovo
       return;
     }
-    // il conto in token torna dal server, non e' stimato qui: il
-    // server conosce le pagine del PDF e quante immagini sono, e una
-    // stima fatta dal browser sarebbe una stima diversa dalla verita'
+    // il conto in token torna dal server, non e' stimato qui: il server conosce le pagine del PDF e quante immagini
+    // sono, e una stima fatta dal browser sarebbe una stima diversa dalla verita'
     try {
       const esito = await r.json();
       if (esito.allegati && esito.allegati.length) {
@@ -78,9 +71,7 @@ async function reset() {
   } catch (e) { addText("error", String(e)); }
 }
 
-// L'undo dei file: non tocca la conversazione, quindi non chiede
-// conferma. Un clic, un file com'era prima; due clic, due scritture
-// indietro. Se non c'e' niente lo dice, invece di tacere.
+// L'undo dei file: non tocca la conversazione, quindi non chiede conferma.
 async function annullaModifica() {
   try {
     const r = await fetch("/api/annulla", { method: "POST" });
@@ -192,9 +183,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && m && !m.hidden) chiudiDiff();
 });
 
-// Modalita' piano. E' un interruttore, e lo stato lo tiene il server:
-// il browser lo mostra e basta. Tenerlo solo qui vorrebbe dire che due
-// schede (o un refresh) mostrano una cosa e l'agente fa l'altra.
+// Modalita' piano.
 let pianoAttivo = false;
 
 function aggiornaPiano(attivo) {
@@ -241,28 +230,16 @@ function autoGrow() {
   input.style.height = Math.min(input.scrollHeight, 200) + "px";
 }
 
-// ---- Allegati: foto, PDF, testo
-//
-// I file si scelgono con la graffetta o con l'incolla (Ctrl+V), e si
-// mandano INSIEME al messaggio successivo, non da soli.
-//
-// Il conto in token e' accanto al nome perche' e' la cosa che decide:
-// 40.000 token e' una richiesta da trenta centesimi, 1.100 e' un
-// centesimo. Vederlo solo dopo averlo gia' speso non serve.
-//
-// Il file non viene scritto su disco: va al server come data URL e
-// basta. Un allegato da 12 MB in un file sul disco sopravvive alla
-// sessione, occupa spazio per sempre, e finisce in qualche backup.
-// Sul server non finisce niente: vive finche' la richiesta dura.
+// Allegati: foto, PDF e testo. Si scelgono con la graffetta o con l'incolla
+// (Ctrl+V) e si mandano insieme al messaggio successivo.
 const btnAllega = $("btn-allega");
 const fileInput = $("file-input");
 const listaAllegati = $("allegati-lista");
 
 let allegatiInAttesa = [];
 
-// 12 MB, uguale al tetto del server. Qui si ferma PRIMA di leggere il
-// file: un file da 40 MB letto in memoria e poi rifiutato e' una
-// pagina bianca per un secondo, e il rifiuto non arriva.
+// 12 MB, uguale al tetto del server. Il controllo avviene prima di FileReader:
+// un file enorme non deve essere letto in memoria per poi essere rifiutato.
 const LIMITE_MB = 12;
 
 function _leggiFile(file) {
@@ -285,35 +262,22 @@ async function aggiungiFile( listaFile ) {
       disegnaAllegati();
       continue;
     }
-    // La riga appare SUBITO, anche prima della risposta: unattesa
-    // senza nulla che spieghi il perche' sembra una pagina rotta, e
-    // l'utente prova a cliccare il pulsante che non c'e' ancora.
+    // La riga appare SUBITO, anche prima della risposta: unattesa senza nulla che spieghi il perche' sembra una pagina
+    // rotta, e l'utente prova a cliccare il pulsante che non c'e' ancora.
     const voce = { nome: file.name, in_caricamento: true, data_url: null };
     allegatiInAttesa.push(voce);
     disegnaAllegati();
     try {
       const data_url = await _leggiFile(file);
       voce.data_url = data_url;
-      // Il file va al server QUI, una volta sola. Prima lo mandavo due
-      // volte — una per il conto, una per l'invio — e un file da 12 MB
-      // viaggiava 32: il secondo passaggio moriva e il browser
-      // diceva "Failed to fetch", che sembra un problema di rete.
+      // Il file va al server QUI, una volta sola.
       const esito = await _manda_allega(file.name, data_url);
       if (!esito.ok) {
         voce.errore = file.name + ": " + esito.errore;
         disegnaAllegati();
         continue;
       }
-      // id: quello che andra' a /api/send. Senza questo la riga
-      // restava "carico..." per sempre: il flag non lo toglieva
-      // nessuno, perche' non c'era nessuno a farlo.
-      //
-      // La risposta porta gli id come lista. Un file ne ha uno solo,
-      // e mettere la lista intera nella voce faceva arrivare a
-      // /api/send [["al-..."]] invece di ["al-..."]: una lista dentro
-      // la lista, che il server respinge come "allegato non valido".
-      // Sembrava funzionasse — la riga si riempiva, il conto c'era —
-      // e falliva solo all'invio.
+      // id: quello che andra' a /api/send.
       const idArr = Array.isArray(esito.id) ? esito.id : [esito.id];
       voce.id = idArr[0] || null;
       voce.token_stimati = esito.token;
@@ -326,9 +290,8 @@ async function aggiungiFile( listaFile ) {
   }
 }
 
-// Manda un file e ne restituisce id e costo. Gli errori arrivano come
-// testo: qui il fallimento e' sempre leggibile, e un "Failed to
-// fetch" qui significherebbe che la connessione e' caduta davvero.
+// Manda un file una volta sola e ne restituisce id e costo: il doppio invio
+// faceva viaggiare due volte 12 MB e il secondo passaggio falliva.
 async function _manda_allega(nome, data_url) {
   const r = await fetch("/api/allega", {
     method: "POST",
@@ -357,14 +320,13 @@ function disegnaAllegati() {
     const riga = el("div", "allegato-riga");
 
     const icona = el("span", "allegato-icona");
-    icona.textContent = a.in_caricamento ? "⏳"
-      : (a.data_url || "").startsWith("data:image") ? "🖼"
-      : (a.data_url || "").startsWith("data:application/pdf") ? "📄" : "📝";
+    icona.textContent = a.in_caricamento ? "…"
+      : (a.data_url || "").startsWith("data:image") ? "IMG"
+      : (a.data_url || "").startsWith("data:application/pdf") ? "PDF" : "TXT";
     riga.appendChild(icona);
 
-    // Il nome e' modificabile: il file che si chiama IMG_4821.jpg
-    // finisce in contesto come "IMG_4821.jpg", e un modello risponde
-    // meglio a "listino-prezzi-giugno.pdf" che a un nome di telefono.
+    // Il nome e' modificabile: il file che si chiama IMG_4821.jpg finisce in contesto come "IMG_4821.jpg", e un modello
+    // risponde meglio a "listino-prezzi-giugno.pdf" che a un nome di telefono.
     const nome = el("span", "allegato-nome");
     const campo = el("input");
     campo.type = "text";
@@ -379,15 +341,14 @@ function disegnaAllegati() {
       costo.textContent = "carico…";
     } else if (typeof a.token_stimati === "number") {
       costo.textContent = "~" + a.token_stimati.toLocaleString() + " token";
-      // sopra 20.000 token la richiesta costa decine di centesimi:
-      // si avvisa, non si vieta. Vietare sarebbe corretto e
-      // inutile — il utente puo' sapere che costa e decidere.
+      // sopra 20.000 token la richiesta costa decine di centesimi: si avvisa, non si vieta.
       if (a.token_stimati > 20000) costo.className = "allegato-costo alto";
     }
     riga.appendChild(costo);
 
     const togli = el("button", "allegato-tomba", "×");
     togli.title = "Togli questo allegato";
+    togli.setAttribute("aria-label", "Togli questo allegato");
     on(togli, "click", () => {
       allegatiInAttesa.splice(i, 1);
       disegnaAllegati();
@@ -409,17 +370,14 @@ on(fileInput, "change", async () => {
   fileInput.value = "";   // cosi' scegliere lo stesso file due volte funziona
 });
 
-// Incollare un'immagine dagli appunti e' il modo piu' naturale di
-// darne una, molto piu' del "vai a cercarla". E' anche quello che
-// su Windows e' gratis: il file e' gia' in memoria.
+// Incollare un'immagine dagli appunti e' il modo piu' naturale di darne una, molto piu' del "vai a cercarla".
 on(document, "paste", async (e) => {
   if (busy) return;
   const dt = e.clipboardData;
   if (!dt || !dt.files || !dt.files.length) return;
   const file = dt.files[0];
-  // Solo immagini incollate: un file di testo incollato lo mette
-  // gia' l'utente nel campo, e metterlo due volte e' peggio che
-  // lasciarglielo scrivere.
+  // Solo immagini incollate: un file di testo incollato lo mette gia' l'utente nel campo, e metterlo due volte e'
+  // peggio che lasciarglielo scrivere.
   if (!file.type.startsWith("image/")) return;
   e.preventDefault();
   await aggiungiFile([file]);
@@ -427,11 +385,7 @@ on(document, "paste", async (e) => {
 
 on(input, "input", autoGrow);
 
-// ------------------------------------------------- verifica del lavoro
-// Toggle ✓ accanto alla graffetta. Quando è attivo, il prossimo invio
-// chiede al server di verificare OGGETTIVAMENTE il risultato e, se non
-// torna, rimandare il modello indietro col motivo. Mai un modello che
-// giudica un modello: si controlla il file, il JSON, la somma.
+// verifica del lavoro: Toggle ✓ accanto alla graffetta.
 let verificaAttiva = false;
 
 function verificaPayload() {
@@ -458,9 +412,7 @@ function apriChiudiVerifica() {
 }
 
 if (btnVerifica && verificaPop) {
-  // Il toggle riflette SUBITO lo stato: il ✓ acceso dice "la prossima
-  // verifica", spento dice "gira normale". Se non si accendesse, non si
-  // saprebbe se è attivo finché non parte il turno.
+  // Il toggle riflette SUBITO lo stato: il ✓ acceso dice "la prossima verifica", spento dice "gira normale".
   btnVerifica.addEventListener("click", () => {
     verificaAttiva = !verificaAttiva;
     btnVerifica.classList.toggle("acceso", verificaAttiva);
@@ -489,6 +441,7 @@ function _micAvvia() {
   if (ws) {
     _micRec = true;
     btnMic.classList.add("recording");
+    btnMic.setAttribute("aria-label", "Ferma la dettatura");
     const rec = new ws();
     rec.lang = (navigator.language || "it-IT");
     rec.continuous = true;
@@ -515,6 +468,7 @@ function _micAvvia() {
     _micRec = true;
     _micChunks = [];
     btnMic.classList.add("recording");
+    btnMic.setAttribute("aria-label", "Ferma la dettatura");
     const mr = new MediaRecorder(stream);
     mr.ondataavailable = (e) => { if (e.data.size > 0) _micChunks.push(e.data); };
     mr.onstop = async () => {
@@ -541,7 +495,10 @@ function _micFerma() {
   if (_recTimer) { clearTimeout(_recTimer); _recTimer = null; }
   if (_micStream) { _micStream.getTracks().forEach(t => t.stop()); _micStream = null; }
   _micRec = false;
-  if (btnMic) btnMic.classList.remove("recording");
+  if (btnMic) {
+    btnMic.classList.remove("recording");
+    btnMic.setAttribute("aria-label", "Dittazione vocale");
+  }
 }
 function _micMessaggio(msg) {
   if (!btnMic) return;
@@ -560,17 +517,13 @@ on(input, "keydown", (e) => {
 });
 btnSend.onclick = () => { chiediPermessoNotifiche(); send(); };
 if (btnAllega) btnAllega.disabled = !ready;
-// Verifica: stesso gate dell'allegato. Prima restava disabilitato per
-// sempre (nessuna riga lo abilitava), quindi il ✓ non si accendeva mai,
-// il popover non si apriva e la self-correzione non si attivava: di fuori
-// sembrava rotta. Con `ready` segue lo stesso ciclo dell'allegato.
+// Verifica: stesso gate dell'allegato, altrimenti il ✓ resterebbe spento per sempre.
 if (btnVerifica) btnVerifica.disabled = !ready;
 if (btnMic) {
   btnMic.disabled = !ready;
   btnMic.hidden = true;
-  // Il microfono è disponibile solo se il browser parla (Web Speech
-  // API) o se il server ha whisper installato. Se entrambi mancano,
-  // il pulsante non compare affatto.
+  // Il microfono compare solo se il browser parla (Web Speech API) o il server ha whisper.
+  // Se mancano entrambi non si mostra un pulsante finto.
   _micDisponibile().then((ok) => {
     if (!btnMic) return;
     btnMic.hidden = !ok;
@@ -578,10 +531,8 @@ if (btnMic) {
   });
 }
 
-// All'avvio chiediamo al server se whisper è installato: così il pulsante
-// microfono compare solo quando c'è una via d'uscita (Web Speech API nel
-// browser, o faster-whisper sul server). Se entrambi mancano, non
-// mostriamo niente: non è un pulsante finto.
+// All'avvio chiediamo al server se whisper è installato: così il pulsante microfono compare solo quando c'è una via
+// d'uscita (Web Speech API nel browser, o faster-whisper sul server).
 function _sttCheck() {
   fetch("/api/stt/status")
     .then(r => r.json())
@@ -603,12 +554,10 @@ function inviaSteer() {
   }).then(r => r.json()).then(d => {
     if (!d.ok) alert(d.error || "Steer fallito");
     else {
-      // Conferma visibile: l'utente deve sapere che la guida e' stata
-      // ricevuta e verrà letta appena possibile, non aspettare in silenzio.
-      // Non "al prossimo tool": se il modello stava già chiudendo, lo
-      // steer lo fa riprendere prima della risposta finale.
+      // Conferma visibile: la guida è stata ricevuta e verrà letta appena possibile.
+      // Non solo al prossimo tool: se il modello sta chiudendo, lo steer lo fa riprendere prima.
       const anteprima = testo.length > 80 ? testo.slice(0, 80) + "…" : testo;
-      addNote(`guida inviata: «${anteprima}» — verrà letta appena il `
+      addNote(`guida inviata: «${anteprima}»: verrà letta appena il `
               + `modello riprende il controllo`);
     }
   });
@@ -630,10 +579,7 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
 // Install PWA rimosso: in desktop (Electron/tauri non in uso) il prompt
 // di installazione non serve. L'app resta installabile dal browser.
 
-// ---- Header mobile: il pulsante "altre opzioni" espande/chiude i
-// controlli secondari. Di default l'header resta compatto (logo, scopo,
-// modello) cosi' non ruba quattro righe sullo schermo di un telefono.
-// Desktop il pulsante non esiste (via CSS), quindi niente da fare.
+// Header mobile: il pulsante "altre opzioni" espande/chiude i controlli secondari.
 (function () {
   const tog = $("btn-header-toggle");
   if (!tog) return;
@@ -642,8 +588,11 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   tog.addEventListener("click", () => {
     const aperto = hdr.classList.toggle("esteso");
     tog.setAttribute("aria-expanded", aperto ? "true" : "false");
-    document.body.classList.toggle("header-menu-aperto", aperto);
-    document.body.style.overflow = aperto ? "hidden" : "";
+    // Il blocco dello scroll serve solo quando il menu copre lo schermo (telefono).
+    const stretto = window.matchMedia("(max-width: 640px)").matches;
+    document.body.classList.toggle("header-menu-aperto",
+                                   aperto && stretto);
+    document.body.style.overflow = (aperto && stretto) ? "hidden" : "";
   });
   // chiusura con Escape
   document.addEventListener("keydown", (e) => {
@@ -655,15 +604,7 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     }
   });
 })();
-// Opzioni si caricano QUI, non solo quando apri il pannello. I
-// selettori di servizio e di scopo vivono nell'header, e senza questa
-// chiamata restano disabilitati fino a quando non apri Opzioni: si
-// vedono, sembrano cliccabili, e non lo sono. Il pannello e' una vista
-// degli stessi dati, non il posto dove vengono costruiti.
-// Le categorie si chiedono al server, che le conta dai task veri.
-// Prima le categorie, poi il resto: cosi' il riepilogo sotto i
-// selettori sappia cosa e' misurabile prima di dire "non ancora
-// misurato" — o "senza test".
+// Opzioni si caricano QUI, non solo quando apri il pannello.
 caricaCategorie();
 caricaOpzioni().catch(() => {
   // un errore qui non deve fermare il bootstrap: la chat resta viva,
@@ -702,9 +643,7 @@ function esitiTraccia() {
     troppi_errori_consecutivi: "troppi errori",
     verifica_fallita: "verifica fallita",
     solo_parole: "solo parole, niente fatti",
-    // Il turno ha lavorato, ma si e' chiuso annunciando altro lavoro
-    // invece di farlo. Diverso da "solo parole": qui qualcosa e' stato
-    // fatto, e il lavoro e' rimasto a meta'.
+    // Il turno ha lavorato, ma si e' chiuso annunciando altro lavoro invece di farlo.
     annuncio_finale: "fermato su un annuncio",
     risposta_vuota: "nessuna risposta scritta",
   };
@@ -806,7 +745,7 @@ async function apriTraccia(id, btn) {
   if (!det) return;
   try {
     const t = await (await fetch("/api/tracce/" + id)).json();
-    if (t.error) { det.textContent = t.error; apriModaleTraccia(); return; }
+    if (t.error) { det.textContent = t.error; apriModaleTraccia(btn); return; }
     det.replaceChildren();
     const intest = document.createElement("div");
     intest.className = "small dim";
@@ -828,7 +767,7 @@ async function apriTraccia(id, btn) {
       } else if (tipo === "tool_end") {
         riga = `tool ${e.dati.name}: ${e.dati.ok ? "ok" : "errore"}`;
         if (!e.dati.ok && e.dati.result)
-          riga += ` — ${String(e.dati.result).split("\n")[0].slice(0, 120)}`;
+          riga += `: ${String(e.dati.result).split("\n")[0].slice(0, 120)}`;
       } else if (tipo === "assistant") {
         riga = e.dati.content && e.dati.content.trim()
           ? `assistant: ${e.dati.content.trim().slice(0, 80)}`
@@ -842,10 +781,8 @@ async function apriTraccia(id, btn) {
       } else if (tipo === "compaction") {
         riga = `compattazione ${e.dati.tokens_before}→${e.dati.tokens_after}`;
       }
-      // Il payload grezzo e' la ragione per cui si apre una traccia:
-      // "quale argomento ha passato" e "cosa e' tornato" non stanno
-      // nella riga. Chiuso di default perche' un turno ha decine di
-      // eventi e aprirli tutti rende la sequenza illeggibile.
+      // Il payload grezzo e' la ragione per cui si apre una traccia: "quale argomento ha passato" e "cosa e' tornato"
+      // non stanno nella riga.
       const dettaglio = document.createElement("details");
       const summary = document.createElement("summary");
       const offset = inizio ? `+${(e.ts - inizio).toFixed(2)}s` : "";
@@ -861,20 +798,14 @@ async function apriTraccia(id, btn) {
       ol.appendChild(li);
     }
     det.appendChild(ol);
-    apriModaleTraccia();
+    apriModaleTraccia(btn);
   } catch (e) {
     det.textContent = "apertura traccia fallita: " + e;
-    apriModaleTraccia();
+    apriModaleTraccia(btn);
   }
 }
 
-// ------------------------------------------------------------- Dettatura vocale (STT)
-//
-// Microfono flottante in basso a destra. Due vie:
-//   1. Web Speech API (Chrome desktop + Android): gratis, zero server.
-//   2. MediaRecorder + /api/transcribe (faster-whisper sul server): per i
-//      browser senza Web Speech API (Safari/iOS). Funziona solo se whisper
-//      e' installato sul PC che serve l'app.
+// Dettatura vocale (STT): Microfono flottante in basso a destra.
 const micFloat = $("mic-float");
 let micRecording = false;
 let micRecognition = null;
@@ -896,9 +827,8 @@ async function micDisponibile() {
 function micUpdateUI() {
   if (!micFloat) return;
   micFloat.classList.toggle("recording", micRecording);
-  const span = micFloat.querySelector("span");
-  if (span) span.textContent = micRecording ? "⏹" : "🎤";
   micFloat.title = micRecording ? "Ferma la dettatura" : "Dettatura vocale";
+  micFloat.setAttribute("aria-label", micFloat.title);
 }
 
 async function micToggle() {

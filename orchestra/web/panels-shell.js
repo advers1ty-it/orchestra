@@ -1,8 +1,5 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-shell")<0)window.__diagFiles.push("panels-shell");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-shell");}})();
-// --------------------------------------------------------- pannello laterale
-//
-// Flex-item del body, non overlay: la chat si restringe e resta leggibile.
-// Un modale coprirebbe la conversazione proprio mentre la si sfoglia.
+// pannello laterale: Flex-item del body, non overlay: la chat si restringe e resta leggibile.
 
 const sidebar = $("sidebar");
 const sideElenco = $("side-elenco");
@@ -26,12 +23,8 @@ function apriSide(aperta) {
   }
 }
 
-// All'avvio si carica, sempre: la sidebar è aperta di default, e senza
-// questa chiamata la cronologia restava vuota fino al primo Ctrl+B.
-// Il bottone dell'header chiama riduciSide(), che non carica — solo
-// Ctrl+B passava da qui, ed è per questo che "la prima volta non c'è".
-// La X non c'è più: il bottone RIDUCE a una striscia invece di chiudere.
-// La cronologia serve troppo spesso per costare due clic.
+// All'avvio si carica, sempre: la sidebar è aperta di default, e senza questa chiamata la cronologia restava vuota fino
+// al primo Ctrl+B.
 
 // Rotaia delle sezioni: visibile solo a sidebar ridotta, un'icona per
 // sezione. Il clic riapre e porta alla sezione.
@@ -65,10 +58,8 @@ function _sideData(ts) {
 async function caricaSide() {
   if (!sideElenco) return;
   if (sideMsg) { sideMsg.textContent = "caricamento..."; sideMsg.className = "small dim side-msg"; }
-  // Anche i progetti: la lista dei progetti registrati e' nella
-  // sidebar, e deve essere aggiornata quando la sidebar si apre —
-  // un progetto registrato in un'altra finestra non apparirebbe
-  // altrimenti, e l'utente lo crederebbe perso.
+  // Anche i progetti: la lista dei progetti registrati e' nella sidebar, e deve essere aggiornata quando la sidebar si
+  // apre — un progetto registrato in un'altra finestra non apparirebbe altrimenti, e l'utente lo crederebbe perso.
   await Promise.all([caricaSideSessioni(), caricaSideTracce(),
                       caricaProgetti()]);
   if (sideMsg) { sideMsg.textContent = ""; sideMsg.className = "small dim side-msg"; }
@@ -143,6 +134,7 @@ async function caricaSideSessioni() {
       pin.className = "side-pin" + (ePinnata ? " pinnato" : "");
       pin.textContent = ePinnata ? "\u2605" : "\u2606";
       pin.title = ePinnata ? "Togli dai preferiti" : "Metti nei preferiti";
+      pin.setAttribute("aria-label", pin.title);
       pin.addEventListener("click", () => {
         const attuali = new Set(JSON.parse(localStorage.getItem("orchestra.pin") || "[]"));
         const chiave = String(s.id);
@@ -152,13 +144,12 @@ async function caricaSideSessioni() {
       });
       li.appendChild(pin);
 
-      // Elimina: mancava in sidebar, c'era solo nelle Opzioni. Chi vive
-      // nella sidebar (ed è il pannello che si tiene aperto) non aveva
-      // modo di cancellare una conversazione senza aprire le Opzioni.
+      // Elimina: mancava in sidebar, c'era solo nelle Opzioni.
       const del = document.createElement("button");
       del.className = "side-del";
       del.textContent = "\u2715";
       del.title = "Elimina questa conversazione";
+      del.setAttribute("aria-label", del.title);
       del.addEventListener("click", async () => {
         if (!confirm(`Eliminare "${(s.titolo || "(senza titolo)").slice(0, 40)}"? Non si recupera.`)) return;
         try {
@@ -187,10 +178,8 @@ async function caricaSideSessioni() {
   }
 }
 
-// La finestra che apriva una skill non c'e' piu': adesso "Apri" la mostra
-// dentro al modale Capacita', con il testo e gli allegati. Una seconda
-// finestra per una cosa che il modale sa gia' mostrare e' un modo per
-// perdere il segno di dove si era.
+// La finestra che apriva una skill non c'e' piu': adesso "Apri" la mostra dentro al modale Capacita', con il testo e
+// gli allegati.
 
 const sideNuova = $("side-nuova");
 if (sideNuova) {
@@ -213,20 +202,7 @@ if (sideNuova) {
 const sideRicarica = $("side-ricarica");
 if (sideRicarica) sideRicarica.addEventListener("click", caricaSide);
 
-//
-// Modale, non pannello laterale: è un posto dove si VA a guardare e da
-// cui si esce.
-//
-// Tre tab ma due sorgenti. Le skill hanno una vita propria — importa,
-// accetta, scarta, cestina, rimetti — e il loro codice sta in
-// panels-skill.js: qui si apre la porta, non si riscrive il pannello.
-// Gli strumenti arrivano da /api/capacita e si leggono soltanto.
-//
-// Le skill stavano anche in Opzioni, con lo stesso elenco in un altro
-// formato: qui una lista di nomi con un "apri" che apriva una finestra,
-// là il pannello vero. Due elenchi della stessa cosa mentono appena
-// divergono, quindi il pannello vero adesso è qui, accanto al cestino e
-// alle proposte, e le Opzioni non ne parlano più.
+// Modale, non pannello laterale: è un posto dove si VA a guardare e da cui si esce.
 
 const capacita = $("capacita");
 const capLista = $("cap-lista");
@@ -269,13 +245,12 @@ function mostraCapTab(t) {
   if (t === "tool") caricaStrumenti();
 }
 
-// Il bottone che apre Capacita' e' il "side-cap" nella sidebar, agganciato
-// piu' in basso. Un secondo aggancio su un id che il markup non ha non
-// e' innocuo: e' un bottone che non esiste, e il giorno in cui qualcuno
-// rimette quell'id per sbaglio non si accorge che il bottone vero e' un
-// altro.
+// Il bottone che apre Capacita' e' il "side-cap" nella sidebar, agganciato piu' in basso.
 const capClose = $("capacita-close");
 if (capClose) capClose.addEventListener("click", chiudiCapacita);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && capacita && !capacita.classList.contains("hidden")) chiudiCapacita();
+});
 
 for (const t of ["skill", "cestino", "tool"]) {
   const b = $("cap-tab-" + t);
@@ -452,21 +427,10 @@ if (sideBackdrop) {
   else allargaSide();
 })();
 
-// Il caricamento all'avvio e' in FONDO del file, non qui. Stava qui,
-// subito dopo la dichiarazione di `sidebar`, ma `caricaSide` tocca
-// anche `sideSkill`, `sideElenco` e i `prog*` dei progetti, che sono
-// `const` dichiarate piu' sotto: in temporal dead zone il riferimento
-// lancia e le liste restano vuote — senza errori in console, perche'
-// la funzione e' hoisted e sembra chiamabile.
-//
-// La regola e' una sola: nessun `const` puo' essere letto prima della
-// sua dichiarazione, e le dichiarazioni stanno in fondo. Per questo
-// la chiamata sta in fondo anche lei.
+// Il caricamento all'avvio e' in FONDO del file, non qui.
 
-// --------------------------------------------- cercare nelle conversazioni
-//
-// Il campo sta SOTTO la lista: cercare sostituisce quello che c'era, e
-// svuotandolo si torna alla lista. Non è una seconda lista.
+// cercare nelle conversazioni: Il campo sta SOTTO la lista: cercare sostituisce quello che c'era, e svuotandolo si
+// torna alla lista.
 
 const sideCerca = $("side-cerca");
 let _cercaTimer = null;
@@ -563,14 +527,9 @@ if (sideCerca) {
   });
 }
 
-// ------------------------------------------------- streaming del ragionamento
+// streaming del ragionamento
 
 // Il nodo del ragionamento "vivo", cioè quello che sta accumulando adesso.
-// Un nodo per ciclo di thinking: quando l'agente chiama un tool e poi
-// ragiona ancora, NON deve riempire il blocco di prima (che resterebbe
-// ancorato in cima, sotto il ragionamento iniziale), ma aprirne uno nuovo
-// in fondo. Così il ragionamento segue la conversazione invece di
-// accumularsi tutto in un punto fisso che i tool spingono su.
 let ragionamentoCorrente = null;
 
 function ragionamentoNodo() {
@@ -586,25 +545,17 @@ function ragionamentoNodo() {
 }
 
 function ragionamentoApri() {
-  // Nodo nuovo, in fondo, a ogni ciclo: il precedente resta dov'è (e se
-  // era aperto si chiude da sé perché non è più quello "corrente").
-  // Così il ragionamento dopo un tool non si accoda a quello prima del
-  // tool — che ormai è salito in cima — ma parte pulito sotto i tool.
+  // Nodo nuovo, in fondo, a ogni ciclo: il precedente resta dov'è (e se era aperto si chiude da sé perché non è più
+  // quello "corrente").
   const n = document.createElement("div");
   n.className = "ragionamento";
   n.textContent = "";
-  // Nasce nascosto: un blocco senza testo e' una riga vuota a schermo,
-  // e sembra un ragionamento che non e' arrivato. Si mostra al primo
-  // carattere vero (vedi `ragionamentoAggiungi`).
+  // Nasce nascosto: un blocco senza testo e' una riga vuota a schermo, e sembra un ragionamento che non e' arrivato.
   n.setAttribute("hidden", "");
   log.appendChild(n);
   ragionamentoCorrente = n;
   scrollDown();
-  // Si restituisce il nodo: `ragionamentoCorrente || ragionamentoApri()`
-  // prendeva il VALORE di ritorno, che era `undefined`, e il pezzo di
-  // ragionamento andava perso con un'eccezione — succedeva quando il
-  // puntatore era stato azzerato (`turn_end`, `idle`) ma il flag del
-  // ciclo era ancora acceso.
+  // Restituisce il nodo: il chiamante usava il valore di ritorno, che era undefined.
   return n;
 }
 
@@ -612,9 +563,8 @@ function ragionamentoAggiungi(testo) {
   if (!ragionamentoCorrente) ragionamentoApri();
   const n = ragionamentoCorrente;
   n.textContent += testo;
-  // Il provider manda a volte pezzi di ragionamento fatti di soli a capo:
-  // `if (d.testo)` li lascia passare, e il blocco restava aperto e vuoto.
-  // Solo quando c'e' qualcosa da leggere compare.
+  // Il provider manda a volte pezzi di ragionamento fatti di soli a capo: `if (d.testo)` li lascia passare, e il blocco
+  // restava aperto e vuoto.
   if (n.textContent.trim()) n.removeAttribute("hidden");
   scrollDown();
 }
@@ -626,19 +576,14 @@ function ragionamentoChiudi() {
 }
 
 function ragionamentoDimentica() {
-  // Il log è stato svuotato (snapshot, polling, /nuova, banner): il nodo
-  // puntato non è più nel documento, e i pezzi che arrivassero adesso
-  // finirebbero in un nodo staccato — il ragionamento arriverebbe, e non
-  // si vedrebbe. Qui si riparte da zero: il prossimo pezzo apre un blocco
-  // nuovo, in fondo.
+  // Il log è stato svuotato (snapshot, polling, /nuova, banner): il nodo puntato non è più nel documento, e i pezzi che
+  // arrivassero adesso finirebbero in un nodo staccato — il ragionamento arriverebbe, e non si vedrebbe.
   ragionamentoCorrente = null;
   ragionamentoVisibile = false;
 }
 
-// ------------------------------------------------- onboarding guidato
-// La prima volta si mostra un selettore di obiettivo: l'utente non deve
-// conoscere i modelli, sceglie che lavoro fare e Orchestra configura
-// scope/profilo/prompt iniziale.
+// onboarding guidato: La prima volta si mostra un selettore di obiettivo: l'utente non deve conoscere i modelli,
+// sceglie che lavoro fare e Orchestra configura scope/profilo/prompt iniziale.
 const OBBIETTIVI = [
   { id: "code", t: "Programmare", d: "Fix bug, feature, refactor, test, review del codice.", scope: "code", profile: "base",
     prompt: "Analizza il progetto corrente e proponi un piano di lavoro conciso. Se c'e' un bug o una feature da fare, dimmi quale sarebbe il primo passo sensato." },
@@ -837,7 +782,7 @@ if (dettagliInput) dettagliInput.addEventListener("keydown", (e) => {
 
 
 
-// ------------------------------------------------- dipendenze opzionali (pannello)
+// dipendenze opzionali (pannello)
 const btnDeps = $("opzioni-deps");
 function _depsChiudi() {
   const m = document.getElementById("deps-modal");
@@ -883,12 +828,7 @@ async function _depsApri() {
   modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;";
   const box = document.createElement("div");
   box.style.cssText = "background:var(--bg,#1a1a2e);color:var(--fg,#eee);padding:20px;border-radius:12px;max-width:420px;width:90%;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.4);";
-  // Il titolo diceva "opzionali" perche' il pannello conosceva solo quelle
-  // tre (ddgs, faster-whisper, cloudflared). Ora la lista viene da
-  // `requirements.txt`, quindi contiene anche cio' che serve ai tool:
-  // chiamarle opzionali sarebbe falso, e un utente che non le installa
-  // trova un tool che dice "installa Pillow" e un pannello che non lo
-  // nominava.
+  // Il titolo diceva "opzionali" perche' il pannello conosceva solo quelle tre (ddgs, faster-whisper, cloudflared).
   let html = "<h3 style='margin:0 0 12px'>Dipendenze</h3>";
   html += "<p style='font-size:12px;opacity:.7;margin:0 0 12px'>Python: " + _depsEsc(data.python || "?") + "</p>";
   for (const d of deps) {

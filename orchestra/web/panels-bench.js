@@ -1,10 +1,7 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-bench")<0)window.__diagFiles.push("panels-bench");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-bench");}})();
-// -------------------------------------------------------------- benchmark
+// benchmark
 
-// ------------------------------------------------- scelta dei modelli da provare
-// Con 396 modelli un campo "quanti" non basta: la scelta la fa chi guarda.
-// Caselle + filtro free + due scorciatoie, e il conteggio sempre visibile
-// perche' l'errore piu' comune e' lanciare trecento modelli per distrarsi.
+// scelta dei modelli da provare: Con 396 modelli un campo "quanti" non basta: la scelta la fa chi guarda.
 const benchModels = $("bench-models");
 const benchFree = $("bench-free");
 const benchCount = $("bench-count");
@@ -20,32 +17,13 @@ function aggiornaConteggio() {
   benchCount.textContent = n === 1 ? "1 scelto" : n + " scelti";
 }
 
-// Il punteggio sta nella riga, per la categoria scelta. Non in una
-// tabella a parte: la scelta e la valutazione devono stare sulla stessa
-// riga, o il confronto fra due modelli costa due sguardi a due posti.
-// Un modello non misurato mostra "—": non e' zero, e' sconosciuto, e la
-// differenza conta quando si tratta di soldi.
-// Il punteggio e' una percentuale, non una frazione.
-//
-// "0.50" non dice niente di useful: con due task i valori possibili
-// sono 0, 0.33, 0.5, 0.66, 1 — e due modelli con 0.67 e 0.66 sono
-// indistinguibili, mentre uno che ne ha passati 1 su 2 sembra
-// comparabile con uno che ne ha passati 10 su 20. In percento la
-// scala e' continua e l'occhio la legge.
-//
-// Accanto c'e' sempre la frazione — "50 · 1/2" — perche' la
-// percentuale da sola nasconde la base: 50 su 2 test e 50 su 20
-// test non sono la stessa cosa, e tu non puoi saperlo altrimenti.
+// Il punteggio sta nella riga, per la categoria scelta.
 function punteggioDi(m, cat) {
   const s = m.scores || {};
   const base = m.passi || {};        // quanti ne ha passati, per categoria
   const totale = m.task_per_cat || {};
 
-  // su "tutte" non c'e' un punteggio unico, e non lo si inventa. Un
-  // 1.00 in codice e uno 0.00 in ragionamento non sono "0.50": sono
-  // due fatti che la media nasconde. Mostriamo quante categorie sono
-  // state misurate, che e' quello che ti dice se quel modello e'
-  // confrontabile o e' ancora sconosciuto.
+  // su "tutte" non c'e' un punteggio unico, e non lo si inventa.
   if (cat === "all" || !cat) {
     const n = Object.keys(s).length;
     if (!n) return null;
@@ -72,7 +50,7 @@ function punteggioDi(m, cat) {
     }
     return { testo: n + "/" + CATEGORIE_TOTALE, cls: "quante",
              titolo: "categorie misurate su " + CATEGORIE_TOTALE
-                     + " — nessun numero unico disponibile" };
+                     + ": nessun numero unico disponibile" };
   }
   const v = s[cat];
   if (typeof v !== "number") return null;
@@ -112,7 +90,7 @@ function disegnaModelli() {
       meta.textContent = p.testo;
       meta.className = "mp-meta punteggio " + p.cls;
     } else {
-      meta.textContent = "—";
+      meta.textContent = "n/d";
       meta.className = "mp-meta nonmisurato";
     }
     const free = el("span", "mp-free");
@@ -144,10 +122,7 @@ on($("bench-none"), "click", () => {
   aggiornaConteggio();
 });
 
-// --------------------------------------------------------------- prova manuale
-// Un prompt, un modello, tutta la trascrizione. Non c'e' un punteggio:
-// quello che serve e' vedere cosa scrive e quali tool chiama, per capire
-// perche' un modello perde un task automatico.
+// prova manuale: Un prompt, un modello, tutta la trascrizione.
 const provaPrompt = $("prova-prompt");
 const provaModel = $("prova-model");
 const provaOut = $("prova-out");
@@ -161,7 +136,7 @@ function disegnaProva(r) {
     return;
   }
   const riga = el("div", "prova-meta");
-  riga.textContent = r.model + " — " + r.seconds + "s · " + r.iterations +
+  riga.textContent = r.model + ": " + r.seconds + "s · " + r.iterations +
     " iterazioni · " + r.completion_tokens + " token · " +
     r.tool_calls + " tool (" + r.tool_errors + " errori) · $" +
     (r.cost_usd || 0).toFixed(6);
@@ -275,7 +250,7 @@ on($("bench-run"), "click", async () => {
     }
     // il totale arriva subito: la percentuale ha un denominatore
     attesaTotale = d.runs || 0;
-    statoBench("in corso — 0/" + attesaTotale + " run", "on");
+    statoBench("in corso: 0/" + attesaTotale + " run", "on");
     pollBench();
   } catch (e) {
     benchLog.textContent = "";
@@ -290,9 +265,7 @@ on($("bench-run"), "click", async () => {
   }
 });
 
-// Stato e avanzamento, in alto nel pannello. Il conteggio dei run
-// e' quello che serve per capire quanto manca: un "sta girando" senza
-// numeri non dice niente quando un benchmark dura tre minuti.
+// Stato e avanzamento, in alto nel pannello.
 const benchStatus = $("bench-status");
 let attesaTotale = 0;
 
@@ -301,24 +274,10 @@ function statoBench(testo, classe) {
   benchStatus.className = "bench-status " + (classe || "");
 }
 
-// Il testo dell'avanzamento, senza mostrarlo. Serve a chi deve
-// aggiungere qualcosa: il ramo "fermo da 30 secondi" scrive
-// "59/88 run · attento, fermo da 44s", e per farlo deve poter
-// leggere il conto invece di ricalcolarlo.
-//
-// contaAvanzamento non tornava niente — scriveva dentro e basta — e
-// usarla come valore dentro una stringa stampava "undefined". Che su
-// un pannello e' peggio di non stampare niente: sembra un dato.
+// Il testo dell'avanzamento, senza mostrarlo.
 function testoAvanzamento(log, finiti, modelliVisti) {
-  // Il conto lo da' il server. Prima contavamo le righe di log
-  // visibili, ma il server manda solo gli ultimi 60: con 88 run le
-  // prime ~28 non arrivavano mai, e il numero non poteva superare
-  // 60. Mostrava "59/88" quando in realta' era a meta' — non un
-  // benchmark fermo, un contatore che non sapeva contare.
-  //
-  // Il fallback sul log serve solo se il server e' vecchio: senza, la
-  // funzione restituirebbe zero e il pannello direbbe "0/88" su un
-  // benchmark che sta funzionando.
+  // Il conto lo dà il server: il log si ferma agli ultimi 60, quindi da solo
+  // non può contare 88 run. Il fallback sul log serve solo per un server vecchio.
   const n = (typeof finiti === "number") ? finiti
     : (log || []).filter((l) => /^\s{2}\S+:\s/.test(l)).length;
   const visti = (modelliVisti || []).length;
@@ -333,21 +292,12 @@ function testoAvanzamento(log, finiti, modelliVisti) {
 function contaAvanzamento(log, finiti, modelliVisti) {
   // una riga per run finito: "== modello ==" segna l'inizio, "  task:"
   // segna un risultato. Contiamo i risultati.
-  statoBench("in corso — " + testoAvanzamento(log, finiti, modelliVisti), "on");
+  statoBench("in corso: " + testoAvanzamento(log, finiti, modelliVisti), "on");
 }
 
 function pollBench() {
   if (benchTimer) return;
-  // Quante volte si puo' sbagliare prima di dichiarare la connessione
-  // persa. Una richiesta every 1,5 secondi per tre minuti sono
-  // centoventi richieste: se basta che una fallisca per chiudere il
-  // polling, una singola scossa di rete lascia la UI ferma mentre il
-  // benchmark continua a girare sul server. Il lavoro va avanti e non
-  // lo vedi piu', e la cosa sembra un crash.
-  //
-  // Non e' che il server sia andato via: si puo' chiedere. Solo se
-  // falliscono piu' richieste di fila, e il server conferma che
-  // risponde male, si smette.
+  // Quante volte si puo' sbagliare prima di dichiarare la connessione persa.
   let errori = 0;
   benchTimer = setInterval(async () => {
     try {
@@ -358,19 +308,12 @@ function pollBench() {
       benchLog.scrollTop = benchLog.scrollHeight;
       if (d.running) {
               contaAvanzamento(d.log, d.finiti, d.modelli_visti);
-              // Il conto può essere giusto e il lavoro fermo lo stesso: un
-              // run è una chiamata a un servizio esterno, e se quella
-              // chiamata si blocca il finally non arriva mai. Il pannello
-              // continuerebbe a dire "in corso" all'infinito, e 59/88 non
-              // distingue "ci manca un pezzo" da "manterrà così".
-              //
-              // La soglia è generosa: un modello lento (GLM risponde in
-              // 43-55 secondi) è lento, non fermo. Due minuti senza un
-              // passo solo non passano per un modello che sta pensando.
+              // Il conto può essere giusto e il lavoro fermo lo stesso: un run è una chiamata
+      // esterna e il finally non arriva mai. Soglia 120s: un modello lento (43-55s) non è fermo.
               const fermo = d.fermo_da || 0;
               if (fermo > 120) {
                 statoBench("fermo da " + Math.floor(fermo / 60) + " min " +
-                           (fermo % 60) + "s — non avanza. Riavvia il benchmark.",
+                           (fermo % 60) + "s: non avanza. Riavvia il benchmark.",
                            "ko");
                 addText("warn", "nessun passo da " + fermo + " secondi");
               } else if (fermo > 30) {
@@ -384,27 +327,25 @@ function pollBench() {
         benchTimer = null;
         renderBenchResult(d.result);
         const n = (d.log || []).filter((l) => /^\s{2}\S+:\s/.test(l)).length;
-        statoBench(n === 0 ? "nessun run eseguito" : "finito — " + n + " run", "ok");
+        statoBench(n === 0 ? "nessun run eseguito" : "finito: " + n + " run", "ok");
       }
     } catch (e) {
       errori += 1;
-      // Non e' finito: si riprova. Un benchmark dura minuti, e un
-      // tentativo non riuscito non vuol dire che il server sia andato.
+      // Un benchmark dura minuti: una singola scossa di rete non deve fermare il
+      // polling. Si smette solo dopo 12 errori di fila; il lavoro può continuare.
       if (errori < 12) {
-        statoBench("connessione instabile — riprovo (" + errori + ")", "on");
+        statoBench("connessione instabile: riprovo (" + errori + ")", "on");
         return;
       }
       clearInterval(benchTimer);
       benchTimer = null;
       statoBench("connessione persa dopo " + errori + " tentativi: " + e +
-                 " — il benchmark puo' continuare sul server", "ko");
+                 ". Il benchmark puo' continuare sul server", "ko");
     }
   }, 1500);
 }
 
-// La tabella arriva come testo monospaziato dal backend, che l'ha
-// costruita per il terminale. Riutilizzarla è più onesto che rifare la
-// formattazione in JS e rischiare due versioni che divergono.
+// La tabella arriva come testo monospaziato dal backend, che l'ha costruita per il terminale.
 function renderBenchResult(res) {
   benchOut.textContent = "";
   if (!res) return;
@@ -422,7 +363,4 @@ function renderBenchResult(res) {
   loadModels();
 }
 
-// Riceve il catalogo gia' ordinato da loadModels e riempie le liste del
-// pannello. Una sola fonte: se il selettore in alto e le caselle qui
-// prendessero i dati da due fetch separati, potrebbero mostrare modelli
-// diversi e la scelta sarebbe illudente.
+// Riceve il catalogo gia' ordinato da loadModels e riempie le liste del pannello.

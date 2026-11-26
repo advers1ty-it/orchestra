@@ -1,15 +1,6 @@
-/* Service worker: cache della shell per uso offline/PWA.
-   Network-first per HTML/JS (cosi' il telefono aggiornato vede sempre
-   l'ultima versione anche dopo un refresh), cache-first per asset statici.
-
-   Il nome della cache porta il digest degli asset statici (CSS, icone,
-   manifest): rinominarla e' l'unico modo di buttare via la copia vecchia,
-   perche' per quelli il fetch passa dalla cache prima che dalla rete. Un
-   numero scelto a mano resta indietro esattamente quando il CSS cambia —
-   cioe' quando serve. `tests/test_frontend_split.py` lo ricalcola dagli
-   asset dichiarati in SHELL: se non torna, il test e' rosso e dice quale
-   mettere. */
-const CACHE = "orchestra-shell-575a5bb9";
+/* Service worker: shell offline/PWA. HTML/JS network-first, asset statici
+   cache-first; il nome della cache porta il digest calcolato dai test. */
+const CACHE = "orchestra-shell-f16e0182";
 const SHELL = ["/", "/app.css", "/app.js", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

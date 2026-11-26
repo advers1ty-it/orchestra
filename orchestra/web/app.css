@@ -1,61 +1,174 @@
 /* Tutto in CSS custom property, niente framework. */
   :root {
-    --bg: #0f1115;
-    --panel: #161a21;
-    --panel-2: #1c212a;
+  /* superfici, dalla piu' profonda alla piu' rilevata */
+    --bg: #0b0d11;
+  --bg-1: #11141a;
+  --bg-2: #171b23;
+  --panel: #141821;
+  --panel-2: #1b2029;
+  --panel-3: #242b38;
+  --card: var(--panel);
+  /* linee */
     --border: #262c37;
-    --fg: #e4e7ec;
-    --muted: #8b93a3;
-    --accent: #5b8cff;
-    --accent-dim: #3a5bbf;
-    --ok: #3ecf8e;
-    --warn: #f5a623;
-    --err: #ff6b6b;
-    --tool: #b78bff;
-    --mono: ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, Consolas, monospace;
-  }
+  --border-soft: rgba(255, 255, 255, .055);
+  --border-strong: #35404f;
+  --line: var(--border);
+  /* testo */
+    --fg: #e7ebf2;
+  --fg-strong: #f7f9fc;
+  --muted: #9aa4b6;
+  --muted-2: #74808f;
+  --foreground: var(--fg);
+  --muted-foreground: var(--muted);
+  --dim: var(--muted);
+  /* stato e accenti */
+    --accent: #6f9bff;
+  --accent-dim: #3a5bbf;
+  --accent-soft: rgba(111, 155, 255, .11);
+  --ok: #45d193;
+  --warn: #f0b457;
+  --err: #ff7b7b;
+  --tool: #b98cff;
+  --danger: #d05c5c;
+  /* forma */
+    --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-2: 0 12px 34px rgba(0, 0, 0, .38);
+  --ring: 0 0 0 3px rgba(111, 155, 255, .2);
+  --mono: ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, Consolas, monospace;
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--bg);
+    /* Un alone appena percettibile in cima: da' profondita' alla finestra senza diventare decorazione. */
+    background:
+      radial-gradient(1100px 520px at 50% -12%, rgba(111, 155, 255, .07), transparent 72%),
+      var(--bg);
     color: var(--fg);
-    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     display: flex; flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
+  ::selection { background: rgba(111, 155, 255, .32); color: #fff; }
 
-  /* ---------- header ---------- */
+  /* stati globali e barra in alto */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+header .mp-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  border: 1px solid transparent;
+  background: var(--panel-2);
+  border-color: var(--border);
+  color: var(--fg);
+  max-width: 240px;
+}
+header button.ghost {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
+header select:hover:not(:disabled),
+header button.ghost:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--border);
+  color: var(--fg);
+}
+header .mp-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+header #btn-side,
+header #btn-undo,
+header #btn-diff {
+  font-size: 15px;
+  padding: 0 9px;
+}
+header #btn-piano {
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+header #btn-piano[aria-pressed="true"] {
+  color: #bcd0ff;
+  background: var(--accent-soft);
+  border-color: var(--accent-dim);
+}
+header select:disabled, header .mp-btn:disabled {
+  opacity: .42;
+}
+
+/* header */
   header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .logo { font-weight: 650; letter-spacing: .2px; }
-  .logo span { color: var(--accent); }
-  .ver { font: 10px var(--mono); color: var(--muted); margin-left: 6px; }
-  /* La dichiarazione che si sta parlando con un'IA (Reg. UE 2024/1689,
-     art. 50). Visibile sempre, non solo al primo avvio: un avviso che
-     sparisce non e' una dichiarazione, e' un messaggio di benvenuto. */
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 9px;
+  padding: 9px 16px;
+  min-height: 56px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .4);
+  backdrop-filter: blur(14px) saturate(1.15);
+  position: relative;
+  z-index: 30;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+  .logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: .15px;
+  color: var(--fg-strong);
+}
+  .logo span {
+  color: #a9c2ff;
+}
+  .ver {
+  font: 10px var(--mono);
+  margin-left: 2px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .025);
+  font-size: 10px;
+  color: var(--muted-2);
+  flex-shrink: 0;
+}
+  /* La dichiarazione che si sta parlando con un'IA (Reg. UE 2024/1689, art. 50).
+     Visibile sempre, non solo al primo avvio: un avviso che sparisce non è una dichiarazione. */
   .ia-avviso {
-    font: 10px var(--mono); color: var(--muted); margin-left: 8px;
-    padding: 1px 6px; border: 1px solid var(--border); border-radius: 8px;
-    cursor: help;
-  }
-  /* Timbro statico scritto nell'HTML, non da JS: se nella pagina compare
-     "UI-4"... */
-  .stamp {
-    font: 10px var(--mono); color: #0f1115; background: var(--warn);
-    padding: 2px 6px; border-radius: 3px; margin-left: 6px; font-weight: 700;
-  }
+  font: 10px var(--mono);
+  margin-left: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: var(--muted-2);
+  font-size: 10px;
+  letter-spacing: .02em;
+  background: rgba(255, 255, 255, .02);
+  cursor: help;
+  flex-shrink: 0;
+}
   .grow { flex: 1; }
   .stat { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
   .stat b { color: var(--fg); font-weight: 500; }
-  /* Barra di riempimento del contesto: mostra quanto manca alla
-     compattazione. È l'unica cosa che dice "quanto sono vicino al
-     limite" senza contare i token a mano. Il colore cambia col
-     riempimento: verde sotto il 70%, giallo sotto l'85%, rosso
-     oltre. */
+  /* Barra di riempimento del contesto: mostra quanto manca alla compattazione. */
   .stat .ctx-bar {
     display: inline-block; width: 90px; height: 8px; vertical-align: middle;
     margin: 0 6px; border-radius: 4px;
@@ -72,76 +185,165 @@
   @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
 
   button {
-    font: 13px inherit; color: var(--fg);
-    background: var(--panel-2); border: 1px solid var(--border);
-    padding: 6px 12px; border-radius: 6px; cursor: pointer;
-  }
+  font: 13px inherit;
+  color: var(--fg);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease, color .14s ease, box-shadow .14s ease;
+}
   button:hover:not(:disabled) { background: #232936; border-color: #333c4a; }
   button:disabled { opacity: .4; cursor: not-allowed; }
   button.primary { background: var(--accent-dim); border-color: var(--accent); }
   button.primary:hover:not(:disabled) { background: var(--accent); }
 
-  /* ---------- main ---------- */
-  main { flex: 1; overflow-y: auto; padding: 20px 0 16px; }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+  /* main */
+  main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 0 22px;
+}
+  .wrap {
+  margin: 0 auto;
+  max-width: 860px;
+  padding: 0 24px;
+}
 
-  .msg { margin-bottom: 18px; }
+  .msg {
+  margin-bottom: 22px;
+}
   .role {
     font: 11px var(--mono); text-transform: uppercase; letter-spacing: .8px;
     color: var(--muted); margin-bottom: 5px;
   }
-  .msg.user .role { color: var(--accent); }
-  .msg.assistant .role { color: var(--ok); }
-  .msg.system .role { color: var(--warn); }
-  .msg.error .role { color: var(--err); }
+  .msg.user .role {
+  color: var(--accent);
+  justify-content: flex-end;
+}
+  .msg.assistant .role {
+  color: var(--ok);
+}
+
+  .msg.error .role {
+  color: var(--err);
+}
   .body { white-space: pre-wrap; word-break: break-word; }
   .msg.user .body {
-    background: var(--panel-2); border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    padding: 9px 13px; border-radius: 6px;
-  }
-  .msg.assistant .body { padding-left: 2px; }
+  border-left: 3px solid var(--accent);
+  max-width: min(76%, 620px);
+  padding: 10px 14px;
+  border: 1px solid rgba(111, 155, 255, .22);
+  border-radius: 14px 14px 4px 14px;
+  background: linear-gradient(180deg, rgba(111, 155, 255, .15), rgba(111, 155, 255, .08));
+  color: var(--fg-strong);
+}
+  .msg.assistant .body {
+  padding-left: 12px;
+  border-left: 1px solid var(--border-soft);
+}
   .msg.error .body {
-    background: #2a1618; border: 1px solid #4a2024; color: #ffb4b4;
-    padding: 9px 13px; border-radius: 6px; font: 13px var(--mono);
-  }
-  /* annotazione di sistema (es. cambio modello): non e' un messaggio
-     dell'utente ne' dell'agente, quindi non va in nessuna delle due
-     classi. Senza questo finiva con lo stile dell'utente. */
-  .msg.system .role { color: var(--warn); }
+  border: 1px solid #4a2024;
+  padding: 9px 13px;
+  font: 13px var(--mono);
+  max-width: none;
+  border-color: rgba(255, 123, 123, .28);
+  border-radius: 10px;
+  background: rgba(255, 123, 123, .08);
+  font-size: 12.5px;
+  color: #ffc2c2;
+}
+  /* annotazione di sistema (es. cambio modello): non e' un messaggio dell'utente ne' dell'agente, quindi non va in
+     nessuna delle due classi. */
+  .msg.system .role {
+  color: var(--warn);
+}
   .msg.system .body {
-    color: var(--muted); font: 12px var(--mono);
-    padding: 4px 0; text-align: center;
-  }
+  font: 12px var(--mono);
+  padding: 4px 0;
+  text-align: center;
+  max-width: none;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
 
   /* tool call */
   .tool {
-    font: 13px var(--mono); margin: 8px 0;
-    background: var(--panel); border: 1px solid var(--border);
-    border-left: 3px solid var(--tool);
-    border-radius: 6px; overflow: hidden;
-  }
+  font: 13px var(--mono);
+  overflow: hidden;
+  margin: 10px 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--tool);
+  border-radius: 10px;
+  box-shadow: var(--shadow-1);
+}
   .tool-head {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 11px; cursor: pointer; user-select: none;
-  }
-  .tool-head:hover { background: var(--panel-2); }
-  .tool-name { color: var(--tool); font-weight: 600; }
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 12px;
+  gap: 9px;
+}
+  .tool-head:hover {
+  background: rgba(255, 255, 255, .025);
+}
+  .tool-name {
+  color: var(--tool);
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: .01em;
+  flex-shrink: 0;
+}
   .tool-args {
-    color: var(--muted); overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; flex: 1; min-width: 0;
-  }
-  .tool-status { font-size: 11px; padding: 1px 7px; border-radius: 4px; flex-shrink: 0; }
-  .tool-status.ok { background: #14322a; color: var(--ok); }
-  .tool-status.err { background: #3a1e20; color: var(--err); }
-  .tool-status.run { background: #3a3320; color: var(--warn); }
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+  .tool-status {
+  flex-shrink: 0;
+  font: 10.5px var(--mono);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  letter-spacing: .02em;
+}
+  .tool-status.ok {
+  background: rgba(69, 209, 147, .1);
+  border-color: rgba(69, 209, 147, .22);
+  color: #8fe4bd;
+}
+  .tool-status.err {
+  background: rgba(255, 123, 123, .1);
+  border-color: rgba(255, 123, 123, .25);
+  color: #ffb0b0;
+}
+  .tool-status.run {
+  background: rgba(240, 180, 87, .1);
+  border-color: rgba(240, 180, 87, .25);
+  color: #f3c885;
+}
   .caret { color: var(--muted); font-size: 10px; transition: transform .15s; flex-shrink: 0; }
   .tool.open .caret { transform: rotate(90deg); }
   .tool-out {
-    display: none; padding: 9px 12px; border-top: 1px solid var(--border);
-    color: var(--muted); font-size: 12.5px; white-space: pre-wrap;
-    word-break: break-word; max-height: 320px; overflow-y: auto;
-  }
+  display: none;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 11px 14px;
+  background: #0a0d13;
+  font-size: 12px;
+  line-height: 1.55;
+}
   .tool.open .tool-out { display: block; }
   /* Un'immagine generata: grande abbastanza da giudicarla, mai piu' larga
      del riquadro. Il bordo la stacca dallo sfondo scuro. */
@@ -152,62 +354,227 @@
   }
 
   .sysnote {
-    font: 12px var(--mono); color: var(--warn);
-    padding: 6px 11px; margin: 8px 0;
-    background: #241f14; border: 1px solid #3d3320; border-radius: 6px;
-  }
+  font: 12px var(--mono);
+  margin: 10px 0;
+  padding: 7px 12px;
+  background: rgba(240, 180, 87, .06);
+  border: 1px solid rgba(240, 180, 87, .2);
+  border-radius: 8px;
+  color: #f0c37e;
+  font-size: 11.5px;
+}
 
-  /* ---------- composer ---------- */
+  /* conversazione: stati, markdown e tool */
+.msg .role {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 10.5px var(--mono);
+  letter-spacing: .1em;
+  margin-bottom: 6px;
+  color: var(--muted-2);
+}
+.msg .role::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .9;
+  flex-shrink: 0;
+}
+.msg .body {
+  font-size: 14.5px;
+  line-height: 1.68;
+  max-width: 78ch;
+}
+.msg.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.body.md {
+  white-space: normal;
+}
+.msg .body li::marker {
+  color: var(--accent);
+}
+.msg .body a:hover {
+  border-bottom-color: var(--accent);
+}
+.msg .body blockquote {
+  margin: .6em 0;
+  padding: .1em 0 .1em 12px;
+  border-left: 2px solid var(--accent-dim);
+  color: var(--muted);
+}
+.msg .body table {
+  border-collapse: collapse;
+  margin: .7em 0;
+  font-size: .94em;
+}
+.msg .body th, .msg .body td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+}
+.msg .body th {
+  background: var(--panel-2);
+  text-align: left;
+  font-weight: 600;
+}
+.vuoto {
+  display: none;
+  max-width: 540px;
+  margin: 12vh auto 0;
+  padding: 0 24px;
+  text-align: center;
+}
+.vuoto-segno {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 18px;
+  border-radius: 14px;
+  background: linear-gradient(150deg, #82a8ff, #3b5bc0);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 30px rgba(59, 91, 192, .35);
+  position: relative;
+}
+.vuoto h2 {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  color: var(--fg-strong);
+}
+.vuoto p {
+  margin: 0 auto;
+  max-width: 44ch;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.vuoto-riga {
+  margin-top: 18px !important;
+  color: var(--muted-2) !important;
+  font-size: 11.5px !important;
+}
+.vuoto-riga kbd {
+  margin: 0 1px;
+}
+.vuoto-segno::after {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 2px solid rgba(255, 255, 255, .9);
+  border-radius: 4px;
+  transform: rotate(45deg);
+}
+
+/* composer */
   footer {
-    border-top: 1px solid var(--border); background: var(--panel);
-    padding: 12px 20px; flex-shrink: 0;
-  }
+  flex-shrink: 0;
+  padding: 14px 20px 12px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border-top: 1px solid var(--border-soft);
+}
   .cwrap { max-width: 900px; margin: 0 auto; }
-  .row { display: flex; gap: 10px; align-items: flex-end; }
-  /* I pulsanti di fine turno: pillole sopra il campo. Non sono comandi,
-     sono frasi pronte — e si comportano da pulsanti perche' un link che
-     compila un campo sembra un link, e non si preme. */
+  .row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-2), inset 0 1px 0 rgba(255, 255, 255, .03);
+}
+  /* I pulsanti di fine turno: pillole sopra il campo. */
   .suggerimenti { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
   .suggerimenti[hidden] { display: none !important; }
   .suggerimento {
-    font: 12px var(--mono); color: var(--fg); background: var(--panel-2);
-    border: 1px solid var(--border); border-radius: 999px;
-    padding: 5px 12px; cursor: pointer; max-width: 100%;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .suggerimento:hover { border-color: var(--accent-dim); color: var(--accent); }
+  font: 12px var(--mono);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, .03);
+  border-color: var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+  .suggerimento:hover {
+  color: var(--fg);
+  border-color: var(--accent-dim);
+  background: var(--accent-soft);
+}
   textarea {
-    flex: 1; resize: none; background: var(--panel-2); color: var(--fg);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px 12px; font: 14px/1.5 inherit;
-    min-height: 46px; max-height: 200px;
-    outline: none;
-  }
-  textarea:focus { border-color: var(--accent-dim); }
+  flex: 1;
+  resize: none;
+  background: var(--panel-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: 14px/1.5 inherit;
+  min-height: 46px;
+  max-height: 200px;
+  outline: none;
+  transition: border-color .14s ease, background .14s ease, color .14s ease, box-shadow .14s ease;
+}
+  textarea:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
   textarea:disabled { opacity: .5; }
   .hint {
-    font: 11.5px var(--mono); color: var(--muted);
-    margin-top: 7px; display: flex; gap: 14px; flex-wrap: wrap;
-  }
-  /* Le statistiche vanno in fondo a destra: sotto la chat, dove si
-     guarda a lavoro finito. In testa erano un numero in piu' che
-     spingeva i selettori e non diceva niente finche' non finiva. */
-  /* Steer: quando l'agente lavora, sostituisce il form chat. Ha lo stesso
-      layout (bottoni a sinistra, input al centro, dot a destra) e la
-      stessa larghezza, così non si sposta il layout. */
+  font: 11.5px var(--mono);
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  gap: 16px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+  /* Le statistiche vanno in fondo a destra: sotto la chat, dove si guarda a lavoro finito. */
+  /* Steer: quando l'agente lavora, sostituisce il form chat. */
   .chat-form { display: contents; }
   /* L'attributo hidden deve vincere sui display qui sopra: senza,
      la barra guida resta visibile da ferma e il form chat da occupato. */
   #chat-form[hidden], #steer-bar[hidden] { display: none !important; }
-  .steer-bar { display: flex; gap: 10px; align-items: flex-end; }
+  .steer-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--accent-dim);
+  border-radius: 14px;
+}
   .steer-bar input {
-    flex: 1; background: var(--panel-2); color: var(--fg);
-    border: 1px solid var(--accent-dim); border-radius: 8px;
-    padding: 10px 12px; font: 14px/1.5 inherit;
-    min-height: 46px; outline: none;
-  }
-  .steer-bar input:focus { border-color: var(--accent); }
-  .hint .stat { margin-left: auto; }
+  flex: 1;
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: 14px/1.5 inherit;
+  outline: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  min-height: 40px;
+}
+  .steer-bar input:focus {
+  border-color: var(--accent);
+  border: 0;
+  box-shadow: none;
+}
+  .hint .stat {
+  margin-left: auto;
+  color: var(--muted-2);
+}
   kbd {
     background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 3px; padding: 1px 5px; font: 11px var(--mono);
@@ -218,35 +585,162 @@
     padding: 9px 13px; border-radius: 6px; margin-bottom: 14px; font: 13px var(--mono);
   }
 
-  /* ---------- selettore modello ---------- */
+  /* composer e guida */
+.row:focus-within {
+  border-color: var(--accent-dim);
+  box-shadow: var(--ring), var(--shadow-2);
+}
+.row textarea {
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  box-shadow: none;
+  padding: 8px;
+  font-size: 14.5px;
+  min-height: 44px;
+}
+.row textarea:focus {
+  border: 0;
+  box-shadow: none;
+}
+.row #btn-allega,
+.row #btn-verifica {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 15px;
+}
+.row #btn-allega:hover:not(:disabled),
+.row #btn-verifica:hover:not(:disabled) {
+  background: var(--panel-3);
+  color: var(--fg);
+}
+.row .dot {
+  margin: 0 5px;
+}
+.row #btn-send {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #7fa6ff, #5b8cff);
+  color: #0a1020;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(91, 140, 255, .28);
+}
+.row #btn-send:hover:not(:disabled) {
+  background: #8db1ff;
+}
+.row #btn-send:disabled {
+  background: var(--panel-3);
+  color: var(--muted-2);
+  box-shadow: none;
+}
+.hint kbd {
+  background: rgba(255, 255, 255, .05);
+  border-color: var(--border);
+  border-bottom-width: 2px;
+  padding: 1px 5px;
+  color: var(--muted);
+}
+.hint .stat b {
+  color: var(--fg);
+}
+#steer-input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+#mic-float.mic-float {
+  width: 38px;
+  height: 38px;
+  right: 16px;
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  box-shadow: var(--shadow-2);
+  font-size: 16px;
+}
+#mic-float.mic-float:hover {
+  background: var(--panel-3);
+  border-color: var(--border-strong);
+  color: var(--fg);
+  transform: none;
+}
+#mic-float.mic-float.recording {
+  background: #c0392b;
+  border-color: #e05a4a;
+  color: #fff;
+}
+
+/* selettore modello */
   select {
-    font: 12px var(--mono); color: var(--fg);
-    background: var(--panel-2); border: 1px solid var(--border);
-    padding: 5px 8px; border-radius: 6px; outline: none; max-width: 260px;
-  }
-  select:focus { border-color: var(--accent-dim); }
+  font: 12px var(--mono);
+  color: var(--fg);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  border-radius: 6px;
+  outline: none;
+  max-width: 260px;
+  transition: border-color .14s ease, background .14s ease, color .14s ease, box-shadow .14s ease;
+}
+  select:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
   select:disabled { opacity: .5; cursor: not-allowed; }
   button.ghost { background: transparent; }
   .dim { color: var(--muted); }
   .small { font-size: 12px; }
 
-  /* ---------- pannello benchmark ---------- */
+  /* pannello benchmark */
   .panel {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6);
-    display: flex; align-items: flex-start; justify-content: center;
-    padding: 60px 20px; z-index: 50; overflow-y: auto;
-  }
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 50;
+  overflow-y: auto;
+  padding: 48px 20px;
+  background: rgba(4, 6, 10, .68);
+  backdrop-filter: blur(5px);
+}
   .panel.hidden { display: none; }
   .panel-box {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 18px 20px;
-    max-width: 900px; width: 100%;
-  }
+  max-width: 900px;
+  width: 100%;
+  padding: 20px 22px;
+  background: linear-gradient(180deg, var(--panel), #11151d);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .04);
+}
   .panel-head {
-    display: flex; align-items: flex-start; justify-content: space-between;
-    gap: 12px; margin-bottom: 14px;
-  }
-  .panel-head .dim { display: block; margin-top: 3px; font-size: 12.5px; }
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+  .panel-head .dim {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted-2);
+}
   .bench-controls {
     display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;
     margin-bottom: 10px;
@@ -255,16 +749,11 @@
     font: 11px var(--mono); text-transform: uppercase; letter-spacing: .6px;
     color: var(--muted); display: flex; flex-direction: column; gap: 5px;
   }
-  .benchlog {
-    font: 12px var(--mono); color: var(--muted);
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: 6px; padding: 10px 12px; margin: 10px 0 0;
-    max-height: 300px; overflow-y: auto; white-space: pre-wrap;
-  }
+
   .benchlog:empty { display: none; }
   .code { color: var(--muted); }
 
-/* ---- scelta dei modelli e prova manuale ---- */
+/* scelta dei modelli e prova manuale */
 .modelpick-list {
   max-height: 190px; overflow-y: auto; margin: 10px 0;
   border: 1px solid var(--border); border-radius: 8px;
@@ -277,7 +766,7 @@
 .mp-row:hover { background: rgba(255,255,255,.04); }
 .mp-name { flex: 1; font-family: var(--mono); overflow: hidden;
            text-overflow: ellipsis; white-space: nowrap; }
-.mp-meta { color: var(--muted); font-size: 11px; min-width: 74px; text-align: right; }
+
 .bench-controls .chk { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .prova-box {
   margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
@@ -313,11 +802,21 @@
                      background: rgba(62,207,142,.10); }
 .bench-status.ko   { color: #ffb4b4; border-color: #ff6b6b;
                      background: rgba(255,107,107,.10); }
-.benchlog { max-height: 220px; }
+.benchlog {
+  font: 12px var(--mono);
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 10px 0 0;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  max-height: 220px;
+}
 
-/* Punteggio sulla riga del modello: e' la valutazione, e sta dove
-   scelgi. Verde se alto, grigio se non misurato — "non misurato" non e'
-   "zero" e non devono sembrare la stessa cosa. */
+/* Punteggio sulla riga del modello: è la valutazione e sta dove scegli.
+   Verde se alto, grigio se non misurato: "non misurato" non è zero. */
 .mp-row .mp-free { font-size: 10px; color: var(--muted); min-width: 26px; }
 .mp-row .mp-meta.punteggio { font-family: var(--mono); font-size: 12.5px; min-width: 34px; }
 .mp-row .mp-meta.alto  { color: #3ecf8e; }
@@ -334,16 +833,22 @@
 .routing-altri { margin-top: 4px; font-size: 11.5px; color: var(--muted); }
 .routing-ok { margin-top: 6px; color: #9fe8c4; font-size: 12px; }
 
-/* Scope + modello nell'header. Lo scope viene prima perche' e' la
-   domanda a cui il modello risponde: se lo scope e' "tutto", il numero
-   accanto al modello non avrebbe senso (sarebbe una media di cose
-   diverse) e quindi non lo mostriamo affatto. */
+/* Scope + modello nell'header. */
 .scope-wrap { display: flex; align-items: center; gap: 5px; }
 .scope-label {
   font: 10px var(--mono); color: var(--muted); text-transform: uppercase;
   letter-spacing: .04em;
 }
-header select { max-width: 230px; }
+header select {
+  max-width: 230px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
 #scope-pick { max-width: 175px; }
 .scope-note {
   font: 11px var(--mono); padding: 2px 8px; border-radius: 4px;
@@ -358,7 +863,7 @@ header select { max-width: 230px; }
   header select { max-width: 150px; }
 }
 
-/* ---- Opzioni: chiavi e servizi gratuiti ---- */
+/* Opzioni: chiavi e servizi gratuiti */
 .avviso-sicurezza {
   background: rgba(62,207,142,.07); border: 1px solid rgba(62,207,142,.35);
   border-radius: 7px; padding: 9px 12px; font-size: 12.5px;
@@ -373,9 +878,8 @@ header select { max-width: 230px; }
   display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
   gap: 10px;
 }
-/* Il campo della chiave dentro la scheda del servizio: separato dalla
-   descrizione da una riga, perche' sopra c'e' cosa fa il servizio e
-   sotto cosa devi incollare. */
+/* Il campo della chiave dentro la scheda del servizio: separato dalla descrizione da una riga, perche' sopra c'e' cosa
+   fa il servizio e sotto cosa devi incollare. */
 .chiave-campo {
   border-top: 1px solid var(--border); margin-top: 3px; padding-top: 8px;
   display: grid; gap: 6px;
@@ -397,13 +901,25 @@ header select { max-width: 230px; }
 
 #opzioni-nota { display: block; margin: 4px 0 12px; font-size: 11.5px; }
 .gratis-scheda {
-  border: 1px solid var(--border); border-radius: 8px; padding: 11px 12px;
-  display: flex; flex-direction: column; gap: 5px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 10px;
+  border-color: var(--border);
+  background: var(--panel-2);
+  padding: 12px 13px;
 }
-.gratis-scheda.senza-chiave { border-color: #3ecf8e; background: rgba(62,207,142,.05); }
+.gratis-scheda.senza-chiave {
+  border-color: #3ecf8e;
+  background: var(--panel-2);
+}
 /* La chiave c'e': la scheda lo dice a colpo d'occhio, senza leggere
    l'indizio di quattro caratteri. */
-.gratis-scheda.pronta { border-color: rgba(62,207,142,.55); }
+.gratis-scheda.pronta {
+  border-color: rgba(62,207,142,.55);
+  background: var(--panel-2);
+}
 .gratis-capo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .gratis-nome { font-weight: 600; font-size: 13px; }
 .gratis-badge { font: 10px var(--mono); padding: 2px 6px; border-radius: 3px; }
@@ -445,20 +961,28 @@ a.gratis-come:hover { text-decoration: underline; }
 }
 .opzioni-selezione select { min-width: 210px; max-width: 330px; }
 
-/* ---- Permessi: la domanda che blocca ---- */
-/* z-index sopra i pannelli: se l'agente aspetta, nient'altro ha
-   importanza, e un pannello aperto sopra la domanda renderebbe
-   impossibile rispondere. */
+/* Permessi: la domanda che blocca */
+/* z-index sopra i pannelli: se l'agente aspetta, nient'altro ha importanza, e un pannello aperto sopra la domanda
+   renderebbe impossibile rispondere. */
 .permesso {
-  position: fixed; inset: 0; z-index: 200;
-  background: rgba(0,0,0,.72);
-  display: flex; align-items: center; justify-content: center; padding: 24px;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 6, 10, .8);
 }
 .permesso.hidden { display: none; }
 .permesso-box {
-  background: var(--panel); border: 1px solid var(--warn);
-  border-radius: 12px; padding: 22px 24px; max-width: 560px; width: 100%;
-  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  background: var(--panel);
+  border: 1px solid var(--warn);
+  padding: 22px 24px;
+  max-width: 560px;
+  width: 100%;
+  border-radius: 16px;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, .6);
 }
 .permesso-percorso {
   font: 12.5px var(--mono); margin: 12px 0 6px; padding: 9px 11px;
@@ -502,10 +1026,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .permesso-stato-riga.attesa { color: #ffcf9b; background: rgba(245,166,35,.10); }
 .permesso-stato-riga.ko    { color: #ffb4b4; background: rgba(255,107,107,.08); }
 
-/* Servizio accanto al modello, nella barra in alto.
-   Stessa altezza e stesso bordo del select del modello: se uno dei due
-   sembra un campo diverso dall'altro, si legge come se fossero cose
-   diverse, e invece sono due facce della stessa scelta. */
+/* Servizio accanto al modello, nella barra in alto. */
 #provider-pick { max-width: 150px; }
 .provider-note {
   font: 11px var(--mono); color: var(--muted);
@@ -516,27 +1037,25 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .provider-note.rosso { color: #ffb4b4; }
 .small.giallo, .provider-note.giallo { color: #ffcf9b; }
 
-/* Header piu' affollato: servizio, scopo e modello sulla stessa riga.
-   Senza un punto di rottura, su una finestra stretta i tre selettori
-   si comprimono fino a diventare illeggibili e difficili da centrare —
-   sembrano rotti, ma e' solo spazio mancante. Meglio andare a capo
-   che far sembrare la pagina guasta. */
+/* Header piu' affollato: servizio, scopo e modello sulla stessa riga. */
 @media (max-width: 1100px) {
   header { flex-wrap: wrap; row-gap: 8px; }
-  header .grow { flex-basis: 100%; height: 0; }
+  header .grow {
+  flex: 1 1 auto;
+  height: auto;
+}
   .provider-note { display: none; }
 }
 @media (max-width: 720px) {
   #provider-pick, #model-pick, #scope-pick { max-width: 100%; flex: 1 1 140px; }
   .scope-label { display: none; }
-  .stamp { display: none; }
 }
 
 /* Una categoria senza test non e' una categoria "da misurare": e' un
    buco, e si dice con un colore diverso da un semplice "non ancora". */
 .avviso-grave { color: #ffb4b4; }
 
-/* ---- Allegati ---- */
+/* Allegati */
 /* La graffetta sta con il campo, non in alto: allegare e' parte di
    scrivere il messaggio. */
 #btn-allega { flex-shrink: 0; font-size: 15px; padding: 7px 10px; }
@@ -564,9 +1083,8 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   width: 100%; background: transparent; border: none; color: var(--fg);
   font: inherit; outline: none;
 }
-/* Il conto in token e' accanto al nome perche' e' LA cosa che
-   decide: 40.000 token e' una richiesta da 30 centesimi, 1.100 e' un
-   centesimo. Vederlo solo dopo averlo gia' speso e' inutile. */
+/* Il conto in token e' accanto al nome perche' e' LA cosa che decide: 40.000 token e' una richiesta da 30 centesimi,
+   1.100 e' un centesimo. */
 .allegato-costo { color: var(--muted); white-space: nowrap; }
 .allegato-costo.alto { color: #ffcf9b; }
 .allegato-tomba {
@@ -583,9 +1101,8 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   padding: 5px 10px; border-left: 2px solid var(--warn);
 }
 
-/* ---------------------------------------------------------------- skill
-   La lista e' lunga e va scorsa: il contenitore ha un tetto, e con 100
-   skill senza tetto il pannello delle Opzioni diventa un metro. */
+/* skill: La lista e' lunga e va scorsa: il contenitore ha un tetto, e con 100 skill senza tetto il pannello delle
+   Opzioni diventa un metro. */
 .opzioni-skill {
   margin: 18px 0;
   padding: 14px 0;
@@ -620,9 +1137,8 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 }
 .skill-filtro { margin: 6px 0; }
 
-/* Il bordo sinistro e' la distinzione: una scaricata e' roba scritta
-   da qualcun altro, una generata e' un'affermazione dello stesso
-   agente che la usa. Si vede senza leggere una parola. */
+/* Il bordo sinistro e' la distinzione: una scaricata e' roba scritta da qualcun altro, una generata e' un'affermazione
+   dello stesso agente che la usa. */
 .skill-riga {
   display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
   padding: 7px 9px; border-radius: 4px; border-left: 2px solid transparent;
@@ -632,7 +1148,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .skill-riga:hover { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
 .skill-nome { font-weight: 600; font-size: 13px;
               display: flex; align-items: baseline; gap: 5px; }
-.skill-segno { color: var(--accent); font-weight: 700; }
+
 .skill-desc {
   font-size: 12px; color: var(--muted-foreground);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -640,12 +1156,6 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 }
 .skill-meta { font-size: 11px; color: var(--muted-foreground);
               grid-column: 1; grid-row: 3; }
-.skill-pulsante {
-  grid-row: 1 / span 2; align-self: center;
-  font-size: 11px; padding: 2px 7px;
-}
-.skill-bottone-cancella { color: var(--muted-foreground); }
-.skill-bottone-cancella:hover { color: #b44; }
 
 .skill-vuota, .skill-conto {
   font-size: 12px; color: var(--muted-foreground);
@@ -664,9 +1174,8 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 .skill-vista-nota { font-size: 11px; color: var(--muted-foreground);
                     margin-top: 8px; }
 
-/* ---------------------------------------------------- Opzioni a sezioni
-   La barra e' stretta e i nomi interi: sono cinque e crescono col
-   progetto, non dodici che vanno in tre lettere. */
+/* Opzioni a sezioni: La barra e' stretta e i nomi interi: sono cinque e crescono col progetto, non dodici che vanno in
+   tre lettere. */
 .opzioni-corpo {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
@@ -674,24 +1183,36 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   align-items: start;
 }
 .opzioni-nav {
-  display: flex; flex-direction: column; gap: 2px;
-  position: sticky; top: 0;
-  border-right: 1px solid var(--border); padding-right: 10px;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  border-right: 1px solid var(--border);
+  gap: 4px;
+  padding-right: 14px;
 }
 .opzioni-tab {
-  text-align: left; font: inherit; font-size: 13px;
-  padding: 7px 10px; border: 0; border-radius: 4px;
-  background: transparent; color: var(--muted-foreground);
+  text-align: left;
+  font: inherit;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
   cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
 }
 .opzioni-tab:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent);
                      color: var(--foreground); }
-/* La barra attiva ha un bordo a sinistra, non uno sfondo pieno: con
-   cinque voci uno sfondo colorato diventa un blocco, e le voci
-   vicine sembrano parte della voce scelta. */
+/* La barra attiva ha un bordo a sinistra, non uno sfondo pieno: con cinque voci uno sfondo colorato diventa un blocco,
+   e le voci vicine sembrano parte della voce scelta. */
 .opzioni-tab.attiva {
-  color: var(--foreground); font-weight: 600;
-  border-left: 2px solid var(--accent); padding-left: 8px;
+  color: var(--foreground);
+  font-weight: 600;
+  background: var(--accent-soft);
+  border-left: 0;
+  padding-left: 10px;
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .opzioni-tab:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 
@@ -732,10 +1253,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
                         padding-left: 10px; padding-bottom: 4px; }
 }
 
-/* Le skill come schede, non come righe: con cento righe si scorreva
-   per metri e confrontare i nomi era impossibile. In griglia se ne
-   vedono tre o quattro per riga, e il confronto diventa immediato —
-   che e' la ragione per cui uno cerca una skill. */
+/* Le skill come schede, non come righe: con cento righe si scorreva per metri e confrontare i nomi era impossibile. */
 .skill-griglia {
   display: grid;
   /* auto-fit con minimo: il numero di colonne dipende dalla larghezza
@@ -746,17 +1264,20 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   padding: 2px;
 }
 .skill-carta {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 9px 10px; border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   border: 1px solid var(--border);
   border-left: 3px solid transparent;
-  background: color-mix(in srgb, var(--foreground) 3%, transparent);
   min-width: 0;
+  border-radius: 10px;
+  border-color: var(--border);
+  background: var(--panel-2);
+  padding: 11px 12px;
 }
 .skill-carta:hover { border-color: var(--accent); }
-/* La generata ha il bordo sinistro colorato: e' la distinzione che
-   conta e deve stare li' dove si vede a colpo d'occhio, non in una
-   colonna di metadati da leggere. */
+/* La generata ha il bordo sinistro colorato: e' la distinzione che conta e deve stare li' dove si vede a colpo
+   d'occhio, non in una colonna di metadati da leggere. */
 .skill-carta-generata {
   border-left-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
@@ -773,7 +1294,11 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   min-width: 0;
 }
-.skill-segno { color: var(--accent); font-weight: 700; flex: 0 0 auto; }
+.skill-segno {
+  color: var(--accent);
+  font-weight: 700;
+  flex: 0 0 auto;
+}
 /* Due righe fisse: con una sola, metti' schede hanno altezze diverse e
    la griglia diventa una scacchiera. */
 .skill-carta-desc {
@@ -786,53 +1311,71 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .skill-carta-pie { display: flex; gap: 5px; margin-top: auto; padding-top: 4px; }
-.skill-pulsante { font-size: 11px; padding: 3px 8px; }
-.skill-bottone-cancella { color: var(--muted-foreground); }
-.skill-bottone-cancella:hover { color: #c55; border-color: #c55; }
+.skill-pulsante {
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+.skill-bottone-cancella {
+  color: var(--muted-foreground);
+}
+.skill-bottone-cancella:hover {
+  color: #c55;
+  border-color: #c55;
+}
 
 @media (max-width: 560px) {
   .skill-griglia { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 
-/* ---------- popup del selettore modello ----------
-   Il <select> nativo resta nel DOM: conserva il cambio col tastierino,
-   il submit e il value. Questo e' il pannello che si apre sopra, con
-   il cercatore.
+/* pannelli e modali */
+.panel-head b {
+  font-size: 15px;
+  color: var(--fg-strong);
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--fg-strong);
+}
 
-   La regola che decide tutto il resto: il native NON si nasconde, si
-   copre. Se si mettesse display:none, il browser non mette piu' il
-   focus sul campo, Tab salterebbe la select, e il form non saprebbe
-   piu' quale modello e' scelto — perche' il value letto da /api/models
-   arriverebbe da un campo che l'utente non puo' ne' vedere ne'
-   toccare. Un menu che funziona ma che non si puo' usare col
-   tastierino e' peggio di un menu che non si puo' cliccare: il primo
-   si vede subito, il secondo no. */
-/* Niente display:none, e niente classe "aperta".
-   Il pannello viene creato solo quando si apre e tolto quando si
-   chiude: uno stato in cui esiste gia' e' aperto. Con `display:none`
-   serviva una classe per mostrarlo — e il JavaScript non la metteva
-   mai, perche' nella riscrittura l'avevo dimenticata. Il pannello
-   esisteva, era costruito tutto, e restava invisibile per sempre.
-
-   Un elemento che si crea e si toglie non ha bisogno di essere
-   nascosto: la sua esistenza e' gia' lo stato. */
+/* popup del selettore modello: Il <select> nativo resta nel DOM: conserva il cambio col tastierino, il submit e il
+   value. */
+/* Niente display:none, e niente classe "aperta". */
 .mp-pop {
-  position: absolute; z-index: 40; min-width: 340px; max-width: 560px;
-  background: var(--bg-1); border: 1px solid var(--border);
-  border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
-  padding: 6px;
+  position: absolute;
+  z-index: 40;
+  min-width: 340px;
+  max-width: 560px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+  padding: 8px;
 }
 .mp-cerca {
-  width: 100%; padding: 8px 10px; margin-bottom: 4px;
-  background: var(--bg-2, rgba(255,255,255,.03));
-  border: 1px solid var(--border); border-radius: 7px;
-  color: var(--fg); font-family: var(--mono); font-size: 13px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 13px;
+  background: #0f131a;
 }
 .mp-cerca:focus { outline: none; border-color: var(--accent-dim); }
 .mp-lista { max-height: 320px; overflow-y: auto; }
 .mp-voce {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 8px;
 }
 .mp-voce:hover, .mp-voce.cursore { background: rgba(255,255,255,.06); }
 .mp-voce.corrente { outline: 1px solid var(--accent-dim); }
@@ -847,26 +1390,20 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 }
 .mp-bench.buono { background: rgba(80,200,120,.16); color: #7fd6a0; }
 .mp-bench.medio  { background: rgba(220,180,60,.16); color: #e0c070; }
-.mp-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.mp-meta {
+  min-width: 74px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
 .mp-vuoto { padding: 14px; text-align: center; color: var(--muted); font-size: 12.5px; }
 .mp-piede {
   border-top: 1px solid var(--border); margin-top: 4px; padding: 6px 10px 2px;
   color: var(--muted); font-size: 11px;
 }
 
-/* ---------- il selettore custom ----------
-   Tre pezzi, e il terzo e' quello che mancava.
-
-   1. mp-wrap fa da containing block: senza position:relative, il
-      posizionamento del pannello e' relativo alla PAGINA, e il
-      pannello finisce nell'angolo in alto a sinistra invece che sotto
-      il bottone. Il CSS del pannello c'era, ma senza questa riga non
-      aveva nessun riferimento.
-   2. mp-nascosto tiene il select fuori dalla vista ma NON fuori dal
-      tabulamento: display:none farebbe sparire il campo dal percorso
-      di tabulazione, e il value che porta al server verrebbe da un
-      campo che l'utente non puo' raggiungere.
-   3. mp-btn e' l'unica cosa visibile, e sembra un select. */
+/* Selettore custom: mp-wrap fa da containing block per il pannello. */
 .mp-wrap { position: relative; display: inline-block; }
 .mp-nascosto {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -886,22 +1423,13 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* L'attesa: una riga che pulsa.
-
-   Il colore e' quello del testo secondario, non un colore nuovo:
-   e' un'informazione, non un avviso. La pulsazione dice "vivo" senza
-   occupare spazio e senza dover dire niente.
-
-   Con prefers-reduced-motion la pulsazione sparisce e la riga resta:
-   chi ha chiesto di non avere animazioni vuole comunque sapere che
-   il modello sta lavorando, e togliere la riga insieme all'animazione
-   lascerebbe lo schermo vuoto — che e' proprio il difetto che questa
-   cosa doveva risolvere. */
+/* L'attesa: una riga che pulsa. */
 .attesa {
-  color: var(--muted);
   font-style: italic;
-  padding: 2px 0;
   animation: attesa-pulse 1.6s ease-in-out infinite;
+  padding: 2px 0 4px;
+  font-size: 12.5px;
+  color: var(--muted-2);
 }
 
 @keyframes attesa-pulse {
@@ -911,9 +1439,15 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 
 @media (prefers-reduced-motion: reduce) {
   .attesa { animation: none; opacity: .8; }
+
+*, *::before, *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+}
 }
 
-/* ---------- budget section ---------- */
+/* budget section */
 .opzioni-budget {
   display: flex;
   flex-direction: column;
@@ -1036,6 +1570,13 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   overflow-wrap: anywhere;
 }
 
+/* Il segno che un fatto sta nel prompt di ogni conversazione. */
+.memoria-imp {
+  color: var(--warn);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 .memoria-campi {
   display: flex;
   gap: 8px;
@@ -1046,31 +1587,9 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   flex: 1;
 }
 
+/* pannello laterale: Flex-item del body, non overlay: la chat si restringe e resta visibile. */
 
-/* ---------- pannello laterale ----------
-   Flex-item del body, non overlay: la chat si restringe e resta visibile.
-   Un overlay coprirebbe la conversazione proprio mentre la si sfoglia,
-   ed è il difetto classico di una sidebar fatta male. */
-
-/* Il body è `flex-direction: column`, quindi sidebar e chat si impilano
-   VERTICALMENTE. Avevo progettato la sidebar come se stesse ACCANTO alla
-   chat, e `flex: 0 0 268px` in un contenitore column fissa l'ALTEZZA a
-   268px, non la larghezza: la sidebar restava alta 268px e il resto
-   finiva sotto il bordo — misurato nel browser, bottone Capacità a 448px
-   su una sidebar che chiude a 323.
-
-   Serve un contenitore ROW intorno a sidebar e main. */
-#sidebar {
-  width: 268px;
-  flex: 0 0 268px;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border-right: 1px var(--border) solid;
-  border-bottom: 1px var(--border) solid;
-  overflow: hidden;
-  min-height: 0;
-}
+/* Il body è `flex-direction: column`, quindi sidebar e chat si impilano VERTICALMENTE. */
 
 /* Il corpo centrale: sidebar a sinistra, chat a destra, ognuna alta
    quanto la finestra meno l'header. */
@@ -1097,82 +1616,84 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 }
 
 .side-titolo {
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .08em;
-  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: .12em;
+  color: var(--muted-2);
 }
 
 .side-x { padding: 0 8px; font-size: 17px; line-height: 1; }
 
 .side-azioni {
-  display: flex; gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  display: flex;
+  padding: 8px 12px 10px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .side-azioni button { flex: 1; }
 
+/* Nessuna delle tre liste si prende tutto lo spazio: la sidebar è un flex column, e con
+   `flex: 1 1 auto` la cronologia schiaccia a zero pixel quelle sotto, che restano invisibili. */
+/* Le quote sono in FRAZIONI di flex, non in vh: in vh si sommano fra loro e alle teste fisse, e sforavano la finestra
+   (84vh + ~170px di titoli e campi). */
+/* Le tre liste si spartiscono lo spazio avanzato in parti uguali. */
 .side-elenco {
-  list-style: none; margin: 0; padding: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
   overflow-y: auto;
-  min-height: 0;
-}
-
-/* Nessuna delle tre liste si prende tutto lo spazio: la sidebar è un flex
-   column, e con `flex: 1 1 auto` la cronologia schiaccia a zero pixel
-   quelle sotto. La lista dei fatti restava piena ma invisibile. */
-/* Le quote sono in FRAZIONI di flex, non in vh: in vh si sommano fra
-   loro e alle teste fisse, e sforavano la finestra (84vh + ~170px di
-   titoli e campi). Su 900px erano 928px — 28px di troppo, e con 104
-   skill la lista ne voleva 2704. */
-/* Le tre liste si spartiscono lo spazio avanzato in parti uguali. Ma la
-   SEZIONE della memoria era `flex: 0 0 auto`, cioè alta quanto il suo
-   contenuto: con i campi di ricerca e le statistiche prendeva 185px e
-   spingeva la sezione Skill fuori dal bordo (misurato: sfora di 10px con
-   la lista delle skill ancora VUOTA, quindi non era la lista).
-
-   Da qui: anche le sezioni si spartiscono lo spazio, e dentro ognuna la
-   propria lista scorre. */
-.side-elenco { flex: 1 1 0; min-height: 60px; }
-.side-mem-elenco { flex: 1 1 0; min-height: 40px; }
-.side-sez { flex: 1 1 0; min-height: 0; }
-
-.side-sez {
-  border-top: 1px solid var(--border);
-  padding: 8px 12px 0;
-  display: flex; flex-direction: column;
-  min-height: 0;
+  flex: 1 1 0;
+  min-height: 60px;
 }
 
 .side-msg { padding: 0 12px 8px; }
 
 .side-riga {
-  display: flex; align-items: flex-start; gap: 4px;
-  padding: 5px 6px; border-radius: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 7px 8px;
+  margin-bottom: 2px;
+  border-radius: 8px;
 }
 
 .side-riga:hover { background: var(--panel-2, rgba(255,255,255,.03)); }
 
-.side-riga.attiva { background: var(--panel-2, rgba(255,255,255,.06)); }
+.side-riga.attiva {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
 
 /* Il testo si prende lo spazio che resta; il pin e la X non si
    schiacciano mai, altrimenti spariscono su titoli lunghi. */
 .side-apri {
-  flex: 1; min-width: 0;
-  text-align: left; background: none; border: none;
-  color: inherit; font: inherit; cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
   padding: 0;
+  line-height: 1.35;
 }
 
 .side-testo {
   display: block;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
 }
 
 .side-meta {
   display: block;
-  font-size: 10.5px; color: var(--muted);
   margin-top: 1px;
+  font-size: 10px;
+  color: var(--muted-2);
 }
 
 .side-pin {
@@ -1195,47 +1716,59 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 /* Su schermi stretti la sidebar copre: sotto i 640px non c'è spazio
    per chat + pannello, e restringere la chat a 300px la rende illeggibile. */
 @media (max-width: 640px) {
-  #sidebar {
-    position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
-    width: 82vw; flex-basis: 82vw;
-    box-shadow: 0 0 0 100vmax rgba(0,0,0,.35);
-  }
+
 }
 
+/* sidebar */
+.side-azioni .primary {
+  background: linear-gradient(180deg, #7fa6ff, #5b8cff);
+  border-color: transparent;
+  color: #0a1020;
+  font-weight: 600;
+}
+.side-azioni .primary:hover:not(:disabled) {
+  background: #8db1ff;
+}
 
-/* ---------- pagina Capacità ----------
-   Modale centrato: è un posto dove si VA a guardare e da cui si esce,
-   non una superficie di lavoro. Riusa .panel/.panel-box delle Opzioni. */
+/* pagina Capacità: Modale centrato: è un posto dove si VA a guardare e da cui si esce, non una superficie di lavoro. */
 
 /* Piu' larga delle Opzioni: qui dentro c'e' una griglia di schede, e a
    720px le skill diventano due colonne con i nomi spezzati. */
 .capacita-box { max-width: 940px; width: 94vw; }
 
-/* Le sezioni del modale: una per tab. Il pannello skill si porta dietro
-   i suoi margini da sezione di Opzioni (bordo in alto, spazio ai lati):
-   qui il bordo non separa piu' niente, la tab lo fa gia'. */
+/* Le sezioni del modale: una per tab. */
 .cap-sez { padding: 6px 14px 14px; }
 .cap-sez .opzioni-skill {
   margin: 4px 0 0; padding: 0; border-top: none;
 }
 
 .capacita-nav {
-  display: flex; gap: 6px;
-  padding: 8px 14px;
+  display: flex;
   border-bottom: 1px solid var(--border);
+  padding: 0 2px 10px;
+  gap: 4px;
 }
 
 .cap-tab {
-  background: none; border: 1px solid transparent; border-radius: 6px;
-  color: var(--muted); font: inherit; font-size: 13px;
-  padding: 4px 12px; cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 5px 12px;
+  border-radius: 8px;
+  color: var(--muted);
 }
 
-.cap-tab:hover { color: var(--fg); }
+.cap-tab:hover {
+  color: var(--fg);
+  background: rgba(255, 255, 255, .03);
+}
 
 .cap-tab.attiva {
-  color: var(--fg); border-color: var(--border);
-  background: var(--panel-2, rgba(255,255,255,.04));
+  background: var(--accent-soft);
+  border-color: rgba(111, 155, 255, .25);
+  color: var(--fg-strong);
 }
 
 .cap-filtro {
@@ -1282,13 +1815,10 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 
 .cap-vuoto { padding: 14px; color: var(--muted); font-size: 13px; }
 
-/* ---------- sidebar: memoria e resize ---------- */
+/* sidebar: memoria e resize */
 
-/* Il progetto attivo. Sta sopra le sezioni della sidebar perche'
-   riguarda tutto: la memoria e' condivisa, ma i fatti che servono sono
-   quelli di questo progetto. Un progetto non sposta nulla su disco:
-   e' un'etichetta, e si cambia con un click. */
-/* ---------- progetti ---------- */
+/* Il progetto attivo. */
+/* progetti */
   .side-progetti { list-style: none; margin: 8px 0; padding: 0; }
   .side-progetti li {
     padding: 6px 8px; border: 1px solid var(--border);
@@ -1329,9 +1859,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   flex-direction: column;
   gap: 4px;
 }
-/* Il menu a tendina del progetto attivo. Occupa tutta la larghezza:
-   e' una scelta, non un campo da digitare, e la freccia deve essere
-   sempre visibile a destra. */
+/* Il menu a tendina del progetto attivo. */
 #side-progetto-select {
   width: 100%;
   box-sizing: border-box;
@@ -1351,11 +1879,13 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   display: flex; gap: 5px; padding: 0 12px 6px;
 }
 
-.side-mem-campi input { flex: 1; min-width: 0; font-size: 12px; }
-
 .side-mem-elenco {
-  list-style: none; margin: 0; padding: 0 6px;
-  overflow-y: auto; flex: 1 1 0; min-height: 40px;
+  list-style: none;
+  margin: 0;
+  padding: 0 6px;
+  overflow-y: auto;
+  flex: 1 1 0;
+  min-height: 40px;
 }
 
 .side-mem-riga {
@@ -1379,7 +1909,17 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 /* Maniglia di ridimensionamento. Sottile di proposito: si afferra col
    mouse, non si guarda. */
 #sidebar {
+  flex: 0 0 268px;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px var(--border) solid;
+  overflow: hidden;
+  min-height: 0;
   position: relative;
+  width: 280px;
+  flex-basis: 280px;
+  background: #101319;
+  border-right: 1px solid var(--border-soft);
 }
 
 .side-maniglia {
@@ -1392,9 +1932,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 /* Mentre si trascina non si seleziona il testo della cronologia. */
 body.side-trascina { user-select: none; cursor: col-resize; }
 
-
-/* ---------- sidebar: stato ridotto e pulsante capacità ----------
-   Ridotta è una striscia: si vede che c'è, non ingombra. */
+/* sidebar: stato ridotto e pulsante capacità Ridotta è una striscia: si vede che c'è, non ingombra. */
 
 #sidebar.ridotta { width: 60px; flex-basis: 60px; }
 
@@ -1417,6 +1955,20 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 }
 .side-rail button:hover { border-color: var(--border); }
 
+.icona {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mic-float .icona-stop { display: none; }
+.mic-float.recording .icona-mic { display: none; }
+.mic-float.recording .icona-stop { display: block; }
+
 #sidebar.ridotta .side-elenco {
   padding: 6px 4px;
   overflow-x: hidden;
@@ -1429,17 +1981,6 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 #sidebar.ridotta .side-testo,
 #sidebar.ridotta .side-meta { display: none; }
 
-.side-cap-btn {
-  display: block; width: 100%;
-  margin: 4px 0 6px; padding: 5px 8px;
-  background: none; border: 1px solid var(--border); border-radius: 6px;
-  color: var(--accent); font: inherit; font-size: 12px;
-  cursor: pointer; text-align: left;
-}
-
-.side-cap-btn:hover { background: var(--panel-2, rgba(255,255,255,.04)); }
-
-
 .side-mem-stat {
   padding: 2px 12px 4px;
   font-size: 10px;
@@ -1449,12 +1990,30 @@ body.side-trascina { user-select: none; cursor: col-resize; }
    così vuol dire la stessa cosa — "questo resta in cima". */
 /* Modale della memoria: la lista in sidebar e' un sommario di una riga,
    e leggerla lì non serve a nulla. Qui si sfoglia, si cerca, si corregge. */
-.mem-modal { position:fixed; inset:0; background:rgba(0,0,0,.78);
-  display:none; align-items:center; justify-content:center; z-index:2002; }
+.mem-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.78);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2002;
+}
 .mem-modal.show { display:flex; }
-.mem-modal-box { background:var(--card,#14161c); color:var(--fg,#eee);
-  border:1px solid var(--border,#333); border-radius:12px;
-  width:880px; max-width:94vw; height:80vh; display:flex; flex-direction:column; padding:14px; }
+.mem-modal-box {
+  color: var(--fg,#eee);
+  border: 1px solid var(--border,#333);
+  width: 880px;
+  max-width: 94vw;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border-radius: 16px;
+  border-color: var(--border);
+  background: linear-gradient(180deg, var(--panel), #11151d);
+  box-shadow: 0 26px 80px rgba(0, 0, 0, .6);
+}
 .mem-modal-corpo { flex:1; overflow-y:auto; min-height:0; }
 .mem-cerca-riga { display:flex; gap:6px; margin-bottom:10px; }
 .mem-cerca-riga input { flex:1; min-width:0; }
@@ -1486,24 +2045,12 @@ body.side-trascina { user-select: none; cursor: col-resize; }
   margin-right: 2px;
 }
 
-
-/* ---------- la sezione Skill non deve mai sparire ----------
-   Le tre sezioni hanno quote di altezza: cronologia 40vh, memoria 22vh,
-   skill 22vh. La sidebar è overflow:hidden, e con 104 skill la lista
-   sforava la sua quota e spingeva FUORI l'intera sezione — titolo,
-   bottone "Apri tutte le capacità" e lista. Il bottante non era
-   "sparito": era sotto il bordo, invisibile.
-
-   `flex-shrink: 0` sulla sezione dice che non si comprime; lo scroll
-   interno della lista assorbe il troppo. */
-.side-sez {
-  flex-shrink: 0;
-  min-height: 0;
-}
+/* la sezione Skill non deve mai sparire: Le tre sezioni hanno quote di altezza: cronologia 40vh, memoria 22vh, skill
+   22vh. */
 
 .side-cerca-campi {
-  padding: 0 10px 6px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .side-cerca-campi input {
@@ -1525,11 +2072,8 @@ body.side-trascina { user-select: none; cursor: col-resize; }
   -webkit-box-orient: vertical;
 }
 
-
-/* ---------- campi di scrittura ----------
-   Prima non avevano stile proprio: ereditavano dal browser, e su un tema
-   scuro un input bianco con l'ombra interna stonava contro tutto il resto.
-   Una regola sola per tutti, e le eccezioni sotto. */
+/* campi di scrittura: Prima non avevano stile proprio: ereditavano dal browser, e su un tema scuro un input bianco con
+   l'ombra interna stonava contro tutto il resto. */
 
 input[type="text"],
 input[type="search"],
@@ -1537,20 +2081,19 @@ input[type="password"],
 input[type="number"],
 textarea,
 select {
-  background: var(--panel-2);
   color: var(--fg);
   border: 1px solid var(--border);
-  border-radius: 6px;
   padding: 6px 9px;
   font: inherit;
   font-size: 13px;
   line-height: 1.4;
   transition: border-color .12s ease, box-shadow .12s ease;
+  background: #0f131a;
+  border-color: var(--border);
+  border-radius: 8px;
 }
 
-/* Il segno che il campo è attivo. Senza, su fondo scuro non si capisce
-   dove sta scrivendo — l'anello usa l'accento invece di un bordo più
-   spesso, che taglia il layout. */
+/* Il segno che il campo è attivo. */
 input:focus,
 textarea:focus,
 select:focus {
@@ -1583,25 +2126,35 @@ select:disabled {
   padding: 5px 8px;
 }
 
-.side-mem-campi input { flex: 1; min-width: 0; }
-
-/* ---------- barre di scorrimento ----------
-   Non c'era una riga su di loro: su un tema scuro venivano chiare, con
-   l'angolo grigio di Windows, e in tre punti (cronologia, chat, lista
-   capacità) erano l'unica cosa che non era del tema.
-
-   `color-scheme: dark` è la mette che conta: dice al browser di disegnare
-   i suoi controlli per fondo scuro. Poi le regole per WebKit/Blinker
-   aggiustano quello che resta, e Firefox prende `scrollbar-color`. */
-:root {
-  color-scheme: dark;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+.side-mem-campi input {
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
+/* campi */
+input[type="text"]:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+input[type="search"]:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+input[type="password"]:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+input[type="number"]:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+/* Scrollbar del tema scuro: `color-scheme: dark` fa disegnare i controlli del browser per fondo scuro. */
+
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
 }
 
 *::-webkit-scrollbar-track {
@@ -1609,15 +2162,15 @@ select:disabled {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 6px;
-  border: 2px solid transparent;
+  background: #2b3340;
+  border: 3px solid transparent;
   background-clip: content-box;
+  border-radius: 8px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
   border: 2px solid transparent;
+  background: #3a4557;
   background-clip: content-box;
 }
 
@@ -1627,56 +2180,105 @@ select:disabled {
   background: transparent;
 }
 
-
-/* ---------- il ragionamento, mentre accade ----------
-   Distinto dalla risposta ma non nascosto: se fosse grigio e piccolo non
-   si leggerebbe, se fosse uguale alla risposta non si capirebbe quale
-   delle due è la risposta. */
+/* il ragionamento, mentre accade: Distinto dalla risposta ma non nascosto: se fosse grigio e piccolo non si
+   leggerebbe, se fosse uguale alla risposta non si capirebbe quale delle due è la risposta. */
 .ragionamento {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--muted);
-  background: var(--panel-2);
-  border-left: 2px solid var(--border);
-  border-radius: 0 6px 6px 0;
-  padding: 8px 11px;
-  margin: 6px 0 10px;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 220px;
   overflow-y: auto;
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-left: 2px solid var(--border-strong);
+  border-radius: 0 10px 10px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
 .ragionamento[hidden] { display: none; }
 
-/* Markdown dei messaggi assistant: sobrio, nelle dimensioni del testo.
-   Niente librerie esterne: bastano grassetto, liste, codice e titoli
-   piccoli — il 95% di quello che un modello scrive davvero. */
-.msg .body p { margin: 0.3em 0; }
-.msg .body p:first-child { margin-top: 0; }
-.msg .body p:last-child { margin-bottom: 0; }
-.msg .body ul, .msg .body ol { margin: 0.3em 0; padding-left: 1.4em; }
-.msg .body li { margin: 0.15em 0; }
+/* Markdown dei messaggi assistant: sobrio, nelle dimensioni del testo. */
+.msg .body p {
+  margin: .55em 0;
+}
+.msg .body p:first-child {
+  margin-top: 0;
+}
+.msg .body p:last-child {
+  margin-bottom: 0;
+}
+.msg .body ul, .msg .body ol {
+  margin: .5em 0;
+  padding-left: 1.5em;
+}
+.msg .body li {
+  margin: .2em 0;
+}
 .msg .body code {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 0.9em;
-  background: rgba(127, 127, 127, 0.15);
-  padding: 0.05em 0.3em;
-  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: .88em;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid var(--border-soft);
+  padding: .08em .35em;
+  border-radius: 5px;
+  color: #dce5ff;
 }
 .msg .body pre {
-  background: rgba(127, 127, 127, 0.12);
-  padding: 0.5em 0.7em;
-  border-radius: 5px;
-  overflow-x: auto;
   font-size: 0.9em;
+  margin: .75em 0;
+  padding: 12px 14px;
+  background: #0a0d13;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+  overflow-x: auto;
+  line-height: 1.5;
 }
-.msg .body pre code { background: none; padding: 0; }
-.msg .body a { color: var(--accent, #4a9eff); }
-.msg .body hr { border: none; border-top: 1px solid var(--border, #444); margin: 0.5em 0; }
-.md-h1 { font-size: 1.15em; font-weight: 700; margin: 0.4em 0 0.2em; }
-.md-h2 { font-size: 1.08em; font-weight: 700; margin: 0.4em 0 0.2em; }
-.md-h3 { font-size: 1em; font-weight: 700; margin: 0.3em 0 0.15em; }
+.msg .body pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #d9e1f0;
+  font-size: 12.5px;
+}
+.msg .body a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(111, 155, 255, .35);
+}
+.msg .body hr {
+  border: none;
+  border-top: 1px solid var(--border, #444);
+  border-top-color: var(--border-soft);
+  margin: .9em 0;
+}
+.md-h1 {
+  font-weight: 700;
+  color: var(--fg-strong);
+  letter-spacing: -.01em;
+  line-height: 1.35;
+  font-size: 1.22em;
+  margin: .8em 0 .3em;
+}
+.md-h2 {
+  font-weight: 700;
+  color: var(--fg-strong);
+  letter-spacing: -.01em;
+  line-height: 1.35;
+  font-size: 1.12em;
+  margin: .7em 0 .25em;
+}
+.md-h3 {
+  font-weight: 700;
+  color: var(--fg-strong);
+  letter-spacing: -.01em;
+  line-height: 1.35;
+  font-size: 1.02em;
+  margin: .6em 0 .2em;
+}
 
 /* Toggle verifica (✓) e popover. Coerente con la graffetta: ghost,
    stesso ingombro. "acceso" lo distingue a colpo d'occhio. */
@@ -1684,42 +2286,13 @@ select:disabled {
 /* Il piano acceso deve leggersi come uno stato, non come un bottone
    premuto per caso: stessa forma del toggle verifica. */
 #btn-piano.acceso { color: var(--accent); background: var(--panel-2, rgba(255,255,255,.08)); }
-/* Un piano ha i passi su righe separate. Con lo spazio collassato
-   diventava un paragrafo unico, illeggibile proprio quando bisogna
-   decidere se approvarlo. */
+/* Un piano ha i passi su righe separate. */
 #domanda-testo.piano { white-space: pre-wrap; text-align: left; }
-/* Pulsante microfono floating: in basso a destra sopra la chat, piccolo,
-   semitrasparente, non intrusivo. Scompare quando non disponibile. */
-.mic-float {
-  position: fixed;
-  right: 18px;
-  bottom: calc(18px + env(safe-area-inset-bottom));
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,255,255,.18);
-  background: rgba(30,30,34,.78);
-  backdrop-filter: blur(8px);
-  color: var(--fg);
-  font-size: 22px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 6px 22px rgba(0,0,0,.35);
-  z-index: 60;
-  transition: transform .15s ease, opacity .15s ease, background .15s ease;
-}
+
 .mic-float:hover { transform: scale(1.08); background: rgba(50,50,56,.92); }
-.mic-float:disabled { opacity: .28; cursor: not-allowed; }
-.mic-float.recording {
-  background: #c0392b;
-  border-color: #e74c3c;
-  color: #fff;
-  animation: micPulse 1s ease-in-out infinite;
-}
-@keyframes micPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
 @media (max-width: 640px) {
-  .mic-float { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); width: 44px; height: 44px; font-size: 20px; }
+
 }
 
 #verifica-pop {
@@ -1752,10 +2325,6 @@ select:disabled {
 }
 .verifica-nota { margin-top: 4px; line-height: 1.35; }
 
-/* Tracce dei turni, nella sidebar. Una riga per turno; al click si apre
-   la sequenza degli eventi. Sobrio: è uno strumento di diagnosi, non
-   deve competere con la chat. */
-.side-tracce { list-style: none; margin: 0; padding: 0; }
 .side-filtri-tracce { display: flex; align-items: center; gap: 8px;
   flex-wrap: wrap; margin: 4px 0 8px; }
 .side-filtri-tracce select { flex: 1 1 120px; min-width: 0;
@@ -1767,18 +2336,33 @@ select:disabled {
 .side-traccia .side-meta { color: var(--muted, #999); }
 /* Il dettaglio vive in un modale: aperto sotto la lista, finiva fuori
    dal viewport, e il click sembrava non funzionare. */
-.traccia-modal { position:fixed; inset:0; background:rgba(0,0,0,.78);
-  display:none; align-items:center; justify-content:center; z-index:2003; }
+.traccia-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.78);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2003;
+}
 .traccia-modal.show { display:flex; }
-.traccia-modal-box { background:var(--card,#14161c); color:var(--fg,#eee);
-  border:1px solid var(--border,#333); border-radius:12px;
-  width:880px; max-width:94vw; height:80vh; display:flex; flex-direction:column; padding:14px; }
+.traccia-modal-box {
+  color: var(--fg,#eee);
+  border: 1px solid var(--border,#333);
+  width: 880px;
+  max-width: 94vw;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border-radius: 16px;
+  border-color: var(--border);
+  background: linear-gradient(180deg, var(--panel), #11151d);
+  box-shadow: 0 26px 80px rgba(0, 0, 0, .6);
+}
 .traccia-modal-corpo { flex:1; overflow-y:auto; min-height:0; }
 
-/* Il diff multi-file: un blocco per file, ogni riga colorata dal suo
-   segno. La larghezza serve perche' un diff di codice va letto senza
-   andare a capo a ogni riga: lo scroll orizzontale e' meno peggio di un
-   diff illeggibile. */
+/* Il diff multi-file: un blocco per file, ogni riga colorata dal suo segno. */
 .diff-modal-box { width: 1040px; height: 84vh; }
 .diff-file { margin-bottom: 18px; }
 .diff-testa { display:flex; justify-content:space-between; gap:12px;
@@ -1805,20 +2389,21 @@ select:disabled {
   word-break: break-word; background: var(--panel-2, rgba(255,255,255,.04));
   border-radius: 6px; font-size: 11px; line-height: 1.35; }
 
-/* Intestazione uniforme di ogni sezione della sidebar: titolo a sinistra,
-   eventuale controllo a destra. Prima solo Cronologia aveva il contenitore
-   flex, e le altre sezioni mostravano il titolo come blocco con uno spazio
-   vuoto a destra — incoerenza visiva fra le intestazioni. Adesso tutte le
-   sezioni hanno la stessa forma. */
+/* Intestazione uniforme di ogni sezione della sidebar: titolo a sinistra, eventuale controllo a destra. */
 .side-testata {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px 4px;
+  padding: 10px 12px 6px;
 }
 .side-testata .side-titolo { flex: 1 1 auto; }
 .side-cap-btn {
+  display: block;
+  width: 100%;
+  margin: 4px 0 6px;
+  font: inherit;
+  text-align: left;
   background: none;
   border: 1px solid var(--border, #444);
   border-radius: 4px;
@@ -1827,21 +2412,23 @@ select:disabled {
   padding: 2px 7px;
   cursor: pointer;
   flex-shrink: 0;
+  border-color: var(--border-soft);
 }
-.side-cap-btn:hover { color: var(--fg, #eee); border-color: var(--accent); }
+.side-cap-btn:hover {
+  background: var(--panel-2, rgba(255,255,255,.04));
+  color: var(--fg, #eee);
+  border-color: var(--accent-dim);
+}
 
-/* Solo le liste assorbono lo schiacciamento. Teste, campi, stat, note e
-   bottoni restano interi (flex: none); le tre liste + tracce scrollano
-   dentro il proprio box. Senza, quando la sidebar è corta il testo esce
-   dal proprio box e dipinge sopra la sezione dopo — visto in uso: la riga
-   "memoria: memory.md" sopra l'intestazione SKILL. Le liste erano già a
-   posto (overflow-y: auto); a mancare era il divieto di restringersi per
-   tutto il resto. */
+/* Solo le liste assorbono lo schiacciamento. */
 #sidebar > :not(ul):not(.side-sez),
 .side-sez > :not(ul) {
   flex: none;
 }
 .side-tracce {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   flex: 1 1 0;
   min-height: 80px;
   overflow-y: auto;
@@ -1853,12 +2440,18 @@ select:disabled {
 #side-sez-progetti { flex: 2 1 0; }
 #side-sez-tracce { flex: 1 1 0; }
 
-/* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non
-   basta: tiene interi i figli ma la sezione schiacciata resta più corta
-   del contenuto, che continua a sbordare sulla sezione dopo. Con
-   overflow:hidden il di più si taglia al bordo invece di accavallarsi —
-   le liste scrollano dentro, il resto resta dov'è. */
-.side-sez { overflow: hidden; }
+/* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non basta: tiene interi i figli ma la sezione
+   schiacciata resta più corta del contenuto, che continua a sbordare sulla sezione dopo. */
+.side-sez {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--border-soft);
+  padding: 10px 12px 0;
+}
 
 /* Onboarding e goal-bar: stili spostati qui per mantenere index.html con il
    solo blocco diagnostico inline. */
@@ -1866,30 +2459,74 @@ select:disabled {
   z-index: 999; display: flex; align-items: center; justify-content: center;
   padding: 16px; }
 .onboard-backdrop[hidden] { display: none !important; }
-.onboard { max-width: 920px; width: 100%; background: var(--card, #1a1a1f);
-  border: 1px solid var(--border, #333); border-radius: 14px; padding: 20px;
-  max-height: 90vh; overflow: auto; color: var(--foreground, #eee); }
-.onboard h2 { margin: 0 0 6px; }
+.onboard {
+  max-width: 920px;
+  width: 100%;
+  border: 1px solid var(--border, #333);
+  max-height: 90vh;
+  overflow: auto;
+  color: var(--foreground, #eee);
+  border-radius: 16px;
+  border-color: var(--border);
+  background: linear-gradient(180deg, var(--panel), #11151d);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+  padding: 24px;
+}
+.onboard h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -.01em;
+}
 .onboard .sotto { color: var(--muted-foreground, #aaa); margin: 0 0 16px; }
 .onboard-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(200px,1fr));
   gap: 10px; }
-.onboard-card { text-align: left; background: var(--bg2, #121217);
-  border: 1px solid var(--border,#333); border-radius: 10px; padding: 12px;
-  cursor: pointer; transition: border-color .12s; }
-.onboard-card:hover { border-color: var(--accent,#C8A95E); }
+.onboard-card {
+  text-align: left;
+  border: 1px solid var(--border,#333);
+  padding: 12px;
+  cursor: pointer;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border-color: var(--border);
+  transition: border-color .14s ease, transform .14s ease;
+}
+.onboard-card:hover {
+  border-color: var(--accent,#C8A95E);
+  transform: translateY(-1px);
+}
 .onboard-card .t { font-weight: 700; margin-bottom: 4px; }
 .onboard-card .d { font-size: 13px; color: var(--muted-foreground,#aaa); }
 .onboard-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px;
   align-items: center; flex-wrap: wrap; }
 .onboard-skip { background: transparent; border: 1px solid var(--border,#444);
   color: var(--foreground,#eee); padding: 8px 12px; border-radius: 8px; cursor: pointer; }
-.goal-bar { position: fixed; left: 12px; bottom: 12px; z-index: 500; max-width: 620px;
-  background: var(--card,#1a1a1f); border: 1px solid var(--border,#333);
-  border-radius: 12px; padding: 10px; backdrop-filter: blur(6px); }
+.goal-bar {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 500;
+  max-width: 620px;
+  border: 1px solid var(--border,#333);
+  border-radius: 16px;
+  border-color: var(--border);
+  background: linear-gradient(180deg, var(--panel), #11151d);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+  padding: 12px;
+}
 .goal-bar-inner { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .goal-bar-inner input { flex: 1 1 200px; }
-.goal-output { margin-top: 8px; max-height: 180px; overflow: auto; font-size: 12px;
-  color: var(--muted-foreground,#aaa); white-space: pre-wrap; }
+.goal-output {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 12px;
+  color: var(--muted-foreground,#aaa);
+  white-space: pre-wrap;
+  background: #0a0d13;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
 .goal-bar-inner select, .goal-bar-inner input[type=number] { flex: 0 1 auto; }
 #mcp-preset-campi label { flex: 1 1 240px; display: flex; flex-direction: column;
   gap: 3px; font-size: 12px; color: var(--muted-foreground, #aaa); }
@@ -1913,22 +2550,43 @@ select:disabled {
 .gate-attesa { background: #333; color: #bbb; }
 .goal-meta { font-size: 11px; opacity: .75; }
 
-/* ── Modal progetti ────────────────────────────────────────────
-   Stesso pattern dei modal esistenti (mem-modal, traccia-modal):
-   overlay fissato sopra tutto, box centrato, scroll interno.
-   Due colonne: sinistra lista + nuova <
-   ───────────────────────────────────────────────────────────── */
+/* ── Modal progetti ──────────────────────────────────────────── Stesso pattern dei modal esistenti (mem-modal,
+   traccia-modal): overlay fissato sopra tutto, box centrato, scroll interno. */
 .progetti-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .progetti-modal[hidden] { display: none; }
-.progetti-modal-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; width: min(760px, 94vw); height: min(78vh, 720px); display: flex; flex-direction: column; overflow: hidden; }
-.progetti-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.progetti-modal-box {
+  border: 1px solid var(--border);
+  width: min(760px, 94vw);
+  height: min(78vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  border-color: var(--border);
+  background: linear-gradient(180deg, var(--panel), #11151d);
+  box-shadow: 0 26px 80px rgba(0, 0, 0, .6);
+}
+.progetti-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+  border-bottom-color: var(--border-soft);
+}
 .progetti-modal-titolo { font-weight: 600; font-size: 14px; }
 .progetti-modal-head .ghost { background: transparent; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
 .progetti-modal-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .progetti-modal-col { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .progetti-modal-col:first-child { flex: 1 1 60%; border-right: 1px solid var(--border); }
 .progetti-modal-col:last-child { flex: 1 1 40%; overflow-y: auto; }
-.progetti-modal-titolo-col { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 10px 14px 4px; }
+.progetti-modal-titolo-col {
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 10px 14px 4px;
+  color: var(--muted-2);
+  letter-spacing: .1em;
+}
 .progetti-modal-lista { list-style: none; margin: 0; padding: 4px 14px; overflow-y: auto; flex: 1 1 auto; }
 .progetti-modal-lista li { border-bottom: 1px solid var(--border); padding: 6px 0; }
 .progetti-modal-lista li .riga { display: flex; align-items: center; gap: 6px; }
@@ -1944,17 +2602,26 @@ select:disabled {
 .progetti-modal-file .riga .azione { color: var(--muted); font-size: 11px; }
 .progetti-modal-foot { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
 
+/* responsive */
+input {
+  transition: border-color .14s ease, background .14s ease, color .14s ease, box-shadow .14s ease;
+}
+.logo::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(150deg, #82a8ff, #3b5bc0);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 2px 8px rgba(59, 91, 192, .35);
+  flex-shrink: 0;
+}
+#log:empty + .vuoto {
+  display: block;
+}
 
-/* ============================================================
-   MOBILE / WEBAPP: layout dedicato per telefono.
-   ============================================================ */
+/* Layout dedicato per telefono. */
 @media (max-width: 640px) {
-  header {
-    flex-wrap: wrap;
-    row-gap: 6px;
-    padding: 8px 10px;
-  }
-  .logo { font-size: 15px; }
+
   .ver { display: none; }
   #btn-side { order: -1; }
   /* selettori su riga propria, a tutta larghezza */
@@ -1963,19 +2630,13 @@ select:disabled {
   .grow { flex-basis: 100%; height: 0; }
   button { min-height: 40px; padding: 8px 12px; }
   .centro { flex-direction: column; }
-  #sidebar {
-    position: fixed; top: 0; bottom: 0; left: 0; z-index: 40;
-    width: 86vw; max-width: 340px;
-    transform: translateX(-100%);
-    transition: transform .2s ease;
-    box-shadow: 0 0 0 100vmax rgba(0,0,0,.45);
-  }
+
   #sidebar.aperta { transform: translateX(0); }
   body.sidebar-aperta #sidebar { transform: translateX(0); }
-  main { padding: 12px 0 80px; }
-  .wrap { padding: 0 12px; }
+
   /* input area sticky bottom */
-  .input-area, #input-area, footer { position: sticky; bottom: 0; background: var(--bg); padding-bottom: env(safe-area-inset-bottom); }
+  .input-area, #input-area { position: sticky; bottom: 0; background: var(--bg); padding-bottom: env(safe-area-inset-bottom); }
+  footer { position: sticky; bottom: 0; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
   textarea, #input { font-size: 16px; } /* evita zoom iOS */
   /* pannelli full screen */
   .panel, .modal, .capacita { position: fixed; inset: 0; margin: 0; border-radius: 0; max-width: 100vw; max-height: 100vh; overflow-y: auto; }
@@ -1985,40 +2646,49 @@ select:disabled {
   body.sidebar-aperta .backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 39; }
 }
 
-
 /* Mobile: prevenzione pull-to-refresh e scroll chaining */
 @media (max-width: 640px) {
   html, body { overscroll-behavior: none; }
-  main { overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
-  /* Header compatto: pulsanti secondari in riga scrollabile */
-  header { overflow-x: auto; scrollbar-width: none; }
+  main {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px 0 90px;
+}
+
   header::-webkit-scrollbar { display: none; }
   /* Touch target minimi */
   button, select, input { min-height: 44px; }
   /* Chat messages full width */
-  .wrap { max-width: 100%; }
+  .wrap {
+  padding: 0 14px;
+}
   /* Modali full screen con safe area */
   .panel, .modal { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   /* Drawer sidebar: backdrop gia' gestito da JS */
-  #sidebar { transition: transform .22s ease; }
+  #sidebar {
+  flex-basis: 82vw;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  transform: translateX(-100%);
+  box-shadow: 0 0 0 100vmax rgba(0,0,0,.45);
+  transition: transform .22s ease;
+  width: 86vw;
+  max-width: 320px;
+}
 }
 
-
-/* ============================================================
-   Header mobile: sticky in alto + menu full-screen.
-   L'header resta fisso (non scrolla con la chat). I controlli
-   secondari (Opzioni/Benchmark/Obiettivo/Cron/MCP/Docs/Installa,
-   provider e reasoning) non stanno piu' nell'header: quando si preme
-   "menu" l'header diventa un pannello full-screen con tutto impilato,
-   e il corpo della pagina non scrolla finche' non si chiude.
-   Desktop resta invariato: il pulsante non si vede.
-   ============================================================ */
+/* Header mobile: menu full-screen. */
 @media (max-width: 640px) {
-  /* sticky: l'header non si sposta quando si scorre la chat */
   header {
-    position: sticky; top: 0; z-index: 50;
-    flex-wrap: nowrap; row-gap: 6px; overflow: visible;
-  }
+  scrollbar-width: none;
+  top: 0;
+  overflow: visible;
+  min-height: 52px;
+  padding: 8px 10px;
+}
   header .grow { display: none; }
   header .scope-wrap { order: 1; flex: 1 1 40%; min-width: 0; }
   header .mp-wrap { order: 2; flex: 1 1 40%; min-width: 0; }
@@ -2026,9 +2696,8 @@ select:disabled {
     display: inline-flex !important;
     order: 3; margin-left: auto; align-self: center; flex-shrink: 0;
   }
-  /* secondari nascosti nell'header compatto: scopo e modello si
-     spostano nel menu full-screen, cosi' resta solo logo, hamburger
-     e "altre opzioni" */
+  /* secondari nascosti nell'header compatto: scopo e modello si spostano nel menu full-screen, cosi' resta solo logo,
+     hamburger e "altre opzioni" */
   header .h-sec { display: none !important; }
   header .scope-wrap, header .mp-wrap { display: none; }
 
@@ -2073,16 +2742,10 @@ select:disabled {
   #btn-header-toggle { display: none !important; }
 }
 
-
-/* ============================================================
-   Composer mobile.
-   Sul telefono la barra di scrittura era schiacciata: il campo
-   restava basso (46px) e i tre bottoni (allega, verifica, invia)
-   gli rubavano larghezza. Qui il campo cresce e la riga respira,
-   i bottoni restano a 44px (touch target gia' impostato sopra).
-   ============================================================ */
+/* Composer mobile. */
 /* Pulsante microfono flottante (STT) */
 .mic-float {
+  place-items: center;
   position: fixed;
   right: 14px;
   bottom: 96px;
@@ -2104,6 +2767,8 @@ select:disabled {
 }
 .mic-float.show { display: flex; }
 .mic-float.recording {
+  border-color: #e74c3c;
+  color: #fff;
   background: #e53935;
   animation: micPulse 1.1s ease-in-out infinite;
 }
@@ -2111,24 +2776,75 @@ select:disabled {
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229,57,53,.55); }
   50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(229,57,53,0); }
 }
-.mic-float:disabled { opacity: .5; cursor: not-allowed; }
-
-@media (max-width: 640px) {
-  footer { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
-  .row { gap: 8px; }
-  textarea { min-height: 78px; padding: 12px; }
-  .mic-float { bottom: calc(96px + env(safe-area-inset-bottom)); }
+.mic-float:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 
-/* --- Bot ---------------------------------------------------------------
-   Le righe sono cliccabili perche' il gesto naturale, in una lista di
-   identita', e' cliccarle: selezionarle e poi premere "Modifica" sarebbe
-   un passaggio in piu' per la stessa cosa. */
+@media (max-width: 640px) {
+  .row {
+  border-radius: 12px;
+  padding: 5px;
+}
+  textarea { min-height: 78px; padding: 12px; }
+  .mic-float {
+  right: 14px;
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.msg {
+  margin-bottom: 18px;
+}
+.msg .body {
+  font-size: 14.5px;
+}
+.msg.user .body {
+  max-width: 88%;
+}
+.vuoto {
+  margin-top: 7vh;
+  padding: 0 16px;
+}
+.panel {
+  padding: 0;
+}
+.panel-box {
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+}
+.row textarea {
+  min-height: 76px;
+  padding: 10px;
+  font-size: 16px;
+}
+.hint {
+  gap: 10px;
+}
+.hint span:nth-child(2) {
+  display: none;
+}
+}
+
+/* Bot: Le righe sono cliccabili perche' il gesto naturale, in una lista di identita', e' cliccarle: selezionarle e poi
+   premere "Modifica" sarebbe un passaggio in piu' per la stessa cosa. */
 .bot-elenco { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
-.bot-riga { display: flex; align-items: baseline; gap: 10px;
-            flex-wrap: wrap;
-            padding: 8px 10px; border: 1px solid var(--border);
-            border-radius: 8px; cursor: pointer; }
+.bot-riga {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 10px;
+  border-color: var(--border);
+  background: var(--panel-2);
+  padding: 10px 12px;
+}
 .bot-riga:hover { border-color: var(--accent-dim); }
 .bot-riga.attivo { border-color: var(--accent);
                    background: rgba(91, 140, 255, .08); }
@@ -2155,20 +2871,66 @@ select:disabled {
                margin-top: 12px; }
 .bot-persona textarea { width: 100%; resize: vertical; }
 
-/* ---- Backup: una riga per installazione, con il percorso in chiaro.
-   Il percorso e' la ragione per cui questo pannello esiste: la cartella
-   dati si chiama con un hash, e nessuno lo riconosce. ---- */
+/* Backup: una riga per installazione, con il percorso in chiaro. */
 .backup-elenco, .backup-archivi { display: flex; flex-direction: column;
                                   gap: 8px; margin-top: 10px; }
-.backup-riga { border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
-               border-radius: 8px; padding: 8px 10px;
-               display: flex; flex-direction: column; gap: 4px; }
+.backup-riga {
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 10px;
+  border-color: var(--border);
+  background: var(--panel-2);
+  padding: 10px 12px;
+}
 .backup-testa { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .backup-qui { font-size: 11px; padding: 1px 6px; border-radius: 999px;
               background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .backup-dati { overflow-wrap: anywhere; }
 .backup-barra { display: flex; gap: 8px; margin-top: 4px; }
 
-/* ---------- fallback manuale: servizio + modello sulla stessa riga ---------- */
+/* fallback manuale: servizio + modello sulla stessa riga */
 .fb-coppia { display: flex; gap: 6px; width: 100%; }
 .fb-coppia select { flex: 1 1 0; min-width: 0; }
+
+/* responsive */
+@media (min-width: 1201px) and (max-width: 1600px) {
+  #btn-header-toggle {
+    display: inline-flex !important;
+    color: var(--fg);
+    background: var(--panel-2);
+    border-color: var(--border);
+  }
+  header button.ghost.h-sec {
+    display: none;
+  }
+  #btn-header-toggle .h-close {
+    display: none;
+  }
+  header .ver, header #scope-note {
+    display: none;
+  }
+  header {
+    column-gap: 5px;
+  }
+  header .mp-btn {
+    max-width: 200px;
+  }
+  header.esteso {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  header.esteso button.ghost.h-sec {
+    display: inline-flex;
+  }
+  header.esteso #btn-header-toggle .h-open {
+    display: none;
+  }
+  header.esteso #btn-header-toggle .h-close {
+    display: inline;
+  }
+  #btn-header-toggle:hover {
+    border-color: var(--border-strong);
+  }
+}

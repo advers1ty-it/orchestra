@@ -786,7 +786,7 @@ check("renderStats scrive i contatori", "3" in res.get("stats", "") and "tok" in
 check("renderStats usa il DOM, non innerHTML",
       res.get("statsViaNodi", 0) > 3 and res.get("statsTestoGrezzo") == 0,
       f"nodi={res.get('statsViaNodi')} testo_grezzo={res.get('statsTestoGrezzo')}")
-check("stato vuoto mostra il trattino", res.get("empty") == "—", repr(res.get("empty")))
+check("stato vuoto mostra n/d", res.get("empty") == "n/d", repr(res.get("empty")))
 check("occupato disabilita l'input", res.get("busyInputDisabled") is True)
 check("occupato disabilita l'invio", res.get("busySendDisabled") is True)
 check("occupato abilita annulla", res.get("busyCancelEnabled") is True)

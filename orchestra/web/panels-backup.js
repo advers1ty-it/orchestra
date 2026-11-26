@@ -1,18 +1,6 @@
 (function(){window.__diagFiles=window.__diagFiles||[];if(window.__diagFiles.indexOf("panels-backup")<0)window.__diagFiles.push("panels-backup");var e=document.getElementById("diag-files");if(e){e.textContent=((e.textContent?e.textContent+" ":"")+"panels-backup");}})();
-// --------------------------------------------------------------- Backup
-//
-// PERCHE' QUI E NON NELLE OPZIONI BOT
-//
-// Il backup non appartiene a un'identita': appartiene a un'INSTALLAZIONE.
-// Chi ha l'app in AppData, una copia su D: e due server di prova ha tre
-// cartelle dati diverse, e ognuna ha la sua memoria, i suoi bot e le sue
-// chiavi. Il pannello le elenca per percorso, perche' l'hash della
-// cartella non lo ricorda nessuno — ed e' proprio quello che il CLI da
-// solo non poteva mostrare.
-//
-// Il ripristino chiede conferma e dice dove va a scrivere: e' l'unica
-// azione di questa schermata che sovrascrive qualcosa, e il posto dove
-// finisce non deve essere una deduzione dell'utente.
+// Backup: appartiene all'installazione, non a un'identità. Il ripristino chiede
+// conferma e dice dove scrive, perché sovrascrive dati esistenti.
 
 function backupNumero(n) {
   n = Number(n) || 0;
@@ -109,9 +97,7 @@ async function caricaBackup() {
     elenco.appendChild(riga);
   }
 
-  // Gli archivi: quelli gia' presenti nelle cartelle `backup`, dal piu'
-  // recente. Un ripristino parte quasi sempre da qui, e digitare un
-  // percorso a mano e' il modo piu' facile per sbagliare file.
+  // Gli archivi: quelli gia' presenti nelle cartelle `backup`, dal piu' recente.
   archiviBox.innerHTML = "";
   const archivi = d.archivi || [];
   if (!archivi.length) {
@@ -159,9 +145,8 @@ async function caricaBackup() {
     const barra = document.createElement("div");
     barra.className = "backup-barra";
     if (corrente && a.dati === corrente) {
-      // Il ripristino dell'installazione in uso va fatto a server chiuso:
-      // le connessioni sqlite restano aperte, e sostituire i file sotto
-      // chi scrive e' peggio che non ripristinare.
+      // Il ripristino dell'installazione in uso va fatto a server chiuso: le connessioni sqlite restano aperte, e
+      // sostituire i file sotto chi scrive e' peggio che non ripristinare.
       const nota = document.createElement("span");
       nota.className = "small dim";
       nota.textContent = "installazione in uso: ferma Orchestra e usa "
