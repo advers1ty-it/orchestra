@@ -118,6 +118,28 @@ def _footer(agent: Agent) -> None:
 # --------------------------------------------------------------------------
 
 
+def _progetto_da_cartella(env: dict[str, str]) -> tuple[str, str]:
+    """Il progetto attivo per un avvio da cartella, e la sua root.
+
+    La CLI non ha il selettore della UI: nessuno imposta il nome nel
+    thread, e senza questo il tool `progetti` e la memoria lavoravano
+    senza progetto mentre i file si scrivevano dentro un progetto.
+
+    Prima vince `ORCHESTRA_PROGETTO` (esplicito); altrimenti si cerca
+    il progetto registrato che contiene la cartella corrente. Nessun
+    match = nessun progetto: non si registra niente di nascosto.
+    """
+    from . import progetti as _pr
+
+    nome = (env.get("ORCHESTRA_PROGETTO") or "").strip()
+    if nome:
+        return nome, _pr.percorso_di(nome)
+    try:
+        return _pr.per_percorso(os.getcwd())
+    except Exception:  # noqa: BLE001 - senza progetto la CLI funziona lo stesso
+        return "", ""
+
+
 def _build_agent(env: dict[str, str], extra_prompt: str = "") -> Agent:
     provider_name = env.get("ORCHESTRA_PROVIDER", "openrouter")
     model = env.get("ORCHESTRA_MODEL", "")
@@ -127,6 +149,21 @@ def _build_agent(env: dict[str, str], extra_prompt: str = "") -> Agent:
             "in orchestra/.env e scegli un modello."
         )
     provider = build_provider(provider_name, model=model, env=env)
+    # Il progetto va impostato PRIMA delle istruzioni: `blocco_prompt`
+    # legge la radice del thread, e da una sottocartella senza questa
+    # riga non troverebbe l'AGENTS.md del progetto.
+    nome_progetto, percorso_progetto = _progetto_da_cartella(env)
+    try:
+        from . import progetti as _pr
+
+        if nome_progetto and percorso_progetto:
+            _pr._set_root_sessione(percorso_progetto, nome_progetto)
+        else:
+            # Nessun progetto: si azzera la root del thread, o resterebbe
+            # quella di un agent costruito prima nello stesso processo.
+            _pr._set_root_sessione("", "")
+    except Exception:  # noqa: BLE001
+        pass
     reg = default_registry()
     prompt = SYSTEM_PROMPT + (f"\n\n{extra_prompt}" if extra_prompt else "")
     # Le istruzioni del repository valgono anche da CLI: chi lancia
@@ -138,6 +175,14 @@ def _build_agent(env: dict[str, str], extra_prompt: str = "") -> Agent:
     if istruzioni:
         prompt = f"{prompt}\n\n{istruzioni}"
     agente = Agent(provider, reg, prompt, _config(env), on_event=_on_event)
+    if nome_progetto:
+        # L'agente deve saperlo per il blocco progetto e per il filtro
+        # della memoria; il thread per la root e' gia' impostato sopra.
+        try:
+            agente.progetto = nome_progetto
+            agente._aggiorna_prompt()
+        except Exception:  # noqa: BLE001
+            pass
     # La catena di fallback e' la stessa della web UI: il modello in uso
     # piu' i ripieghi scelti in Opzioni → Modello, al massimo tre. Spenta,
     # resta il solo primario e l'errore che arriva e' quello vero.

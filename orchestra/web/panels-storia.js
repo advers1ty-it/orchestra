@@ -47,7 +47,7 @@ async function caricaStorico() {
       titolo.textContent = s.titolo || "(senza titolo)";
       const meta = document.createElement("span");
       meta.className = "small dim";
-      meta.textContent = `${_storico_data(s.aggiornata)} · ${s.n_messaggi} msg · ${s.modello || "?"}`;
+      meta.textContent = `${_storico_data(s.aggiornata)} · ${s.n_messaggi} msg · ${etichettaProgetto(s.progetto)} · ${s.modello || "?"}`;
       info.appendChild(titolo);
       info.appendChild(meta);
       li.appendChild(info);

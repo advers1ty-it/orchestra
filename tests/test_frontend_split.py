@@ -375,6 +375,13 @@ globalThis.fetch = async function (u) {
     ] }) };
   if (u === "/api/state")
     return { ok:true, status:200, json: async () => ({ ready:true, version:"0.5.0", messages:[], busy:false }) };
+  if (u === "/api/storico")
+    return { ok:true, status:200, json: async () => ({ sessioni:[
+      { id:1, titolo:"Chat Alfa", n_messaggi:3, modello:"vendor/a",
+        aggiornata:1700000000, progetto:"Progetto Alfa" },
+      { id:2, titolo:"Chat senza", n_messaggi:1, modello:"vendor/a",
+        aggiornata:1700000001, progetto:"" },
+    ], attiva:null }) };
   return { ok:true, status:200, json: async () => ({ running:false, log:[], result:null }) };
 };
 """
@@ -448,6 +455,23 @@ const OUT = { errore: null };
   } catch (e) {
     OUT.gateErrore = String(e && e.message || e);
   }
+  // La cronologia deve dire a che progetto appartiene la conversazione:
+  // senza, si apre una chat e si continua a scrivere in un'altra
+  // cartella. Si prova sia la lista laterale sia il pannello.
+  const testoDi = function (n) {
+    return (n.textContent || "") + " " +
+      (n.children || []).map(testoDi).join(" ");
+  };
+  try {
+    await caricaSideSessioni();
+    OUT.cronologiaSide = (REG["side-elenco"].children || [])
+      .map(testoDi).join(" | ");
+  } catch (e) { OUT.cronologiaSide = "ERRORE: " + e.message; }
+  try {
+    await caricaStorico();
+    OUT.cronologiaPannello = (REG["storico-elenco"].children || [])
+      .map(testoDi).join(" | ");
+  } catch (e) { OUT.cronologiaPannello = "ERRORE: " + e.message; }
   const mp = REG["model-pick"];
   OUT.opzioni = mp.children.length;
   OUT.disabled = mp.disabled;
@@ -581,6 +605,17 @@ check("il cambio di progetto viene annunciato",
       "Sito Ristorante" in _nota, f"la nota dice: {_nota!r}")
 check("l'annuncio dice DOVE si scrive",
       "D:/lavori/sito" in _nota, f"la nota dice: {_nota!r}")
+# La cronologia: il progetto si deve leggere PRIMA di aprire. Una riga
+# senza progetto e' legittima, e deve dirlo invece di lasciare il vuoto.
+_side = out.get("cronologiaSide", "")
+check("la cronologia laterale mostra il progetto",
+      "progetto: Progetto Alfa" in _side, f"la lista dice: {_side[:200]!r}")
+check("e dichiara le chat senza progetto",
+      "senza progetto" in _side, f"la lista dice: {_side[:200]!r}")
+_pannello = out.get("cronologiaPannello", "")
+check("la cronologia del pannello mostra il progetto",
+      "progetto: Progetto Alfa" in _pannello,
+      f"il pannello dice: {_pannello[:200]!r}")
 # I simboli che il bundle deve esporre: se uno manca, il probe lo
 # dice per nome invece di tacere.
 _assenti = [k for k, v in list(pf.items()) + list(out.get("goalFn", {}).items())

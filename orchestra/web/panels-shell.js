@@ -106,7 +106,7 @@ async function caricaSideSessioni() {
       testo.textContent = s.titolo || "(senza titolo)";
       const meta = document.createElement("span");
       meta.className = "side-meta";
-      meta.textContent = `${_sideData(s.aggiornata)} · ${s.n_messaggi} msg`;
+      meta.textContent = `${_sideData(s.aggiornata)} · ${s.n_messaggi} msg · ${etichettaProgetto(s.progetto)}`;
       apri.appendChild(testo);
       apri.appendChild(meta);
       apri.addEventListener("click", async () => {
@@ -479,7 +479,7 @@ async function sideRicerca() {
       testo.textContent = x.titolo || "(senza titolo)";
       const meta = document.createElement("span");
       meta.className = "side-meta";
-      meta.textContent = x.ruolo;
+      meta.textContent = `${x.ruolo} · ${etichettaProgetto(x.progetto)}`;
       const framm = document.createElement("span");
       framm.className = "side-frammento";
       framm.textContent = x.frammento || "";

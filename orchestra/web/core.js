@@ -4,6 +4,14 @@
 
 const $ = (id) => document.getElementById(id);
 
+// L'etichetta del progetto nella cronologia: prima di aprire una chat
+// bisogna sapere in che cartella si continuera' a scrivere. "senza
+// progetto" e' un'informazione, non un vuoto da nascondere.
+function etichettaProgetto(nome) {
+  const pulito = String(nome == null ? "" : nome).trim();
+  return pulito ? "progetto: " + pulito : "senza progetto";
+}
+
 // Aggancio un handler senza mai esplodere.
 const on = (el, evento, fn) => {
   // Se arriva una stringa, e' un id: si risolve.
