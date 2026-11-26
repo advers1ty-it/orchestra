@@ -10,6 +10,7 @@ che le serve; la tabella e il dispatch stanno in `rotte.py` e in
 from __future__ import annotations
 
 import urllib.parse
+from pathlib import Path
 from typing import Any
 
 from .rotte import rotta
@@ -274,6 +275,154 @@ class RotteProgetti:
             # sono diversi.
             "progetti": [p.get("nome") for p in self.app._elenco_progetti()],
         })
+
+    def _radice_progetto(self, nome: str) -> str | None:
+        """La cartella del progetto, o una risposta gia' scritta.
+
+        Le rotte che scrivono le istruzioni fanno la stessa domanda
+        ("questo progetto esiste?") e devono rispondere allo stesso modo:
+        409 se non c'e' un progetto, 404 se il nome non e' registrato.
+        Tenerlo in un posto solo evita che le due divergano.
+        """
+        from . import progetti as _pr
+
+        if not nome:
+            self._json({"error": "nessun progetto attivo"}, 409)
+            return None
+        radice = _pr.percorso_di(nome)
+        if not radice:
+            self._json({"error": f"progetto sconosciuto: {nome}"}, 404)
+            return None
+        return radice
+
+    @rotta("GET", "/api/progetto/istruzioni")
+    def _r_get_progetto_istruzioni(self, path: str, body: dict[str, Any],
+                                   s: Any) -> None:
+        # Le istruzioni del progetto: quale file esiste, dove sta, e se
+        # manca del tutto. La UI lo chiede quando cambia progetto, per
+        # dire "questo progetto non ha istruzioni" invece di lasciarlo
+        # scoprire quando l'agente usa il comando sbagliato.
+        #
+        # Il progetto arriva da ?progetto=, non da _root(): questa rotta
+        # gira in un thread HTTP senza sessione, e la root di sessione
+        # li' e' vuota. Il percorso si risolve dal nome registrato.
+        from . import istruzioni_progetto as ip
+        from . import progetti as _pr
+
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        nome = ((query.get("progetto") or [""])[0].strip()
+                or self.app._progetto_attivo())
+        if not nome:
+            return self._json({"ok": True, "progetto": "", "esiste": False,
+                               "file": "", "percorso": "", "contenuto": "",
+                               "versione": ""})
+        radice = _pr.percorso_di(nome)
+        if not radice:
+            return self._json({"error": f"progetto sconosciuto: {nome}"}, 404)
+        esiste = not ip.manca(radice)
+        percorso = ip.percorso_istruzioni(radice)
+        testo = ""
+        if esiste:
+            try:
+                testo = percorso.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                testo = ""
+        self._json({"ok": True, "progetto": nome, "esiste": esiste,
+                    "file": percorso.name if esiste else "",
+                    "percorso": str(percorso) if esiste else "",
+                    "contenuto": testo,
+                    # La versione e' quella del testo appena restituito:
+                    # la PUT la rimanda, e se il file e' cambiato nel
+                    # frattempo si risponde 409 invece di sovrascrivere
+                    # la modifica di qualcun altro (l'agente stesso, con
+                    # write_file, puo' averlo riscritto).
+                    "versione": ip.versione(testo) if esiste else ""})
+
+    @rotta("PUT", "/api/progetto/istruzioni")
+    def _r_put_progetto_istruzioni(self, path: str, body: dict[str, Any],
+                                    s: Any) -> None:
+        # Salva il testo nelle istruzioni del progetto. Non e' la POST con
+        # un flag di forza: la POST crea e non sovrascrive mai, questa
+        # sostituisce un file che esiste e pretende la versione letta.
+        #
+        # Due livelli di rischio, due rotte: chi crea non puo' distruggere
+        # niente, chi salva deve dimostrare di aver visto il file.
+        from . import istruzioni_progetto as ip
+
+        nome = (str(body.get("progetto") or "").strip()
+                or self.app._progetto_attivo())
+        radice = self._radice_progetto(nome)
+        if not radice:
+            return
+        if ip.manca(radice):
+            return self._json(
+                {"error": "il progetto non ha istruzioni: creale prima"}, 404)
+        percorso = ip.percorso_istruzioni(radice)
+        try:
+            attuale = percorso.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            return self._json(
+                {"error": f"non riesco a leggere {percorso}: {e}"}, 403)
+        attesa = str(body.get("versione") or "")
+        if attesa != ip.versione(attuale):
+            # Il corpo porta quello che c'e' adesso: la UI lo mostra, e se
+            # l'utente accetta rimanda la PUT con QUESTA versione. La
+            # conferma e' "ho visto questa", non un flag che qualcuno puo'
+            # mettere per sbaglio.
+            #
+            # La conferma vale UNA volta sola: se anche questa versione e'
+            # cambiata prima del retry, la UI non riprova e chiede di
+            # ricaricare. Il server non tiene il conto (e' stateless): il
+            # tetto sta nel client, che sa quante volte ha gia' chiesto.
+            return self._json({"error": "il file e' cambiato dopo la lettura",
+                               "conflitto": True,
+                               "versione": ip.versione(attuale),
+                               "contenuto": attuale}, 409)
+        testo = str(body.get("contenuto") or "")
+        try:
+            scritto = ip.scrivi(percorso, testo)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        except OSError as e:
+            return self._json(
+                {"error": f"non riesco a scrivere {percorso}: {e}"}, 403)
+        self._json({"ok": True, "salvato": True, "file": percorso.name,
+                    "percorso": str(percorso), "versione": ip.versione(scritto)})
+
+    @rotta("POST", "/api/progetto/istruzioni")
+    def _r_post_progetto_istruzioni(self, path: str, body: dict[str, Any],
+                                     s: Any) -> None:
+        # Crea AGENTS.md con il modulo, SOLO se il progetto non ha
+        # nessuno dei file di istruzioni. Non sovrascrive mai: chi ha
+        # gia' CLAUDE.md non deve ritrovarsi un secondo documento, e chi
+        # ha un AGENTS.md vuoto l'ha voluto vuoto.
+        #
+        # Il nome del file e' fisso (FILE_ISTRUZIONI[0]) e la cartella
+        # viene dal DB dei progetti, non dal corpo della richiesta: non
+        # c'e' nessun percorso da costruire con l'input dell'utente.
+        from . import istruzioni_progetto as ip
+
+        nome = (str(body.get("progetto") or "").strip()
+                or self.app._progetto_attivo())
+        radice = self._radice_progetto(nome)
+        if not radice:
+            return
+        if not ip.manca(radice):
+            # Gia' istruito: si risponde con quello che c'e', non con un
+            # errore che la UI dovrebbe tradurre in un messaggio.
+            percorso = ip.percorso_istruzioni(radice)
+            return self._json({"ok": True, "creato": False,
+                               "file": percorso.name,
+                               "percorso": str(percorso)})
+        destinazione = Path(radice) / ip.FILE_ISTRUZIONI[0]
+        try:
+            ip.scrivi(destinazione, ip.STUB)
+        except (OSError, ValueError) as e:
+            return self._json(
+                {"error": f"non riesco a scrivere {destinazione}: {e}"}, 403)
+        self._json({"ok": True, "creato": True,
+                    "file": destinazione.name,
+                    "percorso": str(destinazione)})
 
     @rotta("POST", "/api/progetti/registra")
     def _r_post_progetti_registra(self, path: str, body: dict[str, Any],

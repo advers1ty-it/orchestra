@@ -295,6 +295,18 @@ tot3 = per_id(sg.proposte(rie(5), radice=casa, stato_git=lambda: [],
 check("una proposta sola non e' una scelta: si ricade sulle fisse",
       "verifica" in tot3, str(list(tot3)))
 
+# Il confine e' due, non tre: una risposta quasi completa si mostra, perche'
+# due mosse su misura valgono piu' di tre generiche. Sotto i due il modello
+# si e' fermato a meta', e li' le fisse sono piu' oneste.
+due = ProviderFinto('{"proposte":[{"titolo":"Prima scelta","prompt":"'
+                    + "y" * 80 + '"},{"titolo":"Seconda scelta","prompt":"'
+                    + "z" * 80 + '"}]}')
+tot_due = per_id(sg.proposte(rie(13), radice=casa, stato_git=lambda: [],
+                             provider=due, conversazione=CONVERSAZIONE))
+check("due proposte bastano: si mostrano, non si ricade sulle fisse",
+      "dinamico-0" in tot_due and "dinamico-1" in tot_due
+      and "verifica" not in tot_due, str(list(tot_due)))
+
 senza_prov = per_id(sg.proposte(rie(6), radice=casa, stato_git=lambda: [],
                                 conversazione=CONVERSAZIONE))
 check("senza provider restano le fisse", "verifica" in senza_prov,

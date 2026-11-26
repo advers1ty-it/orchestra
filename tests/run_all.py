@@ -142,6 +142,9 @@ SUITES = [
     # dimostrato che un file ignorato rompe solo le installazioni.
     ("file-tracciati", "test_file_tracciati.py", True),
     ("frontend", "test_frontend_split.py", True),
+    # Il markdown dei messaggi: le tabelle devono diventare una tabella vera,
+    # non righe di pipe crude. Il CSS c'era, mancava chi costruiva l'HTML.
+    ("markdown", "test_markdown_tabelle.py", True),
     ("ui", "test_ui.py", True),
     # Il pannello Servizi e quello Gratis erano due sezioni per la
     # stessa cosa: qui si controlla che il DOM ne disegni una sola, con

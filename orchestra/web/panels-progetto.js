@@ -313,6 +313,9 @@ async function caricaProgetto() {
         progFatti.textContent = "la memoria è condivisa: i fatti senza progetto valgono per tutti";
       }
     }
+    // L'avviso sulle istruzioni è un'altra lettura: non deve far
+    // aspettare la sidebar né farla fallire se non risponde.
+    caricaIstruzioniProgetto(attivo);
   } catch (e) {
     if (progFatti) progFatti.textContent = "non riesco a leggere i progetti";
   }
@@ -321,6 +324,16 @@ async function caricaProgetto() {
 async function impostaProgetto() {
   if (!progSelect) return;
   const nome = _progettoLabel();
+  // Cambiare progetto mentre l'editor delle istruzioni ha modifiche non
+  // salvate le butterebbe via: `caricaProgetto` azzera `istruzioniSporco`
+  // e rilegge il file del nuovo progetto. Si chiede prima; se l'utente
+  // annulla, il menu torna sul progetto a cui appartengono le modifiche.
+  if (istruzioniSporco && !confirm(
+    "Le istruzioni di «" + istruzioniFile + "» hanno modifiche non salvate: "
+    + "cambiare progetto le perde. Continuare?")) {
+    progSelect.value = istruzioniProgetto;
+    return;
+  }
   if (progFatti) progFatti.textContent = "salvo...";
   try {
     const r = await fetch("/api/progetto", {
@@ -337,6 +350,237 @@ async function impostaProgetto() {
   } catch (e) {
     if (progFatti) progFatti.textContent = "errore: " + e;
   }
+}
+
+// Le istruzioni del progetto: l'avviso quando non ce n'è nessuna, e
+// l'editor quando c'è. Il file esiste ma nessuno lo sa — è il difetto
+// che questo riquadro copre.
+const progIstruzioni = $("side-progetto-istruzioni");
+const progIstruzioniTesto = $("side-progetto-istruzioni-testo");
+const progIstruzioniCrea = $("side-progetto-istruzioni-crea");
+const progIstruzioniModifica = $("side-progetto-istruzioni-modifica");
+const progIstruzioniEditor = $("side-progetto-istruzioni-editor");
+const progIstruzioniAzioni = $("side-progetto-istruzioni-azioni");
+const progIstruzioniSalva = $("side-progetto-istruzioni-salva");
+const progIstruzioniAnnulla = $("side-progetto-istruzioni-annulla");
+const progIstruzioniSovrascrivi = $("side-progetto-istruzioni-sovrascrivi");
+const progIstruzioniRicarica = $("side-progetto-istruzioni-ricarica");
+
+// La versione è l'impronta del testo che l'editor ha caricato: la PUT la
+// rimanda, e se il file è cambiato nel frattempo il server risponde 409
+// invece di sovrascrivere. `conflitto` tiene la versione nuova appena
+// mostrata dal server: solo "Sovrascrivi" la usa.
+let istruzioniFile = "";
+let istruzioniProgetto = "";
+let istruzioniVersione = "";
+let istruzioniConflitto = "";
+// Quante volte il server ha risposto 409 in questa sessione di modifica.
+// La conferma "Sovrascrivi" vale per UNA versione: al secondo conflitto
+// si rilegge, non si riprova.
+let istruzioniConflitti = 0;
+// La textarea contiene modifiche che non sono state salvate. Serve a
+// distinguere "Annulla" (una pausa: l'editor si chiude, il testo resta)
+// da "riapri" (che rifarebbe la GET e cancellerebbe le modifiche).
+let istruzioniSporco = false;
+
+function istruzioniStato(stato) {
+  if (progIstruzioniCrea) progIstruzioniCrea.hidden = stato !== "manca";
+  if (progIstruzioniModifica) progIstruzioniModifica.hidden = stato !== "esiste";
+  if (progIstruzioniEditor) progIstruzioniEditor.hidden = stato !== "modifica";
+  if (progIstruzioniAzioni) progIstruzioniAzioni.hidden = stato !== "modifica";
+  if (progIstruzioniSovrascrivi) progIstruzioniSovrascrivi.hidden = true;
+  if (progIstruzioniRicarica) progIstruzioniRicarica.hidden = true;
+}
+
+async function caricaIstruzioniProgetto(nome) {
+  if (!progIstruzioni) return;
+  istruzioniFile = "";
+  istruzioniVersione = "";
+  istruzioniConflitto = "";
+  istruzioniConflitti = 0;
+  istruzioniSporco = false;
+  if (!nome) {
+    progIstruzioni.hidden = true;
+    return;
+  }
+  istruzioniProgetto = nome;
+  try {
+    const r = await fetch("/api/progetto/istruzioni?progetto=" + encodeURIComponent(nome));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      progIstruzioni.hidden = true;
+      return;
+    }
+    progIstruzioni.hidden = false;
+    // `esiste` vuol dire "il progetto ha uno dei cinque file", non
+    // "c'è AGENTS.md": chi ha CLAUDE.md non deve vedere l'avviso.
+    if (!d.esiste) {
+      istruzioniStato("manca");
+      if (progIstruzioniTesto) {
+        progIstruzioniTesto.textContent = "«" + nome + "» non ha istruzioni: l'agente indovina comandi e stile.";
+      }
+      return;
+    }
+    istruzioniFile = d.file || "AGENTS.md";
+    istruzioniVersione = d.versione || "";
+    istruzioniStato("esiste");
+    if (progIstruzioniTesto) progIstruzioniTesto.textContent = "istruzioni: " + istruzioniFile;
+  } catch (e) {
+    progIstruzioni.hidden = true;
+  }
+}
+
+async function creaIstruzioniProgetto() {
+  const nome = _progettoLabel();
+  if (!nome || !progIstruzioniTesto) return;
+  progIstruzioniTesto.textContent = "creo...";
+  try {
+    const r = await fetch("/api/progetto/istruzioni", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ progetto: nome }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      progIstruzioniTesto.textContent = d.error || ("errore " + r.status);
+      return;
+    }
+    progIstruzioniTesto.textContent = d.creato
+      ? ("creato " + d.file + ": compilalo con i comandi del progetto")
+      : ("il progetto ha già " + d.file);
+    // Dopo la creazione si può compilare subito: l'editor si apre da solo.
+    if (d.creato) await modificaIstruzioni();
+  } catch (e) {
+    progIstruzioniTesto.textContent = "errore: " + e;
+  }
+}
+
+async function modificaIstruzioni() {
+  const nome = _progettoLabel();
+  if (!nome) return;
+  istruzioniProgetto = nome;
+  // Una pausa, non un riavvio: se la textarea contiene modifiche non
+  // salvate si riapre con quelle. Rifare la GET le cancellerebbe, ed è
+  // il passo 4 che il test ha trovato. La versione resta quella letta:
+  // se il file è cambiato, il salvataggio lo dirà con un 409.
+  if (istruzioniSporco && progIstruzioniEditor) {
+    istruzioniStato("modifica");
+    if (progIstruzioniTesto) progIstruzioniTesto.textContent = "modifica " + istruzioniFile + " (non salvate)";
+    progIstruzioniEditor.focus();
+    return;
+  }
+  try {
+    const r = await fetch("/api/progetto/istruzioni?progetto=" + encodeURIComponent(nome));
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.esiste) {
+      await caricaIstruzioniProgetto(nome);
+      return;
+    }
+    istruzioniFile = d.file || "AGENTS.md";
+    istruzioniVersione = d.versione || "";
+    istruzioniConflitto = "";
+    istruzioniConflitti = 0;
+    istruzioniSporco = false;
+    if (progIstruzioniEditor) progIstruzioniEditor.value = d.contenuto || "";
+    istruzioniStato("modifica");
+    if (progIstruzioniTesto) progIstruzioniTesto.textContent = "modifica " + istruzioniFile;
+    if (progIstruzioniEditor) progIstruzioniEditor.focus();
+  } catch (e) {
+    if (progIstruzioniTesto) progIstruzioniTesto.textContent = "errore: " + e;
+  }
+}
+
+async function salvaIstruzioni(versione) {
+  const nome = _progettoLabel();
+  if (!nome || !progIstruzioniEditor) return;
+  // Un secondo click mentre la prima PUT è in volo manderebbe la stessa
+  // versione due volte: la seconda tornerebbe 409 per un conflitto che
+  // non esiste. Il bottone si spegne finché la richiesta non finisce.
+  if (progIstruzioniSalva) progIstruzioniSalva.disabled = true;
+  if (progIstruzioniTesto) progIstruzioniTesto.textContent = "salvo...";
+  try {
+    const r = await fetch("/api/progetto/istruzioni", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        progetto: nome,
+        contenuto: progIstruzioniEditor.value,
+        versione: versione,
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 409 && d.conflitto) {
+      // Il file è cambiato mentre lo si modificava (per esempio l'agente
+      // l'ha riscritto con write_file). La conferma vale per UNA versione:
+      // al primo conflitto si offre "Sovrascrivi" (l'utente ha visto
+      // questa versione), al secondo si rilegge e basta — riprovare
+      // sarebbe confermare un contenuto che non ha davanti.
+      istruzioniConflitto = d.versione || "";
+      istruzioniConflitti += 1;
+      if (istruzioniConflitti > 1) {
+        if (progIstruzioniTesto) progIstruzioniTesto.textContent = "il file è cambiato di nuovo mentre sovrascrivevi: ricarica per vedere l'ultima versione, le tue modifiche non salvate vanno perse";
+        if (progIstruzioniSovrascrivi) progIstruzioniSovrascrivi.hidden = true;
+        if (progIstruzioniRicarica) progIstruzioniRicarica.hidden = false;
+      } else {
+        if (progIstruzioniTesto) progIstruzioniTesto.textContent = "il file è cambiato nel frattempo: ricarica (perdi le tue modifiche) o sovrascrivi";
+        if (progIstruzioniSovrascrivi) progIstruzioniSovrascrivi.hidden = false;
+        // Anche Ricarica: il testo la nomina, e nasconderla lascerebbe
+        // l'utente davanti a una sola delle due perdite possibili.
+        if (progIstruzioniRicarica) progIstruzioniRicarica.hidden = false;
+      }
+      return;
+    }
+    if (!r.ok) {
+      if (progIstruzioniTesto) progIstruzioniTesto.textContent = d.error || ("errore " + r.status);
+      return;
+    }
+    istruzioniVersione = d.versione || "";
+    istruzioniConflitto = "";
+    istruzioniConflitti = 0;
+    istruzioniSporco = false;
+    istruzioniStato("esiste");
+    if (progIstruzioniTesto) progIstruzioniTesto.textContent = "istruzioni: " + istruzioniFile + " (salvate)";
+  } catch (e) {
+    if (progIstruzioniTesto) progIstruzioniTesto.textContent = "errore: " + e;
+  } finally {
+    if (progIstruzioniSalva) progIstruzioniSalva.disabled = false;
+  }
+}
+
+if (progIstruzioniCrea) {
+  progIstruzioniCrea.addEventListener("click", creaIstruzioniProgetto);
+}
+if (progIstruzioniModifica) {
+  progIstruzioniModifica.addEventListener("click", modificaIstruzioni);
+}
+if (progIstruzioniSalva) {
+  progIstruzioniSalva.addEventListener("click", () => salvaIstruzioni(istruzioniVersione));
+}
+if (progIstruzioniSovrascrivi) {
+  progIstruzioniSovrascrivi.addEventListener("click", () => salvaIstruzioni(istruzioniConflitto));
+}
+if (progIstruzioniRicarica) {
+  progIstruzioniRicarica.addEventListener("click", modificaIstruzioni);
+}
+if (progIstruzioniEditor) {
+  // `input` e non `change`: `change` scatta solo alla perdita del focus,
+  // e chi chiude l'editor con Annulla non lo perde mai.
+  progIstruzioniEditor.addEventListener("input", () => {
+    istruzioniSporco = true;
+  });
+}
+if (progIstruzioniAnnulla) {
+  progIstruzioniAnnulla.addEventListener("click", () => {
+    // Una pausa: l'editor si chiude, `istruzioniSporco` resta com'è e
+    // `modificaIstruzioni` riaprirà con il testo dell'utente invece di
+    // rifare la GET.
+    istruzioniStato(istruzioniFile ? "esiste" : "manca");
+    if (progIstruzioniTesto) {
+      progIstruzioniTesto.textContent = istruzioniFile
+        ? ("istruzioni: " + istruzioniFile + (istruzioniSporco ? " (non salvate)" : ""))
+        : "";
+    }
+  });
 }
 
 // Scegliere nel menu cambia subito il progetto: niente bottone, e

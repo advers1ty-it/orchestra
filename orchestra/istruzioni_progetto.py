@@ -29,6 +29,7 @@ intero e tacere.
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -47,6 +48,31 @@ FILE_ISTRUZIONI = (
 # tutto, uno per il blocco evita che cinque file insieme lo facciano.
 MAX_FILE = 6000
 MAX_TOTALE = 8000
+
+# Il modulo che il pannello Progetto propone quando un progetto non ha
+# nessuna istruzione. Non e' un documento: e' una traccia da riempire, e
+# sta qui perche' il testo e' la cosa che l'utente deve vedere. Breve di
+# proposito: finche' non e' compilato entra nel prompt a ogni turno.
+STUB = """# Istruzioni del progetto
+
+Questo file dice all'agente come lavorare in QUESTO repository.
+Compila le righe fra <...> e cancella quelle che non servono: senza,
+l'agente indovina i comandi e lo stile.
+
+## Comandi
+
+- Test: <es. `make test`>
+- Build: <es. `npm run build`>
+- Avvio in locale: <es. `npm run dev`>
+
+## Convenzioni
+
+- <stile del codice, lingua dei commenti, dove stanno i test>
+
+## Da non toccare
+
+- <cartelle generate, vendor, file di segreti>
+"""
 
 # path -> (mtime_ns, size, testo). Il file cambia raramente, ma puo'
 # cambiare durante la sessione: la chiave include mtime e dimensione,
@@ -88,6 +114,79 @@ def _leggi(p: Path) -> str:
               f"ne mostro i primi {MAX_FILE}]"
         )
     _CACHE[chiave] = (st.st_mtime_ns, st.st_size, testo)
+    return testo
+
+
+def manca(radice: str | Path | None = None) -> bool:
+    """True se NESSUNO dei file di istruzioni esiste nella radice.
+
+    Guarda l'esistenza, non il contenuto: un file vuoto e' comunque una
+    scelta dell'utente, e sovrascriverlo sarebbe una scrittura distruttiva.
+    E' la domanda che fa il pannello Progetto prima di proporre
+    "Crea AGENTS.md".
+    """
+    base = Path(radice) if radice is not None else _radice_predefinita()
+    return not any((base / nome).is_file() for nome in FILE_ISTRUZIONI)
+
+
+def percorso_istruzioni(radice: str | Path | None = None) -> Path:
+    """Il file da MOSTRARE: il primo che esiste e ha testo, altrimenti AGENTS.md.
+
+    La creazione invece ha una destinazione fissa (`AGENTS.md`, il primo
+    di FILE_ISTRUZIONI): qui si sceglie cosa mostrare a chi ha gia' un
+    `CLAUDE.md`, non dove scrivere. Due domande diverse, due funzioni.
+    """
+    base = Path(radice) if radice is not None else _radice_predefinita()
+    for nome in FILE_ISTRUZIONI:
+        p = base / nome
+        if p.is_file() and _leggi(p):
+            return p
+    return base / FILE_ISTRUZIONI[0]
+
+
+def versione(testo: str) -> str:
+    """L'impronta del testo che la UI ha letto.
+
+    Si calcola sul TESTO restituito dalla GET, non sui byte del file: il
+    client rimanda l'hash di quello che ha visto, e un file con byte non
+    UTF-8 non deve produrre un conflitto che l'utente non sa risolvere.
+    Corta (16 esadecimali): non e' una firma, e' la risposta a "questo e'
+    ancora quello che avevi davanti?".
+    """
+    return hashlib.sha256(str(testo or "").encode("utf-8")).hexdigest()[:16]
+
+
+def scrivi(percorso: str | Path, testo: str) -> str:
+    """Scrive il file in modo atomico e torna il testo finito sul disco.
+
+    Il ritorno e' il testo NORMALIZZATO (a capo LF): chi deve calcolare
+    la versione del file appena scritto non deve rifare la stessa
+    normalizzazione e rischiare di calcolarla su una stringa diversa.
+    ValueError oltre il tetto.
+
+    In scrittura il tetto si RIFIUTA, non si tronca: troncare in lettura
+    e' una scelta dichiarata ("il resto non l'ho letto"), troncare in
+    scrittura vorrebbe dire cancellare il fondo del file dell'utente
+    senza dirglielo.
+
+    Il file temporaneo piu' `os.replace` evitano il caso peggiore: una
+    scrittura interrotta lascerebbe un AGENTS.md a meta', e l'agente
+    leggerebbe istruzioni troncate come se fossero complete.
+    """
+    testo = str(testo or "").replace("\r\n", "\n").replace("\r", "\n")
+    if len(testo) > MAX_FILE:
+        raise ValueError(
+            f"troppo lungo: {len(testo)} caratteri, il tetto e' {MAX_FILE}")
+    p = Path(percorso)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(testo)
+    os.replace(tmp, p)
+    # La cache di _leggi e' chiaveata sul percorso: dopo una scrittura
+    # potrebbe restituire la versione vecchia se mtime e size coincidono
+    # (due scritture nello stesso istante). Si toglie solo questa voce.
+    _CACHE.pop(str(p), None)
     return testo
 
 

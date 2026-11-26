@@ -941,6 +941,21 @@
         <label class="small dim" for="side-progetto-select">Attivo</label>
         <select id="side-progetto-select" title="Il progetto attivo. Sceglierlo cambia subito la cartella in cui si scrive"></select>
         <div id="side-progetto-fatti" class="small dim"></div>
+        <!-- L'avviso: un progetto senza istruzioni fa indovinare l'agente.
+             Il bottone crea AGENTS.md con il modulo, e solo se non c'e' gia'
+             uno degli altri file (CLAUDE.md, .cursorrules, ...). -->
+        <div id="side-progetto-istruzioni" class="side-istruzioni" hidden>
+          <span id="side-progetto-istruzioni-testo" class="small dim"></span>
+          <button id="side-progetto-istruzioni-crea" class="side-cap-btn" type="button">Crea AGENTS.md</button>
+          <button id="side-progetto-istruzioni-modifica" class="side-cap-btn" type="button" hidden>Modifica</button>
+          <textarea id="side-progetto-istruzioni-editor" rows="8" hidden></textarea>
+          <div id="side-progetto-istruzioni-azioni" class="side-istruzioni-azioni" hidden>
+            <button id="side-progetto-istruzioni-salva" class="primary" type="button">Salva</button>
+            <button id="side-progetto-istruzioni-annulla" class="side-cap-btn" type="button">Annulla</button>
+            <button id="side-progetto-istruzioni-sovrascrivi" class="side-cap-btn" type="button" hidden>Sovrascrivi</button>
+            <button id="side-progetto-istruzioni-ricarica" class="side-cap-btn" type="button" hidden>Ricarica</button>
+          </div>
+        </div>
       </div>
     </div>
 

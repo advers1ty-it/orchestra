@@ -1859,6 +1859,28 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   flex-direction: column;
   gap: 4px;
 }
+/* L'avviso sulle istruzioni: un riquadro, non una riga di testo persa
+   sotto il menu. Il bottone sta a capo e non occupa tutta la larghezza. */
+.side-istruzioni {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.side-istruzioni .side-cap-btn { align-self: flex-start; }
+.side-istruzioni textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 120px;
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+.side-istruzioni-azioni { display: flex; flex-wrap: wrap; gap: 6px; }
 /* Il menu a tendina del progetto attivo. */
 #side-progetto-select {
   width: 100%;

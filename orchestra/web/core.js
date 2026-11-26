@@ -466,9 +466,50 @@ function renderMarkdown(text) {
     if (lista) { fuori.push((lista === "ul" ? "<ul>" : "<ol>") + listaHtml + (lista === "ul" ? "</ul>" : "</ol>")); lista = null; listaHtml = ""; }
   };
   let listaHtml = "";
-  for (const r of righe) {
+  // Le tabelle: riga di intestazione con le pipe, riga di trattini, righe di
+  // corpo. Senza questo ramo ogni riga finiva in un <p> e si vedevano i `|---|`
+  // crudi: il CSS della tabella c'era gia', mancava chi la costruiva.
+  // Una pipe vera dentro una cella si scrive `\|`: va protetta prima dello
+  // split, altrimenti `x \| y` diventa due celle e la riga guadagna una colonna.
+  // Il segnaposto e' un carattere di controllo che nel testo non compare.
+  const celle = (r) => {
+    const protetto = r.trim().replace(/\\\|/g, "\u0001");
+    return protetto.replace(/^\|/, "").replace(/\|$/, "").split("|")
+      .map((c) => c.trim().replace(/\u0001/g, "|"));
+  };
+  const eSeparatore = (r) => /\|/.test(r) && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(r);
+  const allinea = (c) => /^:-+:$/.test(c) ? "center" : /^-+:$/.test(c) ? "right" : "";
+  for (let i = 0; i < righe.length; i++) {
+    const r = righe[i];
     let m;
-    if (/^\u0000\d+\u0000$/.test(r.trim()) && pezzi[+r.trim().slice(1, -1)].startsWith("blocco:")) {
+    if (/\|/.test(r) && i + 1 < righe.length && eSeparatore(righe[i + 1])) {
+      chiudiLista();
+      const testa = celle(r);
+      const posizioni = celle(righe[i + 1]).map(allinea);
+      const att = (k) => posizioni[k] ? ' style="text-align:' + posizioni[k] + '"' : "";
+      let html = "<table><thead><tr>";
+      testa.forEach((c, k) => { html += "<th" + att(k) + ">" + c + "</th>"; });
+      html += "</tr></thead><tbody>";
+      i += 2;
+      // Una riga di corpo deve somigliare all'intestazione: con i bordi
+      // (`| a | b |`) si pretende il bordo, senza bordi (`a | b`) lo
+      // stesso numero di celle. Senza questo, un paragrafo con una pipe
+      // dopo la tabella veniva mangiato come riga di tabella.
+      const conBordi = /^\s*\|/.test(r);
+      const rigaDiTabella = (x) => {
+        if (/^\s*$/.test(x)) return false;
+        if (conBordi) return /^\s*\|/.test(x);
+        return /\|/.test(x) && celle(x).length === testa.length;
+      };
+      while (i < righe.length && rigaDiTabella(righe[i])) {
+        html += "<tr>";
+        celle(righe[i]).forEach((c, k) => { html += "<td" + att(k) + ">" + c + "</td>"; });
+        html += "</tr>";
+        i += 1;
+      }
+      fuori.push(html + "</tbody></table>");
+      i -= 1;
+    } else if (/^\u0000\d+\u0000$/.test(r.trim()) && pezzi[+r.trim().slice(1, -1)].startsWith("blocco:")) {
       chiudiLista();
       fuori.push(pezzi[+r.trim().slice(1, -1)].slice(7));
     } else if ((m = r.match(/^(#{1,3})\s+(.*)/))) {

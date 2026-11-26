@@ -5330,6 +5330,16 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
     # -- POST --------------------------------------------------------------
 
     def do_POST(self) -> None:  # noqa: N802
+        self._con_corpo("POST")
+
+    def do_PUT(self) -> None:  # noqa: N802
+        # Stessa strada della POST — CSRF, tetto del corpo, sessione,
+        # dispatch — cambia solo il metodo con cui si sceglie la rotta.
+        # Senza questo metodo il server risponderebbe 501 e la PUT
+        # resterebbe nella tabella senza arrivare mai a un gestore.
+        self._con_corpo("PUT")
+
+    def _con_corpo(self, metodo: str) -> None:
         path = self.path.split("?")[0]
         # CSRF: una pagina di un altro sito non deve poter comandare
         # l'agente con una POST verso 127.0.0.1. Sta PRIMA di tutto,
@@ -5394,7 +5404,8 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
                     "/api/provider", "/api/memoria/cerca",
                     "/api/memoria/aggiungi", "/api/memoria/elimina",
                     "/api/memoria/modifica", "/api/memoria/ottimizza",
-                    "/api/progetto", "/api/identita", "/api/bots/crea",
+                    "/api/progetto", "/api/progetto/istruzioni",
+                    "/api/identita", "/api/bots/crea",
                     "/api/bots/attiva", "/api/bots/aggiorna",
                     "/api/bots/elimina", "/api/bots/avvia",
                     "/api/lavori/riprova", "/api/lavori/annulla",
@@ -5419,7 +5430,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
 
         # Un corpo solo, letto una volta (il tetto dipende dalla rotta),
         # poi la tabella decide chi lo riceve.
-        self._instrada("POST", path, body, s)
+        self._instrada(metodo, path, body, s)
 
 
 def _trova_cloudflared() -> str:
