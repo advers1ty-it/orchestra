@@ -260,7 +260,7 @@ class RotteSistema:
             for d in _dep.stato():
                 segno = "ok  " if d["stato"] == "ok" else "--  "
                 ver = f" {d['versione']}" if d.get("versione") else ""
-                cosa = f" — {d['perche']}" if d.get("perche") else ""
+                cosa = f", {d['perche']}" if d.get("perche") else ""
                 righe.append(f"{segno}{d['nome']}{ver} [{d['via']}]{cosa}")
             self._json({"comando": cmd_id, "ok": True,
                         "output": "\n".join(righe)})

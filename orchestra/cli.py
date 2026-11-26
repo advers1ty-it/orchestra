@@ -174,7 +174,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         print(f"{C['r']}errore provider: {e}{C['x']}", file=sys.stderr)
         return 2
 
-    print(f"{C['b']}Orchestra {__version__}{C['x']} — modello {env.get('ORCHESTRA_MODEL')}")
+    print(f"{C['b']}Orchestra {__version__}{C['x']}, modello {env.get('ORCHESTRA_MODEL')}")
     print(f"{C['dim']}/esci per uscire{C['x']}\n")
     while True:
         try:
@@ -194,7 +194,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
 def cmd_doctor(args: argparse.Namespace) -> int:
     env = _env()
-    print(f"{C['b']}Orchestra {__version__} — doctor{C['x']}\n")
+    print(f"{C['b']}Orchestra {__version__}, doctor{C['x']}\n")
     ok = True
 
     print("Configurazione")

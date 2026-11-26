@@ -177,7 +177,7 @@ def tool_immagine() -> Tool:
             "OpenAI only) and the only one that spends credit. "
             "`azione=\"modifica\"` composites instead: pastes the real logo "
             "(PNG transparency kept, `scontorna` removes a flat background), "
-            "draws the real text, crops, resizes — every other pixel stays "
+            "draws the real text, crops, resizes, every other pixel stays "
             "the original, and it costs nothing. For a price, a logo or a "
             "watermark on a photo the user attached, always use `modifica`: "
             "a model invents the letters and the digits. Both write into "

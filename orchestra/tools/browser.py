@@ -124,7 +124,7 @@ def _risposta_render(grezzo: str, fonte: str) -> str:
     testo = _html_a_testo(grezzo)
     if not testo:
         return (f"Pagina senza testo estraibile su {fonte} "
-                f"({len(grezzo)} byte grezzi — magari JSON/PDF/immagine).")
+                f"({len(grezzo)} byte grezzi, magari JSON/PDF/immagine).")
     if len(testo) > 6000:
         testo = testo[:6000] + f"\n\n[...troncato: {len(testo)} caratteri]"
     prefisso = f"# {titolo}\n{fonte}\n\n" if titolo else f"{fonte}\n\n"
@@ -356,11 +356,11 @@ def tool_browser_click() -> Tool:
         if not isinstance(esito, dict) or not esito.get("ok"):
             motivo = (esito or {}).get("motivo") if isinstance(esito, dict) else ""
             return (f"nessun elemento per {selettore!r} su {s.url_corrente()}"
-                    f"{' — ' + motivo if motivo else ''}")
+                    f"{', ' + motivo if motivo else ''}")
         extra = " (era disabilitato)" if esito.get("disabilitato") else ""
         return (f"cliccato <{esito.get('tag')}> {selettore} su "
                 f"{s.url_corrente()}{extra}"
-                + (f" — testo: {esito['testo']!r}" if esito.get("testo") else ""))
+                + (f", testo: {esito['testo']!r}" if esito.get("testo") else ""))
 
     return Tool(
         name="browser_click",
@@ -421,7 +421,7 @@ def tool_browser_digita() -> Tool:
             return f"digitazione non riuscita: {type(e).__name__}: {e}"
         return (f"scritto in {selettore} su {s.url_corrente()}"
                 + (" e inviato" if invio else "")
-                + (f" — valore ora: {valore!r}" if valore is not None else ""))
+                + (f", valore ora: {valore!r}" if valore is not None else ""))
 
     return Tool(
         name="browser_digita",

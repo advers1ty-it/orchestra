@@ -458,7 +458,7 @@ def tool_memoria() -> Tool:
                         "(default) it reports what would be pruned or "
                         "merged without touching memory. 'aggiungi', "
                         "'modifica' and 'elimina' always act, whatever "
-                        "this says — do not set it expecting a preview "
+                        "this says, do not set it expecting a preview "
                         "of them."
                     ),
                 },

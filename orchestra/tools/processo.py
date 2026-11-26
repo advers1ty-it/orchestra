@@ -44,7 +44,7 @@ def _testo_avvio(esito: dict) -> str:
 
 
 def _testo_lettura(esito: dict) -> str:
-    righe = [f"{esito['id']} — {esito['stato']}",
+    righe = [f"{esito['id']}, {esito['stato']}",
              f"Comando: {esito['cmd']}" if esito.get("cmd") else "",
              f"Log: {esito['log']}"]
     righe = [r for r in righe if r]
@@ -114,8 +114,8 @@ def tool_processo() -> Tool:
             if esito.get("errore"):
                 return esito["errore"]
             if esito.get("giafinito"):
-                return f"{esito['id']} — {esito['stato']}: niente da fermare."
-            righe_out = [f"FERMATO {esito['id']} — {esito['stato']}."]
+                return f"{esito['id']}, {esito['stato']}: niente da fermare."
+            righe_out = [f"FERMATO {esito['id']}, {esito['stato']}."]
             uscita = (esito.get("uscita") or "").strip()
             if uscita:
                 righe_out.append("--- ultime righe ---")
@@ -146,8 +146,8 @@ def tool_processo() -> Tool:
             "run_shell WAITS and kills the command at its timeout, so a "
             "server started there is gone before you can open it. Flow: "
             "azione='avvia' returns an id and says immediately whether the "
-            "process is still alive (a command that dies at startup — port "
-            "in use, missing module — is reported with its output right "
+            "process is still alive (a command that dies at startup: port "
+            "in use or a missing module is reported with its output right "
             "there); azione='leggi' returns the last lines of the log "
             "without consuming them; azione='scrivi' writes text to the "
             "process's stdin, so a REPL or a CLI that asks a question can "

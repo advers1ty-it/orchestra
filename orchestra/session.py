@@ -700,9 +700,9 @@ class Session:
                          "l'unione la decidi tu. Usarlo quando i compiti "
                          "non dipendono uno dall'altro (leggere tre file, "
                          "verificare due ipotesi, cercare in due cartelle "
-                         "diverse). NON usarlo per compiti in sequenza — lì "
+                         "diverse). NON usarlo per compiti in sequenza, lì "
                          "il secondo ha bisogno di ciò che ha trovato il "
-                         "primo — né per far scrivere più figli sugli "
+                         "primo, né per far scrivere più figli sugli "
                          "stessi file: lavorano nella stessa cartella."),
             schema={
                 "type": "object",
@@ -914,11 +914,11 @@ class Session:
             pass
         if not finito:
             return (f"[il bot {nome_vero} sta ancora lavorando dopo "
-                    f"{int(secondi)}s: la risposta non e' pronta — non e' "
+                    f"{int(secondi)}s: la risposta non e' pronta, non e' "
                     f"un risultato]")
         if not risposta:
             return (f"[il bot {nome_vero} ha finito senza una risposta "
-                    f"testuale — non e' un risultato]")
+                    f"testuale, non e' un risultato]")
         return f"[risposta dal bot {nome_vero}]\n{risposta}"
 
     def _ricorda_modello_delegato(self, modello: str) -> None:
@@ -1434,7 +1434,7 @@ class Session:
                         raise
                     vecchio = self.modello_in_uso()
                     self.bridge.emit("log", {
-                        "text": f"{vecchio}: {self._motivo_rifiuto(e)} — "
+                        "text": f"{vecchio}: {self._motivo_rifiuto(e)}, "
                                 f"provo {sostituto}"
                     })
                     if not self.cambia_modello(sostituto):

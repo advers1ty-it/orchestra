@@ -215,7 +215,7 @@ def tool_calendario() -> Tool:
             "fine optional, luogo, note), `elimina` (id), plus the "
             "subscriptions: `fonti` (what is subscribed), `aggiungi_fonte` "
             "(nome, url of an iCal link), `elimina_fonte` (nome), "
-            "`sincronizza` (fonte optional — necessary before new remote "
+            "`sincronizza` (fonte optional, necessary before new remote "
             "events appear). A subscribed calendar is remote and read-only: "
             "its events are marked with the source and cannot be deleted "
             "here, say so instead of pretending. Dates are 'AAAA-MM-GG' or "

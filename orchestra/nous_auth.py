@@ -350,11 +350,11 @@ def complete_device_flow(device: dict[str, Any]) -> dict[str, Any]:
         if error_code in ("access_denied", "expired_token"):
             raise RuntimeError(
                 f"Nous OAuth interrotto: {error_code}"
-                + (f" — {description}" if description else "")
+                + (f", {description}" if description else "")
             )
         raise RuntimeError(
             f"Nous OAuth: HTTP {status} {error_code}"
-            + (f" — {description}" if description else "")
+            + (f", {description}" if description else "")
         )
 
     raise RuntimeError(

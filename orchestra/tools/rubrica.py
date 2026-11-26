@@ -80,7 +80,7 @@ def tool_rubrica() -> Tool:
             "The user's address book: name, email, phone, company, notes. "
             "The `azione` values are: `cerca` (testo: matches any field, and "
             "phone numbers also match digit by digit), `aggiungi` "
-            "(nome/email/telefono/azienda/note — a contact with the same "
+            "(nome/email/telefono/azienda/note, a contact with the same "
             "email is UPDATED, not duplicated), `modifica` (id plus the "
             "fields to change), `elimina` (id), `conta`. "
             "Use it before asking the user 'who is this person?', and before "

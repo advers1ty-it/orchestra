@@ -111,7 +111,7 @@ class Scelta:
     def spiega(self) -> str:
         """Una riga per l'utomo, con il motivo e le alternative."""
         if self.modello is None:
-            return f"{self.categoria}: nessun modello adatto — {self.motivo}"
+            return f"{self.categoria}: nessun modello adatto, {self.motivo}"
         testo = (f"{self.categoria} → {self.modello} "
                  f"({self.punteggio:.0f}% su {self.prove:.0f} prove)"
                  if self.punteggio is not None

@@ -34,7 +34,10 @@ orchestra/budget_global.json
 memoria_indice.db
 orchestra/memory.md
 orchestra/memoria_config.json
-nul*
+# Nomi riservati di Windows e artefatti di redirect sbagliati: solo il nome
+# esatto. Con 'nul*' finivano ignorati anche nullable.ts, null.ts e nul.py.
+nul
+nul'
 tests/_run_*.js
 orchestra.err.log
 orchestra.err.log.1

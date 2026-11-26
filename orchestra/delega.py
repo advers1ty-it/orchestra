@@ -98,7 +98,7 @@ class Figlio:
             # "non ha finito" non e' "ha sbagliato": il padre deve
             # poter decidere se riprovare piu' a lungo o spezzare il
             # compito, e con un errore generico non lo saprebbe.
-            return (f"[il figlio non ha finito in tempo ({self.motivo}) — "
+            return (f"[il figlio non ha finito in tempo ({self.motivo}), "
                     f"non e' un risultato: quello che ha fatto puo' "
                     f"essere incompleto]\n{self.testo}")
         if self.esito == "esaurito":
@@ -107,8 +107,8 @@ class Figlio:
             # quindi il messaggio deve riportare il valore effettivo
             # raggiunto, non una costante.
             return (f"[il figlio ha finito i {self.passi} passi senza "
-                    f"rispondere — non e' un risultato]\n{self.testo}")
-        return (f"[il figlio e' andato in errore: {self.motivo} — "
+                    f"rispondere, non e' un risultato]\n{self.testo}")
+        return (f"[il figlio e' andato in errore: {self.motivo}, "
                 f"non e' un risultato]\n{self.testo}")
 
     def __repr__(self) -> str:
@@ -168,7 +168,7 @@ def _ultimo_progresso(stato: Any) -> str:
                 break
     if not ultimo_tool:
         return ""
-    return f"[il figlio si è fermato senza chiudere — {ultimo_tool}]"
+    return f"[il figlio si è fermato senza chiudere, {ultimo_tool}]"
 
 
 def _costo(stato: Any, tariffa: Any = None) -> float | None:

@@ -59,7 +59,7 @@ def tool_storico_cerca() -> Tool:
             righe.append(f"{i}. [{r['titolo'] or '(senza titolo)'}] "
                          f"{r['ruolo']} · {quando}")
             righe.append(f"   {r['frammento']}")
-            righe.append(f"   (sessione {r['sessione_id']} — "
+            righe.append(f"   (sessione {r['sessione_id']}, "
                          f"apri con storico/apri)")
             righe.append("")
         return "\n".join(righe).rstrip()

@@ -1293,7 +1293,7 @@ class OrchestraApp:
                         state = "ok" if r.passed else ("errore" if r.error else "fail")
                         self._bench["log"].append(
                             f"  {t.id}: {state}"
-                            + (f" — {perché(r)}" if not r.passed else "")
+                            + (f", {perché(r)}" if not r.passed else "")
                         )
                         self._bench["finiti"] += 1
                         self._bench["last_progress"] = time.monotonic()
@@ -2834,9 +2834,9 @@ class OrchestraApp:
         # solo per Orchestra, mentre la vista in chat e' per bot — e chi
         # legge "Reasoning: high" senza saperlo crede di aver cambiato
         # solo questa chat.
-        testo = (f"Reasoning: {livello} — per tutte le sessioni, e resta "
+        testo = (f"Reasoning: {livello}, per tutte le sessioni, e resta "
                  f"dopo il riavvio." if livello
-                 else "Reasoning: automatico (per categoria) — per tutte "
+                 else "Reasoning: automatico (per categoria), per tutte "
                       "le sessioni, e resta dopo il riavvio.")
         if avviso:
             return (f"{testo} Applicato subito, ma non salvato per il "
@@ -2863,7 +2863,7 @@ class OrchestraApp:
             for g in voci[:10]:
                 stato = g.get("status") or "?"
                 obiettivo = (g.get("objective") or "").strip().replace("\n", " ")
-                righe.append(f"· {stato} — {obiettivo[:70]}")
+                righe.append(f"· {stato}, {obiettivo[:70]}")
             resto = (f"\n(e altri {len(voci) - 10})" if len(voci) > 10 else "")
             return "Obiettivi aperti:\n" + "\n".join(righe) + resto
         try:
@@ -2895,7 +2895,7 @@ class OrchestraApp:
         righe = []
         for chiave in sedie:
             perche = str(motivi.get(chiave) or "").strip()
-            righe.append(f"· {chiave}" + (f" — {perche}" if perche else ""))
+            righe.append(f"· {chiave}" + (f", {perche}" if perche else ""))
         testo = (f"Tavolo per: {domanda[:140]}\n" + "\n".join(righe))
         nota = str(esito.get("note") or "").strip()
         if nota:
@@ -2963,8 +2963,8 @@ class OrchestraApp:
         # pannello, salvata nel .env), la vista e' di questo bot. Senza le
         # parentesi sembrava che entrambe valessero solo per questa chat.
         testo = [
-            f"Ragionamento: {livello or 'auto'} — tutte le sessioni",
-            f"In chat: {'acceso' if mostra else 'spento'} — solo questo bot",
+            f"Ragionamento: {livello or 'auto'}, tutte le sessioni",
+            f"In chat: {'acceso' if mostra else 'spento'}, solo questo bot",
             "Il livello dice quanto pensa il modello; in chat, se il suo "
             "ragionamento ti arriva.",
         ]
@@ -4533,7 +4533,7 @@ class Handler(Rotte, BaseHTTPRequestHandler):
     def _login_page(self) -> None:
         html = """<!DOCTYPE html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Orchestra — Accesso</title>
+<title>Orchestra: Accesso</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f1115;color:#e6e6e6;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 .card{background:#1a1d24;padding:24px;border-radius:12px;width:320px;box-shadow:0 8px 30px rgba(0,0,0,.4)}
 h1{font-size:18px;margin:0 0 12px}p{font-size:13px;color:#9aa0a6;margin:0 0 16px}
@@ -5623,7 +5623,7 @@ class OrchestraServer(ThreadingHTTPServer):
             addr = client_address[0]
         except Exception:
             addr = "?"
-        print(f"  connessione chiusa dal client ({addr}) — normale, non un errore",
+        print(f"  connessione chiusa dal client ({addr}), normale, non un errore",
               flush=True)
 
 

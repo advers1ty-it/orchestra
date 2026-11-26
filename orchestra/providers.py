@@ -233,7 +233,7 @@ class OpenAICompatAdapter:
                 detail or "",
                 getattr(e, "headers", None))
             raise ProviderError(
-                f"{self.name}: HTTP {e.code} — {detail or e.reason}",
+                f"{self.name}: HTTP {e.code}, {detail or e.reason}",
                 retryable=e.code in RETRYABLE_STATUS,
                 status=e.code,
                 unusable=harness_locked,
@@ -242,7 +242,7 @@ class OpenAICompatAdapter:
         except urllib.error.URLError as e:
             # errori di rete: quasi sempre transitori
             raise ProviderError(
-                f"{self.name}: errore di rete — {e.reason}", retryable=True
+                f"{self.name}: errore di rete, {e.reason}", retryable=True
             ) from e
 
         try:
@@ -396,7 +396,7 @@ class OpenAICompatAdapter:
             if e.code == 401 and _retry and self._chiave_fresca():
                 return self._post_stream(path, payload, emetti, _retry=False)
             raise ProviderError(
-                f"{self.name}: HTTP {e.code} — {detail or e.reason}",
+                f"{self.name}: HTTP {e.code}, {detail or e.reason}",
                 retryable=e.code in RETRYABLE_STATUS,
                 status=e.code,
                 retry_after=_retry_after(detail or "", getattr(e, "headers", None)),
@@ -521,7 +521,7 @@ class OpenAICompatAdapter:
         choices = data.get("choices") or []
         if not choices:
             raise ProviderError(
-                f"{self.name}: nessuna choice nella risposta — "
+                f"{self.name}: nessuna choice nella risposta, "
                 f"{json.dumps(data)[:300]}"
             )
         ch = choices[0]
@@ -647,12 +647,12 @@ class AnthropicAdapter:
             except Exception:
                 pass
             raise ProviderError(
-                f"anthropic: HTTP {e.code} — {detail or e.reason}",
+                f"anthropic: HTTP {e.code}, {detail or e.reason}",
                 retryable=e.code in RETRYABLE_STATUS,
                 status=e.code,
             ) from e
         except urllib.error.URLError as e:
-            raise ProviderError(f"anthropic: errore di rete — {e.reason}",
+            raise ProviderError(f"anthropic: errore di rete, {e.reason}",
                                retryable=True) from e
         try:
             return json.loads(raw)

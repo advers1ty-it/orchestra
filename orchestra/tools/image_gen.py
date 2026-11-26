@@ -179,7 +179,7 @@ def tool_image_gen() -> Tool:
             for voce in voci[:60]:
                 extra = (" (accetta immagini di riferimento)"
                          if voce["riferimento"] else "")
-                righe.append(f"- {voce['id']} — {voce['nome']}{extra}")
+                righe.append(f"- {voce['id']}, {voce['nome']}{extra}")
             resto = len(voci) - len(righe)
             coda = (f"\n...e altri {resto}." if resto > 0 else "")
             return ToolResult(text=(
@@ -252,7 +252,7 @@ def tool_image_gen() -> Tool:
             "To edit, pass `riferimento`: a path in the project, a data URL, "
             "or `ultimo` for the image the user just attached. When the user "
             "attached several images in one message, name them with "
-            "`allegato:1`, `allegato:2`, … — `ultimo` is only the last one, "
+            "`allegato:1`, `allegato:2`, …, `ultimo` is only the last one, "
             "and an album of three photos needs all three named. When the "
             "edit needs more than one image (the poster to keep, the real logo, "
             "the real product photo) pass `riferimenti`: the model rebuilds "

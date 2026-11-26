@@ -249,5 +249,5 @@ def formatta(contatto: dict[str, Any]) -> str:
     riga = " · ".join(pezzi)
     if contatto["note"]:
         nota = contatto["note"].strip().replace("\n", " ")
-        riga += f" — {nota[:120]}"
+        riga += f", {nota[:120]}"
     return riga

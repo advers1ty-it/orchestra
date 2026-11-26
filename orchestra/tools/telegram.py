@@ -106,7 +106,7 @@ def tool_telegram() -> Tool:
             "from a turn that did not come from Telegram. No token or chat "
             "id is needed and none should be asked for: it uses the link "
             "already saved. `testo` is the real message as the user will "
-            "read it on the phone — never a placeholder or a test string. "
+            "read it on the phone, never a placeholder or a test string. "
             "It answers where the message went; if it says no chat is "
             "linked, tell the user to link one from Opzioni > Bot > Telegram."
         ),

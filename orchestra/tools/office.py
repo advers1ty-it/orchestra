@@ -110,15 +110,15 @@ def tool_office() -> Tool:
     return Tool(
         name="office",
         description=(
-            "Writes a real .docx (Word) or .xlsx (Excel) file — a quote, a "
-            "letter, a timesheet — inside the working folder. For .docx pass "
+            "Writes a real .docx (Word) or .xlsx (Excel) file inside the working "
+            "folder: a quote, a letter, a timesheet. For .docx pass "
             "`titolo` and `paragrafi` (one string per paragraph). For .xlsx "
             "pass `righe` (a list of rows, each a list of cells; numbers stay "
             "numbers), or `fogli` for several sheets, each "
             "{nome, righe}. The first row is formatted as a bold, frozen "
             "header unless `intestazione` is false; column widths follow the "
             "content. A cell that starts with '=' becomes a real formula and "
-            "Excel computes it on open — use the English function names "
+            "Excel computes it on open: use the English function names "
             "(SUM, AVERAGE, IF), which is what the file format stores. The "
             "extension of `percorso` decides the format unless `formato` is "
             "given. It creates a new file: to read an existing Office file "
