@@ -719,6 +719,7 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
     except Exception:  # noqa: BLE001 - la guardia ha comunque root/assenza
         pass
     last_output: list[str] = []
+    state: Any = None
     iterations = {"n": 0}
     cancelled = {"f": False}
 
@@ -756,7 +757,20 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
             pass
 
     def _testo() -> str:
-        return "\n\n".join(last_output[-5:])
+        testo = "\n\n".join(last_output[-5:])
+        if testo.strip():
+            return testo
+        # Con un provider senza streaming non arriva nessun evento
+        # `contenuto`: il testo finale esiste solo nel messaggio assistant
+        # dello stato. Senza questo ripiego il goal risultava `done` con
+        # `last_output` vuoto.
+        if state is not None:
+            for m in reversed(getattr(state, "messages", []) or []):
+                if getattr(m, "role", "") == "assistant":
+                    contenuto = (getattr(m, "content", "") or "").strip()
+                    if contenuto:
+                        return contenuto
+        return ""
 
     try:
         from .agent import Agent, LoopConfig, parametri_da_env

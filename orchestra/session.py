@@ -1813,7 +1813,7 @@ class Session:
         """
         st = getattr(self.agent, "state", None)
         esito = (getattr(st, "stopped_because", "") or "").strip()
-        if esito not in ("", "complete"):
+        if esito not in ("", "complete", "risposta_finale"):
             return
         try:
             from . import apprendimento

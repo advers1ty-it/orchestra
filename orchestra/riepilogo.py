@@ -32,6 +32,13 @@ from typing import Any
 _ESITI = {
     "": ("finito", "ok"),
     "complete": ("finito", "ok"),
+    # L'agente chiude cosi' un turno normale: senza questa voce il
+    # riepilogo lo trattava come un codice sconosciuto, con gravita'
+    # "avviso", e un turno riuscito sembrava sospetto.
+    "risposta_finale": ("finito", "ok"),
+    # Ha finito il giro, non il lavoro: il testo resta valido, ma il
+    # turno va ripreso.
+    "max_iterations": ("fermato: tetto di iterazioni raggiunto", "avviso"),
     "troppi_errori_consecutivi": ("fermato: troppi errori di fila", "errore"),
     "gira_a_vuoto": ("fermato: stava ripetendo la stessa chiamata", "errore"),
     "budget_exceeded": ("fermato: budget esaurito", "errore"),

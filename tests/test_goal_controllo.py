@@ -67,8 +67,11 @@ class AgentFinto:
             G.cancel(gid)
             if should_continue is not None and not should_continue(None):
                 return Stato("canceled_da_should_continue")
-        # Il testo finale lo produce l'evento, come nel loop vero.
-        self.on_event("testo", {"testo": "lavoro fatto"})
+        # Il testo finale lo produce l'evento, come nel loop vero. Il
+        # provider non-streaming invece non emette niente: il suo testo
+        # resta nel messaggio assistant dello stato.
+        if AgentFinto.mode != "senza_eventi":
+            self.on_event("testo", {"testo": "lavoro fatto"})
         return Stato()
 
 
@@ -162,6 +165,17 @@ try:
     check("il goal completa con la risposta finale",
           (G.get(g_run) or {}).get("status") == "done",
           str((G.get(g_run) or {}).get("status")))
+
+    AgentFinto.mode = "senza_eventi"
+    g_noevent = G.create("provider senza streaming", root=root_b)
+    G.run_goal(g_noevent, env={})
+    riga_noevent = G.get(g_noevent) or {}
+    check("un provider senza eventi usa il messaggio assistant",
+          riga_noevent.get("last_output") == "fatto",
+          str(riga_noevent.get("last_output")))
+    check("e il goal non chiude con un risultato vuoto",
+          riga_noevent.get("status") == "done",
+          str(riga_noevent.get("status")))
 
     # Lo scheduler prenota (running) e poi chiama `run_goal`: il percorso
     # prenotato deve eseguire, non essere scambiato per un goal gia' chiuso.

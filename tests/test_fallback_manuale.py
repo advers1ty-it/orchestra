@@ -147,6 +147,36 @@ check("nessun provider di ripiego viene tentato",
       "fallback_attempt" not in eventi or eventi.count("fallback_attempt") == 1,
       str(eventi))
 
+print("\n[4b] Il ripiego vale solo per il turno in corso")
+
+from orchestra.fallback import FallbackState  # noqa: E402
+from orchestra.types import LLMResponse  # noqa: E402
+
+
+class ProviderRisposta:
+    name = "nous"
+    model = "m"
+
+    def chat(self, messages, tools=None, **kw):
+        return LLMResponse(content="ok", model="m")
+
+
+ag_turno = Agent(ProviderRisposta(), default_registry(), "SYS",
+                 LoopConfig(max_iterations=2))
+ag_turno.fallback_chain = catena_manuale("nous", "m", [], attivo=False)
+# Uno stato avanzato oltre la catena: se `run()` non lo azzera, il turno
+# non trova piu' nessun provider e chiude con un errore.
+ag_turno._fallback_state = FallbackState(entries=ag_turno.fallback_chain)
+ag_turno._fallback_state.current_index = 99
+ag_turno.run("riparti dal primario")
+check("il turno dopo un fallback riparte dal primario",
+      ag_turno.state.stopped_because == "risposta_finale",
+      str(ag_turno.state.stopped_because))
+check("lo stato di fallback e' nuovo, non quello del turno prima",
+      ag_turno._fallback_state is not None
+      and ag_turno._fallback_state.current_index == 0,
+      str(getattr(ag_turno._fallback_state, "current_index", None)))
+
 # ---------------------------------------- il salvataggio (senza server vero)
 print("\n[5] Salvare la scelta: .env e catena viva")
 

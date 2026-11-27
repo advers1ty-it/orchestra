@@ -1311,6 +1311,11 @@ class Agent:
         self._chiamate_identiche = {}
         self._troncamenti = 0
         self._risposte_vuote = 0
+        # Il ripiego vale per il turno in corso, non per la vita
+        # dell'agente: se il primario torna disponibile, il turno dopo
+        # deve ripartire da lui. Senza questo azzeramento il modello
+        # scelto nella UI poteva restare scavalcato per sempre.
+        self._fallback_state = None
 
         for self.state.iterations in range(1, self.config.max_iterations + 1):
             if should_continue and not should_continue(self.state):

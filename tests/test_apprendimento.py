@@ -192,6 +192,15 @@ check("infatti non c'e' la proposta",
       not any(x.nome == "flutter-build-apk"
               for x in sk.Indice().tutte()))
 
+emessi.clear()
+for n in range(3):
+    reg = types.SimpleNamespace(eventi=turno(["ruff check ."],
+                                             prefisso=f"d{n}"))
+    _Finto("risposta_finale")._impara("controllare lo stile", reg)
+check("un turno chiuso con risposta_finale insegna",
+      any("procedura" in str(d).lower() for _k, d in emessi),
+      str(emessi))
+
 print("\n[8] lo stato non cresce senza fine")
 voce = [v for v in ap.leggi()["firme"].values()
         if "pytest -q" in (v.get("comandi") or [])]

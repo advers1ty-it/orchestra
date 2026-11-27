@@ -99,6 +99,14 @@ for codice, atteso in (
     check(f"{codice} -> {atteso}", atteso in testo and gravita != "ok",
           f"{testo} ({gravita})")
 
+testo, gravita = riepilogo.esito_leggibile("risposta_finale")
+check("risposta_finale e' un turno finito",
+      testo == "finito" and gravita == "ok", f"{testo} ({gravita})")
+
+testo, gravita = riepilogo.esito_leggibile("max_iterations")
+check("max_iterations e' un avviso, non un successo",
+      "iterazioni" in testo and gravita == "avviso", f"{testo} ({gravita})")
+
 testo, gravita = riepilogo.esito_leggibile("qualcosa_di_nuovo")
 check("un codice sconosciuto non diventa 'finito'",
       "qualcosa" in testo and gravita == "avviso", f"{testo} ({gravita})")
