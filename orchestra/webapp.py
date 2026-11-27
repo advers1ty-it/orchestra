@@ -669,10 +669,16 @@ class OrchestraApp:
         return {"ok": True, "file": file, "progetto": nome}
 
     def _progetto_attivo(self) -> str:
-        """Il nome del progetto attivo, o "" se non c'e'."""
-        if self.session is None:
+        """Il nome del progetto attivo, o "" se non c'e'.
+
+        `getattr` e non `self.session`: i comandi Telegram vengono provati
+        anche su un'app costruita senza `__init__`, dove la sessione non
+        esiste ancora. Un comando non deve cadere per questo.
+        """
+        session = getattr(self, "session", None)
+        if session is None:
             return ""
-        return getattr(self.session, "progetto", "") or ""
+        return getattr(session, "progetto", "") or ""
 
     def _elenco_progetti(self) -> list[dict[str, Any]]:
         """I progetti registrati, con il file toccati."""

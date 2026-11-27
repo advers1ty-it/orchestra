@@ -45,6 +45,17 @@ def check(nome, cond, dettaglio=""):
           + (f" — {dettaglio}" if dettaglio and not cond else ""))
 
 
+def solo_output(risposta: str) -> str:
+    """La parte dopo `--- output ---`, senza il comando che la precede.
+
+    Il comando di prova contiene la parola `letto:`. Cercarla in tutta la
+    risposta la trova anche quando il processo non ha ancora stampato
+    niente, e il test esce dal ciclo troppo presto.
+    """
+    parti = risposta.split("--- output ---", 1)
+    return parti[1] if len(parti) == 2 else ""
+
+
 reg = default_registry()
 tool = reg.get("processo")
 
@@ -169,7 +180,7 @@ check("scrive senza chiudere la riga",
 time.sleep(0.3)
 prima = tool.handler(azione="leggi", id=sid2) if sid2 else ""
 check("senza a capo il processo aspetta ancora",
-      "letto:" not in prima.split("--- output ---")[-1], prima[:200])
+      "letto:" not in solo_output(prima), prima[:200])
 w2 = tool.handler(azione="scrivi", id=sid2, testo="", a_capo=True) if sid2 else ""
 check("il solo a capo completa la riga",
       "SCRITTO" in w2 and "con a capo" in w2, w2[:200])
@@ -178,14 +189,15 @@ letto2 = ""
 # copre l'attesa vera, non un numero scelto per far passare il test.
 for _ in range(150):
     letto2 = tool.handler(azione="leggi", id=sid2) if sid2 else ""
-    if "letto:" in letto2:
+    if "letto:" in solo_output(letto2):
         break
     time.sleep(0.1)
-if "letto:" not in letto2 or "senza-capo" not in letto2:
+if "letto:" not in solo_output(letto2) or "senza-capo" not in letto2:
     print(f"  DEBUG w1={w1!r} prima={prima!r} w2={w2!r} "
           f"letto2={letto2!r}")
 check("il processo ha letto la riga completa",
-      "letto:" in letto2 and "senza-capo" in letto2, letto2[:200])
+      "letto:" in solo_output(letto2) and "senza-capo" in solo_output(letto2),
+      letto2[:200])
 # Il processo stampa e poi esce: aspettare l'uscita evita di provare a
 # scrivere nella finestra in cui la pipe e' gia' chiusa ma `poll()`
 # risponde ancora vivo. Il caso "scrivi a un processo davvero finito"
