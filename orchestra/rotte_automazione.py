@@ -113,6 +113,8 @@ class RotteAutomazione:
         parent_id = None
         kind = "goal"
         consenti_parziale = False
+        project = self._progetto_attivo()
+        root = ""
         if isinstance(body, dict):
             try:
                 max_iters = int(body.get("max_iterations") or 60)
@@ -133,6 +135,8 @@ class RotteAutomazione:
             consenti_parziale = bool(body.get("consenti_parziale"))
             criteri = body.get("criteri")
             recovery = body.get("recovery")
+            project = str(body.get("project") or project or "").strip()
+            root = str(body.get("root") or "").strip()
         from . import goal as goal_mod
         try:
             gid = goal_mod.start_goal(
@@ -142,7 +146,8 @@ class RotteAutomazione:
                 not_before=not_before, kind=kind,
                 max_attempts=max_attempts,
                 consenti_parziale=consenti_parziale,
-                criteri=criteri, recovery=recovery)
+                criteri=criteri, recovery=recovery,
+                project=project or None, root=root or None)
         except (RuntimeError, ValueError) as e:
             self._json({"error": f"goal non avviato: {e}"}, 409)
             return

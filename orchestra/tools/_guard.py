@@ -137,7 +137,7 @@ def _motivo_sensibile(p: Path) -> str:
     return ""
 
 
-def _safe_path(rel: str) -> Path:
+def _safe_path(rel: str, azione: str = "leggere") -> Path:
     """Risolve un path, dentro la root per default, fuori solo se autorizzato.
 
     Legge la root al momento della chiamata, non quella congelata
@@ -151,30 +151,44 @@ def _safe_path(rel: str) -> Path:
 
     I file di credenziali sono negati PRIMA della domanda: non sono una
     scelta che l'utente puo' concedere per sbaglio in un riquadro, e il
-    messaggio deve dirlo invece di far credere che basti riprovare.
+    messaggio deve dirlo invece di far credere che basti riprovare. Il
+    controllo vale anche FUORI dalla root e anche quando il gate ha
+    concesso il percorso: un consenso sul percorso non e' un consenso su
+    un segreto che ci sta dentro.
+
+    `azione` e' quella che il tool sta davvero facendo ("leggere",
+    "scrivere", "eseguire"): il gate la usa nella chiave del permesso,
+    cosi' un consenso di lettura non autorizza la scrittura.
     """
     root = _root()
     p = (root / rel).resolve()
 
+    gate = _gate()
+    motivo = _motivo_sensibile(p)
+    if not motivo and gate is not None:
+        # Anche il gate ha la sua lista di percorsi di sistema. Si
+        # consulta qui, prima della domanda, perche' un consenso sul
+        # percorso non deve poter scavalcare un divieto che vale sempre.
+        try:
+            motivo = gate.percorso_sensibile(p)
+        except Exception:  # noqa: BLE001
+            motivo = ""
+    if motivo:
+        raise PermissionError(
+            f"percorso protetto ({motivo}): {rel}. I file di "
+            f"credenziali non si leggono ne' si scrivono con gli "
+            f"strumenti, nemmeno dentro la cartella di lavoro. Se "
+            f"serve davvero, aprilo fuori dall'agente: qui la risposta "
+            f"e' no, e riprovare non cambia niente."
+        )
+
     dentro = _dentro_root(str(p))
     if dentro:
-        # Dentro la root il confine non basta: `.env` sta nel progetto, e
-        # senza questo controllo era leggibile mentre la shell lo negava.
-        motivo = _motivo_sensibile(p)
-        if motivo:
-            raise PermissionError(
-                f"percorso protetto ({motivo}): {rel}. I file di "
-                f"credenziali non si leggono ne' si scrivono con gli "
-                f"strumenti, nemmeno dentro la cartella di lavoro. Se "
-                f"serve davvero, aprilo fuori dall'agente: qui la risposta "
-                f"e' no, e riprovare non cambia niente."
-            )
         return p
 
-    gate = _gate()
     if gate is None:
         raise ValueError(f"path fuori dal root consentito: {rel}")
-    if gate.chiedi_all_utente(str(p), "leggere", f"{rel} → {p}"):
+    if gate.chiedi_all_utente(str(p), azione, f"{rel} → {p}"):
         return p
     raise PermissionError(
         f"accesso fuori dalla cartella di lavoro non autorizzato: {p}. "
@@ -386,126 +400,119 @@ def _espandi_variabili(command: str) -> str:
     return out
 
 
-def _percorso_fuori(command: str) -> str:
-    """Il percorso che il comando tocca ed esce dalla root, o "".
+def _percorsi_fuori(command: str) -> list[str]:
+    """TUTTI i percorsi esterni che il comando nomina, non solo il primo.
 
-    Restituisce il percorso e non un booleano perche' serve al gate
-    come SOGGETTO della domanda. Passandogli la root — cioe' dicendogli
-    "guarda se questa cartella e' fuori dalla root" while lei e' la
-    root stessa — la risposta e' sempre "dentro", e il permesso viene
-    concesso senza chiedere nulla. E' successo: l'agente si e' sentito
-    dire che non poteva toccare C:\\Users\\adver\\TraceAppNew senza che
-    all'utente comparisse mai la domanda.
-
-    Un path DENTRO la root non e' un "fuori": e' il posto di lavoro,
-    e farlo scattare come se fosse fuori produceva due guai. In web
-    UI la domanda di permesso per un file del progetto (assurdo), e in
-    CLI — dove non c'e' nessuno a cui chiedere — il comando veniva
-    negato con un messaggio che diceva "fuori dalla cartella di
-    lavoro" per un percorso che era dentro. Negare il proprio progetto
-    perche' il percorso era assoluto e' un difetto che si vede subito,
-    e il messaggio che lo spiega e' falso.
-
-    Approssimazione dichiarata: non e' un sandbox e non puo' esserlo
-    qui dentro. Un `curl`, un `python -c` o una catena di pipe possono
-    arrivare ovunque senza mai nominare un percorso. Quello che
-    facciamo e' fermare gli errori ovvi — `..`, un percorso assoluto
-    FUORI dalla root, la home — che sono anche la maggior parte degli
-    incidenti reali, e chiedere il permesso su quelli invece di negare
-    in silenzio.
-
-    Dichiararlo e' parte del lavoro: un controllo che sembra totale e
-    non lo e' e' peggio di nessun controllo, perche' ci si fiderebbe
-    troppo.
+    `_percorso_fuori` si fermava al primo: un comando come
+    `cp /tmp/a /tmp/b` faceva autorizzare `/tmp/a` e poi eseguiva anche
+    `/tmp/b`. La domanda e' una sola, ma il consenso deve coprire ogni
+    percorso che il comando tocca. Questa funzione e' la stessa ricerca,
+    senza il `return` anticipato, e mantiene l'ordine in cui i percorsi
+    compaiono.
     """
     import re
 
     command = _espandi_variabili(command)
     low = command.lower()
+    fuori: list[str] = []
+    visti: set[str] = set()
+
+    def aggiungi(candidato: str) -> None:
+        candidato = (candidato or "").strip().rstrip("/\\")
+        if not candidato or _dentro_root(candidato):
+            return
+        chiave = os.path.normcase(os.path.abspath(candidato))
+        if chiave in visti:
+            return
+        visti.add(chiave)
+        fuori.append(candidato)
 
     def come_windows(s: str) -> str:
-        # /c/Users/... -> C:\Users\...  (stile msys/git-bash)
+        # /c/Users/... -> C:\Users\... (stile msys/git-bash)
         m2 = re.match(r"^/([a-z])/(.*)$", s)
         if m2 and os.name == "nt":
             resto = m2.group(2).replace("/", "\\")
-            return f"{m2.group(1).upper()}:\\{resto}" if resto else f"{m2.group(1).upper()}:\\"
+            return (f"{m2.group(1).upper()}:\\{resto}"
+                    if resto else f"{m2.group(1).upper()}:\\")
         return s
 
-    # L'ordine conta. Prima le drive msys (/c/Users/...), PERCHE' se
-    # scatta prima /users/... il percorso resta in forma Unix, il gate lo
-    # risolve sulla drive corrente e la domanda arriva con un percorso
-    # che l'utente non riconosce — se non lo riconosce, non autorizza.
-    #
-    # Si cerca nella versione minuscola ma si restituisce il testo
-    # ORIGINALE: nel riquadro deve comparire C:\\Users\\adver\\TraceAppNew
-    # come l'ha scritto l'agente, non tutto minuscolo. Un percorso che
-    # l'utente non riconosce e' un percorso che non autorizza.
+    # 1) drive msys: /c/Users/...
+    intervalli: list[tuple[int, int]] = []
     for m in re.finditer(r"/[a-z](?:/[^\s'\";|&)<>]*)?", low):
         originale = command[m.start():m.end()]
         tradotto = come_windows(originale)
         if tradotto.lower() != originale.lower():
-            # Solo se e' davvero fuori dalla root: `/d/orchestra` e' il
-            # progetto, non un percorso esterno.
-            if not _dentro_root(tradotto):
-                return tradotto
+            intervalli.append((m.start(), m.end()))
+            aggiungi(tradotto)
+
+    # 2) percorsi assoluti Windows
     for m in re.finditer(r"[a-z]:[\\/](?:[^\s'\";|&)<>]{0,200})", low):
-        # Solo se e' davvero FUORI: un path assoluto dentro la root
-        # e' il posto di lavoro, e farlo scattare come "fuori" produce
-        # una domanda di permesso per il file che l'agente sta
-        # semplicemente aprendo.
-        candidato = command[m.start():m.end()].rstrip("/\\")
-        if candidato and not _dentro_root(candidato):
-            return candidato or command[m.start():m.start() + 2]
+        aggiungi(command[m.start():m.end()].rstrip("/\\"))
+
+    # 3) prefissi POSIX noti (il caso Windows e' gia' stato tradotto)
     for m in re.finditer(r"/(?:users|home|root|mnt|media)/[^\s'\";|&)<>]{0,200}", low):
-        candidato = come_windows(command[m.start():m.end()].rstrip("/"))
-        if candidato and not _dentro_root(candidato):
-            return candidato
-    # Percorsi assoluti POSIX fuori dai prefissi noti: su Linux `/tmp/...`,
-    # `/etc/...`, `/bin/...` sono assoluti e stanno fuori dalla root, e
-    # prima non li vedeva nessuno. Il confine della shell valeva solo su
-    # Windows: `cat /etc/passwd` passava senza domanda, e senza gate non
-    # veniva nemmeno fermato. La CI su Ubuntu l'ha trovato subito.
-    #
-    # Il lookbehind esclude `://` (un URL non e' un percorso) e le slash
-    # consecutive; `%a%b` e le sostituzioni `sed s/a/b/` restano fuori
-    # perche' la slash e' preceduta da una lettera o da un altro carattere
-    # di parola.
+        aggiungi(come_windows(command[m.start():m.end()].rstrip("/")))
+
+    # 4) altri percorsi POSIX assoluti. Si saltano le parti gia' lette
+    #    come drive msys, altrimenti `/c/Users` verrebbe chiesto due volte
+    #    in due forme diverse.
     for m in re.finditer(r"(?<![\w:/])/(?!/)[^\s'\";|&)<>]+", command):
-        candidato = m.group(0).rstrip("/.,;")
-        if candidato and len(candidato) > 1 and not _dentro_root(candidato):
-            return candidato
+        if any(a <= m.start() < b for a, b in intervalli):
+            continue
+        aggiungi(m.group(0).rstrip("/.,;"))
+
+    # 5) `..` che risolve fuori dalla root
     if "../" in command or "..\\" in command:
-        # si risolve solo il PRIMO token che sembra un percorso: passare
-        # l'intero comando a resolve() lo tratta come un nome di file e
-        # produce una destinazione sbagliata
         for m in re.finditer(r"[^\s'\";|&)<>]*\.\.[^\s'\";|&)<>]*", command):
             try:
-                risolto = str((_root() / m.group(0)).resolve())
+                aggiungi(str((_root() / m.group(0)).resolve()))
             except Exception:  # noqa: BLE001
-                return str(_root())
-            # `..` che RISOLVE dentro la root non esce: e' un modo
-            # goffo di scrivere la stessa cartella. Solo se il
-            # risultato e' davvero fuori, e' un percorso esterno.
-            if not _dentro_root(risolto):
-                return risolto
-        return ""
-    if low.startswith("~/"):
-        # La home e' fuori dalla root solo se la root non E' la home.
-        # Un progetto dentro C:\\Users\\adver ha la home come
-        # antenato, e `~/documenti` non ne esce.
-        home = os.path.expanduser("~")
-        if not _dentro_root(home):
-            return home
-    for pat in _SUSPICIOUS:
-        if re.search(pat, low):
-            return os.path.join(os.path.expanduser("~"), pat.strip("^$"))
-    return ""
+                aggiungi(str(_root()))
+
+    # 6) home esplicita con `~`
+    for m in re.finditer(r"(?:^|\s)(~/[^\s'\";|&)<>]*)", command):
+        try:
+            aggiungi(os.path.expanduser(m.group(1)))
+        except Exception:  # noqa: BLE001
+            pass
+    return fuori
 
 
-def _check_shell_access(command: str) -> str | None:
+def _percorso_fuori(command: str) -> str:
+    """Il primo percorso esterno, per i chiamanti che ne vogliono uno solo."""
+    percorsi = _percorsi_fuori(command)
+    return percorsi[0] if percorsi else ""
+
+
+def _consentito(candidato: str, consentiti: set[str] | None) -> bool:
+    """Il percorso e' coperto da un consenso gia' ottenuto?
+
+    Il confronto e' per contenimento: autorizzare una cartella copre i
+    suoi figli, come fa il gate. Serve a non dire "BLOCCATO" su un
+    percorso che l'utente ha appena autorizzato.
+    """
+    if not consentiti:
+        return False
+    try:
+        c = os.path.normcase(os.path.abspath(os.path.expanduser(candidato)))
+    except Exception:  # noqa: BLE001
+        return False
+    for autorizzato in consentiti:
+        try:
+            a = os.path.normcase(os.path.abspath(os.path.expanduser(autorizzato)))
+            if os.path.commonpath([c, a]) == a:
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def _check_shell_access(command: str,
+                        consentiti: set[str] | None = None) -> str | None:
     """Rifiuta i comandi che uscirebbero dal root o toccherebbero segreti.
 
-    Non è un sandbox: non ferma `curl`, che può scaricare quello che vuole.
+    Questo controllo non e' un sandbox: non ferma `curl`, che può
+    scaricare quello che vuole.
     Ferma gli errori ovvi — il percorso esplicito e i file di credenziali —
     che sono anche la maggior parte degli incidenti reali. Un sandbox vero
     richiede isolamento a livello di processo e non sta in un tool handler.
@@ -518,9 +525,11 @@ def _check_shell_access(command: str) -> str | None:
     del rifiuto. Il confine che conta e' "dentro o fuori dalla root",
     e si guarda il path.
 
-    Nota: questo controllo gira solo quando il gate non ha concesso
-    niente (vedi `run_shell`): con il gate, e' il gate a decidere, per
-   che' e' piu' severo e l'utente ha gia' risposto.
+    Nota: gira anche dopo il gate. I percorsi che l'utente ha appena
+    autorizzato arrivano in `consentiti` e non vengono bloccati una
+    seconda volta; i segreti e gli altri pattern pericolosi, invece,
+    vengono controllati sempre — un consenso sul percorso non e' un
+    consenso su un `.env` che ci sta dentro.
     """
     import re
 
@@ -532,13 +541,16 @@ def _check_shell_access(command: str) -> str | None:
         # `..` che RISOLVE dentro la root non esce: e' un modo goffo
         # di scrivere la stessa cartella. Solo se il risultato e'
         # davvero fuori, e' un escape.
-        if _percorso_fuori(command):
+        fuori = [p for p in _percorsi_fuori(command)
+                 if not _consentito(p, consentiti)]
+        if fuori:
             return f"il comando contiene '..' (escape dal root): {command[:120]}"
 
     # 2) percorsi assoluti Windows: solo se escono davvero dalla root
     for m in re.finditer(r"[a-z]:[\\/][^\s'\";|&<>]{0,200}", low):
         candidato = command[m.start():m.end()].rstrip("/\\")
-        if candidato and not _dentro_root(candidato):
+        if (candidato and not _dentro_root(candidato)
+                and not _consentito(candidato, consentiti)):
             return f"il comando punta fuori dal progetto ({candidato}): {command[:120]}"
 
     # 2b) percorsi assoluti POSIX: stesso ragionamento, e prima mancavano.
@@ -546,13 +558,17 @@ def _check_shell_access(command: str) -> str | None:
     # c'e' (CLI, benchmark) lasciava passare `cat /etc/passwd`.
     for m in re.finditer(r"(?<![\w:/])/(?!/)[^\s'\";|&<>]{0,200}", command):
         candidato = m.group(0).rstrip("/.,;")
-        if candidato and len(candidato) > 1 and not _dentro_root(candidato):
+        if (candidato and len(candidato) > 1
+                and not _dentro_root(candidato)
+                and not _consentito(candidato, consentiti)):
             return f"il comando punta fuori dal progetto ({candidato}): {command[:120]}"
 
     # 3) home esplicita: solo se la home e' davvero fuori
     if "/home/" in low or "/root/" in low or low.startswith("~/") or "/users/" in low:
         home = os.path.expanduser("~")
-        if not _dentro_root(home):
+        fuori_home = [p for p in _percorsi_fuori(command)
+                      if not _consentito(p, consentiti)]
+        if not _dentro_root(home) and fuori_home:
             return f"il comando punta fuori dal progetto: {command[:120]}"
 
     # 4) file di credenziali
@@ -620,47 +636,45 @@ def verifica_comando(command: str) -> str | None:
     # un comando puo' toccare tre file, e chiedere per uno e poi
     # eseguirlo cosi' com'e' sarebbe autorizzare tutto.
     gate = _gate()
-    fuori = _percorso_fuori(command)
-    concesso = False
-    if gate is not None and fuori:
-        # si chiede sul percorso REALE che il comando tocca, non sulla
-        # root: chiedere "questa cartella e' fuori dalla root" indicando
-        # la root stessa e' una domanda con la risposta gia' scritta, e
-        # non e' quello che e' successo
-        concesso = gate.chiedi_all_utente(fuori, "eseguire",
-                                          f"comando: {command[:200]}")
-        if not concesso:
-            return (
-                "NON ESEGUITO: comando fuori dalla cartella di lavoro, "
-                f"permesso non concesso per {fuori}.\n"
-                f"Il root consentito è {_root()}.\n"
-                f"Comando: {command[:200]}"
-            )
-    elif fuori and gate is None:
+    percorsi = _percorsi_fuori(command)
+    if gate is not None and percorsi:
+        # Un comando puo' toccare piu' percorsi. Chiedere per il primo e
+        # poi eseguire anche gli altri era il buco: il consenso vale per
+        # ogni percorso che il comando nomina.
+        for fuori in percorsi:
+            if not gate.chiedi_all_utente(fuori, "eseguire",
+                                          f"comando: {command[:200]}"):
+                return (
+                    "NON ESEGUITO: comando fuori dalla cartella di lavoro, "
+                    f"permesso non concesso per {fuori}.\n"
+                    f"Il root consentito è {_root()}.\n"
+                    f"Comando: {command[:200]}"
+                )
+    elif percorsi and gate is None:
         # nessuno a cui chiedere (CLI, benchmark): si nega, e si dice
         # perche' invece di lasciare che fallisca in silenzio. Si dice
         # anche l'alternativa: un blocco che non dice cosa fare
         # costringe il modello a indovinare e a riprovare
         return (
-            f"NON ESEGUITO: il comando tocca {fuori}, fuori dalla "
+            f"NON ESEGUITO: il comando tocca {percorsi[0]}, fuori dalla "
             f"cartella di lavoro ({_root()}), e non c'è nessuno a cui "
             f"chiedere il permesso.\n"
             f"Usa un percorso relativo dentro il progetto, oppure "
             f"avvia Orchestra con ORCHESTRA_ROOT su quella cartella."
         )
 
-    # _check_shell_access gira SOLO senza gate, oppure quando il gate
-    # non ha avuto niente da dire (nessun percorso fuori). Con il gate
-    # che ha concesso, farlo comunque era un modo di rispondere due
-    # volte: l'utente autorizzava, il gate concedeva, e subito dopo
-    # questo controllo diceva "BLOCCATO per sicurezza". Due risposte
-    # contraddittorie alla stessa domanda, e la seconda vinceva.
-    if not (gate is not None and fuori and concesso):
-        denied = _check_shell_access(command)
-        if denied:
-            return (f"BLOCCATO per sicurezza: {denied}\n"
-                    f"Il root consentito è {_root()}. Usa path relativi "
-                    f"dentro il progetto.")
+    # I percorsi autorizzati si dicono al controllo, che cosi' non li
+    # blocca di nuovo; i segreti e gli altri pattern pericolosi vengono
+    # controllati SEMPRE, anche quando il gate ha concesso il percorso.
+    # Prima questo blocco veniva saltato del tutto dopo un consenso, e
+    # `cat .env` fuori dalla root passava se il gate aveva approvato la
+    # cartella che lo conteneva.
+    denied = _check_shell_access(
+        command, consentiti=set(percorsi) if gate is not None else None)
+    if denied:
+        return (f"BLOCCATO per sicurezza: {denied}\n"
+                f"Il root consentito è {_root()}. Usa path relativi "
+                f"dentro il progetto.")
 
     # La root e' un confine, ma non e' una cassaforte: `rm -rf src/`
     # sta dentro, non esce da nessuna parte, e cancella il lavoro. Il

@@ -101,7 +101,7 @@ for bad in ["../../../Windows/win.ini", "..\\..\\secrets.txt", "/etc/passwd"]:
     try:
         h(path=bad, trova="a", sostituisci="b")
         check(f"edit_file blocca {bad[:30]}", False, "ha scritto fuori dal root!")
-    except ValueError as e:
+    except (ValueError, PermissionError) as e:
         check(f"edit_file blocca {bad[:30]}", True)
     except Exception as e:  # noqa: BLE001
         check(f"edit_file blocca {bad[:30]}", False, f"tipo inatteso: {type(e).__name__}")

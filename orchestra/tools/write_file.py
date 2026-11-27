@@ -32,7 +32,7 @@ def _registra(p, azione: str) -> None:
 
 def tool_write_file() -> Tool:
     def handler(path: str, content: str) -> str:
-        p = _safe_path(path)
+        p = _safe_path(path, "scrivere")
         p.parent.mkdir(parents=True, exist_ok=True)
         existed = p.exists()
         # Checkpoint PRIMA della scrittura: dopo, la versione vecchia non

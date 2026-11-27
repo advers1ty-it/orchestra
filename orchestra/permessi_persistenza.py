@@ -37,7 +37,32 @@ def _path() -> str:
     return _percorso_dati(NOME_FILE)
 
 
-def carica() -> dict[str, list[str]]:
+def _voce(voce: Any) -> dict[str, str] | None:
+    """Una voce nel formato nuovo, o None se non e' utilizzabile.
+
+    Il vecchio formato era una lista di percorsi. Un permesso senza
+    azione non puo' autorizzare scrittura o esecuzione: vale solo per la
+    lettura, l'unica azione che il vecchio gate conosceva di fatto.
+    """
+    if isinstance(voce, dict):
+        percorso = str(voce.get("percorso") or "")
+        azione = str(voce.get("azione") or "leggere")
+    elif isinstance(voce, (tuple, list)) and len(voce) == 2:
+        percorso, azione = voce
+        percorso = str(percorso or "")
+        azione = str(azione or "leggere")
+    elif isinstance(voce, (str, bytes)):
+        percorso = voce.decode() if isinstance(voce, bytes) else voce
+        azione = "leggere"
+    else:
+        return None
+    percorso = percorso.strip()
+    if not percorso:
+        return None
+    return {"percorso": percorso, "azione": azione.strip().lower() or "leggere"}
+
+
+def carica() -> dict[str, list[dict[str, str]]]:
     """Legge i permessi salvati. Un file rotto non blocca niente."""
     vuoto = {"sempre": [], "negati": []}
     try:
@@ -51,20 +76,26 @@ def carica() -> dict[str, list[str]]:
         return vuoto
     if not isinstance(dati, dict):
         return vuoto
-    out: dict[str, list[str]] = {}
+    out: dict[str, list[dict[str, str]]] = {}
     for sezione in ("sempre", "negati"):
         valori = dati.get(sezione)
         if not isinstance(valori, list):
             valori = []
-        out[sezione] = [str(v) for v in valori if isinstance(v, (str, bytes))]
+        out[sezione] = [v for v in (_voce(v) for v in valori) if v]
     return out
 
 
-def salva(sempre: set[str] | list[str], negati: set[str] | list[str]) -> None:
+def salva(sempre: Any, negati: Any) -> None:
     """Scrive i permessi. Fallisce in silenzio: e' un salvataggio."""
+    def _puliti(voci: Any) -> list[dict[str, str]]:
+        return sorted(
+            (v for v in (_voce(v) for v in (voci or [])) if v),
+            key=lambda v: (v["azione"], v["percorso"]),
+        )
+
     dati = {
-        "sempre": sorted(sempre),
-        "negati": sorted(negati),
+        "sempre": _puliti(sempre),
+        "negati": _puliti(negati),
     }
     with _lock:
         path = _path()

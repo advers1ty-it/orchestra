@@ -20,6 +20,7 @@ import json
 import sqlite3
 import threading
 import time
+import uuid
 from typing import Any
 
 from . import redazione
@@ -44,6 +45,9 @@ CREATE TABLE IF NOT EXISTS messaggi (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     sessione_id INTEGER NOT NULL REFERENCES sessioni(id) ON DELETE CASCADE,
     ruolo        TEXT NOT NULL,
+    -- Identita' stabile: lo storico e' append-only, e senza uid due
+    -- salvataggi dello stesso turno potrebbero duplicare le righe.
+    uid         TEXT NOT NULL DEFAULT '',
     contenuto    TEXT NOT NULL DEFAULT '',
     ragionamento TEXT NOT NULL DEFAULT '',
     nome         TEXT,
@@ -147,6 +151,23 @@ class Storico:
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
+            # Migrazione: le righe scritte prima dello storico append-only
+            # non hanno un uid. Se ne assegna uno a ciascuna, cosi' una
+            # conversazione riaperta non viene reinserita da capo al primo
+            # salvataggio (e il vecchio `salva_turno` non le cancella piu').
+            try:
+                self._conn.execute(
+                    "ALTER TABLE messaggi ADD COLUMN uid TEXT "
+                    "NOT NULL DEFAULT ''")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
+            self._conn.execute(
+                "UPDATE messaggi SET uid = lower(hex(randomblob(16)))"
+                " WHERE uid = ''")
+            self._conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_messaggi_uid"
+                " ON messaggi(sessione_id, uid)")
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_sessioni_progetto"
                 " ON sessioni(progetto)")
@@ -312,9 +333,10 @@ class Storico:
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO messaggi"
-                " (sessione_id, ruolo, contenuto, nome, tool_json, token, creata)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (sessione_id, ruolo, contenuto, nome, dati, token, time.time()))
+                " (sessione_id, ruolo, uid, contenuto, nome, tool_json, token, creata)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (sessione_id, ruolo, uuid.uuid4().hex, contenuto, nome,
+                 dati, token, time.time()))
             self._conn.execute(
                 "UPDATE sessioni SET aggiornata = ? WHERE id = ?",
                 (time.time(), sessione_id))
@@ -324,7 +346,8 @@ class Storico:
     def messaggi(self, sessione_id: int) -> list[dict[str, Any]]:
         with self._lock:
             righe = self._conn.execute(
-                "SELECT id, ruolo, contenuto, ragionamento, nome, tool_json, token, creata"
+                "SELECT id, sessione_id, uid, ruolo, contenuto, ragionamento,"
+                " nome, tool_json, token, creata"
                 " FROM messaggi WHERE sessione_id = ? ORDER BY id", (sessione_id,)
             ).fetchall()
         fuori = []
@@ -444,31 +467,43 @@ class Storico:
 
     def salva_turno(self, sessione_id: int, messaggi: list[dict[str, Any]],
                     modello: str = "", provider: str = "") -> None:
-        """Salva una conversazione intera in un colpo.
+        """Aggiunge i messaggi nuovi, senza riscrivere quelli gia' salvati.
 
-        Usato quando la sessione viene ripresa e il suo stato in memoria
-        è già completo: riscrivere tutto è più semplice che cercare quali
-        righe mancano, e il numero di messaggi è nell'ordine delle
-        centinaia, non dei milioni.
+        Lo storico e' append-only: gli id delle righe esistenti non devono
+        cambiare, perche' la cronologia e' anche il bersaglio dei link e
+        della ricerca. `uid` rende l'inserimento idempotente; l'intero
+        blocco e' una transazione, quindi un errore a meta' non lascia un
+        turno mezzo scritto.
         """
         with self._lock:
-            self._conn.execute("DELETE FROM messaggi WHERE sessione_id = ?",
-                               (sessione_id,))
-            for m in messaggi:
-                tool_json = m.get("tool")
-                dati = (json.dumps(redazione.redigi_dati(tool_json),
-                                   ensure_ascii=False)
-                        if tool_json is not None else None)
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                for m in messaggi:
+                    tool_json = m.get("tool")
+                    dati = (json.dumps(redazione.redigi_dati(tool_json),
+                                       ensure_ascii=False)
+                            if tool_json is not None else None)
+                    uid = str(m.get("uid") or uuid.uuid4().hex)
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO messaggi"
+                        " (sessione_id, ruolo, uid, contenuto, ragionamento,"
+                        " nome, tool_json, token, creata)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (sessione_id, m.get("ruolo", ""), uid,
+                         redazione.redigi(m.get("contenuto", "") or ""),
+                         redazione.redigi(m.get("ragionamento", "") or ""),
+                         m.get("nome"), dati,
+                         m.get("token", 0), time.time()))
                 self._conn.execute(
-                    "INSERT INTO messaggi"
-                    " (sessione_id, ruolo, contenuto, ragionamento, nome, tool_json, token, creata)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (sessione_id, m.get("ruolo", ""),
-                     redazione.redigi(m.get("contenuto", "") or ""),
-                     redazione.redigi(m.get("ragionamento", "") or ""),
-                     m.get("nome"), dati,
-                     m.get("token", 0), time.time()))
-            self.tocca(sessione_id, modello, provider)
+                    "UPDATE sessioni SET aggiornata = ?,"
+                    " modello = COALESCE(NULLIF(?, ''), modello),"
+                    " provider = COALESCE(NULLIF(?, ''), provider)"
+                    " WHERE id = ?",
+                    (time.time(), modello, provider, sessione_id))
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
 
 
 # Istanza condivisa. Il server ne ha uno solo, ma la sessione e la UI

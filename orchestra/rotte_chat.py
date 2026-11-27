@@ -442,7 +442,11 @@ class RotteChat:
             self._json({"error": "gate non attivo"}, 503)
             return
         if body.get("revoca"):
-            revocato = gate.revoca(str(body.get("revoca")))
+            azione = body.get("azione")
+            revocato = gate.revoca(
+                str(body.get("revoca")),
+                str(azione) if azione else None,
+            )
             self._json({"ok": revocato, "stato": gate.stato()})
             return
         self._json(gate.stato())

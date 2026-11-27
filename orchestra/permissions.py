@@ -22,9 +22,12 @@ sono autorizzabili con nessuna delle quattro scelte, perche' sbagliarli
 non costa un file, costa il sistema. Su quelli si nega e basta — e si dice
 perche', altrimenti sembra un bug.
 
-Il vincolo e' sul TOOL, non sul prompt. Se autorizzi la lettura di una
-cartella, vale anche quando l'agente usa run_shell per arrivarci: al
-trimenti basta chiedere la permesso giusta e usare quella sbagliata.
+Il vincolo e' sul TOOL, non sul prompt, e vale per la coppia
+(percorso, azione): autorizzare la lettura di una cartella NON autorizza
+a scriverla ne' a eseguire un comando che la tocca. Altrimenti basterebbe
+chiedere il permesso piu' comodo e usare quello piu' pericoloso. Il
+permesso su una cartella si eredita ai figli, ma solo per la stessa
+azione.
 """
 
 from __future__ import annotations
@@ -117,12 +120,12 @@ class Gate:
         # id di richiesta -> risposta. Il tool aspetta su questo.
         self._risposte: dict[str, Risposta] = {}
         self._attesa: dict[str, threading.Event] = {}
-        # permessi concessi per la sessione: percorso -> scade
-        self._sessione: dict[str, float] = {}
-        # permessi concessi per sempre: percorso -> True
-        self._sempre: set[str] = set()
-        # permessi negati per sempre: percorso -> True
-        self._negati: set[str] = set()
+        # permessi concessi per la sessione: (percorso, azione) -> scade
+        self._sessione: dict[tuple[str, str], float] = {}
+        # permessi concessi per sempre: (percorso, azione)
+        self._sempre: set[tuple[str, str]] = set()
+        # permessi negati per sempre: (percorso, azione)
+        self._negati: set[tuple[str, str]] = set()
         self._lock = threading.Lock()
         self._contatore = 0
         # Quelli di sopra stanno in memoria, e il Gate vive sul processo
@@ -149,8 +152,25 @@ class Gate:
         except Exception:  # noqa: BLE001
             return
         with self._lock:
-            self._sempre.update(dati.get("sempre", []))
-            self._negati.update(dati.get("negati", []))
+            for sezione, destinazione in (("sempre", self._sempre),
+                                          ("negati", self._negati)):
+                for voce in dati.get(sezione, []):
+                    if isinstance(voce, dict):
+                        percorso = str(voce.get("percorso") or "")
+                        azione = str(voce.get("azione") or "leggere")
+                    else:
+                        # Formato vecchio: solo il percorso. Vale per la
+                        # lettura, l'unica azione che poteva essere stata
+                        # autorizzata prima che i permessi fossero legati
+                        # all'azione. Non allarga il consenso a scrittura
+                        # o esecuzione.
+                        percorso = str(voce)
+                        azione = "leggere"
+                    if percorso:
+                        destinazione.add((
+                            self._chiave(self._canonico(percorso)),
+                            self._azione(azione),
+                        ))
 
     def _salva_persistenza(self) -> None:
         """Scrive su disco i permessi che devono sopravvivere al riavvio."""
@@ -170,6 +190,17 @@ class Gate:
 
     def _chiave(self, p: Path) -> str:
         return str(p).lower() if os.name == "nt" else str(p)
+
+    @staticmethod
+    def _azione(azione: str) -> str:
+        """La forma con cui si confronta un'azione.
+
+        Il percorso e l'azione sono la stessa chiave: se una riga salva
+        "Leggere" e l'altra cerca "leggere", il consenso non si trova e
+        l'utente deve rispondere di nuovo. Le azioni sono parole semplici,
+        quindi normalizzarle non perde informazione.
+        """
+        return str(azione or "").strip().lower()
 
     def dentro_root(self, p: Path) -> bool:
         """Se p sta dentro la root, con lo stesso "dentro" del sistema.
@@ -290,13 +321,11 @@ class Gate:
         # all'esistenza.
         p = self._canonico(p)
 
-        # 1. dentro la root: nessuna domanda, e' il posto di lavoro.
-        #    `dentro_root_concesso=False` salta questo ramo per le azioni
-        #    che devono essere confermate anche qui (commit, push).
-        if dentro_root_concesso and self.dentro_root(p):
-            return "concesso"
-
-        # 2. percorsi vietati: nessuna delle quattro scelte li sblocca.
+        # 1. percorsi vietati: nessuna delle quattro scelte li sblocca.
+        #    Il controllo viene PRIMA della scorciatoia "dentro la root":
+        #    un `.env` nel progetto e' dentro la root, ma non e' per questo
+        #    autorizzabile. Prima il ramo della root rispondeva "concesso"
+        #    e il divieto non veniva mai guardato.
         #
         # Si controlla anche il percorso COSI' COM'E' STATO SCRITTO, non
         # solo quello risolto: `/bin/ls` su Ubuntu e' un symlink che
@@ -310,27 +339,36 @@ class Gate:
         if motivo:
             return "negato"
 
+        # 2. dentro la root: nessuna domanda, e' il posto di lavoro.
+        #    `dentro_root_concesso=False` salta questo ramo per le azioni
+        #    che devono essere confermate anche qui (commit, push).
+        if dentro_root_concesso and self.dentro_root(p):
+            return "concesso"
+
         k = self._chiave(p)
+        az = self._azione(azione)
+        chiave = (k, az)
         with self._lock:
             # 3. negato in precedenza: non si torna indietro
-            if k in self._negati:
+            if chiave in self._negati:
                 return "negato"
             # 4. concesso per sempre
-            if k in self._sempre:
+            if chiave in self._sempre:
                 return "concesso"
             # 5. concesso per la sessione, se non e' scaduto
-            scade = self._sessione.get(k)
+            scade = self._sessione.get(chiave)
             ora = time.time()
             if scade is not None:
                 if scade > ora:
                     return "concesso"
-                del self._sessione[k]
+                del self._sessione[chiave]
             # 5b. concesso perché sta dentro una cartella già concessa
             for kc, sc in self._sessione.items():
-                if sc > ora and self._concesso_anche_figli(p, kc):
+                if (sc > ora and kc[1] == az
+                        and self._concesso_anche_figli(p, kc[0])):
                     return "concesso"
             for kc in self._sempre:
-                if self._concesso_anche_figli(p, kc):
+                if kc[1] == az and self._concesso_anche_figli(p, kc[0]):
                     return "concesso"
         return "chiedi"
 
@@ -356,6 +394,7 @@ class Gate:
         comandi distruttivi), dove "siamo nel progetto" non e' un
         consenso. Un "sempre" gia' dato resta valido per quella chiave.
         """
+        azione = self._azione(azione)
         esito = self.valuta(percorso, azione, dettaglio,
                             dentro_root_concesso=not forza)
         if esito == "concesso":
@@ -397,7 +436,7 @@ class Gate:
             return True
         # Stessa canonicalizzazione di `valuta`: una chiave costruita in
         # un altro modo non verrebbe mai ritrovata.
-        k = self._chiave(self._canonico(percorso))
+        k = (self._chiave(self._canonico(percorso)), azione)
         concesso = False
         da_salvare = False
         with self._lock:
@@ -439,26 +478,49 @@ class Gate:
                 "root": str(self.root),
                 "in_attesa": list(self._attesa.keys()),
                 "sessione": [
-                    {"percorso": k,
+                    {"percorso": k[0], "azione": k[1],
                      "scade_tra": int(v - ora)}
                     for k, v in attive.items()
                 ],
-                "sempre": sorted(self._sempre),
-                "negati": sorted(self._negati),
+                "sempre": [
+                    {"percorso": k[0], "azione": k[1]}
+                    for k in sorted(self._sempre)
+                ],
+                "negati": [
+                    {"percorso": k[0], "azione": k[1]}
+                    for k in sorted(self._negati)
+                ],
             }
 
-    def revoca(self, percorso: str) -> bool:
-        """Toglie un permesso concesso (sessione/sempre) o dimentica un "mai"."""
+    def revoca(self, percorso: str, azione: str | None = None) -> bool:
+        """Toglie un permesso concesso (sessione/sempre) o dimentica un "mai".
+
+        Senza `azione` revoca tutte le azioni per quel percorso: e' la
+        compatibilita' con la UI e con le chiamate vecchie, che
+        conoscevano solo il percorso. Con `azione` tocca solo quella.
+        """
         # Come per il consenso: la revoca deve usare la stessa chiave
         # canonica, o toglie un permesso che non c'e' e lascia in piedi
         # quello vero. Su Windows succedeva con i nomi brevi 8.3.
         k = self._chiave(self._canonico(percorso))
+        filtro = self._azione(azione) if azione is not None else None
+
+        def _match(chiave: tuple[str, str]) -> bool:
+            return chiave[0] == k and (filtro is None or chiave[1] == filtro)
+
         with self._lock:
-            tolto = self._sessione.pop(k, None) is not None
-            tolto = k in self._sempre or tolto
-            self._sempre.discard(k)
-            tolto = k in self._negati or tolto
-            self._negati.discard(k)
+            chiavi_sessione = [c for c in self._sessione if _match(c)]
+            tolto = bool(chiavi_sessione)
+            for chiave in chiavi_sessione:
+                del self._sessione[chiave]
+            chiavi_sempre = [c for c in self._sempre if _match(c)]
+            tolto = bool(chiavi_sempre) or tolto
+            for chiave in chiavi_sempre:
+                self._sempre.discard(chiave)
+            chiavi_negate = [c for c in self._negati if _match(c)]
+            tolto = bool(chiavi_negate) or tolto
+            for chiave in chiavi_negate:
+                self._negati.discard(chiave)
         # anche la revoca va salvata: se non la salvo, il riavvio
         # rimetterebbe su disco il permesso che l'utente ha tolto.
         self._salva_persistenza()

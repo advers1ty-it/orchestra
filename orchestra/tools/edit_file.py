@@ -121,7 +121,7 @@ def tool_edit_file() -> Tool:
             voci = [{"trova": trova, "sostituisci": sostituisci,
                      "all": bool(all), "count": count}]
 
-        p = _safe_path(path)
+        p = _safe_path(path, "scrivere")
         if not p.exists():
             return f"NON ESISTE: {path}"
         if p.is_dir():

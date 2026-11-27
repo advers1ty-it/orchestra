@@ -94,6 +94,10 @@ class Message:
 
     role: Role
     content: str = ""
+    # Identita' stabile del messaggio. La compaction ricostruisce la lista
+    # e fonde i turni: senza un uid, lo storico non puo' distinguere un
+    # messaggio nuovo da uno gia' salvato senza confrontare il testo.
+    uid: str = field(default_factory=lambda: uuid.uuid4().hex)
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None  # solo per role="tool"
     name: str | None = None  # nome del tool, per role="tool"
@@ -162,6 +166,7 @@ class Message:
         return cls(
             role=d["role"],
             content=d.get("content", "") or "",
+            uid=d.get("uid") or uuid.uuid4().hex,
             tool_calls=tcs,
             tool_call_id=d.get("tool_call_id"),
             name=d.get("name"),

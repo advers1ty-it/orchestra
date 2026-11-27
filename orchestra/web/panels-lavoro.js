@@ -7,6 +7,7 @@ const permessiMsg = $("permessi-msg");
 function disegnaPermessi(st) {
   if (!permessiStato) return;
   permessiStato.replaceChildren();
+  const etichetta = (p) => (p.azione ? p.azione + ": " : "") + p.percorso;
   const aggiungi = (testo, classe) => {
     const d = el("div", "permesso-stato-riga " + (classe || ""));
     d.textContent = testo;
@@ -21,7 +22,7 @@ function disegnaPermessi(st) {
   }
   for (const s of st.sessione || []) {
     const minuti = Math.max(1, Math.round(s.scade_tra / 60));
-    const riga = aggiungi("Concesso: " + s.percorso + ", scade fra " + minuti + " min", "ok");
+    const riga = aggiungi("Concesso: " + etichetta(s) + ", scade fra " + minuti + " min", "ok");
     const rev = el("button", "ghost piccolo", "Revoca");
     riga.appendChild(rev);
     on(rev, "click", async () => {
@@ -29,7 +30,7 @@ function disegnaPermessi(st) {
         const r = await fetch("/api/permessi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ revoca: s.percorso }),
+          body: JSON.stringify({ revoca: s.percorso, azione: s.azione }),
         });
         const d = await r.json();
         disegnaPermessi(d.stato || st);
@@ -37,7 +38,7 @@ function disegnaPermessi(st) {
     });
   }
   for (const p of st.sempre || []) {
-    const riga = aggiungi("Sempre concesso: " + p, "ok");
+    const riga = aggiungi("Sempre concesso: " + etichetta(p), "ok");
     const rev = el("button", "ghost piccolo", "Revoca");
     riga.appendChild(rev);
     on(rev, "click", async () => {
@@ -45,7 +46,7 @@ function disegnaPermessi(st) {
         const r = await fetch("/api/permessi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ revoca: p }),
+          body: JSON.stringify({ revoca: p.percorso, azione: p.azione }),
         });
         const d = await r.json();
         disegnaPermessi(d.stato || st);
@@ -53,7 +54,7 @@ function disegnaPermessi(st) {
     });
   }
   for (const p of st.negati || []) {
-    const riga = aggiungi("Negato: " + p, "ko");
+    const riga = aggiungi("Negato: " + etichetta(p), "ko");
     const dim = el("button", "ghost piccolo", "Dimentica");
     dim.title = "Dimentica il 'mai': la prossima volta chiede di nuovo";
     riga.appendChild(dim);
@@ -62,7 +63,7 @@ function disegnaPermessi(st) {
         const r = await fetch("/api/permessi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ revoca: p }),
+          body: JSON.stringify({ revoca: p.percorso, azione: p.azione }),
         });
         const d = await r.json();
         disegnaPermessi(d.stato || st);

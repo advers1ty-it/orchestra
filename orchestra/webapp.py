@@ -48,6 +48,128 @@ from .webapp_rotte import Rotte
 
 REMOTE_STATE_PATH = os.path.join(HERE, ".remote_state.json")
 
+# Header presenti su OGNI risposta, non solo sull'HTML. La UI usa script e
+# stili inline (diagnostica, pannelli): per questo `unsafe-inline` resta,
+# mentre tutto il resto e' chiuso. `img-src https:` serve al QR Telegram,
+# che e' l'unica immagine esterna della pagina.
+SECURITY_HEADERS = (
+    ("Content-Security-Policy",
+     "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+     "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; "
+     "media-src 'self' data: blob:; font-src 'self' data:; "
+     "connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; "
+     "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; "
+     "form-action 'self'"),
+    ("X-Frame-Options", "DENY"),
+    ("X-Content-Type-Options", "nosniff"),
+    # Ignorato sopra HTTP semplice, applicato quando la UI passa da un
+    # tunnel HTTPS: il browser non deve poter tornare a http://.
+    ("Strict-Transport-Security", "max-age=31536000"),
+    ("Referrer-Policy", "no-referrer"),
+    ("Permissions-Policy",
+     "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)"),
+)
+
+
+def _processo_vivo(pid: int) -> bool:
+    """Vero se il PID esiste ancora, senza rischiare di terminarlo.
+
+    Su Windows `os.kill(pid, 0)` non e' una sonda: Python lo traduce in
+    `TerminateProcess`. Qui si interroga l'handle con
+    `GetExitCodeProcess`, che e' l'unico controllo sicuro.
+    """
+    if not pid:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            k32 = ctypes.windll.kernel32
+            handle = k32.OpenProcess(0x1000, False, int(pid))
+            if not handle:
+                return False
+            codice = wintypes.DWORD()
+            try:
+                if not k32.GetExitCodeProcess(handle, ctypes.byref(codice)):
+                    return False
+                return codice.value == 259  # STILL_ACTIVE
+            finally:
+                k32.CloseHandle(handle)
+        except Exception:  # noqa: BLE001
+            return False
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def _comando_processo(pid: int) -> str:
+    """La command line del PID, o "" se non e' leggibile."""
+    if not pid:
+        return ""
+    if os.name == "nt":
+        import subprocess
+
+        script = ("(Get-CimInstance Win32_Process -Filter "
+                  f"\"ProcessId={int(pid)}\").CommandLine")
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive",
+                 "-Command", script],
+                capture_output=True, text=True, timeout=8,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if r.returncode == 0 and (r.stdout or "").strip():
+                return r.stdout.strip()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            r = subprocess.run(
+                ["wmic", "process", "where", f"processid={int(pid)}",
+                 "get", "commandline", "/value"],
+                capture_output=True, text=True, timeout=8,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            for riga in (r.stdout or "").splitlines():
+                if riga.lower().startswith("commandline="):
+                    return riga.split("=", 1)[1].strip()
+        except Exception:  # noqa: BLE001
+            pass
+        return ""
+    proc = f"/proc/{int(pid)}/cmdline"
+    if os.path.isfile(proc):
+        try:
+            with open(proc, "rb") as f:
+                return f.read().replace(b"\0", b" ").decode(
+                    "utf-8", "replace").strip()
+        except OSError:
+            pass
+    import subprocess
+
+    try:
+        r = subprocess.run(["ps", "-p", str(int(pid)), "-o", "command="],
+                           capture_output=True, text=True, timeout=5)
+        return (r.stdout or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _comando_e_orchestra(comando: str) -> bool:
+    """Vero solo per il server web avviato da Orchestra.
+
+    Il PID da solo non basta: un file di stato vecchio o modificato a mano
+    potrebbe puntare a un processo qualsiasi. Il comando di `remote/start`
+    e' sempre `python -m orchestra.cli web ...`; quello e' il bersaglio.
+    """
+    c = " ".join((comando or "").lower().replace("\\", "/").split())
+    if not c:
+        return False
+    modulo = " -m orchestra.cli" in (" " + c)
+    script = "orchestra/cli.py" in c
+    if not (modulo or script):
+        return False
+    return " web" in (" " + c)
+
 # Quanti minuti un catalogo puo' invecchiare prima di essere
 # ricaricato. Non e' un dettaglio: senza, un modello che esce
 # dal provider resta nel menu fino al riavvio.
@@ -2867,7 +2989,9 @@ class OrchestraApp:
             resto = (f"\n(e altri {len(voci) - 10})" if len(voci) > 10 else "")
             return "Obiettivi aperti:\n" + "\n".join(righe) + resto
         try:
-            gid = goal_mod.start_goal(testo, env=self.env, profile="auto")
+            gid = goal_mod.start_goal(
+                testo, env=self.env, profile="auto",
+                project=self._progetto_attivo() or None)
         except (RuntimeError, ValueError) as e:
             return f"Obiettivo non avviato: {e}"
         except Exception as e:  # noqa: BLE001 - provider, DB, disco
@@ -4336,6 +4460,17 @@ class Handler(Rotte, BaseHTTPRequestHandler):
 
     # -- helper ------------------------------------------------------------
 
+    def end_headers(self) -> None:
+        """Aggiunge gli header di sicurezza a ogni risposta.
+
+        Passare da qui invece che dai singoli gestori evita il caso in cui
+        una rotta nuova (o un errore) dimentichi uno degli header. Le
+        risposte SSE, i PDF e i file statici passano tutti da `end_headers`.
+        """
+        for nome, valore in SECURITY_HEADERS:
+            self.send_header(nome, valore)
+        super().end_headers()
+
     def _send_bytes(self, code: int, body: bytes, content_type: str,
                     headers: dict[str, str] | None = None) -> None:
         """Risposta con byte gia' pronti.
@@ -4598,14 +4733,7 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             pass
 
     def _pid_vivo(self, pid: int) -> bool:
-        if not pid:
-            return False
-        try:
-            import os as _os
-            _os.kill(pid, 0)
-            return True
-        except (OSError, ProcessLookupError):
-            return False
+        return _processo_vivo(pid)
 
     def _api_remote_status(self, corpo: dict[str, Any]) -> dict[str, Any]:
         stato = self._leggi_stato_remoto()
@@ -4706,23 +4834,40 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
 
     def _api_remote_stop(self, corpo: dict[str, Any]) -> dict[str, Any]:
         stato = self._leggi_stato_remoto()
-        pid = int(stato.get("pid") or 0)
+        try:
+            pid = int(stato.get("pid") or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        motivo = ""
+        spento = False
         if pid and pid != os.getpid():
-            try:
-                if os.name == "nt":
-                    import subprocess
-                    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                                   capture_output=True)
+            if not _processo_vivo(pid):
+                motivo = ""  # gia' finito: si toglie solo lo stato
+            else:
+                comando = _comando_processo(pid)
+                if not _comando_e_orchestra(comando):
+                    motivo = (f"il pid {pid} non e' un server Orchestra "
+                              "(comando non riconosciuto): non terminato")
                 else:
-                    import signal
-                    os.kill(pid, 9)
-            except Exception:
-                pass
+                    try:
+                        if os.name == "nt":
+                            import subprocess
+                            subprocess.run(
+                                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                                capture_output=True)
+                        else:
+                            import signal
+                            os.kill(pid, signal.SIGTERM)
+                        spento = True
+                    except Exception as e:  # noqa: BLE001
+                        motivo = f"impossibile terminare il pid {pid}: {e}"
         try:
             os.remove(REMOTE_STATE_PATH)
         except OSError:
             pass
-        return {"ok": True}
+        if motivo:
+            return {"ok": False, "errore": motivo, "pid": pid}
+        return {"ok": True, "spento": spento, "pid": pid}
 
     def _ip_lan(self) -> str:
         try:

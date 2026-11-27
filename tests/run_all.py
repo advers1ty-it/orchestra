@@ -57,6 +57,15 @@ SUITES = [
     ("strumenti-codice", "test_strumenti_codice.py", True),
     ("resilienza", "test_resilience.py", True),
     ("orchestrazione", "test_orchestrazione.py", True),
+    # I goal controllabili: progetto/root espliciti, stop cooperativo,
+    # cancellazione dei pending e riconciliazione dei running al riavvio.
+    ("goal-controllo", "test_goal_controllo.py", True),
+    # Lo storico append-only: gli id non cambiano, una transazione non
+    # lascia turni a meta', e la compaction non cancella i messaggi grezzi.
+    ("storico-append-only", "test_storico_append_only.py", True),
+    # remote_stop non deve uccidere un PID solo perche' compare in un file
+    # di stato: prima verifica che sia davvero il server Orchestra.
+    ("remote-stop", "test_remote_stop.py", True),
     ("update", "test_update.py", True),
     # Il backup non e' "lo zip esiste": e' che il database dentro sia
     # consistente anche con il WAL, e che il ripristino rimetta i file
@@ -251,6 +260,10 @@ SUITES = [
     ("servizio", "test_servizio_ui.py", True),
     ("servizio-sync", "test_servizio_sync.py", True),
     ("permessi", "test_permessi.py", True),
+    # Un consenso di lettura non deve autorizzare scrittura o esecuzione,
+    # e il gate non deve saltare i controlli su .env e sugli altri
+    # percorsi protetti. I comandi con piu' percorsi chiedono per tutti.
+    ("permessi-azione", "test_permessi_azione.py", True),
     ("permessi-persistenza", "test_permessi_persistenza.py", True),
     # La cartella dati non deve poter finire in un repository: se
     # ORCHESTRA_HOME punta dentro un progetto, si ignora da sola; sulla

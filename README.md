@@ -59,9 +59,27 @@ nascosti dietro una risposta.
 su disco e sopravvive al riavvio del programma. Puoi chiuderlo, riaprirlo e
 ritrovarlo dov'era; fermarlo dall'esterno se sta sbagliando strada.
 
+**I limiti veri dei goal.** Un goal non è un processo che continua da solo
+per sempre:
+
+- il goal ricorda il progetto e la cartella in cui è nato; un progetto
+  sconosciuto o una root che non coincide con il progetto vengono rifiutati;
+- dopo un riavvio un goal interrotto torna `pending` e riparte solo se lo
+  scheduler è acceso (di default è spento). Il turno che era in corso non
+  riprende dal punto esatto: riparte dall'obiettivo;
+- lo stop è cooperativo. Il turno si ferma ai punti di controllo
+  dell'agente, quindi una chiamata al modello o un tool già partiti possono
+  finire prima che il processo si accorga dell'annullamento;
+- ogni esecuzione consuma token e ha un tetto di iterazioni. Esaurirlo è un
+  fallimento, non un successo, salvo `consenti_parziale`; i tentativi
+  automatici sono limitati e hanno un backoff;
+- i criteri di accettazione possono controllare output e file, non eseguire
+  comandi arbitrari. Il risultato resta da leggere e provare.
+
 **Piani e dipendenze.** Un obiettivo può aspettare che un altro sia finito
 prima di partire, e i giri viziosi vengono rifiutati invece di bloccare
-tutto.
+tutto. Lo scheduler esegue un goal alla volta: due lavori sullo stesso
+registro non si rubano la prenotazione.
 
 **Niente finti successi.** Se un lavoro si interrompe (troppe iterazioni,
 errori, tempo scaduto) non viene archiviato come «completato»: diventa un

@@ -53,10 +53,10 @@ def _istante(valore: str) -> tuple[dt.datetime, bool]:
         f"AAAA-MM-GG HH:MM.")
 
 
-def _file(file: str) -> str:
+def _file(file: str, azione: str = "leggere") -> str:
     """Il percorso del calendario: quello dell'utente, o quello di Orchestra."""
     if (file or "").strip():
-        return str(_safe_path(file.strip()))
+        return str(_safe_path(file.strip(), azione))
     return cal.percorso_default()
 
 
@@ -138,7 +138,10 @@ def tool_calendario() -> Tool:
                 righe.extend(f"  {e['nome']}: {e['esito']}" for e in esiti)
                 return "\n".join(righe)
 
-            percorso_file = _file(file)
+            azione_file = ("scrivere" if azione in
+                           ("aggiungi", "crea", "segna", "elimina",
+                            "cancella", "togli") else "leggere")
+            percorso_file = _file(file, azione_file)
             solo_locale = bool((file or "").strip())
 
             if azione in ("oggi", "settimana", "prossimi", "periodo"):

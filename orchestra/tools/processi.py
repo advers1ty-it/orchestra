@@ -250,7 +250,7 @@ def avvia(comando: str, cwd: str = ".", attesa: float = 2.0) -> dict:
     # esistente, quindi `processo` poteva avviare un comando fuori dalla
     # root senza che nessuno lo chiedesse.
     try:
-        cartella = _safe_path(str(cwd or "."))
+        cartella = _safe_path(str(cwd or "."), "eseguire")
     except (ValueError, PermissionError) as exc:
         return {"errore": f"cartella non ammessa: {exc}"}
     if not cartella.is_dir():

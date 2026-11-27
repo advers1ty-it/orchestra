@@ -124,7 +124,7 @@ for bad in ["../../../Windows/win.ini", _risalita, "/etc/passwd"]:
     try:
         rf.handler(path=bad)
         check(f"read_file blocca {bad[:30]}", False, "ha letto!")
-    except ValueError as e:
+    except (ValueError, PermissionError) as e:
         check(f"read_file blocca {bad[:30]}", True)
     except Exception as e:
         check(f"read_file blocca {bad[:30]}", False, f"tipo inatteso: {type(e).__name__}")

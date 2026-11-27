@@ -67,7 +67,7 @@ def tool_scarica() -> Tool:
         # Il confine dei percorsi vale PRIMA della rete: se la
         # destinazione e' fuori dalla root, il gate deve poter dire di
         # no senza che sia gia' partita una richiesta.
-        p = _safe_path(path)
+        p = _safe_path(path, "scrivere")
         if p.exists() and p.is_dir():
             return f"È UNA DIRECTORY: {path} (scarica salva un file)"
 

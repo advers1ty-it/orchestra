@@ -676,9 +676,14 @@ def cmd_goal(args: argparse.Namespace) -> int:
         return 2
     from .goal import start_goal
     env = _env()
+    project = getattr(args, "project", None)
+    root = getattr(args, "root", None)
+    if not project and not root:
+        project = _progetto_da_cartella(env)[0] or None
     try:
         gid = start_goal(
             objective, env=env,
+            project=project, root=root,
             profile=getattr(args, "profile", None),
             max_iterations=getattr(args, "max_iterations", 60),
             parent_id=getattr(args, "parent", None),
@@ -968,6 +973,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="accetta un completamento parziale dopo stop anomalo")
     g.add_argument("--criteri", help="criteri di accettazione in JSON")
     g.add_argument("--recovery", help="politica retry delega in JSON")
+    g.add_argument("--project", help="progetto registrato in cui lavorare")
+    g.add_argument("--root", help="cartella di lavoro esplicita del goal")
     g.set_defaults(func=cmd_goal)
 
     gs = sub.add_parser("goals", help="elenca goal e piani con stato scheduler")

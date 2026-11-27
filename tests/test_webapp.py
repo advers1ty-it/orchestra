@@ -113,6 +113,26 @@ try:
           r.headers.get("Content-Type", ""))
     check("Content-Length coerente", int(r.headers.get("Content-Length", 0)) == len(html.encode()),
           f"{r.headers.get('Content-Length')} vs {len(html.encode())}")
+    check("CSP presente", "default-src 'self'" in r.headers.get("Content-Security-Policy", ""),
+          r.headers.get("Content-Security-Policy", ""))
+    check("CSP chiude i frame", "frame-ancestors 'none'" in r.headers.get("Content-Security-Policy", ""),
+          r.headers.get("Content-Security-Policy", ""))
+    check("X-Frame-Options presente", r.headers.get("X-Frame-Options") == "DENY",
+          str(r.headers.get("X-Frame-Options")))
+    check("nosniff presente", r.headers.get("X-Content-Type-Options") == "nosniff",
+          str(r.headers.get("X-Content-Type-Options")))
+    check("HSTS presente",
+          "max-age=31536000" in r.headers.get("Strict-Transport-Security", ""),
+          str(r.headers.get("Strict-Transport-Security")))
+    check("Referrer-Policy presente", r.headers.get("Referrer-Policy") == "no-referrer",
+          str(r.headers.get("Referrer-Policy")))
+    check("Permissions-Policy presente",
+          "microphone=(self)" in r.headers.get("Permissions-Policy", ""),
+          str(r.headers.get("Permissions-Policy")))
+    with urllib.request.urlopen(BASE + "/app.js", timeout=10) as rs:
+        check("gli header ci sono anche sul JS",
+              rs.headers.get("X-Content-Type-Options") == "nosniff",
+              str(rs.headers.get("X-Content-Type-Options")))
 
     print("\n[2] /api/state")
     with urllib.request.urlopen(BASE + "/api/state", timeout=10) as r:

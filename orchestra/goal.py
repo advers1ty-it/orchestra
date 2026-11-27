@@ -34,6 +34,18 @@ def _lock() -> threading.Lock:
 
 _GOAL_LOCK = threading.Lock()
 
+# I goal che questo processo sta eseguendo davvero. Un `running` che non
+# compare qui e' un residuo di un processo precedente: al riavvio nessun
+# thread lo sta portando avanti, e lasciarlo `running` significherebbe
+# aspettare per sempre un lavoro che non esiste piu'.
+_ATTIVI: set[str] = set()
+
+# Chi possiede un goal attivo. La prenotazione nasce in un thread e
+# l'esecuzione parte in un altro: senza proprietario, un secondo
+# `run_goal` sullo stesso id crederebbe di essere lui a doverlo eseguire.
+# Assente = prenotato ma non ancora reclamato.
+_TITOLARI: dict[str, int] = {}
+
 
 def _load() -> list[dict[str, Any]]:
     path = _path()
@@ -57,11 +69,41 @@ def _save(goals: list[dict[str, Any]]) -> None:
     os.replace(tmp, _path())
 
 
+def riconcilia_running() -> int:
+    """Rimette in coda i `running` rimasti da un processo precedente.
+
+    Un goal interrotto da un riavvio non ha piu' nessun thread che lo
+    esegue, ma il file dice ancora `running`: la UI lo mostra occupato e
+    lo scheduler non lo seleziona mai. Qui torna `pending`, con il motivo
+    scritto e senza consumare un tentativo — il tentativo interrotto non
+    e' un fallimento del goal.
+    """
+    toccati = 0
+    with _lock():
+        goals = _load()
+        for g in goals:
+            gid = g.get("id")
+            if g.get("status") != "running" or not gid or gid in _ATTIVI:
+                continue
+            tentativi = int(g.get("attempts") or 0)
+            g["attempts"] = max(0, tentativi - 1)
+            g["status"] = "pending"
+            g["not_before"] = 0.0
+            g["error"] = "interrotto da un riavvio: riprogrammato"
+            g["updated_at"] = time.time()
+            toccati += 1
+        if toccati:
+            _save(goals)
+    return toccati
+
+
 def list_goals() -> list[dict[str, Any]]:
+    riconcilia_running()
     return _load()
 
 
 def get(goal_id: str) -> dict[str, Any] | None:
+    riconcilia_running()
     for g in _load():
         if g.get("id") == goal_id:
             return g
@@ -143,6 +185,40 @@ def _valida_collegamenti(
         raise ValueError("dipendenze circolari non ammesse")
 
 
+def _canonico(percorso: str) -> str:
+    return os.path.normcase(os.path.realpath(
+        os.path.abspath(os.path.expanduser(percorso or ""))))
+
+
+def _contesto(project: str | None, root: str | None) -> tuple[str, str]:
+    """Risolve il progetto e la root ESpliciti di un goal.
+
+    Il goal non deve dipendere dalla cartella corrente del processo che
+    lo lancia: quella, in un server, e' la cartella di installazione. Se
+    il progetto e' indicato, la sua root registrata e' l'unica valida; se
+    sono indicati entrambi, devono coincidere. Un progetto sconosciuto o
+    una root inesistente sono errori espliciti, non fallback silenziosi.
+    """
+    from . import progetti as _pr
+
+    nome = str(project or "").strip()
+    percorso = str(root or "").strip()
+    if nome:
+        registrato = _pr.percorso_di(nome)
+        if not registrato:
+            raise ValueError(f"progetto sconosciuto: {nome}")
+        if percorso and _canonico(percorso) != _canonico(registrato):
+            raise ValueError(
+                f"progetto e root non coincidono: {nome} e' in {registrato}")
+        percorso = registrato
+    if not percorso:
+        percorso = os.getcwd()
+    percorso = os.path.abspath(os.path.expanduser(percorso))
+    if not os.path.isdir(percorso):
+        raise ValueError(f"root inesistente: {percorso}")
+    return nome, percorso
+
+
 def create(objective: str, *, profile: str | None = None,
            max_iterations: int = 60, scope: str | None = None,
            parent_id: str | None = None, depends_on: Any = None,
@@ -150,7 +226,10 @@ def create(objective: str, *, profile: str | None = None,
            kind: str = "goal", max_attempts: int = 1,
            consenti_parziale: bool = False,
            criteri: list[dict[str, Any]] | None = None,
-           recovery: dict[str, Any] | None = None) -> str:
+           recovery: dict[str, Any] | None = None,
+           project: str | None = None,
+           root: str | None = None) -> str:
+    project, root = _contesto(project, root)
     goal_id = f"g{uuid.uuid4().hex[:16]}"
     now = time.time()
     depends = _normalizza_lista_id(depends_on)
@@ -176,6 +255,8 @@ def create(objective: str, *, profile: str | None = None,
         "objective": objective,
         "profile": profile,
         "scope": scope,
+        "project": project,
+        "root": root,
         "kind": kind,
         "max_iterations": max(1, int(max_iterations or 1)),
         "parent_id": parent_id,
@@ -217,10 +298,17 @@ def update(goal_id: str, **fields: Any) -> None:
 
 
 def cancel(goal_id: str) -> bool:
+    """Annulla un goal pending o running.
+
+    Un pending non ha nessun thread da fermare: si marca e basta. Un
+    running riceve anche `cancelled=True`, che il suo `should_continue`
+    legge al prossimo punto sicuro del loop.
+    """
     with _lock():
         goals = _load()
         for g in goals:
-            if g.get("id") == goal_id and g.get("status") == "running":
+            if (g.get("id") == goal_id
+                    and g.get("status") in ("pending", "running")):
                 g["cancelled"] = True
                 g["status"] = "cancelled"
                 g["updated_at"] = time.time()
@@ -360,6 +448,7 @@ def motivo_non_pronto(
 
 
 def prossimo_pronto(now: float | None = None) -> dict[str, Any] | None:
+    riconcilia_running()
     aggiorna_piani()
     now = time.time() if now is None else float(now)
     goals = _load()
@@ -389,8 +478,22 @@ def _prenota(gid: str) -> dict[str, Any] | None:
         g["status"] = "running"
         g["error"] = ""
         g["updated_at"] = time.time()
+        # La prenotazione e' gia' un'esecuzione in corso: la
+        # riconciliazione non deve scambiarla per un running orfano nel
+        # breve tratto fra questo punto e l'avvio del thread.
+        _ATTIVI.add(gid)
+        _TITOLARI.pop(gid, None)
         _save(goals)
         return dict(g)
+
+
+def _rilascia_goal(goal_id: str) -> None:
+    with _lock():
+        titolare = _TITOLARI.get(goal_id)
+        if titolare not in (None, threading.get_ident()):
+            return
+        _ATTIVI.discard(goal_id)
+        _TITOLARI.pop(goal_id, None)
 
 
 def prenota_prossimo() -> dict[str, Any] | None:
@@ -554,34 +657,81 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
     if not goal:
         return
     if (goal.get("kind") or "goal") != "goal":
+        _rilascia_goal(goal_id)
         update(goal_id, status="failed",
                error="i piani contenitore non si eseguono: usare lo scheduler")
         return
-    if motivo_non_pronto(goal):
-        # Lo scheduler seleziona solo goal pronti; un avvio diretto con
-        # dipendenze insoddisfatte non bypassa il piano, resta pending.
-        update(goal_id, error=motivo_non_pronto(goal))
+    root = str(goal.get("root") or "").strip()
+    if not root or not os.path.isdir(root):
+        _rilascia_goal(goal_id)
+        update(goal_id, status="failed",
+               error=f"root del goal inesistente: {root or '(mancante)'}")
+        return
+    io = threading.get_ident()
+    if goal.get("status") == "running" and goal_id in _ATTIVI:
+        # Prenotato da `_prenota`: e' gia' running, e la sua dipendenza e'
+        # stata verificata al momento della prenotazione. Si reclama, non
+        # si ri-prenota.
+        with _lock():
+            titolare = _TITOLARI.get(goal_id)
+            if titolare not in (None, io):
+                return
+            _TITOLARI[goal_id] = io
+            g = _mappa(_load()).get(goal_id)
+            if not g or g.get("status") != "running":
+                _ATTIVI.discard(goal_id)
+                _TITOLARI.pop(goal_id, None)
+                return
+            goal = dict(g)
+    else:
+        motivo = motivo_non_pronto(goal)
+        if motivo:
+            # Lo scheduler seleziona solo goal pronti; un avvio diretto con
+            # dipendenze insoddisfatte non bypassa il piano, resta pending.
+            update(goal_id, error=motivo)
+            return
+        env = env or _env()
+        with _lock():
+            goals = _load()
+            by_id = _mappa(goals)
+            g = by_id.get(goal_id)
+            if not g or g.get("status") != "pending":
+                return
+            g["attempts"] = int(g.get("attempts") or 0) + 1
+            g["status"] = "running"
+            g["error"] = ""
+            g["updated_at"] = time.time()
+            _ATTIVI.add(goal_id)
+            _TITOLARI[goal_id] = io
+            _save(goals)
+            goal = dict(g)
+    if goal.get("cancelled"):
+        _rilascia_goal(goal_id)
+        update(goal_id, status="cancelled", last_output="")
         return
     env = env or _env()
-    with _lock():
-        goals = _load()
-        by_id = _mappa(goals)
-        g = by_id.get(goal_id)
-        if not g or g.get("status") != "pending":
-            return
-        g["attempts"] = int(g.get("attempts") or 0) + 1
-        g["status"] = "running"
-        g["error"] = ""
-        g["updated_at"] = time.time()
-        _save(goals)
-        goal = dict(g)
+    # La root viaggia con il goal, non con il processo: il thread dei goal
+    # non e' quello della richiesta HTTP, e senza questa riga i tool
+    # scriverebbero nella cartella sbagliata (spesso quella di Orchestra).
+    try:
+        from . import progetti as _pr
+        _pr._set_root_sessione(root, goal.get("project") or "")
+    except Exception:  # noqa: BLE001 - la guardia ha comunque root/assenza
+        pass
     last_output: list[str] = []
     iterations = {"n": 0}
     cancelled = {"f": False}
 
     def _cancelled() -> bool:
         g = get(goal_id)
-        return bool(g and g.get("cancelled"))
+        return bool(g and (g.get("cancelled")
+                           or g.get("status") == "cancelled"))
+
+    def _should_continue(_state: Any) -> bool:
+        """Il loop si ferma appena il goal non e' piu' running."""
+        g = get(goal_id)
+        return bool(g and not g.get("cancelled")
+                    and g.get("status") == "running")
 
     def on_event(kind: str, data: dict[str, Any] | None) -> None:
         data = data or {}
@@ -667,9 +817,15 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
         # "Nessun provider disponibile" dopo tentativi a porte chiuse.
         from .fallback import catena_per_agente
         agent.fallback_chain = catena_per_agente(agent, env)
-        state = agent.run(goal["objective"])
-        if _cancelled():
-            update(goal_id, status="cancelled", last_output=_testo())
+        try:
+            agent.progetto = goal.get("project") or ""
+        except Exception:  # noqa: BLE001
+            pass
+        state = agent.run(goal["objective"],
+                          should_continue=_should_continue)
+        if _cancelled() or state.stopped_because == "canceled_da_should_continue":
+            update(goal_id, status="cancelled", cancelled=True,
+                   last_output=_testo())
             return
         from .accettazione import valuta_goal as _valuta
 
@@ -677,12 +833,22 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
             state,
             consenti_parziale=bool(goal.get("consenti_parziale")),
             criteri=goal.get("criteri") or [],
-            radice=os.getcwd(),
+            radice=root,
         )
         if not esito.ok:
             update(goal_id, last_output=_testo(),
                    tokens=getattr(state, "total_tokens", 0) or 0)
             _aggiorna_dopo_fallimento(goal_id, f"accettazione fallita: {esito.motivo}")
+            return
+        # Una cancellazione arrivata mentre l'ultimo passo finiva non deve
+        # essere sovrascritta da `done`: il goal e' stato fermato, e questo
+        # e' l'esito che l'utente ha chiesto.
+        if _cancelled():
+            update(goal_id, status="cancelled", cancelled=True,
+                   last_output=_testo())
+            return
+        attuale = get(goal_id) or {}
+        if attuale.get("status") != "running":
             return
         testo = _testo()
         if esito.dettagli.get("stop_anomalo"):
@@ -690,8 +856,14 @@ def run_goal(goal_id: str, env: dict[str, str] | None = None,
         update(goal_id, status="done", last_output=testo,
                tokens=getattr(state, "total_tokens", 0) or 0)
     except Exception as e:
+        if _cancelled():
+            update(goal_id, status="cancelled", cancelled=True,
+                   last_output=_testo())
+            return
         update(goal_id, last_output=_testo())
         _aggiorna_dopo_fallimento(goal_id, f"{type(e).__name__}: {e}")
+    finally:
+        _rilascia_goal(goal_id)
 
 
 def _attacca_delega(reg: Any,
@@ -847,14 +1019,17 @@ def start_goal(objective: str, env: dict[str, str] | None = None,
                not_before: float | None = None, kind: str = "goal",
                max_attempts: int = 1, consenti_parziale: bool = False,
                criteri: list[dict[str, Any]] | None = None,
-               recovery: dict[str, Any] | None = None) -> str:
+               recovery: dict[str, Any] | None = None,
+               project: str | None = None,
+               root: str | None = None) -> str:
     goal_id = create(objective, profile=profile,
                     max_iterations=max_iterations, parent_id=parent_id,
                     depends_on=depends_on, priority=priority,
                     not_before=not_before, kind=kind,
                     max_attempts=max_attempts,
                     consenti_parziale=consenti_parziale,
-                    criteri=criteri, recovery=recovery)
+                    criteri=criteri, recovery=recovery,
+                    project=project, root=root)
     if kind != "goal":
         # Un piano e' un contenitore: si crea e lo scheduler lo chiude
         # quando i figli finiscono. Non parte nessun thread.

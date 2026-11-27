@@ -73,7 +73,7 @@ def tool_office() -> Tool:
             return ("ERRORE: serve `percorso` (per esempio "
                     "'preventivo.pdf', 'preventivo.docx' o 'ore.xlsx').")
         try:
-            p = _safe_path(percorso.strip())
+            p = _safe_path(percorso.strip(), "scrivere")
             if azione in ("aggiungi", "append", "accoda"):
                 # In coda a un file che c'e' gia': nessun checkpoint, perche'
                 # un annullamento qui cancellerebbe il lavoro vecchio.

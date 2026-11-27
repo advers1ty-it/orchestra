@@ -22,6 +22,7 @@ import os
 import queue
 import threading
 import time
+import uuid
 from typing import Any, Iterator
 
 from .agent import Agent, AgentState, LoopConfig
@@ -1559,11 +1560,17 @@ class Session:
                                    content=self.agent.system_prompt)]
             for m in messaggi:
                 if m["ruolo"] in ("user", "assistant") and m["contenuto"].strip():
-                    ricostruiti.append(Message(role=m["ruolo"],
-                                               content=m["contenuto"],
-                                               name=m.get("nome"),
-                                               reasoning=m.get("ragionamento", "") or ""))
+                    ricostruiti.append(Message(
+                        role=m["ruolo"],
+                        content=m["contenuto"],
+                        uid=m.get("uid") or uuid.uuid4().hex,
+                        name=m.get("nome"),
+                        reasoning=m.get("ragionamento", "") or ""))
             self.agent.state.messages = ricostruiti
+            # Il registro grezzo appartiene alla conversazione che stiamo
+            # lasciando: se restasse, il primo salvataggio della chat
+            # riaperta ci mescolerebbe dentro i messaggi della precedente.
+            self.agent.state.messaggi_grezzi = []
         # Il progetto della conversazione torna con lei. Se la riga non ne
         # ha uno (chat nate prima della colonna) si adotta quello attivo:
         # continuare a scrivere in una chat "senza progetto" mentre si
@@ -1603,10 +1610,20 @@ class Session:
         da far diventare un errore in chat.
         """
         st = self.agent.state
+        # Lo storico conserva i messaggi nella forma in cui sono nati, non
+        # la lista compattata che il modello vede adesso. Se la compaction
+        # ha gia' girato, `state.messages` contiene il riepilogo al posto
+        # dei turni vecchi: salvarli da li' cancellerebbe la conversazione.
+        try:
+            self.agent.preserva_grezzi()
+        except Exception:  # noqa: BLE001 - si ripiega sullo stato attuale
+            pass
+        grezzi = getattr(st, "messaggi_grezzi", None) or st.messages
         messaggi = [
-            {"ruolo": m.role, "contenuto": m.content, "nome": m.name,
+            {"uid": getattr(m, "uid", ""), "ruolo": m.role,
+             "contenuto": m.content, "nome": m.name,
              "ragionamento": getattr(m, "reasoning", "") if m.role == "assistant" else ""}
-            for m in st.messages
+            for m in grezzi
             if m.role in ("user", "assistant") and m.content.strip()
         ]
         # Niente da salvare = niente riga. Creare una conversazione vuota
@@ -2004,6 +2021,7 @@ class Session:
             self.agent.state.usage_by_model = {}
             self.agent.state.steer_queue = []
             self.agent.state.steer_count = 0
+            self.agent.state.messaggi_grezzi = []
             # Nuova conversazione = nuova riga nello storico, ma la si crea
             # QUANDO c'è qualcosa da salvarci, non adesso. Prima la creava
             # subito (`_nuova_sessione_db`), e ogni "nuova chat" o reset

@@ -18,6 +18,8 @@ Invarianti che ci siamo dati, da mantenere nei refactor:
 
 from __future__ import annotations
 
+import copy
+
 import json
 import os
 import re
@@ -204,6 +206,10 @@ class AgentState:
     steer_queue: list[str] = field(default_factory=list)
     steer_count: int = 0
     steer_max: int = 5
+    # I messaggi utente/assistente nella forma in cui sono nati. La
+    # compaction modifica `messages` in place; questo registro le
+    # sopravvive, ed e' quello che lo storico salva.
+    messaggi_grezzi: list[Message] = field(default_factory=list)
 
 
 # ------------------------------------------------------ annuncio a vuoto
@@ -441,7 +447,31 @@ class Agent:
         elif kind == "contenuto":
             self._emit("contenuto", testo=testo)
 
+    def preserva_grezzi(self) -> None:
+        """Copia nel registro i messaggi visibili non ancora archiviati.
+
+        Va chiamata PRIMA della compaction e di nuovo prima del salvataggio:
+        la compaction fonde e sostituisce i turni, quindi dopo non basta
+        piu' leggere `state.messages`. I riepiloghi sintetici non entrano
+        nel registro: sono un'ottimizzazione del contesto, non un messaggio
+        che l'utente ha scambiato.
+        """
+        from .context import RIEPILOGO_TAG
+
+        grezzi = self.state.messaggi_grezzi
+        noti = {m.uid for m in grezzi}
+        for m in self.state.messages:
+            if m.role not in ("user", "assistant"):
+                continue
+            if (m.content or "").startswith(RIEPILOGO_TAG):
+                continue
+            if m.uid in noti:
+                continue
+            grezzi.append(copy.deepcopy(m))
+            noti.add(m.uid)
+
     def _maybe_compact(self) -> None:
+        self.preserva_grezzi()
         report = fit_context(
             self.state.messages,
             limit=self.config.context_limit,
