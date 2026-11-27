@@ -130,16 +130,6 @@ class RotteChat:
         if not text and not allegati:
             self._json({"error": "messaggio vuoto"}, 400)
             return
-        # Self-correzione: l'utente può chiedere che il lavoro venga
-        # VERIFICATO prima di accettarlo. `verifica` è una lista di
-        # nomi di controlli oggettivi; li traduciamo nei verificatori
-        # veri e li attacchiamo al config del giro. Senza lista,
-        # nessuna verifica: i task conversazionali restano intatti.
-        verifica_nomi = body.get("verifica") or []
-        if verifica_nomi:
-            self._imposta_verifica(verifica_nomi)
-        else:
-            self.app.session.agent.config.verifica_compito = None
         ok = s.send(text, allegati, scope=scope)
         if ok:
             # Gli allegati vivono per un messaggio. Senza questo,

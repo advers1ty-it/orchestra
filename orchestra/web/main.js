@@ -27,9 +27,6 @@ async function send() {
               // quando e' stato caricato.
               allegati: daMando.map((a) => a.id).filter(Boolean),
               scope: scopeAttivo || null,
-              // Self-correzione: se il toggle ✓ e' attivo e c'e' un file da controllare, si chiede al server di
-              // verificare il lavoro prima di accettarlo.
-              verifica: verificaPayload(),
             }),
     });
     if (!r.ok) {
@@ -385,47 +382,7 @@ on(document, "paste", async (e) => {
 
 on(input, "input", autoGrow);
 
-// verifica del lavoro: Toggle ✓ accanto alla graffetta.
-let verificaAttiva = false;
-
-function verificaPayload() {
-  // Attivo solo con un file indicato: senza file non c'è niente da
-  // controllare, e mandare una verifica vuota sarebbe rumore.
-  if (!verificaAttiva) return [];
-  const file = ($("verifica-file").value || "").trim();
-  if (!file) return [];
-  const tipo = $("verifica-tipo").value;
-  const spec = { tipo, file };
-  // I parametri extra dipendono dal tipo: senza, il server li ignora e
-  // usa default ragionevoli, ma per "somma" e "contiene" servono.
-  if (tipo === "testo_lungo") spec.minimo = 1;
-  if (tipo === "testo_contiene") spec.frammenti = [];
-  return [spec];
-}
-
-const btnVerifica = $("btn-verifica");
-const verificaPop = $("verifica-pop");
 const btnMic = $("btn-mic-float");
-
-function apriChiudiVerifica() {
-  verificaPop.hidden = !verificaPop.hidden;
-}
-
-if (btnVerifica && verificaPop) {
-  // Il toggle riflette SUBITO lo stato: il ✓ acceso dice "la prossima verifica", spento dice "gira normale".
-  btnVerifica.addEventListener("click", () => {
-    verificaAttiva = !verificaAttiva;
-    btnVerifica.classList.toggle("acceso", verificaAttiva);
-    apriChiudiVerifica();
-    if (verificaAttiva && !($("verifica-file").value || "").trim()) {
-      $("verifica-file").focus();
-    }
-  });
-  // Cambiare tipo o file chiude il popover: la scelta è fatta, e
-  // lasciarlo aperto copre il campo di scrittura.
-  on("verifica-tipo", "change", apriChiudiVerifica);
-  on("verifica-file", "change", apriChiudiVerifica);
-}
 // Dittazione vocale: Web Speech API quando disponibile (Chrome desktop
 // e Android), altrimenti audio -> server -> faster-whisper.
 let _micRec = false, _micStream = null, _micChunks = [];
@@ -517,8 +474,6 @@ on(input, "keydown", (e) => {
 });
 btnSend.onclick = () => { chiediPermessoNotifiche(); send(); };
 if (btnAllega) btnAllega.disabled = !ready;
-// Verifica: stesso gate dell'allegato, altrimenti il ✓ resterebbe spento per sempre.
-if (btnVerifica) btnVerifica.disabled = !ready;
 if (btnMic) {
   btnMic.disabled = !ready;
   btnMic.hidden = true;
@@ -655,9 +610,8 @@ caricaOpzioni().catch(() => {
 fetch("/api/state").then(r => r.json()).then(s => {
   if (s.version) showVersion(s.version);
   ready = s.ready !== false;
-  // I bottoni allega e verifica seguono `ready`.
+  // Il bottone allega segue `ready`.
   if (btnAllega) btnAllega.disabled = !ready;
-  if (btnVerifica) btnVerifica.disabled = !ready;
   if (!ready) { showBanner(s.error); if (typeof apriOpzioni === "function") apriOpzioni(); return; }
   // setBusy applica `ready` ai controlli.
   setBusy(false);
@@ -683,7 +637,6 @@ function esitiTraccia() {
     budget_exceeded: "budget finito",
     gira_a_vuoto: "girava a vuoto",
     troppi_errori_consecutivi: "troppi errori",
-    verifica_fallita: "verifica fallita",
     solo_parole: "solo parole, niente fatti",
     // Il turno ha lavorato, ma si e' chiuso annunciando altro lavoro invece di farlo.
     annuncio_finale: "fermato su un annuncio",
@@ -814,8 +767,6 @@ async function apriTraccia(id, btn) {
         riga = e.dati.content && e.dati.content.trim()
           ? `assistant: ${e.dati.content.trim().slice(0, 80)}`
           : "assistant (chiama tool)";
-      } else if (tipo === "verifica") {
-        riga = `verifica: ${e.dati.ok ? "passata" : e.dati.motivo}`;
       } else if (tipo === "gira_a_vuoto") {
         riga = `GIRA A VUOTO su ${e.dati.tool}`;
       } else if (tipo === "fallback_triggered") {

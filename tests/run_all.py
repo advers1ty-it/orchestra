@@ -67,6 +67,10 @@ SUITES = [
     # di stato: prima verifica che sia davvero il server Orchestra.
     ("remote-stop", "test_remote_stop.py", True),
     ("update", "test_update.py", True),
+    # L'installer Linux e' uno script autonomo: un CRLF o una parentesi
+    # sbagliata si vedono solo su Linux, e solo quando l'utente prova a
+    # installare. Meglio qui.
+    ("installer-linux", "test_installer_linux.py", True),
     # Il backup non e' "lo zip esiste": e' che il database dentro sia
     # consistente anche con il WAL, e che il ripristino rimetta i file
     # senza uscire dalla cartella dati.

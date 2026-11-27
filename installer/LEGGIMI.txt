@@ -1,6 +1,9 @@
 ORCHESTRA — guida rapida
 =======================
 
+Su Linux non usare questo file: l'installer e' installer/Installa-Orchestra.sh
+(vedi il README, sezione "Installazione (Linux)").
+
 COS'È
 -----
 Orchestra è un assistente AI che lavora da solo: gli scrivi un obiettivo

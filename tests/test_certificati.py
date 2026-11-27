@@ -71,8 +71,8 @@ for voce in cert.RADICI:
 
 print("\n[2] Lo stato dice quali ci sono e quali mancano")
 dati = cert.stato()
-check("lo store e' dichiarato", dati.get("store") in ("Windows ROOT",
-                                                      "non disponibile"),
+check("lo store e' dichiarato", dati.get("store") in (
+          "Windows ROOT", "sistema", "non disponibile"),
       str(dati.get("store")))
 check("una voce per ogni radice richiesta",
       len(dati["radici"]) == len(cert.RADICI), str(len(dati["radici"])))
@@ -90,8 +90,9 @@ if sys.platform.startswith("win"):
     check("su questa macchina le radici richieste ci sono",
           dati["mancanti"] == [], str(dati["mancanti"]))
 else:
-    check("fuori da Windows non c'e' uno store da interrogare",
-          dati["store"] == "non disponibile", str(dati.get("store")))
+    check("fuori da Windows si guarda il bundle di sistema",
+          dati["store"] in ("sistema", "non disponibile"),
+          str(dati.get("store")))
 
 print("\n[3] Una radice assente si vede, e si dice come rimediare")
 finta = ({"nome": "Radice Inventata", "sha1": "00" * 20,
@@ -101,7 +102,8 @@ check("risulta mancante", rotto["mancanti"] == ["Radice Inventata"],
       str(rotto["mancanti"]))
 referto = cert.report(rotto)
 check("il referto la nomina", "Radice Inventata" in referto, referto)
-check("il referto dice come si installa", "certutil" in referto, referto)
+check("il referto dice come si installa",
+      "certutil" in referto or "ca-certificates" in referto, referto)
 check("il referto e' ASCII (la console dell'installer non e' UTF-8)",
       referto.isascii(), repr(referto[:200]))
 referto_ok = cert.report(dati)
@@ -147,7 +149,8 @@ for atteso in ("ddgs", "pillow", "pypdf"):
     check(f"c'e' {atteso}", atteso in nomi, str(nomi))
 check("le opzionali ci sono", "faster-whisper" in nomi, str(nomi))
 check("le di sistema ci sono, con la loro via",
-      any(r.split("|")[2] == "winget" for r in righe), str(righe[:3]))
+      any(r.split("|")[2] in ("winget", "manuale") for r in righe),
+      str(righe[:3]))
 check("ogni riga dice a cosa serve", all(r.split("|")[3].strip()
                                         for r in righe), str(righe[:3]))
 check("l'elenco e' ASCII (lo legge cmd, non un browser)",

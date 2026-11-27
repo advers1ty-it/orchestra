@@ -11,7 +11,7 @@
 <title>Orchestra</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
 
 <!-- Diagnostica inline, PRIMA di ogni altra cosa.
      Se il CSS o un JS non arrivano, senza questo la pagina fallisce in
@@ -87,8 +87,6 @@
         title="Orchestra e' un assistente di intelligenza artificiale: le risposte e i file che scrive sono generati da un modello, possono sbagliare. Ogni turno mostra le modifiche (il pulsante diff) e si annulla con la freccia indietro."
         aria-label="Assistente di intelligenza artificiale">assistente IA</span>
   <!-- stamp rimosso -->
-  <button id="btn-side" class="ghost" title="Cronologia e skill (Ctrl+B)"
-          aria-label="Apri il pannello laterale">&#9776;</button>
   <button id="btn-undo" class="ghost" title="Annulla l'ultima modifica ai file"
           aria-label="Annulla l'ultima modifica ai file">&#8630;</button>
   <!-- Le modifiche del turno: non annulla niente, mostra. E' il
@@ -546,7 +544,7 @@
 
         <section id="opz-sez-autostart" class="opz-sez" data-sez="autostart" hidden>
           <div class="opzioni-servizi-testa">
-            <b>Avvio automatico con Windows</b>
+            <b>Avvio automatico</b>
             <span class="dim">fa partire il server Orchestra al login, senza privilegi di amministratore.</span>
           </div>
           <div class="goal-bar-inner" style="margin-top:10px">
@@ -555,7 +553,7 @@
             <span class="grow"></span>
             <button id="autostart-toggle" class="ghost">Attiva</button>
           </div>
-          <p class="opzioni-nota">Usa la chiave Run dell'utente (HKCU). Disattiva per fermare l'avvio automatico.</p>
+          <p class="opzioni-nota">Su Windows usa la chiave Run dell'utente (HKCU); su Linux il file .desktop in ~/.config/autostart. Disattiva per fermare l'avvio automatico.</p>
         </section>
 
         <section id="opz-sez-bot" class="opz-sez" data-sez="bot" hidden>
@@ -912,13 +910,18 @@
       <button data-vista="tracce" title="Tracce" aria-label="Tracce"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/></svg></button>
     </nav>
     <div class="side-corpo">
-      <nav class="side-tabs" aria-label="Sezioni del pannello" role="tablist">
-        <button class="side-tab attiva" type="button" role="tab" data-vista="cronologia" aria-selected="true" title="Cronologia">Storia</button>
-        <button class="side-tab" type="button" role="tab" data-vista="progetti" aria-selected="false" title="Progetti">Progetti</button>
-        <button class="side-tab" type="button" role="tab" data-vista="memoria" aria-selected="false" title="Memoria">Memoria</button>
-        <button class="side-tab" type="button" role="tab" data-vista="capacita" aria-selected="false" title="Capacità">Capacità</button>
-        <button class="side-tab" type="button" role="tab" data-vista="tracce" aria-selected="false" title="Tracce">Tracce</button>
-      </nav>
+      <div class="side-testa-tab">
+        <nav class="side-tabs" aria-label="Sezioni del pannello" role="tablist">
+          <button class="side-tab attiva" type="button" role="tab" data-vista="cronologia" aria-selected="true" title="Cronologia">Storia</button>
+          <button class="side-tab" type="button" role="tab" data-vista="progetti" aria-selected="false" title="Progetti">Progetti</button>
+          <button class="side-tab" type="button" role="tab" data-vista="memoria" aria-selected="false" title="Memoria">Memoria</button>
+          <button class="side-tab" type="button" role="tab" data-vista="capacita" aria-selected="false" title="Capacità">Capacità</button>
+          <button class="side-tab" type="button" role="tab" data-vista="tracce" aria-selected="false" title="Tracce">Tracce</button>
+        </nav>
+        <button id="btn-side" class="side-toggle" type="button"
+                title="Riduci il pannello" aria-label="Riduci il pannello"
+                aria-controls="sidebar" aria-expanded="true">&#171;</button>
+      </div>
       <div class="side-viste">
         <div class="side-vista attiva" id="vista-cronologia" data-vista="cronologia" role="tabpanel">
 
@@ -977,22 +980,23 @@
     <div class="side-sez side-vista side-sez-memoria" id="side-sez-memoria" data-vista="memoria" role="tabpanel">
       <div class="side-testata">
         <span class="side-titolo">Memoria</span>
-        <button id="side-mem-tutti" class="side-cap-btn" title="Sfoglia, cerca e correggi tutti i fatti indicizzati">Tutti i fatti</button>
+        <span id="side-mem-stat" class="small dim"></span>
       </div>
       <div class="side-mem-campi">
         <input id="side-mem-input" type="text" aria-label="Fatto da ricordare" placeholder="Fatto da ricordare..." />
-         <button id="side-mem-aggiungi" class="primary" aria-label="Aggiungi un fatto alla memoria">+</button>
-            <div hidden aria-hidden="true">
-              <div id="storico-elenco"></div>
-              <div id="storico-msg"></div>
-              <button id="storico-nuova"></button>
-              <button id="storico-ricarica"></button>
-              <button id="memoria-aggiungi"></button>
-              <div id="memoria-elenco"></div>
-              <div id="memoria-msg"></div>
-              <button id="memoria-nuovo"></button>
-              <input id="memoria-percorso" />
-            </div>
+        <button id="side-mem-aggiungi" class="primary" aria-label="Aggiungi un fatto alla memoria">+</button>
+      </div>
+      <div class="side-mem-campi">
+        <input id="side-mem-cerca" type="search" aria-label="Cerca nella memoria" placeholder="Cerca nella memoria..." spellcheck="false" />
+        <button id="side-mem-annulla-cerca" class="ghost piccolo" type="button" title="Pulisci la ricerca" hidden>&times;</button>
+      </div>
+      <p id="side-mem-msg" class="small dim side-mem-msg"></p>
+      <div id="side-mem-elenco" class="side-mem-elenco"></div>
+      <div hidden aria-hidden="true">
+        <div id="storico-elenco"></div>
+        <div id="storico-msg"></div>
+        <button id="storico-nuova"></button>
+        <button id="storico-ricarica"></button>
       </div>
     </div>
 
@@ -1020,6 +1024,11 @@
     <p id="side-msg" class="small dim side-msg"></p>
     </div>
   </aside>
+  <!-- Chiuso il pannello, resta una linguetta sul bordo sinistro: da li'
+       si riapre. Il comando sta nel pannello, non nell'header, dove
+       sembrava appartenere a un altro menu. -->
+  <button id="side-drawer" class="side-drawer" type="button" title="Apri il pannello"
+          aria-label="Apri il pannello" aria-controls="sidebar">&#9776;</button>
   <main id="main">
   <div class="wrap" id="log" aria-live="polite" aria-relevant="additions text"></div>
   <!-- Stato vuoto: compare solo quando la chat non ha ancora messaggi
@@ -1049,9 +1058,6 @@
       <div class="chat-form" id="chat-form">
         <button id="btn-allega" class="ghost" title="Allega una foto, un PDF o un file di testo" disabled>
           <span aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M20.5 11.5 11.9 20a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></span><span class="sr">Allega un file</span>
-        </button>
-        <button id="btn-verifica" class="ghost" title="Verifica il lavoro: controlla il risultato in modo oggettivo e, se non torna, rimanda indietro" disabled>
-          <span aria-hidden="true">✓</span><span class="sr">Verifica</span>
         </button>
         <textarea id="input" aria-label="Scrivi un compito" placeholder="Scrivi un compito…  (Invio per inviare, Shift+Invio a capo)" disabled></textarea>
         <div class="dot" id="dot" title="verde = pronto, giallo = al lavoro"></div>
@@ -1089,33 +1095,6 @@
     <span class="icona-mic" aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span><span class="icona-stop" aria-hidden="true"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></span>
   </button>
 </footer>
-
-<!-- Popover della verifica. Nascosto, si apre col toggle ✓ accanto alla
-     graffetta. Scegli CHE COSA controllare e su QUALE file: senza sapere
-     i nomi delle funzioni Python, solo cosa deve essere vero del
-     risultato. Il principio resta: controlli OGGETTIVI, mai un modello
-     che giudica un modello. -->
-<div id="verifica-pop" hidden>
-  <div class="verifica-titolo">Verifica il lavoro</div>
-  <label class="verifica-riga">
-    <span>Tipo di controllo</span>
-    <select id="verifica-tipo">
-      <option value="testo_presente">Il file esiste e non è vuoto</option>
-      <option value="testo_lungo">Il file ha una lunghezza minima</option>
-      <option value="testo_contiene">Il testo contiene dei pezzi</option>
-      <option value="json_campi">Il JSON ha certi campi</option>
-      <option value="json_somma">La somma di un campo torna</option>
-    </select>
-  </label>
-  <label class="verifica-riga">
-    <span>File da controllare</span>
-    <input id="verifica-file" type="text" placeholder="es. out.json">
-  </label>
-  <div class="verifica-nota small dim">
-    Se il controllo non passa, Orchestra rimanda il modello indietro con il
-    motivo esatto, fino a 3 volte. Controlli oggettivi sul risultato.
-  </div>
-</div>
 
 <div id="onboard" class="onboard-backdrop" hidden>
   <div class="onboard">
@@ -1266,27 +1245,6 @@
       </div>
     </div>
     <div class="traccia-modal-corpo" id="diff-corpo"></div>
-  </div>
-</div>
-<div id="mem-modal" class="mem-modal" hidden
-     role="dialog" aria-modal="true" aria-labelledby="mem-titolo">
-  <div class="mem-modal-box">
-    <div class="panel-head">
-      <div><b id="mem-titolo">Memoria</b> <span class="dim">fatti indicizzati, sfoglia, cerca e correggi</span></div>
-      <div>
-        <button id="mem-trova" class="ghost" title="Cerca">&#8634;</button>
-        <button id="mem-chiudi" class="ghost">Chiudi</button>
-      </div>
-    </div>
-    <div class="mem-modal-corpo">
-      <div class="mem-cerca-riga">
-        <input id="mem-cerca" type="text" aria-label="Cerca nella memoria" placeholder="Cerca nella memoria..." spellcheck="false" />
-        <button id="mem-annulla-cerca" class="ghost" title="Pulisci" hidden>&times;</button>
-      </div>
-      <p class="small dim" id="mem-stat"></p>
-      <div id="mem-lista" class="mem-lista"></div>
-      <p class="small dim" id="mem-msg"></p>
-    </div>
   </div>
 </div>
     <!-- Il modal dei progetti: lista, cancellazione e nuova registrazione. -->

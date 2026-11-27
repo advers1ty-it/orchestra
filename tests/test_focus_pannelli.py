@@ -29,7 +29,6 @@ PASS, FAIL = [], []
 # chiave, etichetta, id del pulsante, id del pannello, funzione che chiude
 PANNELLI = [
     ("opzioni", "Opzioni", "btn-opzioni", "opzioni", "chiudiOpzioni"),
-    ("memoria", "Memoria", "side-mem-tutti", "mem-modal", "chiudiMemoria"),
     ("progetti", "Progetti", "side-progetti-gestisci", "progetti-modal",
      "chiudiProgetti"),
     ("capacita", "Capacità", "side-cap", "capacita", "chiudiCapacita"),

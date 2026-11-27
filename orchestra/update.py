@@ -271,7 +271,7 @@ def _radice_zip(nomi: list[str]) -> str:
 # obsoleti. Dati, log, chiavi e stato (.md/.db/.json/.log/.env/...)
 # non si toccano mai, nemmeno se non sono piu' nella release.
 _EXT_CODICE = {".py", ".pyw", ".js", ".jsx", ".ts", ".html", ".htm",
-               ".css", ".bat", ".cmd", ".ps1"}
+               ".css", ".bat", ".cmd", ".ps1", ".sh"}
 
 
 def applica(zip_path: str, root: str | None = None) -> dict:

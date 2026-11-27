@@ -4794,8 +4794,9 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
             flags = 0
             if os.name == "nt":
                 flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-            proc = subprocess.Popen(cmd, stdout=lf, stderr=lf,
-                                    creationflags=flags, close_fds=True)
+            proc = subprocess.Popen(
+                cmd, stdout=lf, stderr=lf, creationflags=flags,
+                close_fds=True, start_new_session=(os.name != "nt"))
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "errore": str(e)}
         # attendi che il server sia pronto (poll stato file o porta)
@@ -4961,53 +4962,6 @@ document.getElementById('tok').addEventListener('keydown',e=>{if(e.key==='Enter'
         return self.app.session
 
     # -- GET ---------------------------------------------------------------
-
-    def _imposta_verifica(self, specifiche: list) -> None:
-        """Traduce i controlli scelti dall'utente in verificatori oggettivi.
-
-        `specifiche` è una lista di dict dichiarativi dal frontend, es.:
-          {"tipo": "json_campi", "file": "out.json", "campi": ["totale"]}
-          {"tipo": "testo_presente", "file": "appunti.md"}
-          {"tipo": "json_somma", "file": "v.json", "campo": "totale", "somma": 42}
-
-        Li traduco nei verificatori veri (verificatori.py) e li attacco al
-        config del giro. Se qualcosa non torna — tipo ignoto, file mancante
-        — quel controllo si SALTA invece di far cadere il turno: una
-        verifica rotta non deve bloccare l'invio. Se non resta nessun
-        verificatore valido, la self-correzione non si attiva e il turno
-        gira come al solito.
-        """
-        from . import verificatori as V
-        cat = {
-            "testo_presente": lambda s: V.v_testo_presente(s["file"]),
-            "testo_lungo": lambda s: V.v_testo_lungo(
-                s["file"], minimo=int(s.get("minimo", 1)),
-                massimo=int(s.get("massimo", 10_000_000))),
-            "testo_contiene": lambda s: V.v_testo_contiene(s["file"], s.get("frammenti", [])),
-            "json_campi": lambda s: V.v_json_campi(s["file"], s.get("campi", [])),
-            "json_valori": lambda s: V.v_json_valori(s["file"], s.get("attesi", {})),
-            "json_somma": lambda s: V.v_json_somma(s["file"], s["campo"], float(s.get("somma", 0))),
-        }
-        verificatori = []
-        for s in specifiche:
-            if not isinstance(s, dict):
-                continue
-            tipo = s.get("tipo")
-            if not s.get("file") or tipo not in cat:
-                continue
-            try:
-                verificatori.append(cat[tipo](s))
-            except Exception:
-                continue
-        cfg = self.app.session.agent.config
-        if verificatori:
-            cfg.verifica_compito = {
-                "verificatori": verificatori,
-                "work": "",
-                "max_tentativi": 3,
-            }
-        else:
-            cfg.verifica_compito = None
 
     # -- difese contro il browser di un altro sito ------------------------
     #
@@ -5599,7 +5553,9 @@ def _trova_cloudflared() -> str:
             candidati.append(os.path.join(base, "cloudflared.exe"))
             candidati.append(os.path.join(base, "Microsoft", "WindowsApps", "cloudflared.exe"))
     else:
-        for base in ("/usr/local/bin", "/usr/bin", "/opt/homebrew/bin"):
+        for base in ("/usr/local/bin", "/usr/bin", "/snap/bin",
+                     os.path.join(os.path.expanduser("~"), ".local", "bin"),
+                     "/opt/homebrew/bin"):
             candidati.append(os.path.join(base, "cloudflared"))
     for c in candidati:
         if c and os.path.isfile(c):

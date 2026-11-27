@@ -79,24 +79,31 @@ ESITI = {
 
 
 def impronte() -> dict[str, str] | None:
-    """Le impronte SHA-1 delle radici nello store di sistema, o None.
+    """Le impronte SHA-1 delle radici, o None se non si possono leggere.
 
-    `ssl.enum_certificates` esiste solo su Windows: e' l'unico sistema in
-    cui Python prende le CA dal sistema invece che da un file. Altrove
-    (macOS, Linux) c'e' un file di CA e il problema non si presenta, quindi
-    None qui vuol dire "non c'e' niente da controllare", non "errore".
+    Su Windows si interroga `ssl.enum_certificates("ROOT")`, lo store da
+    cui il browser prende le CA. Su Linux e macOS Python usa il bundle di
+    sistema: `SSLContext.get_ca_certs(binary_form=True)` legge lo stesso
+    elenco, quindi il controllo resta vero anche fuori da Windows invece
+    di dichiarare "non disponibile" e far fallire l'installer.
     """
     elenca = getattr(ssl, "enum_certificates", None)
-    if elenca is None:
-        return None
-    try:
-        voci = elenca("ROOT") or []
-    except Exception:  # noqa: BLE001 - uno store illeggibile e' "non so", non un guasto
-        return None
     fuori: dict[str, str] = {}
-    for voce in voci:
-        der = voce[0]
-        fuori[hashlib.sha1(der).hexdigest().upper()] = "ROOT"
+    if elenca is not None:
+        try:
+            voci = elenca("ROOT") or []
+        except Exception:  # noqa: BLE001 - uno store illeggibile e' "non so"
+            return None
+        for voce in voci:
+            der = voce[0]
+            fuori[hashlib.sha1(der).hexdigest().upper()] = "ROOT"
+        return fuori
+    try:
+        contesto = ssl.create_default_context()
+        for der in contesto.get_ca_certs(binary_form=True) or []:
+            fuori[hashlib.sha1(der).hexdigest().upper()] = "SISTEMA"
+    except Exception:  # noqa: BLE001 - bundle assente o illeggibile
+        return None
     return fuori
 
 
@@ -116,9 +123,15 @@ def stato(radici: tuple[dict, ...] = RADICI) -> dict:
         voci.append({**radice, "presente": presente})
         if not presente:
             mancanti.append(radice["nome"])
+    if trovate is None:
+        store = "non disponibile"
+    elif WINDOWS:
+        store = "Windows ROOT"
+    else:
+        store = "sistema"
     return {
         "sistema": sys.platform,
-        "store": "Windows ROOT" if trovate is not None else "non disponibile",
+        "store": store,
         "voci": len(trovate or {}),
         "radici": voci,
         "mancanti": mancanti,
@@ -148,6 +161,10 @@ def prova(host: str, secondi: float = 8.0) -> tuple[str, str]:
 def ripara(destinazione: Path | None = None) -> tuple[bool, str]:
     """Scarica le radici da Windows Update e le importa nello store.
 
+    Su Linux e macOS non c'e' uno store separato da riparare: il bundle
+    arriva dalla distribuzione, e `ripara` lo dice invece di lanciare
+    `certutil` (che li' non esiste).
+
     Le due meta' sono diverse di permessi: `-generateSSTFromWU` scrive solo
     un file e funziona da utente normale, `-addstore -f root` tocca lo store
     di sistema e senza amministratore risponde "accesso negato". L'installer
@@ -156,7 +173,9 @@ def ripara(destinazione: Path | None = None) -> tuple[bool, str]:
     un problema di rete che non c'e'.
     """
     if not WINDOWS:
-        return False, "solo Windows ha uno store di sistema da aggiornare"
+        return False, ("su Linux e macOS i certificati vengono dal bundle di "
+                       "sistema: aggiorna ca-certificates con il gestore "
+                       "della distribuzione, non serve un comando di Orchestra")
     import subprocess
 
     percorso = Path(destinazione or (Path(tempfile.gettempdir())
@@ -209,9 +228,15 @@ def report(dati: dict) -> str:
         segno = "ok   " if voce["presente"] else "MANCA"
         righe.append(f"  {segno} {voce['nome']} - {voce['perche']}")
     if dati["mancanti"]:
-        righe.append("  Per aggiungerle, da PowerShell come amministratore:")
-        righe.append('    certutil -generateSSTFromWU "%TEMP%\\radici.sst"')
-        righe.append('    certutil -addstore -f root "%TEMP%\\radici.sst"')
+        if WINDOWS:
+            righe.append("  Per aggiungerle, da PowerShell come amministratore:")
+            righe.append('    certutil -generateSSTFromWU "%TEMP%\\radici.sst"')
+            righe.append('    certutil -addstore -f root "%TEMP%\\radici.sst"')
+        else:
+            righe.append("  Aggiorna il pacchetto delle CA della distribuzione:")
+            righe.append("    Debian/Ubuntu: sudo apt install --reinstall "
+                         "ca-certificates && sudo update-ca-certificates")
+            righe.append("    Fedora: sudo dnf reinstall ca-certificates")
     return "\n".join(righe)
 
 

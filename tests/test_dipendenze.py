@@ -91,7 +91,7 @@ check("la versione è quella vera, non '?'",
 check("ogni voce dice perché serve", all(d.get("perche") for d in stato.values()),
       str({k: v.get("perche") for k, v in stato.items()}))
 check("cloudflared è ancora in elenco, con la sua via",
-      stato.get("cloudflared", {}).get("via") == "winget",
+      stato.get("cloudflared", {}).get("via") in ("winget", "manuale"),
       str(stato.get("cloudflared")))
 check("le opzionali restano visibili",
       "faster-whisper" in stato, str(sorted(stato)))
@@ -110,8 +110,12 @@ check("pypdf ha il suo comando",
       any("pypdf" in p for p in (dep.comando_installazione("pypdf") or [])),
       str(dep.comando_installazione("pypdf")))
 cf = dep.comando_installazione("cloudflared")
-check("cloudflared passa da winget, non da pip",
-      cf is not None and cf[0] == "winget", str(cf))
+if os.name == "nt":
+    check("cloudflared passa da winget, non da pip",
+          cf is not None and cf[0] == "winget", str(cf))
+else:
+    check("su Linux cloudflared non finge un comando winget",
+          cf is None, str(cf))
 check("faster-whisper accetta anche il nome col trattino basso",
       dep.comando_installazione("faster_whisper") ==
       dep.comando_installazione("faster-whisper"),

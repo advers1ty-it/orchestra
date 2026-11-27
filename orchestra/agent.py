@@ -105,17 +105,6 @@ class LoopConfig:
     tool_profile: str | None = None
     # Budget limits per questa run (None = usa default)
     budget_limits: BudgetLimits | None = None
-    # Loop di self-correzione: quando il modello chiide con risposta
-    # finale, se `verifica_compito` è impostata Orchestra controlla
-    # OGGETTIVAMENTE il risultato e, se non torna, rimanda il modello
-    # indietro col motivo esatto. None = nessuna verifica (task
-    # conversazionali, o chi non ne ha bisogno).
-    verifica_compito: Any = None
-    # Tetto ai tentativi di self-correzione: un modello che non ce la fa
-    # in N giri, con l'errore sotto il naso, non ce la farà al N+1 — e
-    # ogni giro costa token. Meglio il lavoro imperfetto col motivo che
-    # girare in tondo.
-    max_tentativi_verifica: int = 3
     # Le chiamate di sola lettura di uno stesso giro partono insieme
     # (vedi orchestra/parallelo.py). Spegnibile perche' e' un'ottimizzazione
     # di tempo, non una funzione: chi vuole la sequenza esatta la chiede.
@@ -361,11 +350,6 @@ class Agent:
             # senza nessun tool. Alla terza si chiude onestamente invece
             # di spacciare narrazione per lavoro fatto.
             self._vuote_di_fila = 0
-            # Self-correzione: contatore dei tentativi di verifica per
-            # questo turno, e bandiera che scatta quando il tetto è stato
-            # raggiunto (oltre, si chiude col lavoro imperfetto).
-            self._verifica_tentativo = 0
-            self._verifica_esaurita = False
             # Anti-gira-a-vuoto: quante volte ho già visto QUESTA identica
             # chiamata (nome+argomenti). Un modello piccolo che si incanta
             # su un tool che fallisce lo riprova tale e quale, e ogni giro
@@ -1192,7 +1176,7 @@ class Agent:
     def _nota_sistema(self, testo: str, nome: str) -> None:
         """Appende una nota di sistema come coppia assistant/tool valida.
 
-        I messaggi di sistema (nudge, verifica, steer, gira-a-vuoto) sono
+        I messaggi di sistema (nudge, steer, gira-a-vuoto) sono
         role="tool" con un tool_call_id inventato: non sono il risultato di
         una tool_call che il modello abbia fatto. I gateway permissivi
         (longcat, laguna) li accettano lo stesso; quelli stretti no:
@@ -1320,12 +1304,10 @@ class Agent:
 
         if self._budget_state:
             self._budget_state.reset_task()
-        # Il nudge e la verifica ripartono puliti a ogni turno: appartenevano
-        # alla domanda di prima.
+        # Il nudge riparte pulito a ogni turno: apparteneva alla domanda
+        # di prima.
         self._nudge_fatto = False
         self._vuote_di_fila = 0
-        self._verifica_tentativo = 0
-        self._verifica_esaurita = False
         self._chiamate_identiche = {}
         self._troncamenti = 0
         self._risposte_vuote = 0
@@ -1810,56 +1792,13 @@ class Agent:
                     self.state.stopped_because = "annuncio_finale"
                 return self.state
             if self.state.tool_calls_made == 0 and self._vuote_di_fila >= 4:
-                # Rete di sicurezza per i giri con verifica: testi
-                # veri ma mai un tool, a ripetizione, non e' lavoro.
+                # Rete di sicurezza: testi veri ma mai un tool, a
+                # ripetizione, non e' lavoro.
                 self._emit("solo_parole",
                            testo=resp.content[:120],
                            giri=self._vuote_di_fila)
                 self.state.stopped_because = "solo_parole"
                 return self.state
-
-            # --- self-correzione: verificare prima di chiudere -------------
-            #
-            # Il modello dice "fatto". Prima di accettarlo, se questo task
-            # ha una specifica di verifica, la eseguiamo: controlli
-            # OGGETTIVI sul risultato (file c'è, JSON valido, codice
-            # eseguito dà il numero atteso). Se non torna, NON chiudere:
-            # inietta l'errore esatto e rimanda il modello indietro.
-            #
-            # Mai un modello che giudica un modello — quello premia il più
-            # verboso. Qui si controlla il risultato, e il motivo è la
-            # prova. Tetto ai tentativi: oltre, il lavoro imperfetto col
-            # motivo vince su un loop che brucia token.
-            if self.config.verifica_compito is not None and not self._verifica_esaurita:
-                self._verifica_tentativo += 1
-                from .autoverifica import verifica_compito, nota_per_modello
-                specifica = self.config.verifica_compito
-                esito = verifica_compito(
-                    verificatori=specifica.get("verificatori", []),
-                    work=specifica.get("work", ""),
-                )
-                self._emit("verifica", ok=esito.ok, motivo=esito.motivo,
-                           tentativo=self._verifica_tentativo,
-                           verificatore=esito.verificatore)
-                if esito.ok:
-                    self.state.stopped_because = "risposta_finale"
-                    return self.state
-                if self._verifica_tentativo >= specifica.get(
-                        "max_tentativi", self.config.max_tentativi_verifica):
-                    self._verifica_esaurita = True
-                    self._emit("verifica_esaurita",
-                               motivo=esito.motivo,
-                               tentativi=self._verifica_tentativo)
-                    self.state.stopped_because = "verifica_fallita"
-                    return self.state
-                self._nota_sistema(
-                    nota_per_modello(
-                        esito, self._verifica_tentativo,
-                        specifica.get("max_tentativi",
-                                      self.config.max_tentativi_verifica)),
-                    "__verifica__",
-                )
-                continue
 
             self.state.stopped_because = "risposta_finale"
             return self.state

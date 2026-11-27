@@ -436,6 +436,7 @@ def per_percorso(percorso: str) -> tuple[str, str]:
     """
     try:
         base = os.path.abspath(os.path.expanduser(percorso or ""))
+        base_confronto = os.path.realpath(base)
     except (OSError, ValueError):
         return "", ""
     if not base:
@@ -448,15 +449,20 @@ def per_percorso(percorso: str) -> tuple[str, str]:
         if not nome or not radice:
             continue
         try:
-            radice = os.path.abspath(os.path.expanduser(radice))
+            radice_assoluta = os.path.abspath(os.path.expanduser(radice))
+            # Il confronto usa il percorso canonico, ma si restituisce
+            # quello registrato: su Windows `resolve()` puo' espandere un
+            # nome breve (RUNNER~1) mentre `abspath` no, e i due lati
+            # devono guardare la stessa cartella.
+            radice_confronto = os.path.realpath(radice_assoluta)
         except (OSError, ValueError):
             continue
-        dentro = os.path.normcase(base)
-        fuori = os.path.normcase(radice)
+        dentro = os.path.normcase(base_confronto)
+        fuori = os.path.normcase(radice_confronto)
         if dentro == fuori or dentro.startswith(fuori + os.sep):
             if len(fuori) > lunghezza:
                 lunghezza = len(fuori)
-                migliore = (nome, radice)
+                migliore = (nome, radice_assoluta)
     return migliore
 
 

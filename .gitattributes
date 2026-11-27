@@ -1,6 +1,7 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+*.sh text eol=lf
 
 # Istruzioni per gli agenti che lavorano sul sorgente: non sono
 # documentazione per chi installa Orchestra e non devono finire nello zip.

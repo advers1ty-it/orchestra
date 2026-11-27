@@ -503,7 +503,7 @@ function mostraSezione(nome) {
     if (t.dataset.sez === nome) t.classList.add("attiva");
     else t.classList.remove("attiva");
   }
-  // Storico e memoria idem: si caricano quando si aprono, non all'avvio.
+  // Lo storico si carica quando si apre, non all'avvio.
   if (nome === "storico") caricaStorico();
   if (nome === "identita") caricaIdentita();
   if (nome === "bot") {
@@ -513,7 +513,6 @@ function mostraSezione(nome) {
     // scopre una chat gia' collegata.
     if (typeof caricaTelegram === "function") caricaTelegram();
   }
-  if (nome === "memoria") caricaMemoria();
   if (nome === "remoto") caricaRemoto();
   if (nome === "autostart") caricaAutostart();
   if (nome === "benchmark") { /* il benchmark resta nel suo pannello */ }

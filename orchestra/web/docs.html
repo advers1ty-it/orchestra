@@ -129,11 +129,11 @@
 
 <section id="schermata">
 <h2>Cosa c'è sullo schermo</h2>
-<p>Dall'alto: una barra con le azioni, la conversazione, e in fondo il campo dove scrivi. La barra laterale (pulsante di menu, oppure <span class="kbd">Ctrl+B</span>) contiene la cronologia, i progetti, la memoria, le capacità e le tracce.</p>
+<p>Dall'alto: una barra con le azioni, la conversazione, e in fondo il campo dove scrivi. La barra laterale (la linguetta sul bordo sinistro, oppure <span class="kbd">Ctrl+B</span>) contiene la cronologia, i progetti, la memoria, le capacità e le tracce.</p>
 <div class="grid">
   <div class="box">
     <h3>In alto a sinistra</h3>
-    <p>Il <b>pulsante di menu</b> apre la barra laterale. <b>↶</b> annulla l'ultima modifica ai file. <b>Δ</b> mostra le modifiche del turno. <b>Piano</b> è un interruttore: acceso, l'agente legge e propone invece di modificare.</p>
+    <p>La <b>linguetta sul bordo sinistro</b> apre la barra laterale; il comando <b>«</b> in cima alla barra la riduce. <b>↶</b> annulla l'ultima modifica ai file. <b>Δ</b> mostra le modifiche del turno. <b>Piano</b> è un interruttore: acceso, l'agente legge e propone invece di modificare.</p>
   </div>
   <div class="box">
     <h3>I pannelli</h3>
@@ -149,7 +149,7 @@
   </div>
   <div class="box">
     <h3>In fondo</h3>
-    <p><b>Allega</b> allega un file, <b>Verifica</b> attiva un controllo automatico sul risultato, il campo di testo serve a scrivere, il pallino (verde = pronto, giallo = al lavoro) indica lo stato e <b>Invia</b> manda. Accanto, se disponibile, c'è il microfono per dettare.</p>
+    <p><b>Allega</b> allega un file, il campo di testo serve a scrivere, il pallino (verde = pronto, giallo = al lavoro) indica lo stato e <b>Invia</b> manda. Accanto, se disponibile, c'è il microfono per dettare.</p>
   </div>
 </div>
 </section>
@@ -189,7 +189,7 @@
 <p>Per usare Orchestra dal telefono: token, indirizzo e un codice QR da inquadrare, con i pulsanti per avviare il server remoto in LAN o il tunnel pubblico. Il dettaglio è in <a href="#remoto">Dal telefono</a>.</p>
 
 <h3>Avvio automatico</h3>
-<p>Un interruttore che fa partire il server al login di Windows, senza privilegi di amministratore. Comodo se vuoi rispondere dal telefono senza accendere il computer a mano. Spegnilo se preferisci decidere tu quando parte.</p>
+<p>Un interruttore che fa partire il server al login, senza privilegi di amministratore: usa la chiave Run su Windows e il file .desktop in <code>~/.config/autostart</code> su Linux. Comodo se vuoi rispondere dal telefono senza accendere il computer a mano. Spegnilo se preferisci decidere tu quando parte.</p>
 <p>La voce registrata usa il Python che sta eseguendo Orchestra in quel momento, non il launcher <code>py</code>: il launcher sceglie da sé la versione predefinita, e se quella è stata disinstallata o sostituita l'avvio non parte più. Quando succede il pannello non scrive più «attivo» e basta: dice che cosa non troverebbe e mostra <b>Ripara</b>, che riscrive la voce con l'interprete di adesso.</p>
 
 <h3>Bot</h3>
@@ -229,9 +229,6 @@
 
 <h3>Dettatura vocale</h3>
 <p>Il microfono compare accanto al campo quando il tuo browser lo permette. Parla, e il testo finisce nel campo; puoi correggerlo prima di inviare. Nei browser senza riconoscimento vocale l'audio viene trascritto dal server, se è installato il componente apposito (Opzioni → Diagnosi → dipendenze te lo dice).</p>
-
-<h3>Chiedere una verifica oggettiva</h3>
-<p>Il pulsante <b>Verifica</b> si accende e chiede: che tipo di controllo, su quale file. I controlli sono verificabili senza interpretazione: il file esiste e non è vuoto, ha una lunghezza minima, contiene certi pezzi, il JSON ha certi campi, la somma di un campo torna. Se il controllo non passa, Orchestra rimanda il modello al lavoro con il motivo esatto, fino a tre volte. Si accende e si spegne: da spento il turno gira normale.</p>
 
 <h3>Fine turno</h3>
 <p>Quando il turno finisce arriva un riepilogo: esito in parole, durata, file toccati con righe aggiunte e tolte, token e costo stimato. Compare come riga in chat; se stai guardando un'altra scheda diventa una notifica di sistema. Lo stesso riepilogo resta disponibile all'indirizzo <code>/api/riepilogo</code>.</p>
@@ -359,9 +356,9 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <h2>Tracce dei turni</h2>
 <p>Ogni turno lascia una traccia: esito, modello, iterazioni, strumenti usati, token, durata e la sequenza degli eventi. Serve a rispondere a «perché quel lavoro è andato così» senza rifarlo.</p>
 <ul>
-  <li>Nella barra laterale, sezione <b>Tracce</b>, ci sono le ultime 50, con l'esito in parole: «completato», «fermato al limite», «annullato», «budget finito», «girava a vuoto», «troppi errori», «verifica fallita», «solo parole, niente fatti», «fermato su un annuncio», «nessuna risposta scritta», «tempo scaduto».</li>
+  <li>Nella barra laterale, sezione <b>Tracce</b>, ci sono le ultime 50, con l'esito in parole: «completato», «fermato al limite», «annullato», «budget finito», «girava a vuoto», «troppi errori», «solo parole, niente fatti», «fermato su un annuncio», «nessuna risposta scritta», «tempo scaduto».</li>
   <li>Puoi filtrare per esito o mostrare <b>solo gli errori</b>: il filtro lo applica il database, quindi un turno fallito di ieri non sparisce dietro cinquanta turni riusciti di oggi.</li>
-  <li>Cliccando una riga si apre la sequenza esatta, e ogni evento si espande nel contenuto grezzo: argomenti degli strumenti, risultati, motivo della verifica.</li>
+  <li>Cliccando una riga si apre la sequenza esatta, e ogni evento si espande nel contenuto grezzo: argomenti degli strumenti, risultati.</li>
 </ul>
 </section>
 
@@ -370,7 +367,7 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <ul>
   <li><b>Cronologia</b>: le conversazioni del progetto attivo, con la ricerca; quelle senza progetto restano visibili. Si aprono e si riprendono, e con un bot attivo vedi quelle di quel bot.</li>
   <li><b>Memoria</b>: i fatti che aggiungi tu (barra laterale, campo «Fatto da ricordare») o che l'agente salva. Non vengono ficcati nel prompt: l'agente li cerca quando servono, così non occupano spazio a ogni messaggio.</li>
-  <li><b>Tutti i fatti</b> apre l'elenco completo: si cercano, si correggono, si tolgono.</li>
+  <li>L'elenco completo sta nella stessa tab: si cerca, si corregge, si toglie.</li>
   <li>Una manutenzione automatica evita i doppioni e potatura i fatti mai usati; non tocca quelli che usi.</li>
 </ul>
 </section>
@@ -426,9 +423,10 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 
 <section id="installazione">
 <h2>Installazione</h2>
-<p>Per installare Orchestra su un altro PC Windows: doppio clic su <code>installer/Installa-Orchestra.bat</code>. Il file è autonomo, non serve Git né un account.</p>
+<p>Su Windows: doppio clic su <code>installer/Installa-Orchestra.bat</code>. Su Linux: <code>bash installer/Installa-Orchestra.sh</code>. Sono file autonomi, non serve Git né un account.</p>
 <ul>
-  <li>Controlla che Python ci sia (e se manca te lo dice), scarica l'ultima versione, crea il file di configurazione da un modello e mette «Avvia Orchestra» sul Desktop.</li>
+  <li>Controlla che Python ci sia; su Windows prova a installarlo, su Linux propone di installarlo con <code>sudo</code> mostrando prima i comandi e chiedendo conferma. Poi scarica l'ultima versione, crea il file di configurazione da un modello e mette «Avvia Orchestra» sul Desktop o nel menu applicazioni.</li>
+  <li>Su Linux l'installer crea un ambiente Python isolato in <code>~/.local/share/orchestra</code>, il comando <code>orchestra</code> in <code>~/.local/bin</code> e il launcher nel menu; l'avvio automatico XDG si attiva dal pannello. I dati restano in <code>~/.orchestra</code>.</li>
   <li>Le chiavi, i budget, la cronologia, la memoria e gli obiettivi <b>non vengono mai sovrascritti</b> da un aggiornamento. <code>orchestra update --check</code> controlla soltanto se c'è una versione nuova.</li>
   <li>Le istruzioni passo per passo per chi installa stanno in <code>installer/LEGGIMI.txt</code>.</li>
 </ul>

@@ -4,7 +4,7 @@ Due difetti della stessa famiglia, visti sul Nous:
 
   1. 400 "Missing required parameter: 'tool_call_id'" — un messaggio di
      tool senza id. L'agente costruisce messaggi di sistema (gira_a_vuoto,
-     nudge, steer, verifica) con un id inventato: ora ce l'hanno.
+     nudge, steer) con un id inventato: ora ce l'hanno.
   2. 400 "messages[N] is a tool result, but it does not follow an
      assistant message with 'tool_calls' or its results" — avere un id
      NON basta: il tool result deve seguire un assistant che lo abbia
@@ -147,36 +147,14 @@ def test_steer_ha_id():
         )
 
 
-def test_verifica_ha_id():
-    """La nota di verifica fallita e' un messaggio tool: deve avere id."""
-    def fallito(work):
-        return False, "file mancante"
-
-    reg = default_registry()
-    prov = Provider(content="fatto")
-    ag = Agent(prov, reg, "test", LoopConfig(max_iterations=4))
-    ag.config.verifica_compito = {
-        "verificatori": [fallito], "work": "", "max_tentativi": 2}
-
-    ag.run("test")
-
-    payload = _payload(ag)
-    tool_msgs = [m for m in payload if m.get("role") == "tool"]
-    assert tool_msgs, "la verifica fallita deve essere un messaggio tool"
-    for m in tool_msgs:
-        assert m.get("tool_call_id"), (
-            f"verifica senza tool_call_id: {m!r}"
-        )
-
-
 def test_nessun_tool_orfano():
     """Ogni tool result del payload segue un assistant con quell'id.
 
     E' il difetto che Beam 1.0 ha fatto vedere: i messaggi di sistema
-    (nudge, steer, verifica) sono role="tool" con un id inventato, ma
-    nessun assistant li aveva chiamati — 400 "is a tool result, but it
-    does not follow an assistant message with 'tool_calls'". Il fix e'
-    il pairing: la nota e' preceduta da un assistant con una tool_call
+    (nudge, steer) sono role="tool" con un id inventato, ma nessun
+    assistant li aveva chiamati — 400 "is a tool result, but it does not
+    follow an assistant message with 'tool_calls'". Il fix e' il
+    pairing: la nota e' preceduta da un assistant con una tool_call
     dello stesso id.
     """
     # nudge (modello che annuncia senza fare)
@@ -194,17 +172,6 @@ def test_nessun_tool_orfano():
     ag.steer("Rifai la parte X")
     ag.run("test")
     _assert_nessun_orfano(ag, "steer")
-
-    # verifica fallita
-    def fallito(work):
-        return False, "file mancante"
-    reg = default_registry()
-    ag = Agent(Provider(content="fatto"), reg, "test",
-               LoopConfig(max_iterations=4))
-    ag.config.verifica_compito = {
-        "verificatori": [fallito], "work": "", "max_tentativi": 2}
-    ag.run("test")
-    _assert_nessun_orfano(ag, "verifica")
 
 
 def test_compaction_non_lascia_tool_orfani():
@@ -245,8 +212,6 @@ if __name__ == "__main__":
     print("OK   il tool normale ha id")
     test_steer_ha_id()
     print("OK   lo steer ha id")
-    test_verifica_ha_id()
-    print("OK   la verifica ha id")
     test_nessun_tool_orfano()
     print("OK   nessun tool result orfano nel payload")
     test_compaction_non_lascia_tool_orfani()

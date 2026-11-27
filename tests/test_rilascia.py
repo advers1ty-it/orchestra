@@ -56,6 +56,10 @@ def repo_finto() -> str:
                            "Installa-Orchestra.bat"), "w",
               encoding="utf-8") as f:
         f.write("@echo off\r\nREM installer\r\n")
+    with open(os.path.join(cartella, "installer",
+                           "Installa-Orchestra.sh"), "w",
+              encoding="utf-8") as f:
+        f.write("#!/usr/bin/env bash\n# installer\n")
     with open(os.path.join(cartella, "README.md"), "w",
               encoding="utf-8") as f:
         f.write("# prova\n")
@@ -111,9 +115,10 @@ check("il titolo finisce nel nome della release",
       "v0.5.100 — Un titolo" in comando, str(comando))
 check("la riga di gh ha lo zip", "orchestra-0.5.100.zip" in comando,
       str(comando))
-check("e l'installer, sempre",
-      comando[-1].endswith(os.path.join("installer", "Installa-Orchestra.bat")),
-      str(comando[-1:]))
+check("e i due installer, sempre",
+      comando[-2].endswith(os.path.join("installer", "Installa-Orchestra.bat"))
+      and comando[-1].endswith(os.path.join("installer", "Installa-Orchestra.sh")),
+      str(comando[-2:]))
 
 # ------------------------------------------------ il giro vero, in locale
 print("\n[2] Il giro completo in locale (senza GitHtub)")
@@ -217,6 +222,7 @@ vecchia = os.getcwd()
 try:
     os.chdir(cartella)
     os.remove(os.path.join(cartella, "installer", "Installa-Orchestra.bat"))
+    os.remove(os.path.join(cartella, "installer", "Installa-Orchestra.sh"))
     git(cartella, "add", "-A")
     git(cartella, "commit", "-m", "Senza installer")
     try:

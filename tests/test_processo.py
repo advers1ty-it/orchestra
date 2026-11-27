@@ -142,12 +142,25 @@ check("si puo' scrivere senza a capo",
 if sid:
     tool.handler(azione="ferma", id=sid)
 
-cmd_line = ("python -u -c \"import sys; riga = sys.stdin.readline(); "
+cmd_line = ("python -u -c \"import sys; print('pronto-lettura', flush=True); "
+            "riga = sys.stdin.readline(); "
             "print('letto:' + repr(riga), flush=True)\"")
 s2 = tool.handler(azione="avvia", comando=cmd_line, attesa=1)
 msid2 = re.search(r"\b(p\d+)\b", s2)
 sid2 = msid2.group(1) if msid2 else ""
 check("il secondo lettore e' vivo", "AVVIATO" in s2, s2[:160])
+# Scrivere prima che la shell abbia eseguito il figlio puo' perdere la
+# riga: il figlio non e' ancora il lettore, e la shell puo' aver gia'
+# consumato il buffer di stdin. Si aspetta il suo segnale di pronto,
+# come farebbe chi parla con un REPL.
+pronto2 = ""
+for _ in range(150):
+    pronto2 = tool.handler(azione="leggi", id=sid2) if sid2 else ""
+    if "pronto-lettura" in pronto2:
+        break
+    time.sleep(0.1)
+check("il secondo lettore ha stampato il pronto",
+      "pronto-lettura" in pronto2, pronto2[:200])
 w1 = tool.handler(azione="scrivi", id=sid2, testo="senza-capo",
                   a_capo=False) if sid2 else ""
 check("scrive senza chiudere la riga",
@@ -156,7 +169,7 @@ check("scrive senza chiudere la riga",
 time.sleep(0.3)
 prima = tool.handler(azione="leggi", id=sid2) if sid2 else ""
 check("senza a capo il processo aspetta ancora",
-      "--- output ---" not in prima, prima[:200])
+      "letto:" not in prima.split("--- output ---")[-1], prima[:200])
 w2 = tool.handler(azione="scrivi", id=sid2, testo="", a_capo=True) if sid2 else ""
 check("il solo a capo completa la riga",
       "SCRITTO" in w2 and "con a capo" in w2, w2[:200])

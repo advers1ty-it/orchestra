@@ -1,4 +1,4 @@
-"""Una release in un comando solo, con ENTRAMBI gli asset.
+"""Una release in un comando solo, con TUTTI gli asset.
 
 PERCHE' ESISTE
 
@@ -6,8 +6,9 @@ La 0.5.99 e' uscita con il solo zip. L'installer era nel repository, la
 release prima lo allegava, e quella dopo no: "quali asset vanno sulla
 release" era una cosa da ricordare, e ricordarsela e' esattamente il
 passo che si salta quando si e' di fretta. Qui gli asset sono una
-costante — lo zip e `installer/Installa-Orchestra.bat` — e alla fine si
-rilegge la release per pretendere che ci siano davvero tutti e due.
+costante — lo zip, `installer/Installa-Orchestra.bat` e
+`installer/Installa-Orchestra.sh` — e alla fine si rilegge la release per
+pretendere che ci siano davvero tutti e tre.
 
     python tools/rilascia.py                 # patch +1, note dal repository
     python tools/rilascia.py 0.6.0           # versione esplicita
@@ -18,8 +19,8 @@ I passi, in ordine: controlli (ramo, albero pulito, tag libero) → versione
 in `orchestra/__init__.py` → note (`release-notes-v<ver>.md`, costruite
 dai commit se mancano) → commit e push → zip da `git archive HEAD` (la
 verifica della radice e della versione sta in `genera_release.py`) → tag e
-push del tag → `gh release create` con zip e installer → lettura della
-release per controllare gli asset.
+push del tag → `gh release create` con zip e i due installer → lettura
+della release per controllare gli asset.
 
 Se un passo fallisce ci si ferma li', senza inventare un "fatto": un tag
 senza release o una release senza installer sono peggio di un comando
@@ -41,10 +42,12 @@ sys.path.insert(0, HERE)
 
 import genera_release  # noqa: E402
 
-# L'installer non si rigenera a ogni versione (legge `releases/latest`),
-# ma va allegato: senza, chi arriva dalla pagina delle release non ha da
-# dove partire.
+# Gli installer non si rigenerano a ogni versione (leggono
+# `releases/latest`), ma vanno allegati: senza, chi arriva dalla pagina
+# delle release non ha da dove partire. Windows e Linux sono due file
+# autonomi, e la release deve avere entrambi.
 INSTALLER = os.path.join("installer", "Installa-Orchestra.bat")
+INSTALLER_LINUX = os.path.join("installer", "Installa-Orchestra.sh")
 
 
 class ErroreRelease(SystemExit):
@@ -172,10 +175,12 @@ def controlla(root: str, ver: str, ramo: str, remoto: bool) -> None:
     if sporco:
         raise ErroreRelease("ci sono modifiche non committate:\n" + sporco
                             + "\ncommittale o mettile da parte prima.")
-    installer = os.path.join(root, INSTALLER)
-    if not os.path.isfile(installer) or os.path.getsize(installer) == 0:
-        raise ErroreRelease(f"manca l'installer ({INSTALLER}): senza, la "
-                            "release non serve a chi parte da zero")
+    for installer_rel in (INSTALLER, INSTALLER_LINUX):
+        installer = os.path.join(root, installer_rel)
+        if not os.path.isfile(installer) or os.path.getsize(installer) == 0:
+            raise ErroreRelease(f"manca l'installer ({installer_rel}): "
+                                "senza, la release non serve a chi parte "
+                                "da zero")
     if esegui(["git", "rev-parse", "-q", "--verify", f"refs/tags/v{ver}"],
               root).returncode == 0:
         raise ErroreRelease(f"il tag v{ver} esiste gia'")
@@ -194,7 +199,7 @@ def controlla(root: str, ver: str, ramo: str, remoto: bool) -> None:
 
 def comando_release(ver: str, titolo: str, note: str, zip_path: str,
                     installer: str) -> list[str]:
-    """La riga di `gh release create`: zip E installer, sempre in due.
+    """La riga di `gh release create`: zip e i due installer (Windows/Linux).
 
     Il titolo arriva gia' calcolato: questa funzione non rilegge le note,
     cosi' non dipende da un file che nel frattempo puo' essere stato
@@ -202,7 +207,8 @@ def comando_release(ver: str, titolo: str, note: str, zip_path: str,
     """
     return ["gh", "release", "create", f"v{ver}",
             "--title", f"v{ver} — {titolo}",
-            "--notes-file", note, zip_path, installer]
+            "--notes-file", note, zip_path, installer,
+            INSTALLER_LINUX]
 
 
 def _leggi(percorso: str) -> str:
@@ -212,7 +218,7 @@ def _leggi(percorso: str) -> str:
 
 def controlla_asset(ver: str, zip_path: str, installer: str,
                     root: str) -> list[str]:
-    """Rilegge la release e pretende che i due asset ci siano.
+    """Rilegge la release e pretende che tutti e tre gli asset ci siano.
 
     Il punto di tutto lo script e' questo controllo: `gh release create`
     puo' riuscire avendo allegato un file solo, ed e' esattamente com'e'
@@ -228,7 +234,8 @@ def controlla_asset(ver: str, zip_path: str, installer: str,
         raise ErroreRelease(f"v{ver} e' ancora una bozza")
     presenti = {str(a.get("name")) for a in (dati.get("assets") or [])
                 if a.get("state") == "uploaded"}
-    attesi = {os.path.basename(zip_path), os.path.basename(installer)}
+    attesi = {os.path.basename(zip_path), os.path.basename(installer),
+              os.path.basename(INSTALLER_LINUX)}
     mancanti = attesi - presenti
     if mancanti:
         raise ErroreRelease(f"sulla release mancano: {sorted(mancanti)} "
@@ -318,7 +325,8 @@ def main(argv: list[str] | None = None) -> int:
         print("[7/7] release saltata (--senza-release)")
         print(f"\nPer finire a mano:\n  gh release create v{ver} --title "
               f"\"v{ver} — {titolo}\" --notes-file {os.path.relpath(note, root)} "
-              f"{os.path.basename(percorso_zip)} {INSTALLER}")
+              f"{os.path.basename(percorso_zip)} {INSTALLER} "
+              f"{INSTALLER_LINUX}")
         return 0
 
     comando = comando_release(ver, titolo, note, percorso_zip, installer)
@@ -340,7 +348,10 @@ def _prova(root: str, a: argparse.Namespace) -> int:
     print(f"ramo: {a.ramo}")
     c_installer = ("c'e'" if os.path.isfile(os.path.join(root, INSTALLER))
                    else "MANCA")
-    print(f"installer: {INSTALLER} ({c_installer})")
+    c_linux = ("c'e'" if os.path.isfile(os.path.join(root, INSTALLER_LINUX))
+               else "MANCA")
+    print(f"installer Windows: {INSTALLER} ({c_installer})")
+    print(f"installer Linux:   {INSTALLER_LINUX} ({c_linux})")
     note = (a.note or "").strip() or os.path.join(
         root, f"release-notes-v{ver}.md")
     if os.path.isfile(note):
@@ -360,7 +371,7 @@ def _prova(root: str, a: argparse.Namespace) -> int:
         print(f"controlli: BLOCCANO — {e}")
         return 1
     print("asset: " + os.path.basename(f"orchestra-{ver}.zip")
-          + " e " + INSTALLER)
+          + ", " + INSTALLER + " e " + INSTALLER_LINUX)
     print("\n(prova: non ho scritto niente)")
     return 0
 

@@ -466,11 +466,11 @@ on(optModel, "change", async () => {
 });
 
 
-// Memoria: modale. La sidebar tiene "Tutti i fatti" e l'aggiunta rapida;
-// sfoglia, cerca e correggi vivono qui dentro.
-const memModal = $("mem-modal"), memLista = $("mem-lista"),
-  memStat = $("mem-stat"), memMsg = $("mem-msg"),
-  memCerca = $("mem-cerca"), memAnnullaCerca = $("mem-annulla-cerca");
+// Memoria: vive nella tab della sidebar. Aggiunta rapida, ricerca e
+// lista modificabile stanno qui, con lo scorrimento della vista.
+const memLista = $("side-mem-elenco"), memStat = $("side-mem-stat"),
+  memMsg = $("side-mem-msg"),
+  memCerca = $("side-mem-cerca"), memAnnullaCerca = $("side-mem-annulla-cerca");
 
 function rigaMemoria(testo, importante) {
   const r = el("div", "mem-item");
@@ -495,28 +495,35 @@ function rigaMemoria(testo, importante) {
     inp.style.flex = "1";
     inp.style.minWidth = "0";
     const ok = el("button", "ghost piccolo", "Salva");
-    r.replaceChildren(inp, ok);
+    const ann = el("button", "ghost piccolo", "Annulla");
+    r.replaceChildren(inp, ok, ann);
     inp.focus();
     inp.select();
     on(ok, "click", async () => {
       const nt = inp.value.trim();
-      if (!nt || nt === testo) { ricaricaMemoria(); return; }
+      if (!nt || nt === testo) { aggiornaMemoria(); return; }
       await fetch("/api/memoria/modifica", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vecchio: testo, nuovo: nt }),
       });
-      ricaricaMemoria();
+      aggiornaMemoria();
     });
-    on(inp, "keydown", (e) => { if (e.key === "Enter") ok.click(); });
+    on(ann, "click", aggiornaMemoria);
+    on(inp, "keydown", (e) => {
+      if (e.key === "Enter") ok.click();
+      if (e.key === "Escape") ann.click();
+    });
   });
   on(del, "click", async () => {
+    const breve = testo.length > 160 ? testo.slice(0, 157) + "..." : testo;
+    if (!confirm(`Dimenticare questo fatto? Non si recupera.\n\n${breve}`)) return;
     await fetch("/api/memoria/elimina", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fatto: testo }),
     });
-    ricaricaMemoria();
+    aggiornaMemoria();
   });
   btns.appendChild(mod);
   btns.appendChild(del);
@@ -559,24 +566,9 @@ async function ricaricaMemoria() {
   }
 }
 
-function apriMemoria(opener) {
-  if (!memModal) return;
-  memModal.hidden = false;
-  memModal.classList.add("show");
-  apriFocusModale(memModal, opener);
-  if (memCerca) { memCerca.value = ""; memAnnullaCerca.hidden = true; }
-  ricaricaMemoria();
-}
-
-function chiudiMemoria() {
-  if (!memModal) return;
-  memModal.hidden = true;
-  memModal.classList.remove("show");
-  chiudiFocusModale(memModal);
-}
-
 async function cercaMemoria() {
   if (!memCerca) return;
+  if (memMsg) memMsg.textContent = "";
   const q = memCerca.value.trim();
   if (memAnnullaCerca) memAnnullaCerca.hidden = !q;
   if (!q) { ricaricaMemoria(); return; }
@@ -588,10 +580,18 @@ async function cercaMemoria() {
     });
     const d = await r.json();
     disegnaMemoria(d.risultati || []);
-    if (memStat) memStat.textContent = (d.risultati || []).length + " risultati";
+    const n = (d.risultati || []).length;
+    if (memStat) memStat.textContent = n + (n === 1 ? " risultato" : " risultati");
   } catch (e) {
     if (memMsg) memMsg.textContent = "ricerca fallita: " + e;
   }
+}
+
+// Dopo una modifica la lista riparte da sola: se stavi cercando, la ricerca
+// resta applicata invece di mostrare all'improvviso tutti i fatti.
+function aggiornaMemoria() {
+  if (memCerca && memCerca.value.trim()) cercaMemoria();
+  else ricaricaMemoria();
 }
 
 let memTimer = null;
@@ -605,9 +605,6 @@ on(memAnnullaCerca, "click", () => {
   ricaricaMemoria();
   if (memCerca) memCerca.focus();
 });
-on($("mem-trova"), "click", () => { if (memCerca) memCerca.focus(); });
-on($("mem-chiudi"), "click", chiudiMemoria);
-on($("side-mem-tutti"), "click", (e) => apriMemoria(e.currentTarget));
 on($("side-mem-aggiungi"), "click", async () => {
   const inp = $("side-mem-input");
   const v = inp ? inp.value.trim() : "";
@@ -618,14 +615,18 @@ on($("side-mem-aggiungi"), "click", async () => {
     body: JSON.stringify({ fatto: v }),
   });
   inp.value = "";
-  if (memModal && !memModal.hidden) ricaricaMemoria();
+  aggiornaMemoria();
 });
 on($("side-mem-input"), "keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); $("side-mem-aggiungi").click(); }
 });
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && memModal && !memModal.hidden) chiudiMemoria();
-});
+
+// La lista si rilegge quando si apre la tab: l'agente puo' aver scritto
+// in memoria nel frattempo. Il primo caricamento lo fa panels-shell, dopo
+// aver scelto la vista salvata.
+for (const b of document.querySelectorAll('.side-tab[data-vista="memoria"]')) {
+  on(b, "click", aggiornaMemoria);
+}
 
 // fallback manuale: Prima la catena era automatica e costruita da una tabella di servizi che chi usa Orchestra puo' non
 // avere.

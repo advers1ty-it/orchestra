@@ -5,6 +5,9 @@ const sidebar = $("sidebar");
 const sideElenco = $("side-elenco");
 const sideMsg = $("side-msg");
 const sideBtn = $("btn-side");
+const sideDrawer = $("side-drawer");
+// Stessa soglia delle media query del layout in app.css.
+const SOGLIA_MOBILE = 640;
 
 function sideAperta() {
   return !!sidebar && !sidebar.hasAttribute("hidden");
@@ -16,10 +19,12 @@ function apriSide(aperta) {
   if (aperta) {
     sidebar.removeAttribute("hidden");
     caricaSide();
-    if (window.innerWidth <= 640) document.body.classList.add("sidebar-aperta");
+    if (window.innerWidth <= SOGLIA_MOBILE) document.body.classList.add("sidebar-aperta");
+    if (sideBtn) sideBtn.setAttribute("aria-expanded", "true");
   } else {
     sidebar.setAttribute("hidden", "");
     document.body.classList.remove("sidebar-aperta");
+    if (sideBtn) sideBtn.setAttribute("aria-expanded", "false");
   }
 }
 
@@ -62,6 +67,11 @@ try {
 } catch (e) {
   mostraVistaSide("cronologia");
 }
+// Se la vista salvata e' la memoria, la lista va letta subito: ad aprirla
+// non c'e' stato nessun clic.
+if (document.querySelector('.side-vista.attiva[data-vista="memoria"]')) {
+  ricaricaMemoria();
+}
 
 // Rotaia delle sezioni: visibile solo a sidebar ridotta, un'icona per
 // sezione. Il clic riapre e porta alla vista scelta.
@@ -71,6 +81,7 @@ for (const b of document.querySelectorAll("#side-rail button")) {
     mostraVistaSide(b.dataset.vista);
   });
 }
+if (sideDrawer) sideDrawer.addEventListener("click", () => apriSide(true));
 
 // Ctrl+B, come gli editor: è il gesto che le persone già hanno in mano.
 document.addEventListener("keydown", (ev) => {
@@ -383,6 +394,7 @@ function riduciSide() {
   sidebar.style.flexBasis = LARGHEZZA_RIDOTTA + "px";
   sidebar.classList.add("ridotta");
   localStorage.setItem("orchestra.side.ridotta", "1");
+  if (sideBtn) sideBtn.setAttribute("aria-expanded", "false");
 }
 
 function allargaSide() {
@@ -392,19 +404,40 @@ function allargaSide() {
   sidebar.style.flexBasis = w + "px";
   sidebar.classList.remove("ridotta");
   localStorage.removeItem("orchestra.side.ridotta");
+  if (sideBtn) sideBtn.setAttribute("aria-expanded", "true");
 }
 
 // Aperta all'avvio, sempre — ma solo su desktop. Su telefono la sidebar
-// è un drawer: parte chiusa, si apre col pulsante hamburger.
-if (window.innerWidth > 640) {
+// è un drawer: parte chiusa, si apre dalla linguetta sul bordo sinistro.
+if (window.innerWidth > SOGLIA_MOBILE) {
   sidebar.removeAttribute("hidden");
 }
 
-// Il bottone alterna aperta/ridotta. Non chiude: la cronologia serve
-// troppo spesso per costare due clic.
+// La soglia non e' solo CSS: `hidden` e la classe del body sono lo stato
+// che il drawer mobile usa per mostrarsi. Cambiando larghezza possono
+// restare quelli di prima (pannello chiuso ma visibile, o aperto ma
+// tradotto fuori schermo), quindi al passaggio di soglia si riallineano.
+// Su desktop il pannello torna a far parte del layout; su telefono torna
+// a essere un drawer chiuso, con la linguetta che lo riapre.
+let sideMobile = window.innerWidth <= SOGLIA_MOBILE;
+function sincronizzaSide() {
+  const mobile = window.innerWidth <= SOGLIA_MOBILE;
+  if (mobile === sideMobile) return;
+  sideMobile = mobile;
+  if (mobile) {
+    apriSide(false);
+  } else {
+    if (!sideAperta()) apriSide(true);
+    document.body.classList.remove("sidebar-aperta");
+  }
+}
+window.addEventListener("resize", sincronizzaSide);
+
+// Su desktop il bottone alterna aperta/ridotta; su telefono apre e
+// chiude il drawer.
 if (sideBtn) {
   sideBtn.addEventListener("click", () => {
-    if (window.innerWidth <= 640) {
+    if (window.innerWidth <= SOGLIA_MOBILE) {
       apriSide();
       return;
     }
@@ -416,7 +449,7 @@ if (sideBtn) {
 const sideBackdrop = $("side-backdrop");
 if (sideBackdrop) {
   sideBackdrop.addEventListener("click", () => {
-    if (window.innerWidth <= 640) apriSide(false);
+    if (window.innerWidth <= SOGLIA_MOBILE) apriSide(false);
   });
 }
 
@@ -854,7 +887,12 @@ async function _depsApri() {
     html += "<div style='display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1)'>";
     html += "<div><strong>" + _depsEsc(d.nome) + "</strong><br><span style='font-size:11px;opacity:.6'>" + (ok ? _depsEsc(d.versione || "ok") : "da installare") + " · " + _depsEsc(d.via || "") + (d.perche ? " · " + _depsEsc(d.perche) : "") + "</span></div>";
     if (!ok) {
-      html += "<button class='deps-install' data-nome='" + _depsEsc(d.nome) + "' style='padding:4px 10px;border-radius:6px;border:1px solid #555;background:transparent;color:inherit;cursor:pointer;font-size:12px'>Installa</button>";
+      if (d.via === "manuale") {
+        const link = d.url ? " <a href='" + _depsEsc(d.url) + "' target='_blank' rel='noopener' style='color:inherit'>istruzioni</a>" : "";
+        html += "<span style='font-size:12px'>installa a mano" + link + "</span>";
+      } else {
+        html += "<button class='deps-install' data-nome='" + _depsEsc(d.nome) + "' style='padding:4px 10px;border-radius:6px;border:1px solid #555;background:transparent;color:inherit;cursor:pointer;font-size:12px'>Installa</button>";
+      }
     } else {
       html += "<span style='color:#4ade80;font-size:12px'>✓ ok</span>";
     }

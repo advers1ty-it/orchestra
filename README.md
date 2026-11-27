@@ -34,6 +34,57 @@ in una release: nessuna riga arriva qui senza che qualcuno l'abbia capita.
 Se hai già installato Orchestra, rilanciare l'installer **aggiorna** senza
 toccare `orchestra/.env`, i database, il token di Telegram o le skill.
 
+## Installazione (Linux, la via semplice)
+
+Serve Python 3.11 o superiore e il modulo `venv`. Se mancano, l'installer
+propone di installare i pacchetti di sistema con `sudo`: mostra prima i
+comandi e chiede conferma. `--no-sistema` salta questa parte e stampa le
+istruzioni. Non serve Git né un account GitHub, e non vengono aggiunti
+repository di terze parti.
+
+Su Windows l'installer punta alla 3.14 (con un fallback se non è
+installabile); su Linux usa la versione più recente già presente, preferendo
+la 3.14 se è utilizzabile e accettando 3.11+. Non viene forzata la 3.14: la maggior
+parte delle distribuzioni non la pacchettizza, e aggiungere un repository
+esterno sarebbe più rischioso che utile.
+
+1. Scarica `Installa-Orchestra.sh` dalla pagina
+   **[Releases](https://github.com/advers1ty-it/orchestra/releases/latest)**,
+   oppure da terminale:
+
+   ```bash
+   curl -fsSL -o Installa-Orchestra.sh \
+     https://github.com/advers1ty-it/orchestra/releases/latest/download/Installa-Orchestra.sh
+   bash Installa-Orchestra.sh
+   ```
+
+2. L'installer scarica l'ultima versione, crea un ambiente Python isolato in
+   `~/.local/share/orchestra`, prepara il comando `orchestra` in
+   `~/.local/bin` e aggiunge **Avvia Orchestra** al menu applicazioni (e al
+   Desktop, se la cartella esiste). Se Python o `venv` mancano, prima chiede
+   il permesso di installarli con `sudo`. Chiede anche se installare ricerca
+   web, immagini e PDF: Invio = sì, `n` = no; `--no-deps` salta la domanda.
+3. Avvia con **Avvia Orchestra** o con:
+
+   ```bash
+   ~/.local/share/orchestra/Avvia-Orchestra.sh
+   ```
+
+   Si apre il browser su `http://127.0.0.1:8737`. Per fermarlo:
+   `~/.local/share/orchestra/Orchestra.sh ferma`.
+
+Rilanciare l'installer aggiorna il codice senza toccare `.env`, database,
+memoria, token o skill. I dati restano in `~/.orchestra`. Le funzioni
+aggiuntive si possono installare anche dopo da **Opzioni → Dipendenze**.
+
+Su Linux l'automazione del mouse e della tastiera richiede `xdotool`
+(X11); senza, i tool del computer dicono cosa manca invece di fallire in
+silenzio. Il rendering e gli screenshot delle pagine web richiedono Google
+Chrome o Chromium (il fetch testuale funziona lo stesso). La trascrizione
+audio (`faster-whisper`) e `cloudflared` per il tunnel sono opzionali e si
+installano a parte. L'avvio automatico usa `~/.config/autostart`, quindi
+funziona sui desktop che rispettano lo standard XDG (GNOME, KDE, XFCE).
+
 ## Il primo avvio in tre minuti
 
 1. **Una chiave.** Nel pannello **Opzioni → Modello** incolla la chiave di
@@ -204,19 +255,19 @@ Serve Python 3.11 o superiore.
 ```bash
 git clone https://github.com/advers1ty-it/orchestra.git
 cd orchestra
-python -m orchestra.cli web            # interfaccia web su 127.0.0.1:8737
+python3 -m orchestra.cli web           # interfaccia web su 127.0.0.1:8737
 ```
 
 Dalla riga di comando, senza aprire il browser:
 
 ```bash
-python -m orchestra.cli doctor                 # controlla configurazione e connessione
-python -m orchestra.cli chat                   # sessione interattiva
-python -m orchestra.cli run "il tuo compito"    # esegui e esci
-python -m orchestra.cli goal "obiettivo"        # obiettivo autonomo
-python -m orchestra.cli goals --pronti          # cosa partirebbe adesso
-python -m orchestra.cli scheduler --una-volta   # svuota la coda e esci
-python -m orchestra.cli update --check          # c'è una versione nuova?
+python3 -m orchestra.cli doctor                 # controlla configurazione e connessione
+python3 -m orchestra.cli chat                   # sessione interattiva
+python3 -m orchestra.cli run "il tuo compito"    # esegui e esci
+python3 -m orchestra.cli goal "obiettivo"        # obiettivo autonomo
+python3 -m orchestra.cli goals --pronti          # cosa partirebbe adesso
+python3 -m orchestra.cli scheduler --una-volta   # svuota la coda e esci
+python3 -m orchestra.cli update --check          # c'è una versione nuova?
 ```
 
 Le dipendenze facoltative (`ddgs` per la ricerca web, `Pillow` per le

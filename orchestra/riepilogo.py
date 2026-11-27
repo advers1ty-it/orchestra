@@ -47,7 +47,6 @@ _ESITI = {
     # Il turno si e' chiuso senza una parola di testo: nessuna risposta da
     # leggere. Non e' «finito» — e dirlo «finito» era il difetto.
     "risposta_vuota": ("fermato: il modello non ha scritto niente", "avviso"),
-    "verifica_fallita": ("finito senza superare la verifica", "avviso"),
 }
 
 

@@ -180,7 +180,7 @@ async function caricaAutostart() {
   try {
     const r = await fetch("/api/autostart/status").then((x) => x.json().catch(() => ({})));
     if (!r.disponibile) {
-      if (autostartStat) autostartStat.textContent = "non disponibile (non Windows)";
+      if (autostartStat) autostartStat.textContent = "non disponibile su questo sistema";
       if (autostartToggle) autostartToggle.hidden = true;
       return;
     }

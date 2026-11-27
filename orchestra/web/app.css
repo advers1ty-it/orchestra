@@ -147,6 +147,7 @@ header .mp-btn:hover:not(:disabled) {
   width: 100%;
   height: 32px;
   padding: 0 8px;
+  align-items: center;
   justify-content: flex-start;
   font-size: 12px;
   color: var(--fg);
@@ -156,7 +157,6 @@ header .mp-btn:hover:not(:disabled) {
   background: var(--bg);
   border-color: var(--border);
 }
-header #btn-side,
 header #btn-undo,
 header #btn-diff {
   font-size: 15px;
@@ -498,10 +498,8 @@ header select:disabled, header .mp-btn:disabled {
   width: 46px;
   height: 46px;
   margin: 0 auto 18px;
-  border-radius: 14px;
-  background: linear-gradient(150deg, #82a8ff, #3b5bc0);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 30px rgba(59, 91, 192, .35);
-  position: relative;
+  background: url("/icon.svg") center / contain no-repeat;
+  filter: drop-shadow(0 10px 26px rgba(59, 91, 192, .35));
 }
 .vuoto h2 {
   margin: 0 0 8px;
@@ -525,14 +523,7 @@ header select:disabled, header .mp-btn:disabled {
 .vuoto-riga kbd {
   margin: 0 1px;
 }
-.vuoto-segno::after {
-  content: "";
-  position: absolute;
-  inset: 14px;
-  border: 2px solid rgba(255, 255, 255, .9);
-  border-radius: 4px;
-  transform: rotate(45deg);
-}
+
 
 /* composer */
   footer {
@@ -668,8 +659,7 @@ header select:disabled, header .mp-btn:disabled {
   border: 0;
   box-shadow: none;
 }
-.row #btn-allega,
-.row #btn-verifica {
+.row #btn-allega {
   width: 36px;
   height: 36px;
   padding: 0;
@@ -680,8 +670,7 @@ header select:disabled, header .mp-btn:disabled {
   color: var(--muted-2);
   font-size: 15px;
 }
-.row #btn-allega:hover:not(:disabled),
-.row #btn-verifica:hover:not(:disabled) {
+.row #btn-allega:hover:not(:disabled) {
   background: var(--panel-3);
   color: var(--fg);
 }
@@ -1640,10 +1629,9 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   min-height: 18px;
 }
 
-/* Storico e Memoria: liste da leggere e da correggere, non da ammirare. */
+/* Storico: liste da leggere e da correggere, non da ammirare. */
 
-.storico-elenco,
-.memoria-elenco {
+.storico-elenco {
   list-style: none;
   margin: 10px 0 0;
   padding: 0;
@@ -1651,8 +1639,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   overflow-y: auto;
 }
 
-.storico-riga,
-.memoria-riga {
+.storico-riga {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1685,29 +1672,6 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   display: flex;
   gap: 5px;
   flex-shrink: 0;
-}
-
-.memoria-fatto {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* Il segno che un fatto sta nel prompt di ogni conversazione. */
-.memoria-imp {
-  color: var(--warn);
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-.memoria-campi {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.memoria-campi input {
-  flex: 1;
 }
 
 /* pannello laterale: Flex-item del body, non overlay: la chat si restringe e resta visibile. */
@@ -2024,32 +1988,19 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   display: flex; gap: 5px; padding: 0 12px 6px;
 }
 
-.side-mem-elenco {
-  list-style: none;
+.side-mem-msg {
   margin: 0;
-  padding: 0 6px;
+  padding: 0 12px 4px;
+}
+.side-mem-msg:empty { display: none; }
+
+.side-mem-elenco {
+  margin: 0;
+  padding: 0 6px 8px;
   overflow-y: auto;
   flex: 1 1 0;
   min-height: 40px;
 }
-
-.side-mem-riga {
-  display: flex; align-items: flex-start; gap: 4px;
-  padding: 3px 4px; border-radius: 5px;
-}
-
-.side-mem-fatto {
-  flex: 1; min-width: 0; font-size: 12px; line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.side-mem-via {
-  background: none; border: none; cursor: pointer;
-  color: var(--muted); font-size: 14px; line-height: 1;
-  padding: 0 3px; flex-shrink: 0;
-}
-
-.side-mem-via:hover { color: var(--fg); }
 
 /* Maniglia di ridimensionamento. Sottile di proposito: si afferra col
    mouse, non si guarda. */
@@ -2078,12 +2029,33 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 /* Le sezioni non stanno piu' tutte insieme: una riga di tab sceglie
    quale si vede, e quella prende tutta l'altezza. Con cinque liste
    aperte insieme, cronologia e tracce restavano con due righe l'una. */
+/* La riga delle schede porta in fondo il comando del pannello: sta qui,
+   non nell'header, dove sembrava appartenere a un altro menu. */
+.side-testa-tab {
+  display: flex;
+  border-bottom: 1px solid var(--border-soft);
+}
 .side-tabs {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   gap: 3px;
   padding: 7px 7px 0;
-  border-bottom: 1px solid var(--border-soft);
+  min-width: 0;
+}
+.side-toggle {
+  flex: 0 0 auto;
+  width: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted-2);
+  font-size: 16px;
+  line-height: 1;
+}
+.side-toggle:hover {
+  background: var(--panel-2);
+  color: var(--fg);
 }
 .side-tab {
   flex: 1 1 auto;
@@ -2152,6 +2124,29 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 }
 .side-rail button:hover { border-color: var(--border); }
 
+/* Chiuso il pannello, resta una linguetta sul bordo sinistro: da li' si
+   riapre, senza un comando estraneo nell'header. */
+.side-drawer {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 38;
+  width: 30px;
+  height: 48px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 14px;
+}
+#sidebar[hidden] + .side-drawer { display: flex; }
+
 .icona {
   display: block;
   width: 18px;
@@ -2178,69 +2173,19 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 #sidebar.ridotta .side-testo,
 #sidebar.ridotta .side-meta { display: none; }
 
-.side-mem-stat {
-  padding: 2px 12px 4px;
-  font-size: 10px;
-}
-
-/* La stella sui fatti importanti: stessa forma del pin della cronologia,
-   così vuol dire la stessa cosa — "questo resta in cima". */
-/* Modale della memoria: la lista in sidebar e' un sommario di una riga,
-   e leggerla lì non serve a nulla. Qui si sfoglia, si cerca, si corregge. */
-.mem-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.78);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 2002;
-}
-.mem-modal.show { display:flex; }
-.mem-modal-box {
-  color: var(--fg,#eee);
-  border: 1px solid var(--border,#333);
-  width: 880px;
-  max-width: 94vw;
-  height: 80vh;
-  display: flex;
-  flex-direction: column;
-  padding: 14px;
-  border-radius: 16px;
-  border-color: var(--border);
-  background: linear-gradient(180deg, var(--panel), #11151d);
-  box-shadow: 0 26px 80px rgba(0, 0, 0, .6);
-}
-.mem-modal-corpo { flex:1; overflow-y:auto; min-height:0; }
-.mem-cerca-riga { display:flex; gap:6px; margin-bottom:10px; }
-.mem-cerca-riga input { flex:1; min-width:0; }
-.mem-lista { flex:1; overflow-y:auto; border:1px solid var(--border,#2c313a);
-  border-radius:8px; padding:6px; }
+/* Le righe della memoria: la stella dice cosa resta nel prompt di ogni
+   conversazione; correzione e "dimentica" stanno sulla riga. */
 .mem-item { display:flex; align-items:flex-start; gap:6px; padding:6px 8px;
   border-bottom:1px solid var(--border,#262b33); font-size:12.5px; line-height:1.45; }
 .mem-item:last-child { border-bottom:0; }
 .mem-item.imp { background:rgba(255,196,0,.06); }
 .mem-item .stella { color:var(--accent); flex-shrink:0; width:14px; }
 .mem-item .txt { flex:1; min-width:0; white-space:pre-wrap; word-break:break-word; }
-.mem-item .via { color:var(--dim,#8a9099); font-size:10.5px; flex-shrink:0; }
 .mem-item .btns { display:flex; gap:4px; flex-shrink:0; }
 .mem-item .btns button { background:var(--panel-2,rgba(255,255,255,.05));
   color:var(--fg,#eee); border:1px solid var(--border,#333); border-radius:6px;
   font-size:11px; padding:3px 7px; cursor:pointer; }
 .mem-item .btns button:hover { background:var(--panel-3,rgba(255,255,255,.12)); }
-.mem-edit { display:none; width:100%; box-sizing:border-box; margin-top:4px;
-  font:inherit; font-size:12.5px; min-height:52px; resize:vertical; }
-.mem-edit.open { display:block; }
-.mem-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:10px; }
-.mem-foot button { font-size:12px; padding:6px 14px; }
-.mem-vuoto { padding:16px; text-align:center; color:var(--dim,#8a9099); font-size:12px; }
-
-.side-mem-imp {
-  color: var(--accent);
-  font-size: 11px;
-  flex-shrink: 0;
-  margin-right: 2px;
-}
 
 /* la sezione Skill non deve mai sparire: Le tre sezioni hanno quote di altezza: cronologia 40vh, memoria 22vh, skill
    22vh. */
@@ -2477,11 +2422,8 @@ input[type="number"]:focus {
   margin: .6em 0 .2em;
 }
 
-/* Toggle verifica (✓) e popover. Coerente con la graffetta: ghost,
-   stesso ingombro. "acceso" lo distingue a colpo d'occhio. */
-#btn-verifica.acceso { color: var(--accent); background: var(--panel-2, rgba(255,255,255,.08)); }
 /* Il piano acceso deve leggersi come uno stato, non come un bottone
-   premuto per caso: stessa forma del toggle verifica. */
+   premuto per caso. */
 #btn-piano.acceso { color: var(--accent); background: var(--panel-2, rgba(255,255,255,.08)); }
 /* Un piano ha i passi su righe separate. */
 #domanda-testo.piano { white-space: pre-wrap; text-align: left; }
@@ -2491,36 +2433,6 @@ input[type="number"]:focus {
 @media (max-width: 640px) {
 
 }
-
-#verifica-pop {
-  position: fixed;
-  bottom: 108px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(420px, 92vw);
-  background: var(--panel, #1c1f26);
-  border: 1px solid var(--border, #333);
-  border-radius: 8px;
-  padding: 12px 14px;
-  box-shadow: 0 8px 28px rgba(0,0,0,.45);
-  z-index: 60;
-}
-#verifica-pop[hidden] { display: none; }
-.verifica-titolo { font-weight: 700; margin-bottom: 8px; }
-.verifica-riga {
-  display: flex; flex-direction: column; gap: 3px;
-  margin-bottom: 8px; font-size: 13px;
-}
-.verifica-riga span { color: var(--muted, #999); }
-.verifica-riga select, .verifica-riga input {
-  background: var(--panel-2, rgba(255,255,255,.05));
-  color: var(--fg, #eee);
-  border: 1px solid var(--border, #333);
-  border-radius: 5px;
-  padding: 5px 7px;
-  font-size: 13px;
-}
-.verifica-nota { margin-top: 4px; line-height: 1.35; }
 
 .side-filtri-tracce { display: flex; align-items: center; gap: 8px;
   flex-wrap: wrap; margin: 4px 0 8px; }
@@ -2619,7 +2531,7 @@ input[type="number"]:focus {
 
 /* Solo le liste assorbono lo schiacciamento. */
 #sidebar > :not(ul):not(.side-sez):not(.side-corpo),
-.side-sez > :not(ul) {
+.side-sez > :not(ul):not(.side-mem-elenco) {
   flex: none;
 }
 .side-tracce {
@@ -2636,7 +2548,6 @@ input[type="number"]:focus {
 #side-sez-memoria, #side-sez-skill,
 #side-sez-progetti, #side-sez-tracce { flex: 1 1 auto; }
 #side-sez-progetti.attiva,
-#side-sez-memoria.attiva,
 #side-sez-skill.attiva { overflow-y: auto; }
 
 /* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non basta: tiene interi i figli ma la sezione
@@ -2732,25 +2643,12 @@ input[type="number"]:focus {
 #mcp-preset-campi label input { flex: 1 1 auto; width: 100%; }
 #mcp-preset-campi .goal-meta { flex: 1 1 100%; }
 #mcp-preset-campi a { color: var(--accent, #8ab4ff); }
-.goal-avanzate { margin: 6px 0; font-size: 12px; }
-.goal-avanzate summary { cursor: pointer; color: var(--muted-foreground,#aaa); }
-.goal-avanzate textarea { flex: 1 1 240px; font-family: monospace; font-size: 11px;
-  background: #0b0f18; color: #dbe1ee; border: 1px solid var(--border,#333);
-  border-radius: 8px; padding: 6px; }
-.goal-check { display: flex; align-items: center; gap: 6px; font-size: 12px;
-  color: var(--muted-foreground,#aaa); white-space: nowrap; }
 .goal-row { cursor: pointer; }
 .goal-row .goal-id { font-family: monospace; font-size: 11px; opacity: .7; }
-.goal-kind { padding: 2px 6px; border-radius: 6px; font-size: 11px; background: #2a4a9a; color: white; }
-.goal-gate { padding: 2px 6px; border-radius: 6px; font-size: 11px; }
-.gate-ok { background: #1d5c38; color: #c9f2d8; }
-.gate-ko { background: #8a3a3a; color: #ffd7d7; }
-.gate-parziale { background: #7a5a1d; color: #ffe9b0; }
-.gate-attesa { background: #333; color: #bbb; }
 .goal-meta { font-size: 11px; opacity: .75; }
 
-/* ── Modal progetti ──────────────────────────────────────────── Stesso pattern dei modal esistenti (mem-modal,
-   traccia-modal): overlay fissato sopra tutto, box centrato, scroll interno. */
+/* ── Modal progetti ──────────────────────────────────────────── Stesso pattern dei modal esistenti
+   (traccia-modal): overlay fissato sopra tutto, box centrato, scroll interno. */
 .progetti-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .progetti-modal[hidden] { display: none; }
 .progetti-modal-box {
@@ -2809,9 +2707,8 @@ input {
   content: "";
   width: 22px;
   height: 22px;
-  border-radius: 7px;
-  background: linear-gradient(150deg, #82a8ff, #3b5bc0);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 2px 8px rgba(59, 91, 192, .35);
+  background: url("/icon.svg") center / contain no-repeat;
+  filter: drop-shadow(0 2px 6px rgba(59, 91, 192, .35));
   flex-shrink: 0;
 }
 #log:empty + .vuoto {
@@ -2822,7 +2719,6 @@ input {
 @media (max-width: 640px) {
 
   .ver { display: none; }
-  #btn-side { order: -1; }
   /* selettori su riga propria, a tutta larghezza */
   .scope-wrap, #provider-pick, .mp-wrap, #reasoning-pick { flex: 1 1 48%; min-width: 0; }
   #scope-pick, #provider-pick { max-width: 100%; }
@@ -2922,8 +2818,8 @@ input {
     display: inline-flex !important;
     order: 3; margin-left: auto; align-self: center; flex-shrink: 0;
   }
-  /* secondari nascosti nell'header compatto: scopo e modello si spostano nel menu full-screen, cosi' resta solo logo,
-     hamburger e "altre opzioni" */
+  /* secondari nascosti nell'header compatto: scopo e modello si spostano
+     nel menu full-screen, cosi' restano logo e "altre opzioni" */
   header .h-sec { display: none !important; }
   header .scope-wrap, header .mp-wrap { display: none; }
 
@@ -2937,8 +2833,7 @@ input {
     gap: 10px;
   }
   header.esteso .grow { display: none; }
-  /* in cima: hamburger a sinistra, chiudi a destra */
-  header.esteso #btn-side { order: -2; align-self: flex-start; }
+  /* in cima: chiudi a destra */
   header.esteso #btn-header-toggle { order: -1; margin-left: 0; align-self: flex-end; }
   /* poi logo, scopo e modello (a tutta larghezza) */
   header.esteso .logo { order: 0; }

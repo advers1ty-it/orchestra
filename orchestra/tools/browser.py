@@ -22,8 +22,9 @@ from .web import (_RedirectPubblico, _blocco_non_fidato, _html_a_testo,
 
 def _browser_exe() -> str | None:
     cand: list[str] = []
-    for name in ("chrome", "chrome.exe", "msedge", "msedge.exe",
-                 "chromium", "chromium.exe"):
+    for name in ("google-chrome", "google-chrome-stable", "chrome",
+                 "chrome.exe", "msedge", "msedge.exe", "microsoft-edge",
+                 "chromium", "chromium-browser", "chromium.exe"):
         w = shutil.which(name)
         if w:
             cand.append(w)
@@ -34,6 +35,12 @@ def _browser_exe() -> str | None:
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files (x86)\Chromium\Application\chrome.exe",
         r"C:\Program Files\Chromium\Application\chrome.exe",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+        "/opt/google/chrome/chrome",
     ]
     for p in cand:
         if os.path.exists(p):

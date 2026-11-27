@@ -281,8 +281,16 @@ def test_file_recenti_nel_prompt() -> None:
 
     check("il prompt del progetto elenca i file gia' toccati",
           "src/file9.txt" in volatile, volatile[-400:])
+    # La cartella del progetto sta nel prompt per design; qui si controlla
+    # la RIGA degli ultimi file, non tutto il prompt. Su Linux il vecchio
+    # controllo guardava l'intero testo e trovava la cartella assoluta
+    # della scheda progetto, facendo fallire una cosa giusta.
+    riga_file = next((r for r in volatile.splitlines()
+                      if "Ultimi file toccati" in r), "")
     check("l'elenco e' relativo alla cartella del progetto",
-          p.replace("\\", "/") not in volatile, volatile[-400:])
+          bool(riga_file)
+          and p.replace("\\", "/") not in riga_file
+          and p not in riga_file, riga_file or volatile[-400:])
     check("il file piu' recente viene prima",
           volatile.index("file9.txt") < volatile.index("file6.txt"),
           volatile[-400:])

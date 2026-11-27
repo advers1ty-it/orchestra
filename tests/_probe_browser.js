@@ -83,9 +83,12 @@ function get(url) {
              rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)],
              genitore: el.parentElement ? el.parentElement.tagName + "." + el.parentElement.className : "?" };
   };
-  // apri la sidebar come farebbe l'utente: il bottone vero, non la funzione
-  const bs = document.getElementById("btn-side");
-  if (bs) { bs.click(); await att(400); }
+  // apri la sidebar come farebbe l'utente: se e' chiusa, la linguetta sul bordo
+  const bs = document.getElementById("sidebar");
+  if (bs && bs.hidden) {
+    const apri = document.getElementById("side-drawer");
+    if (apri) { apri.click(); await att(400); }
+  }
   const ob = document.getElementById("onboard");
   out.onboard = ob ? { hidden: ob.hidden, display: getComputedStyle(ob).display } : "MANCA";
   await att(200);
@@ -93,12 +96,12 @@ function get(url) {
   out.sidebar = side ? { hidden: side.hidden, classe: side.className,
                          rect: (r => [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)])(side.getBoundingClientRect()) } : "MANCA";
 
-  // 1. memoria
-  const bm = document.getElementById("side-mem-tutti");
-  out.bottoneMemoria = bm ? { visibile: bm.getBoundingClientRect().height > 0,
-                              rect: (r => [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)])(bm.getBoundingClientRect()) } : "MANCA";
-  if (bm) { bm.click(); await att(400); }
-  out.memModal = info("mem-modal");
+  // 1. memoria: la lista vive nella tab, non in un modale
+  const tabMem = document.querySelector('.side-tab[data-vista="memoria"]');
+  if (tabMem) { tabMem.click(); await att(600); }
+  const bm = document.getElementById("side-mem-elenco");
+  out.memLista = bm ? { righe: bm.children.length,
+                        rect: (r => [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)])(bm.getBoundingClientRect()) } : "MANCA";
 
   // 2. progetti
   const bp = document.getElementById("side-progetti-gestisci");

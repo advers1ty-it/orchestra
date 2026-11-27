@@ -1,7 +1,10 @@
-"""Automazione minima del computer via API Windows/SendKeys.
+"""Automazione minima del computer su Windows e Linux.
 
-Non richiede dipendenze: usa PowerShell + System.Drawing/System.Windows.Forms
-euser32.dll presenti di default su Windows.
+Su Windows non richiede dipendenze: usa PowerShell + System.Drawing e
+System.Windows.Forms. Su Linux usa, se presenti, `xdotool` per mouse e
+tastiera e `grim`/`gnome-screenshot`/`scrot`/ImageMagick per lo schermo.
+Sono opzionali: se mancano, il tool dice quale comando installare invece di
+far finta che l'operazione sia riuscita.
 """
 
 from __future__ import annotations
@@ -9,11 +12,38 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from ..types import Tool
+
+LINUX = sys.platform.startswith("linux")
+
+
+def _comando_linux(nome: str) -> str:
+    return shutil.which(nome) or ""
+
+
+def _messaggio_linux(manca: str) -> str:
+    return (f"Automazione del computer non disponibile: manca {manca}. "
+            "Su Linux servono xdotool (X11) e uno tra grim, "
+            "gnome-screenshot, scrot o ImageMagick.")
+
+
+def _run_linux(argv: list[str], timeout: int = 30) -> tuple[int, str, str]:
+    try:
+        r = subprocess.run(
+            argv, text=True, capture_output=True, timeout=timeout,
+            encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return 1, "", f"programma non trovato: {argv[0]}"
+    except subprocess.TimeoutExpired:
+        return 1, "", f"timeout {timeout}s"
+    except Exception as e:  # noqa: BLE001
+        return 1, "", f"{type(e).__name__}: {e}"
+    return r.returncode, (r.stdout or "").strip(), (r.stderr or "").strip()
 
 
 def _consento(azione: str, dettagli: str) -> bool:
@@ -75,6 +105,23 @@ def tool_computer_screenshot() -> Tool:
             nome_file += ".png"
         out = _scratch_path(nome_file)
         os.makedirs(out.parent, exist_ok=True)
+        if LINUX:
+            comandi = (
+                ("grim", ["grim", str(out)]),
+                ("gnome-screenshot", ["gnome-screenshot", "-f", str(out)]),
+                ("scrot", ["scrot", "-o", str(out)]),
+                ("import", ["import", "-window", "root", str(out)]),
+            )
+            for nome, argv in comandi:
+                if not _comando_linux(nome):
+                    continue
+                rc, testo, err = _run_linux(argv)
+                if rc == 0 and out.exists():
+                    return (f"Screenshot salvato: {out} "
+                            f"({out.stat().st_size} byte)")
+                if err or testo:
+                    return f"Screenshot fallito: {err or testo}"
+            return _messaggio_linux("uno strumento per lo screenshot")
         out_s = str(out).replace("'", "''")
         script = (
             "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
@@ -129,6 +176,16 @@ def tool_computer_click() -> Tool:
                     "pannello Permessi.")
         btn = "LEFT" if str(bottone).lower() in ("sinistro", "left",
                                                   "sx") else "RIGHT"
+        if LINUX:
+            xdotool = _comando_linux("xdotool")
+            if not xdotool:
+                return _messaggio_linux("xdotool")
+            rc, out_txt, err = _run_linux([
+                xdotool, "mousemove", str(x), str(y), "click",
+                "1" if btn == "LEFT" else "3"])
+            if rc != 0:
+                return f"click fallito: {err or out_txt}"
+            return f"click {btn.lower()} in ({x},{y}) eseguito"
         if btn == "LEFT":
             flag_down, flag_up = 2, 4
         else:
@@ -175,6 +232,18 @@ def tool_computer_type() -> Tool:
             return ("Azione negata: scrittura su sistema non autorizzata. "
                     "Abilita ORCHESTRA_COMPUTER_USE=1 o conferma dal "
                     "pannello Permessi.")
+        if LINUX:
+            xdotool = _comando_linux("xdotool")
+            if not xdotool:
+                return _messaggio_linux("xdotool")
+            # `--` separa le opzioni dal testo: una frase che inizia con
+            # '-' non deve diventare un'opzione di xdotool.
+            rc, out_txt, err = _run_linux([
+                xdotool, "type", "--clearmodifiers", "--delay", "1",
+                "--", t])
+            if rc != 0:
+                return f"scrittura fallita: {err or out_txt}"
+            return f"scritti {len(t)} caratteri"
         # non inviamo caratteri che SendKeys interpreta come sequenze per il
         # controllo (es. +, ^, %): li mettiamo letterali via @{} non e'
         # supportato, quindi li escapovamo come testo; SendKeys tratta %+^
@@ -221,6 +290,19 @@ def tool_computer_open() -> Tool:
             return ("Azione negata: apertura sistema non autorizzata. "
                     "Abilita ORCHESTRA_COMPUTER_USE=1 o conferma dal "
                     "pannello Permessi.")
+        if LINUX:
+            if _comando_linux(a) or (os.path.isfile(a) and os.access(a, os.X_OK)):
+                try:
+                    proc = subprocess.Popen([a], start_new_session=True)
+                    return f"processo avviato: {proc.pid}"
+                except Exception as e:  # noqa: BLE001
+                    return f"apertura fallita: {type(e).__name__}: {e}"
+            if _comando_linux("xdg-open"):
+                rc, out_txt, err = _run_linux(["xdg-open", a])
+                if rc != 0:
+                    return f"apertura fallita: {err or out_txt}"
+                return "aperto con xdg-open"
+            return _messaggio_linux("xdg-open")
         escaped = a.replace("'", "''")
         script = f"Start-Process '{escaped}' -PassThru | Select-Object -ExpandProperty Id"
         rc, out_txt, err = _run_pw(script)

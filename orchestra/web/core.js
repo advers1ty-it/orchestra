@@ -1117,20 +1117,6 @@ function handle(kind, d) {
     // Niente nota quando non c'e' nulla da potare: era rumore a ogni turno ("sotto soglia... sta lavorando") e si
     // confondeva con un vero avanzamento.
 
-    // Self-correzione: il loop "agisci → verifica oggettiva → correggi".
-    case "verifica": {
-      if (d.ok) {
-        addNote(`verifica superata (tentativo ${d.tentativo})`);
-      } else {
-        addNote(`verifica FALLITA (tentativo ${d.tentativo}): ${d.motivo} ` +
-                `Rimando al modello con il motivo esatto`);
-      }
-      break;
-    }
-    case "verifica_esaurita":
-      addNote(`self-correzione esaurita dopo ${d.tentativi} tentativi: ${d.motivo}. ` +
-              `Restituisco il lavoro così com'è, col motivo.`);
-      break;
     case "gira_a_vuoto":
       addNote(`fermato: ripeteva \`${d.tool}\` con gli stessi argomenti, sempre lo stesso errore. ` +
               `Chiudo col lavoro fatto invece di girare a vuoto.`);

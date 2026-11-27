@@ -1,13 +1,15 @@
-"""Avvio automatico di Orchestra su Windows.
+"""Avvio automatico di Orchestra, su Windows e su Linux.
 
-Registra/deregistra Orchestra nella chiave Run dell'utente (HKCU), cosi' il
-server parte al login senza privilegi di amministratore. Solo Windows.
+Su Windows registra/deregistra Orchestra nella chiave Run dell'utente
+(HKCU), cosi' il server parte al login senza privilegi di amministratore.
+Su Linux scrive un file `.desktop` in `~/.config/autostart`, il meccanismo
+standard di GNOME, KDE e degli altri desktop.
 
 L'interprete registrato e' quello che sta eseguendo questo processo
 (sys.executable), non `py -3`: il launcher `py` sceglie da solo la versione
 "predefinita", e su una macchina con piu' Python (o con una registrazione
-rimasta indietro) puo' puntare a un percorso che non esiste piu'. Il
-6/11/2026 e' successo esattamente questo: la voce nella chiave Run c'era,
+rimasta indietro) puo' puntare a un percorso che non esiste piu'.
+Il 6/11/2026 e' successo esattamente questo: la voce nella chiave Run c'era,
 il pannello diceva "attivo", e al login la console rispondeva "Unable to
 create process using ... : impossibile trovare il file specificato".
 Un avvio automatico che non parte lasciando scritto "attivo" e' peggio di
@@ -25,6 +27,8 @@ import sys
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "Orchestra"
 PORTA = "8737"
+WINDOWS = sys.platform.startswith("win")
+LINUX = sys.platform.startswith("linux")
 
 
 def _root() -> str:
@@ -93,6 +97,9 @@ def _citato(valore: str) -> str:
 
 
 def _comando() -> str:
+    """Il comando registrato, nel formato della piattaforma corrente."""
+    if LINUX:
+        return _comando_linux()
     cartella = _cartella_lavoro()
     log = os.path.join(_cartella_log(), "orchestra.log")
     err = os.path.join(_cartella_log(), "orchestra.err.log")
@@ -111,18 +118,62 @@ def _comando() -> str:
     )
 
 
+def _linux_file() -> str:
+    """Il file .desktop dell'avvio automatico."""
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+        os.path.expanduser("~"), ".config")
+    return os.path.join(base, "autostart", "orchestra.desktop")
+
+
+def _linux_quota(valore: str) -> str:
+    """Virgolette per il campo Exec di un .desktop."""
+    return '"' + valore.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _comando_linux() -> str:
+    """Il comando che parte al login.
+
+    Preferisce il launcher dell'installazione, che conosce il venv e i
+    log; se non c'e' (installazione da wheel) usa l'interprete corrente.
+    In entrambi i casi non apre il browser: al login non c'e' nessuno
+    davanti allo schermo.
+    """
+    launcher = os.path.join(_root(), "Avvia-Orchestra.sh")
+    if os.path.isfile(launcher):
+        return ("env ORCHESTRA_NO_BROWSER=1 "
+                + _linux_quota(launcher) + " avvia --no-browser")
+    exe = sys.executable or "python3"
+    return ("env ORCHESTRA_NO_BROWSER=1 " + _linux_quota(exe)
+            + " -m orchestra.cli web --port " + PORTA + " --no-browser")
+
+
 def disponibile() -> bool:
-    return sys.platform.startswith("win")
+    return WINDOWS or LINUX
 
 
 def _interprete_registrato(comando: str) -> str:
-    """Il percorso dopo `-FilePath`, se c'e'."""
+    """Il percorso dopo `-FilePath`, se c'e' (formato Windows)."""
     trovato = re.search(r"-FilePath\s+'([^']*)'", comando or "")
     return trovato.group(1) if trovato else ""
 
 
+def _programma_linux(comando: str) -> str:
+    """Il primo programma fra virgolette nel comando Linux."""
+    trovato = re.search(r'"([^"]+)"', comando or "")
+    return trovato.group(1) if trovato else ""
+
+
 def _valore() -> str:
-    """Il comando scritto nella chiave Run, stringa vuota se non c'e'."""
+    """Il comando scritto nell'avvio automatico, vuoto se non c'e'."""
+    if LINUX:
+        try:
+            with open(_linux_file(), encoding="utf-8") as f:
+                for riga in f:
+                    if riga.startswith("Exec="):
+                        return riga[5:].strip()
+        except OSError:
+            return ""
+        return ""
     import winreg
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,
                         winreg.KEY_READ) as k:
@@ -140,6 +191,15 @@ def problema_del_comando(comando: str) -> str:
     cosi' si puo' provare senza Windows, e la regola che finisce nel test e'
     la stessa che gira davvero.
     """
+    if LINUX:
+        programma = _programma_linux(comando)
+        if not programma:
+            return "la voce registrata non indica un programma"
+        if not os.path.exists(programma):
+            return "il programma registrato non esiste piu' (%s)" % programma
+        if "orchestra.cli" not in comando and not programma.endswith("Avvia-Orchestra.sh"):
+            return ("la voce registrata non avvia il server di Orchestra")
+        return ""
     interprete = _interprete_registrato(comando)
     if not interprete:
         return "la voce registrata non indica un programma"
@@ -182,6 +242,26 @@ def stato() -> bool:
 def abilita() -> bool:
     if not disponibile():
         return False
+    if LINUX:
+        percorso = _linux_file()
+        contenuto = "\n".join([
+            "[Desktop Entry]",
+            "Type=Application",
+            "Name=Orchestra",
+            "Comment=Avvia il server di Orchestra al login",
+            "Exec=" + _comando_linux(),
+            "Path=" + _cartella_lavoro(),
+            "Terminal=false",
+            "X-GNOME-Autostart-enabled=true",
+            "",
+        ])
+        try:
+            os.makedirs(os.path.dirname(percorso), exist_ok=True)
+            with open(percorso, "w", encoding="utf-8", newline="\n") as f:
+                f.write(contenuto)
+            return True
+        except OSError:
+            return False
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,
@@ -195,6 +275,14 @@ def abilita() -> bool:
 def disabilita() -> bool:
     if not disponibile():
         return False
+    if LINUX:
+        try:
+            os.remove(_linux_file())
+        except FileNotFoundError:
+            pass
+        except OSError:
+            return False
+        return True
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,

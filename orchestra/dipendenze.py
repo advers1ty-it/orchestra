@@ -13,9 +13,10 @@ pannello non trova Pillow.
 
 La lista sta in un posto solo: `requirements.txt`. Qui si legge, si
 interroga `importlib` per lo stato vero, e si tiene una tabella per le
-dipendenze che non si installano con pip (cloudflared arriva da winget) e
-per le opzionali che non stanno nel file perche' non servono a Orchestra
-per partire (`faster-whisper`, che serve solo alla trascrizione).
+dipendenze che non si installano con pip (cloudflared: winget su Windows, pagina
+ufficiale o pacchetto della distribuzione su Linux) e per le opzionali che
+non stanno nel file perche' non servono a Orchestra per partire
+(`faster-whisper`, che serve solo alla trascrizione).
 
 Il nome mostrato, il pacchetto pip e il modulo da importare non coincidono
 sempre — `Pillow` si importa `PIL`, `faster-whisper` si importa
@@ -82,8 +83,20 @@ SISTEMA = (
         "via": "winget",
         "perche": "tunnel remoto",
         "winget": "Cloudflare.cloudflared",
+        "url": ("https://developers.cloudflare.com/cloudflare-one/"
+                "connections/connect-networks/downloads/"),
     },
 )
+
+
+def _via_sistema() -> str:
+    """Come si installa cloudflared qui.
+
+    Su Windows l'installer del progetto sa usare winget. Su Linux non
+    esiste un gestore unico: si indica la pagina ufficiale, invece di
+    offrire un comando winget che li' non esiste.
+    """
+    return "winget" if os.name == "nt" else "manuale"
 
 # Opzionali: non stanno in `requirements.txt` perche' Orchestra parte e
 # lavora senza. Restano nel pannello perche' e' li' che si scopre che
@@ -172,8 +185,15 @@ def _trova_cloudflared() -> str:
     trovato = shutil.which("cloudflared")
     if trovato:
         return trovato
-    for cand in (r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
-                 r"C:\Program Files\cloudflared\cloudflared.exe"):
+    for cand in (
+        r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
+        r"C:\Program Files\cloudflared\cloudflared.exe",
+        "/usr/local/bin/cloudflared",
+        "/usr/bin/cloudflared",
+        "/snap/bin/cloudflared",
+        str(Path.home() / ".local" / "bin" / "cloudflared"),
+        "/opt/homebrew/bin/cloudflared",
+    ):
         if Path(cand).exists():
             return cand
     return ""
@@ -189,14 +209,18 @@ def stato(root: Path | None = None) -> list[dict]:
         visti.add(nome.lower())
     for voce in SISTEMA:
         percorso = _trova_cloudflared()
+        via = _via_sistema()
+        comando = (f"winget install --id {voce['winget']} -e"
+                   if via == "winget" else "")
         deps.append({
             "nome": voce["nome"],
             "stato": "ok" if percorso else "da installare",
             "versione": "installato" if percorso else "",
-            "via": voce["via"],
+            "via": via,
             "specifica": "",
             "perche": voce["perche"],
-            "comando": f"winget install --id {voce['winget']} -e",
+            "comando": comando,
+            "url": voce.get("url", ""),
             **({"path": percorso} if percorso else {}),
         })
         visti.add(voce["nome"])
@@ -219,6 +243,10 @@ def comando_installazione(nome: str) -> list[str] | None:
         return None
     for voce in SISTEMA:
         if voce["nome"].lower().replace("_", "-") == chiave:
+            if os.name != "nt":
+                # Non c'e' un comando automatico portabile per cloudflared
+                # su Linux: meglio dire di no che lanciare winget.
+                return None
             return ["winget", "install", "--id", voce["winget"], "-e",
                     "--silent", "--accept-package-agreements",
                     "--accept-source-agreements"]
@@ -269,7 +297,7 @@ def _cli(argv: list[str]) -> int:
                 # winget scarica un installer, pip un wheel: due tempi
                 # diversi, e un timeout solo sarebbe sbagliato per uno dei
                 # due (lo stesso conto lo fa la rotta del pannello).
-                attesa = 600 if comando[0] == "winget" else 900
+                attesa = 600 if comando and comando[0] == "winget" else 900
                 esito = subprocess.run(comando, text=True,
                                        capture_output=True, timeout=attesa)
             except subprocess.TimeoutExpired:
