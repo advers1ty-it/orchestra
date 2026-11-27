@@ -86,14 +86,6 @@ function get(url) {
   // apri la sidebar come farebbe l'utente: il bottone vero, non la funzione
   const bs = document.getElementById("btn-side");
   if (bs) { bs.click(); await att(400); }
-  // la barra degli obiettivi: era anche lei dentro #onboard
-  const gb = document.getElementById("goal-bar");
-  if (gb) { gb.hidden = false; }
-  await att(200);
-  out.goalBar = gb ? (() => { const cs = getComputedStyle(gb); const r = gb.getBoundingClientRect();
-    return { display: cs.display, visibility: cs.visibility,
-             rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)],
-             genitore: gb.parentElement.tagName }; })() : "MANCA";
   const ob = document.getElementById("onboard");
   out.onboard = ob ? { hidden: ob.hidden, display: getComputedStyle(ob).display } : "MANCA";
   await att(200);

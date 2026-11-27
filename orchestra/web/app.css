@@ -64,20 +64,21 @@
 }
 header .mp-btn {
   height: 30px;
-  padding: 0 10px;
+  padding: 0 9px;
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 12px;
   border: 1px solid transparent;
   background: var(--panel-2);
   border-color: var(--border);
   color: var(--fg);
-  max-width: 240px;
+  max-width: 190px;
 }
 header button.ghost {
   height: 30px;
-  padding: 0 10px;
+  padding: 0 6px;
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 12px;
+  white-space: nowrap;
   background: transparent;
   border: 1px solid transparent;
   color: var(--muted);
@@ -90,6 +91,70 @@ header button.ghost:hover:not(:disabled) {
 }
 header .mp-btn:hover:not(:disabled) {
   border-color: var(--border-strong);
+}
+/* Le azioni rare stanno qui: un pulsante solo, gruppi leggibili. */
+#btn-strumenti {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+#btn-strumenti[aria-expanded="true"] {
+  color: var(--fg);
+  background: var(--panel-2);
+  border-color: var(--border);
+}
+.h-str-caret {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--muted);
+}
+#btn-strumenti[aria-expanded="true"] .h-str-caret {
+  color: var(--accent);
+}
+.header-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 14px;
+  z-index: 55;
+  display: none;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap: 12px 18px;
+  width: min(430px, calc(100vw - 28px));
+  padding: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, .5);
+}
+.header-menu:not([hidden]) {
+  display: grid;
+}
+.hm-gruppo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hm-titolo {
+  padding: 4px 8px 2px;
+  font: 10px var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.header-menu button.ghost {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  justify-content: flex-start;
+  font-size: 12px;
+  color: var(--fg);
+  border-color: transparent;
+}
+.header-menu button.ghost:hover {
+  background: var(--bg);
+  border-color: var(--border);
 }
 header #btn-side,
 header #btn-undo,
@@ -115,9 +180,9 @@ header select:disabled, header .mp-btn:disabled {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 9px;
-  padding: 9px 16px;
-  min-height: 56px;
+  gap: 5px;
+  padding: 8px 14px;
+  min-height: 54px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   border-bottom: 1px solid var(--border-soft);
   box-shadow: 0 1px 0 rgba(0, 0, 0, .4);
@@ -840,27 +905,85 @@ header select:disabled, header .mp-btn:disabled {
   letter-spacing: .04em;
 }
 header select {
-  max-width: 230px;
+  max-width: 220px;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 12px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--muted);
 }
-#scope-pick { max-width: 175px; }
+#scope-pick { max-width: 135px; }
+#bot-pick, #provider-pick { max-width: 150px; }
+#reasoning-pick { max-width: 78px; min-width: 58px; padding: 0 5px; }
 .scope-note {
   font: 11px var(--mono); padding: 2px 8px; border-radius: 4px;
   border: 1px solid transparent; color: var(--muted); white-space: nowrap;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis;
 }
+/* Vuoto non occupa spazio: con il solo padding faceva andare a capo
+   l'ultimo controllo e l'header cresceva di una riga per niente. */
+.scope-note:empty { display: none; }
+/* L'avviso e' un popover sotto la barra, non un elemento della riga: il
+   testo puo' essere lungo quanto serve senza allargare l'header ne'
+   mandare a capo il modello. */
+#scope-note {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 14px;
+  z-index: 45;
+  max-width: min(420px, calc(100vw - 28px));
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border-color: var(--border);
+  box-shadow: var(--shadow-2);
+}
+#scope-note.visibile { display: block; }
+#scope-note.ok { border-color: rgba(62,207,142,.5); }
+#scope-note.avviso { border-color: rgba(245,166,35,.5); }
+#scope-note.attesa { border-color: var(--border-strong); }
+/* Il pulsante resta anche dopo che il popover si e' chiuso: sotto i
+   780 px e' l'unico modo per rileggere l'avviso. */
+#scope-note-btn {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  border-radius: 50%;
+  font: 700 12px var(--mono);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-dim);
+}
+#scope-note-btn[hidden] { display: none !important; }
+#scope-note-btn:hover:not(:disabled) { border-color: var(--accent); }
 .scope-note.ok { color: #9fe8c4; background: rgba(62,207,142,.10); cursor: pointer; }
 .scope-note.avviso { color: #ffcf9b; background: rgba(245,166,35,.10); }
 .scope-note.attesa { color: var(--warn); border-color: var(--border); }
 @media (max-width: 780px) {
-  .scope-note { display: none; }
   #scope-pick { max-width: 120px; }
   header select { max-width: 150px; }
+  /* Sotto i 780 px il popover si allarga e resta attaccato sotto
+     l'header. Nel menu a tutto schermo scende in basso, perche' li'
+     "sotto l'header" sarebbe fuori dallo schermo. */
+  #scope-note {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 12px;
+    right: 12px;
+    bottom: auto;
+    max-width: none;
+  }
+  header.esteso #scope-note {
+    top: auto;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+  }
 }
 
 /* Opzioni: chiavi e servizi gratuiti */
@@ -1933,7 +2056,7 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
 #sidebar {
   flex: 0 0 268px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   border-bottom: 1px var(--border) solid;
   overflow: hidden;
   min-height: 0;
@@ -1943,6 +2066,63 @@ button.piccolo { padding: 2px 9px; font-size: 11px; }
   background: #101319;
   border-right: 1px solid var(--border-soft);
 }
+
+.side-corpo {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Le sezioni non stanno piu' tutte insieme: una riga di tab sceglie
+   quale si vede, e quella prende tutta l'altezza. Con cinque liste
+   aperte insieme, cronologia e tracce restavano con due righe l'una. */
+.side-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 7px 7px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.side-tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 3px 5px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: none;
+  color: var(--muted-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side-tab:hover { color: var(--fg); background: var(--panel-2); }
+.side-tab.attiva {
+  color: var(--fg);
+  background: var(--panel-2);
+  border-color: var(--border-soft);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.side-viste {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+.side-viste > .side-vista {
+  display: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.side-viste > .side-vista.attiva { display: flex; }
+.side-viste > .side-vista.side-sez { border-top: 0; padding-top: 12px; }
 
 .side-maniglia {
   position: absolute; top: 0; right: -3px; bottom: 0;
@@ -1958,12 +2138,7 @@ body.side-trascina { user-select: none; cursor: col-resize; }
 
 #sidebar.ridotta { width: 60px; flex-basis: 60px; }
 
-#sidebar.ridotta .side-testa,
-#sidebar.ridotta .side-azioni,
-#sidebar.ridotta .side-sez,
-#sidebar.ridotta .side-msg,
-#sidebar.ridotta .side-elenco,
-#sidebar.ridotta .side-cerca-campi { display: none; }
+#sidebar.ridotta .side-corpo { display: none; }
 
 /* Rotaia: solo a sidebar ridotta, un'icona per sezione. */
 .side-rail { display: none; }
@@ -2443,7 +2618,7 @@ input[type="number"]:focus {
 }
 
 /* Solo le liste assorbono lo schiacciamento. */
-#sidebar > :not(ul):not(.side-sez),
+#sidebar > :not(ul):not(.side-sez):not(.side-corpo),
 .side-sez > :not(ul) {
   flex: none;
 }
@@ -2455,12 +2630,14 @@ input[type="number"]:focus {
   min-height: 80px;
   overflow-y: auto;
 }
-/* Ripartizione sidebar: memoria e skill sono fisse e compatte (il vero
-   contenuto sta nei modali), le tracce prendono lo spazio che resta. */
-#side-sez-memoria { flex: 0 0 auto; }
-#side-sez-skill { flex: 0 0 auto; }
-#side-sez-progetti { flex: 2 1 0; }
-#side-sez-tracce { flex: 1 1 0; }
+/* Ogni sezione, quando e' la vista attiva, prende tutta l'altezza:
+   le quote servivano a far convivere cinque liste, e le lasciavano
+   tutte troppo corte. */
+#side-sez-memoria, #side-sez-skill,
+#side-sez-progetti, #side-sez-tracce { flex: 1 1 auto; }
+#side-sez-progetti.attiva,
+#side-sez-memoria.attiva,
+#side-sez-skill.attiva { overflow-y: auto; }
 
 /* Le sezioni non dipingono fuori dal proprio box. flex:none da solo non basta: tiene interi i figli ma la sezione
    schiacciata resta più corta del contenuto, che continua a sbordare sulla sezione dopo. */
@@ -2704,6 +2881,33 @@ input {
 
 /* Header mobile: menu full-screen. */
 @media (max-width: 640px) {
+  #scope-note-btn { width: 44px; min-width: 44px; }
+  /* Nel telefono il menu Strumenti e' gia' il menu a tutto schermo:
+     niente popover, i gruppi si aprono sotto il modello. */
+  #btn-strumenti { display: none !important; }
+  #menu-strumenti { display: none !important; }
+  header.esteso #menu-strumenti {
+    display: block !important;
+    position: static;
+    top: auto;
+    right: auto;
+    width: 100%;
+    min-width: 0;
+    padding: 8px 0;
+    order: 3;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  header.esteso .header-menu { grid-template-columns: 1fr; gap: 12px; }
+  header.esteso .hm-titolo { padding-left: 0; }
+  header.esteso #menu-strumenti button.ghost {
+    display: inline-flex;
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
   header {
   scrollbar-width: none;
   top: 0;
@@ -2917,12 +3121,11 @@ input {
 .fb-coppia select { flex: 1 1 0; min-width: 0; }
 
 /* responsive */
-@media (min-width: 1201px) and (max-width: 1600px) {
+@media (min-width: 641px) and (max-width: 1599px) {
+  /* Il toggle che apriva sette pulsanti in fila non serve piu':
+     sotto c'e' un solo menu Strumenti. */
   #btn-header-toggle {
-    display: inline-flex !important;
-    color: var(--fg);
-    background: var(--panel-2);
-    border-color: var(--border);
+    display: none !important;
   }
   header button.ghost.h-sec {
     display: none;
@@ -2930,14 +3133,14 @@ input {
   #btn-header-toggle .h-close {
     display: none;
   }
-  header .ver, header #scope-note {
+  header .ver {
     display: none;
   }
   header {
     column-gap: 5px;
   }
   header .mp-btn {
-    max-width: 200px;
+    max-width: 190px;
   }
   header.esteso {
     flex-wrap: wrap;

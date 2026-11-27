@@ -41,10 +41,7 @@ function botNota(testo, errore) {
 }
 
 function botNotaLavoro(testo, errore) {
-  const el = $("bot-lavoro-msg");
-  if (!el) return;
-  el.textContent = testo || "";
-  el.style.color = errore ? "var(--err)" : "var(--muted)";
+  botNota(testo, errore);
 }
 
 function riempiModuloBot(b) {
@@ -408,34 +405,6 @@ async function salvaIdentita() {
   } catch (e) {
     identitaNota("errore di rete: identità non salvata", true);
   }
-}
-
-async function avviaLavoroBot() {
-  if (!botScelto) { botNotaLavoro("scegli un bot dalla lista", true); return; }
-  const testo = ($("bot-compito").value || "").trim();
-  if (!testo) {
-    botNotaLavoro("scrivi il compito da affidare al bot", true);
-    return;
-  }
-  try {
-    const r = await fetch("/api/bots/avvia", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: botScelto, testo: testo }),
-    });
-    const d = await r.json();
-    if (d.error) { botNotaLavoro(d.error, true); return; }
-    $("bot-compito").value = "";
-    botNotaLavoro("avviato: " + (d.in_coda || 1) + " in coda");
-    await caricaBot();
-  } catch (e) {
-    botNotaLavoro("errore di rete: il lavoro non e' partito", true);
-  }
-}
-
-async function aggiornaStatoBot() {
-  await caricaBot();
-  botNotaLavoro("stato aggiornato");
 }
 
 async function riprovaLavoroBot(id) {
@@ -827,8 +796,6 @@ async function scollegaTelegram() {
   const btnSalva = $("bot-salva");
   const btnAttiva = $("bot-attiva");
   const btnElimina = $("bot-elimina");
-  const btnAvvia = $("bot-avvia");
-  const btnStato = $("bot-stato");
   const selTg = $("tg-bot");
   if (selTg) selTg.addEventListener("change", () => {
     // Scelta esplicita: da qui in poi il menu resta su questo bot anche
@@ -843,8 +810,6 @@ async function scollegaTelegram() {
   if (btnSalva) btnSalva.addEventListener("click", salvaBot);
   if (btnAttiva) btnAttiva.addEventListener("click", attivaBotScelto);
   if (btnElimina) btnElimina.addEventListener("click", eliminaBotScelto);
-  if (btnAvvia) btnAvvia.addEventListener("click", avviaLavoroBot);
-  if (btnStato) btnStato.addEventListener("click", aggiornaStatoBot);
   const btToken = $("tg-salva");
   const btTogli = $("tg-togli");
   const btCollega = $("tg-collega");

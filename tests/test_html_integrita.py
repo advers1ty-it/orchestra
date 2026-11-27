@@ -183,7 +183,7 @@ check("nessun tag di chiusura orfano", not albero.orfani, str(albero.orfani[:5])
 
 # I blocchi che devono stare appesi al body: se uno finisce dentro un
 # altro, il suo hidden lo nasconde per sempre.
-PRIMO_LIVELLO = ["onboard", "onboard-details", "goal-bar", "traccia-modal",
+PRIMO_LIVELLO = ["onboard", "onboard-details", "traccia-modal",
                  "mem-modal", "progetti-modal"]
 for _id in PRIMO_LIVELLO:
     catena = albero.genitori.get(_id)

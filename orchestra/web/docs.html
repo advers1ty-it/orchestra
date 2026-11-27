@@ -78,12 +78,10 @@
       <li><a href="#backup">Backup e ripristino</a></li>
       <li><a href="#progetti">Progetti</a></li>
       <li><a href="#tool">Cosa può fare l'agente</a></li>
-      <li><a href="#obiettivi">Obiettivi autonomi</a></li>
       <li><a href="#cron">Cron (lavori programmati)</a></li>
       <li><a href="#consiglio">Consiglio di advisor</a></li>
       <li><a href="#bot">Bot</a></li>
       <li><a href="#telegram">Telegram</a></li>
-      <li><a href="#lavori">Lavori in background</a></li>
       <li><a href="#tracce">Tracce dei turni</a></li>
       <li><a href="#memoria">Memoria e cronologia</a></li>
       <li><a href="#limiti">Limiti, tempo e costi</a></li>
@@ -122,7 +120,7 @@
 <h2>I primi minuti</h2>
 <p>Alla prima apertura compare la domanda <b>«Per cosa stai usando Orchestra oggi?»</b>. Scegli la tessera che somiglia di più al tuo lavoro (scrivere codice, sistemare un errore, un sito, dei dati, una ricerca, un'automazione…) e Orchestra imposta da sola il servizio, il modello e gli strumenti adatti. Non è definitivo: tutto si cambia dai menu in alto.</p>
 <ul>
-  <li>La domanda compare <b>solo la prima volta</b>. «Salta» la nasconde per sempre; il pulsante <b>Cosa fai?</b> in alto la riapre quando vuoi.</li>
+  <li>La domanda compare <b>solo la prima volta</b>. «Salta» la nasconde per sempre; il comando <b>Strumenti → Cosa fai?</b> la riapre quando vuoi.</li>
   <li>Poi scrivi il compito nel campo in basso e premi <span class="kbd">Invio</span>. <span class="kbd">Shift+Invio</span> va a capo senza inviare.</li>
   <li>La prima volta che premi Invio può comparire la richiesta di mostrare le notifiche: serve solo ad avvisarti quando un turno lungo finisce mentre guardi un'altra scheda. Puoi dire no, e non perdi niente.</li>
 </ul>
@@ -139,7 +137,7 @@
   </div>
   <div class="box">
     <h3>I pannelli</h3>
-    <p><b>Opzioni</b> (chiavi, modello, limiti, bot, remoto), <b>Obiettivo</b> (lavoro autonomo), <b>Cron</b> (lavori programmati), <b>MCP</b> (strumenti esterni), <b>Cosa fai?</b> (la domanda iniziale), <b>Docs</b> (questa guida), <b>Consiglio</b> (più pareri su una decisione).</p>
+    <p>Le azioni rare stanno nel menu <b>Strumenti</b>, divise per uso: <b>Lavoro</b> (<b>Cosa fai?</b> per la domanda iniziale), <b>Automazioni</b> (<b>Cron</b> per i lavori programmati, <b>MCP</b> per gli strumenti esterni), <b>Aiuto</b> (<b>Docs</b> per questa guida, <b>Consiglio</b> per più pareri su una decisione) e <b>Sistema</b> (<b>Opzioni</b> per chiavi, modello, limiti, bot e remoto).</p>
   </div>
   <div class="box">
     <h3>MCP senza parametri</h3>
@@ -273,7 +271,7 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <ul>
   <li>All'avvio Orchestra riconosce il progetto dalla cartella da cui è partita.</li>
   <li>Ogni conversazione nasce col progetto attivo e lo ricorda: riaprendola torna quel progetto, e l'elenco e la ricerca mostrano quelle del progetto attivo, più quelle senza progetto (le chat nate prima di questo legame).</li>
-  <li>Se l'agente riconosce il nome di un altro progetto in una frase, lo propone: il menu si aggiorna, non viene sovrascritto di nascosto.</li>
+  <li>Se una frase dice che adesso si lavora a un altro progetto e ne nomina uno solo, Orchestra <b>cambia subito</b>: la cartella in cui scrive passa a quella del progetto, il menu si aggiorna e in chat compare la nota del cambio. Nominare un progetto senza l'intento («il ristorante era bello»), o nominarne due, non sposta niente: resta quello attivo.</li>
 </ul>
 
 <h3>Istruzioni del progetto</h3>
@@ -306,18 +304,6 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <p>L'agente può fermarsi a chiederti: compare una finestra con la domanda e un campo libero, e il turno aspetta. La domanda scade dopo cinque minuti. Se non c'è nessuno collegato (per esempio in un lavoro in background), lo strumento lo dice subito e il modello deve dichiarare l'ipotesi che ha scelto.</p>
 </section>
 
-<section id="obiettivi">
-<h2>Obiettivi autonomi</h2>
-<p>Un <b>obiettivo</b> è un compito che gira da solo, con il suo stato, e che puoi seguire mentre fai altro. Pulsante <b>Obiettivo</b> in alto: scrivi la frase, premi <b>Avvia</b>. Il pannello mostra stato, esito e ultimo output; cliccando una riga vedi i dettagli.</p>
-<ul>
-  <li><b>Prossimo</b> esegue a mano il prossimo obiettivo pronto. <b>Coda: off/on</b> accende lo scheduler, che li prende da solo uno alla volta. È spenta di default perché spende token veri senza che tu prema niente.</li>
-  <li>Nelle opzioni avanzate (collassate) puoi dare priorità, dipendenze (parte solo quando gli altri sono finiti), numero di tentativi, un tetto di iterazioni e <b>criteri di accettazione</b>: regole verificabili sul risultato, per esempio «il file report.md contiene la parola totale».</li>
-  <li>Un <b>piano</b> è un contenitore: non esegue nulla, si chiude quando i figli hanno finito.</li>
-  <li>Senza criteri, un obiettivo è <b>done</b> solo se c'è una risposta finale non vuota. Un'esecuzione che si ferma a metà non viene spacciata per riuscita.</li>
-  <li>Un obiettivo che dipende da altri non parte nemmeno se lo avvii a mano; le dipendenze circolari vengono rifiutate.</li>
-</ul>
-</section>
-
 <section id="cron">
 <h2>Cron (lavori programmati)</h2>
 <p>Pulsante <b>Cron</b>: programmi un lavoro perché parta da solo, ogni tanto o a un'ora precisa. La frequenza si sceglie da un menu in parole: ogni 5, 10 o 30 minuti, ogni ora, due volte al giorno, una volta al giorno, a un orario, oppure un'espressione cron scritta a mano.</p>
@@ -339,7 +325,6 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
 <p>Un bot è un'<b>identità salvata</b>: nome, servizio, modello, persona, progetto e conversazione propri. Si crea da <b>Opzioni → Bot</b> o dal menu identità in testa. Servizio e modello vuoti significano «come l'app»: il bot segue la configurazione principale finché non gliene dai una sua.</p>
 <ul>
   <li>Ogni bot ha una sessione e una cronologia separate, etichettate col suo nome: passare da un bot all'altro non perde la conversazione.</li>
-  <li>Puoi affidargli un <b>compito in background</b> senza cambiare identità: vedi <a href="#lavori">Lavori in background</a>.</li>
   <li><b>Parla con</b> decide a chi un bot può chiedere aiuto: vuoto significa nessuno. Un bot che chiede a un altro aspetta la risposta dentro il proprio turno; la profondità è limitata a un livello, quindi il destinatario non può richiamare.</li>
 </ul>
 
@@ -368,25 +353,6 @@ python -m orchestra.cli restore percorso\del.zip    # nella corrente, o con --pr
   <li><b>I file tornano indietro.</b> Se il turno produce un PDF, un'immagine, un foglio o un archivio, arriva allegato alla risposta: fino a cinque file da 50 MB, che è il tetto di Telegram. Le immagini come foto, il resto come documento. Se un file è troppo grande non parte, ma il messaggio dice dove sta.</li>
 </ul>
 <div class="nota"><b>Da sapere:</b> la chat di Telegram è una porta su questa macchina. Da lì hai gli stessi poteri che hai nella finestra: se il bot può usare la shell, può usarla anche chi scrive su Telegram. Per questo il collegamento vuole un codice che si vede solo sul tuo schermo, e per questo il QR lo disegna Orchestra in casa invece di farlo disegnare a un servizio esterno.</div>
-</section>
-
-<section id="lavori">
-<h2>Lavori in background</h2>
-<p>Da <b>Opzioni → Bot</b> scrivi un compito e premi <b>Avvia in background</b>. Il lavoro parte, il bot lavora nella sua sessione, e tu continui altrove. Bot diversi avanzano davvero in parallelo, ciascuno nella propria cartella; lo stesso bot fa un lavoro alla volta e accoda gli altri (massimo 20).</p>
-<ul>
-  <li>La coda vive in <code>lavori.db</code>, non in memoria: un riavvio non la perde, e all'avvio i lavori in attesa ripartono.</li>
-  <li>Un lavoro trovato a metà dopo un riavvio viene marcato <b>interrotto</b>, non rieseguito alla cieca: potrebbe aver già scritto file o speso token. Dal pannello lo riprovi o lo annulli.</li>
-  <li>L'unità è il turno intero: non si riprende a metà di un'operazione.</li>
-</ul>
-
-<h3>Dove scrive il bot</h3>
-<p>Se il progetto è un repository git con almeno un commit, ogni lavoro scrive in un <b>checkout isolato</b> (un albero di lavoro separato, su un ramo <code>orchestra/lavoro-…</code>): la cartella che hai aperta non viene toccata, e due lavori sullo stesso progetto non si pestano i piedi. Il pannello mostra ramo e percorso; <b>Scarta checkout</b> lo elimina insieme alle modifiche non committate del bot.</p>
-<ul>
-  <li>Il checkout parte dall'ultimo commit: le tue modifiche non committate non vengono copiate. Se il repository non ha commit, il lavoro fallisce invece di scrivere nella cartella aperta.</li>
-  <li>Se le verifiche sono passate, il bot può proporre di unire il suo lavoro: il pannello mostra <b>pronto per il merge</b> e il pulsante <b>Unisci</b>. Il merge è sempre una tua decisione, e in caso di conflitto il repository resta com'era.</li>
-  <li>La verifica mostrata è quella dichiarata dal bot: non viene rieseguita da sola. Se ti serve una certezza, guarda il diff prima di unire.</li>
-  <li>I progetti non git lavorano nella cartella normale. Su repository grandi il checkout occupa spazio e tempo.</li>
-</ul>
 </section>
 
 <section id="tracce">

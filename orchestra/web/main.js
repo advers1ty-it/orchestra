@@ -604,6 +604,48 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     }
   });
 })();
+
+// Menu Strumenti: le azioni rare stanno in un popover, non tutte in fila.
+(function () {
+  const btn = $("btn-strumenti");
+  const menu = $("menu-strumenti");
+  if (!btn || !menu) return;
+  const hdr = btn.closest ? btn.closest("header") : null;
+  const tog = $("btn-header-toggle");
+  function chiudi() {
+    menu.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  }
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    if (menu.hidden) {
+      menu.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+    } else {
+      chiudi();
+    }
+  });
+  menu.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!t || !t.closest || !t.closest("button")) return;
+    chiudi();
+    // Sul telefono il menu vive dentro l'header a tutto schermo:
+    // scelto il comando, si torna a vedere la pagina.
+    if (hdr && hdr.classList.contains("esteso") && tog) tog.click();
+  });
+  document.addEventListener("click", (ev) => {
+    if (menu.hidden) return;
+    if (menu.contains && menu.contains(ev.target)) return;
+    if (btn.contains && btn.contains(ev.target)) return;
+    chiudi();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !menu.hidden) {
+      chiudi();
+      if (btn.offsetParent !== null) btn.focus();
+    }
+  });
+})();
 // Opzioni si caricano QUI, non solo quando apri il pannello.
 caricaCategorie();
 caricaOpzioni().catch(() => {

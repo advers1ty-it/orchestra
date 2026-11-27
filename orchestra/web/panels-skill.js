@@ -506,7 +506,13 @@ function mostraSezione(nome) {
   // Storico e memoria idem: si caricano quando si aprono, non all'avvio.
   if (nome === "storico") caricaStorico();
   if (nome === "identita") caricaIdentita();
-  if (nome === "bot") caricaBot();
+  if (nome === "bot") {
+    caricaBot();
+    // Lo stato Telegram non arriva con /api/bots: senza questa lettura
+    // il pannello sembra vuoto finche' non si preme il QR, che poi
+    // scopre una chat gia' collegata.
+    if (typeof caricaTelegram === "function") caricaTelegram();
+  }
   if (nome === "memoria") caricaMemoria();
   if (nome === "remoto") caricaRemoto();
   if (nome === "autostart") caricaAutostart();

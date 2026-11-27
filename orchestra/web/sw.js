@@ -1,6 +1,6 @@
 /* Service worker: shell offline/PWA. HTML/JS network-first, asset statici
    cache-first; il nome della cache porta il digest calcolato dai test. */
-const CACHE = "orchestra-shell-1fc8375b";
+const CACHE = "orchestra-shell-99813b09";
 const SHELL = ["/", "/app.css", "/app.js", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

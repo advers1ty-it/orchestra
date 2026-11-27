@@ -510,10 +510,149 @@ const routingTop = $("routing-top");
 // Lo scope dell'header e il selettore del pannello sono lo stesso controllo in due posti.
 const scopePick = $("scope-pick");
 const scopeNote = $("scope-note");
+const scopeNoteBtn = $("scope-note-btn");
 
 // Scope nell'header: scegli il lavoro, il modello si sceglie da solo.
 // Una raccomandazione serve solo con almeno due modelli misurati.
 const MIN_PER_CONSIGLIARE = 2;
+
+// L'avviso di routing e' un popover sotto l'header: senza una scadenza
+// resterebbe sopra la chat per tutta la sessione. Si chiude da solo dopo
+// qualche secondo, o subito quando si clicca fuori.
+const SCOPE_NOTE_MS = 10000;
+let _scopeNoteTimer = null;
+// Il conto alla rovescia si ferma mentre si legge: puntatore sopra o
+// focus dentro. Non basta un flag solo, perche' possono valere insieme.
+let _scopeNoteSulPuntatore = false;
+let _scopeNoteConFocus = false;
+
+function _fermaScopeNoteTimer() {
+  if (_scopeNoteTimer) {
+    clearTimeout(_scopeNoteTimer);
+    _scopeNoteTimer = null;
+  }
+}
+
+function _scopeNoteInPausa() {
+  return _scopeNoteSulPuntatore || _scopeNoteConFocus;
+}
+
+function _riavviaScopeNoteTimer() {
+  _fermaScopeNoteTimer();
+  if (_scopeNoteInPausa() || !_scopeNoteVisibile()) return;
+  _scopeNoteTimer = setTimeout(nascondiScopeNote, SCOPE_NOTE_MS);
+}
+
+function _scopeNoteVisibile() {
+  return !!scopeNote && scopeNote.classList.contains("visibile");
+}
+
+function _aggiornaScopeNoteBtn() {
+  if (!scopeNoteBtn) return;
+  const testo = scopeNote ? String(scopeNote.textContent || "").trim() : "";
+  scopeNoteBtn.hidden = !testo;
+  scopeNoteBtn.setAttribute("aria-expanded",
+    _scopeNoteVisibile() ? "true" : "false");
+  scopeNoteBtn.setAttribute("aria-label", _scopeNoteVisibile()
+    ? "Nascondi l'avviso sullo scope" : "Mostra l'avviso sullo scope");
+  if (testo) scopeNoteBtn.title = testo;
+}
+
+// Chiude il popover ma conserva il testo: il pulsante "i" lo riapre, e
+// sotto i 780 px e' l'unico modo per rileggerlo.
+function nascondiScopeNote() {
+  if (!scopeNote) return;
+  _fermaScopeNoteTimer();
+  _scopeNoteSulPuntatore = false;
+  _scopeNoteConFocus = false;
+  scopeNote.classList.remove("visibile");
+  _aggiornaScopeNoteBtn();
+}
+
+function azzeraScopeNote() {
+  if (!scopeNote) return;
+  nascondiScopeNote();
+  scopeNote.textContent = "";
+  scopeNote.className = "scope-note";
+  scopeNote.style.cursor = "";
+  scopeNote.onclick = null;
+  if (scopeNoteBtn) {
+    scopeNoteBtn.hidden = true;
+    scopeNoteBtn.title = "";
+    scopeNoteBtn.setAttribute("aria-expanded", "false");
+  }
+}
+
+function apriScopeNote() {
+  if (!scopeNote || !String(scopeNote.textContent || "").trim()) return;
+  scopeNote.classList.add("visibile");
+  if (scopeNoteBtn) {
+    scopeNoteBtn.hidden = false;
+    scopeNoteBtn.title = scopeNote.textContent;
+    scopeNoteBtn.setAttribute("aria-expanded", "true");
+    scopeNoteBtn.setAttribute("aria-label", "Nascondi l'avviso sullo scope");
+  }
+  _riavviaScopeNoteTimer();
+}
+
+function mostraScopeNote(testo, classe) {
+  if (!scopeNote) return;
+  scopeNote.textContent = testo;
+  scopeNote.className = classe;
+  scopeNote.style.cursor = "";
+  scopeNote.onclick = null;
+  apriScopeNote();
+}
+
+if (scopeNoteBtn) {
+  scopeNoteBtn.addEventListener("click", () => {
+    if (_scopeNoteVisibile()) nascondiScopeNote();
+    else apriScopeNote();
+  });
+}
+
+if (scopeNote) {
+  // Solo il mouse mette in pausa: il tocco genera eventi compatibili
+  // che, senza il controllo sul tipo, lascerebbero l'avviso aperto
+  // per sempre dopo un tap.
+  const _puntatoreMouse = (ev) => !ev || !ev.pointerType || ev.pointerType === "mouse";
+  scopeNote.addEventListener("pointerenter", (ev) => {
+    if (!_puntatoreMouse(ev)) return;
+    _scopeNoteSulPuntatore = true;
+    _fermaScopeNoteTimer();
+  });
+  scopeNote.addEventListener("pointerleave", (ev) => {
+    if (!_puntatoreMouse(ev)) return;
+    _scopeNoteSulPuntatore = false;
+    _riavviaScopeNoteTimer();
+  });
+  scopeNote.addEventListener("focusin", () => {
+    _scopeNoteConFocus = true;
+    _fermaScopeNoteTimer();
+  });
+  scopeNote.addEventListener("focusout", (ev) => {
+    if (ev.relatedTarget && scopeNote.contains(ev.relatedTarget)) return;
+    _scopeNoteConFocus = false;
+    _riavviaScopeNoteTimer();
+  });
+}
+
+if (scopeNote) {
+  document.addEventListener("click", (ev) => {
+    if (!scopeNote.textContent) return;
+    if (ev.target === scopeNote ||
+        (scopeNote.contains && scopeNote.contains(ev.target))) return;
+    if (scopeNoteBtn &&
+        (ev.target === scopeNoteBtn ||
+         (scopeNoteBtn.contains && scopeNoteBtn.contains(ev.target)))) return;
+    // Il cambio di scope nasce da un clic sul selettore: se lo contassimo
+    // come "fuori", l'avviso appena creato sparirebbe subito.
+    if (scopePick &&
+        (ev.target === scopePick ||
+         (scopePick.contains && scopePick.contains(ev.target)))) return;
+    nascondiScopeNote();
+  });
+}
 
 function misuratiPer(scope) {
   const attuale = (typeof modelPick !== "undefined" && modelPick) ? modelPick.value : "";
@@ -542,24 +681,22 @@ function applicaScope(scope) {
   // loadModels, il selettore mostrerebbe i numeri della categoria vecchia
   loadModels();
   if (!scope) {
-    scopeNote.textContent = "";
-    scopeNote.className = "scope-note";
+    azzeraScopeNote();
     return;
   }
   const candidati = misuratiPer(scope);
   const nome = CAT_ETICHETTE[scope] || scope;
   if (!candidati.length) {
     // non misurato: si dice, non si indovina
-    scopeNote.textContent = nome + ": nessuno misurato";
-    scopeNote.className = "scope-note avviso";
+    mostraScopeNote(nome + ": nessuno misurato", "scope-note avviso");
     return;
   }
   if (candidati.length < MIN_PER_CONSIGLIARE) {
     const unico = candidati[0];
-    scopeNote.textContent = nome + ": pochi dati (" + candidati.length +
+    mostraScopeNote(nome + ": pochi dati (" + candidati.length +
       " misurato). Migliore " + unico.short + " " +
-      unico.scores[scope].toFixed(2) + ", ma conviene misurarne altri";
-    scopeNote.className = "scope-note attesa";
+      unico.scores[scope].toFixed(2) + ", ma conviene misurarne altri",
+      "scope-note attesa");
     return;
   }
   const best = candidati[0];
@@ -569,19 +706,17 @@ function applicaScope(scope) {
   // stesso punteggio non migliora nulla e genera confusione
   if (attuale === best.id ||
       (typeof punteggioAttuale === "number" && punteggioAttuale >= best.scores[scope])) {
-    scopeNote.textContent = "già il migliore per " + nome;
-    scopeNote.className = "scope-note ok";
+    mostraScopeNote("già il migliore per " + nome, "scope-note ok");
     return;
   }
   if (busy) {
     // durante un turno non si cambia modello sotto gli occhi di chi
     // sta guardando: si dice cosa serve e si applica dopo
-    scopeNote.textContent = "dopo il turno: " + best.short;
-    scopeNote.className = "scope-note attesa";
+    mostraScopeNote("dopo il turno: " + best.short, "scope-note attesa");
     return;
   }
-  scopeNote.textContent = "→ " + best.short + " " + best.scores[scope].toFixed(2);
-  scopeNote.className = "scope-note ok";
+  mostraScopeNote("→ " + best.short + " " + best.scores[scope].toFixed(2),
+                  "scope-note ok");
   const sw = $("scope-note");
   sw.style.cursor = "pointer";
   sw.onclick = async () => {
@@ -593,8 +728,8 @@ function applicaScope(scope) {
       });
       // Il menu si aggiorna da solo con loadModels(), quindi basta un
       // punto di sospeso: il cambio e' avvenuto e si vede.
-      if (r.ok) { loadModels(); scopeNote.textContent = ""; }
-    } catch (e) { scopeNote.textContent = "cambio fallito: " + e; }
+      if (r.ok) { loadModels(); azzeraScopeNote(); }
+    } catch (e) { mostraScopeNote("cambio fallito: " + e, "scope-note avviso"); }
   };
 }
 

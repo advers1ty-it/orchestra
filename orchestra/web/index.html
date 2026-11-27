@@ -104,13 +104,6 @@
           title="Modalita' piano: propone i passi e aspetta l'approvazione prima di modificare"
           aria-label="Modalita' piano">Piano</button>
   <div class="grow"></div>
-  <button id="btn-opzioni" class="ghost h-sec" title="Chiavi API e servizi gratuiti">Opzioni</button>
-  <button id="btn-goal" class="ghost h-sec" title="Obiettivo autonomo">Obiettivo</button>
-   <button id="btn-cron" class="ghost h-sec" title="Job programmati">Cron</button>
-   <button id="btn-mcp" class="ghost h-sec" title="Server MCP">MCP</button>
-  <button id="btn-onboard" class="ghost h-sec" title="Mostra obiettivi iniziali">Cosa fai?</button>
-  <button id="btn-docs" class="ghost h-sec" title="Documentazione">Docs</button>
-  <button id="btn-council" class="ghost h-sec" title="Consiglio di advisor">Consiglio</button>
 
   <!-- Lo scopo sta PRIMA del modello, non in un pannello: la domanda
        "che lavoro stai facendo" viene prima di "con quale modello", e
@@ -161,7 +154,39 @@
         <option value="xhigh">xhigh</option>
         <option value="max">max</option>
       </select>
-    <span id="scope-note" class="scope-note h-sec"></span>
+    <button id="scope-note-btn" class="ghost" type="button" hidden
+            aria-label="Mostra l'avviso sullo scope" aria-expanded="false"
+            aria-controls="scope-note" title="Avviso sullo scope scelto">i</button>
+    <span id="scope-note" class="scope-note" tabindex="0"></span>
+    <!-- Le azioni rare stanno in un solo menu, diviso per uso: la riga
+         in alto resta per cio' che si cambia mentre si lavora. E' in
+         fondo, vicino al bordo destro, cosi' il popover cade sotto di
+         lui e non dall'altra parte dell'header. -->
+    <button id="btn-strumenti" class="ghost h-str" type="button"
+            aria-haspopup="true" aria-expanded="false"
+            aria-controls="menu-strumenti" title="Strumenti">Strumenti
+      <span class="h-str-caret" aria-hidden="true">▾</span>
+    </button>
+    <div id="menu-strumenti" class="header-menu" hidden aria-label="Strumenti">
+      <div class="hm-gruppo">
+        <div class="hm-titolo">Lavoro</div>
+        <button id="btn-onboard" class="ghost" title="Mostra i tipi di lavoro iniziali">Cosa fai?</button>
+      </div>
+      <div class="hm-gruppo">
+        <div class="hm-titolo">Automazioni</div>
+        <button id="btn-cron" class="ghost" title="Job programmati">Cron</button>
+        <button id="btn-mcp" class="ghost" title="Server MCP">MCP</button>
+      </div>
+      <div class="hm-gruppo">
+        <div class="hm-titolo">Aiuto</div>
+        <button id="btn-docs" class="ghost" title="Documentazione">Docs</button>
+        <button id="btn-council" class="ghost" title="Consiglio di advisor">Consiglio</button>
+      </div>
+      <div class="hm-gruppo">
+        <div class="hm-titolo">Sistema</div>
+        <button id="btn-opzioni" class="ghost" title="Chiavi API e servizi gratuiti">Opzioni</button>
+      </div>
+    </div>
     <!-- Mobile: apre/chiude i controlli secondari (azioni, provider,
          reasoning) che altrimenti impileranno quattro righe. Desktop
          resta invariato: il pulsante qui non si vede. -->
@@ -614,22 +639,6 @@
             <button id="bot-elimina" class="ghost">Elimina</button>
             <span id="bot-msg" class="small dim"></span>
           </div>
-          <label class="bot-persona">Compito in background
-            <textarea id="bot-compito" rows="3"
-                      placeholder="Un lavoro da affidare a questo bot mentre continui altrove."></textarea>
-          </label>
-          <div class="opzioni-budget-azioni">
-            <button id="bot-avvia" class="ghost">Avvia in background</button>
-            <button id="bot-stato" class="ghost">Aggiorna stato</button>
-            <span id="bot-lavoro-msg" class="small dim"></span>
-          </div>
-          <p class="opzioni-nota">Il lavoro parte subito e non cambia
-            l'identita' attiva: puoi avviarne uno per bot e continuare a
-            usare l'agente principale. Un bot esegue un compito alla
-            volta; gli altri restano in coda. Puoi anche cambiare bot
-            mentre lavora: il turno continua e lo ritrovi quando torni.
-            Lo stato si vede nella lista qui sopra.</p>
-
           <div class="bot-telegram">
             <div class="opzioni-servizi-testa">
               <b>Telegram</b>
@@ -896,17 +905,22 @@
     <!-- Ridotta, la sidebar diventa questa rotaia: un'icona per sezione.
          Il clic riapre e porta alla sezione. -->
     <nav id="side-rail" class="side-rail" aria-label="Sezioni del pannello">
-      <button data-sez="side-elenco" title="Cronologia" aria-label="Cronologia"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></button>
-      <button data-sez="side-sez-progetti" title="Progetti" aria-label="Progetti"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></button>
-      <button data-sez="side-sez-memoria" title="Memoria" aria-label="Memoria"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6"/></svg></button>
-      <button data-sez="side-sez-skill" title="Capacità" aria-label="Capacità"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/></svg></button>
-      <button data-sez="side-sez-tracce" title="Tracce" aria-label="Tracce"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/></svg></button>
+      <button data-vista="cronologia" title="Cronologia" aria-label="Cronologia"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></button>
+      <button data-vista="progetti" title="Progetti" aria-label="Progetti"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></button>
+      <button data-vista="memoria" title="Memoria" aria-label="Memoria"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6"/></svg></button>
+      <button data-vista="capacita" title="Capacità" aria-label="Capacità"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/></svg></button>
+      <button data-vista="tracce" title="Tracce" aria-label="Tracce"><svg class="icona" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/></svg></button>
     </nav>
-    <div class="side-testa">
-      <div class="side-testata">
-        <span class="side-titolo">Cronologia</span>
-      </div>
-    </div>
+    <div class="side-corpo">
+      <nav class="side-tabs" aria-label="Sezioni del pannello" role="tablist">
+        <button class="side-tab attiva" type="button" role="tab" data-vista="cronologia" aria-selected="true" title="Cronologia">Storia</button>
+        <button class="side-tab" type="button" role="tab" data-vista="progetti" aria-selected="false" title="Progetti">Progetti</button>
+        <button class="side-tab" type="button" role="tab" data-vista="memoria" aria-selected="false" title="Memoria">Memoria</button>
+        <button class="side-tab" type="button" role="tab" data-vista="capacita" aria-selected="false" title="Capacità">Capacità</button>
+        <button class="side-tab" type="button" role="tab" data-vista="tracce" aria-selected="false" title="Tracce">Tracce</button>
+      </nav>
+      <div class="side-viste">
+        <div class="side-vista attiva" id="vista-cronologia" data-vista="cronologia" role="tabpanel">
 
     <div class="side-azioni">
       <button id="side-nuova" class="primary">Nuova</button>
@@ -919,6 +933,7 @@
       <input id="side-cerca" type="text" aria-label="Cerca nelle conversazioni"
              placeholder="Cerca nelle conversazioni..." spellcheck="false" />
     </div>
+        </div>
 
     <!-- I progetti: una sola sezione, piccola. Il progetto ATTIVO in
          alto come menu a tendina — sceglierlo cambia subito il progetto
@@ -932,7 +947,7 @@
           per questo l'attivo sta qui sopra: e' la cosa che riguarda tutta
           la sessione. Lo switch automatico (l'agente che riconosce il
           nome del progetto) aggiorna questo menu, non lo sovrascrive. -->
-    <div class="side-sez side-sez-progetti" id="side-sez-progetti">
+    <div class="side-sez side-vista side-sez-progetti" id="side-sez-progetti" data-vista="progetti" role="tabpanel">
       <div class="side-testata">
         <span class="side-titolo">Progetti</span>
         <button id="side-progetti-gestisci" class="side-cap-btn">Gestione</button>
@@ -959,7 +974,7 @@
       </div>
     </div>
 
-    <div class="side-sez side-sez-memoria" id="side-sez-memoria">
+    <div class="side-sez side-vista side-sez-memoria" id="side-sez-memoria" data-vista="memoria" role="tabpanel">
       <div class="side-testata">
         <span class="side-titolo">Memoria</span>
         <button id="side-mem-tutti" class="side-cap-btn" title="Sfoglia, cerca e correggi tutti i fatti indicizzati">Tutti i fatti</button>
@@ -981,17 +996,14 @@
       </div>
     </div>
 
-    <div class="side-sez side-sez-skill" id="side-sez-skill">
+    <div class="side-sez side-vista side-sez-skill" id="side-sez-skill" data-vista="capacita" role="tabpanel">
       <div class="side-testata">
         <span class="side-titolo">Capacit&agrave;</span>
         <button id="side-cap" class="side-cap-btn">Apri tutte le capacit&agrave;</button>
       </div>
     </div>
 
-    <div class="side-sez side-sez-tracce" id="side-sez-tracce">
-      <div class="side-testata">
-        <span class="side-titolo">Tracce</span>
-      </div>
+    <div class="side-sez side-vista side-sez-tracce" id="side-sez-tracce" data-vista="tracce" role="tabpanel">
       <div class="side-filtri-tracce">
         <select id="traccia-filtro-esito" class="small"
                 title="Mostra solo un esito">
@@ -1003,8 +1015,10 @@
       </div>
       <ul id="side-tracce" class="side-tracce"></ul>
     </div>
+      </div>
 
     <p id="side-msg" class="small dim side-msg"></p>
+    </div>
   </aside>
   <main id="main">
   <div class="wrap" id="log" aria-live="polite" aria-relevant="additions text"></div>
@@ -1106,7 +1120,7 @@
 <div id="onboard" class="onboard-backdrop" hidden>
   <div class="onboard">
     <h2>Per cosa stai usando Orchestra oggi?</h2>
-    <p class="sotto">Scegli l’obiettivo: Orchestra imposta il modello, i tool e il modo di lavoro più adatto. Puoi sempre cambiarlo sopra.</p>
+    <p class="sotto">Scegli il tipo di lavoro: Orchestra imposta il modello e i tool più adatti. Puoi sempre cambiarli sopra.</p>
     <p class="small dim">Orchestra è un assistente di intelligenza artificiale: legge i tuoi file, scrive codice e testo con un modello, e può sbagliare. Le modifiche di ogni turno si vedono con il pulsante Δ e si annullano con la freccia ↶ in alto.</p>
     <div id="onboard-cards" class="onboard-grid"></div>
     <div class="onboard-foot">
@@ -1123,54 +1137,9 @@
     <textarea id="onboard-details-input" aria-label="Dettagli del compito di esempio" placeholder="es. Sito web per ristorante, con menu online, sezioni: home, menu, contatti, prenotazioni. Stile moderno, colori caldi, italiano." rows="4"></textarea>
     <div class="onboard-foot">
       <button id="onboard-back" class="ghost">← Indietro</button>
-      <button id="onboard-avvia" class="primary">Avvia obiettivo</button>
+      <button id="onboard-avvia" class="primary">Scrivi in chat</button>
     </div>
   </div>
-</div>
-<div id="goal-bar" class="goal-bar" hidden>
-  <div class="goal-bar-inner">
-    <input id="goal-input" type="text" aria-label="Obiettivo autonomo" placeholder="Obiettivo (es. creare un sito web completo...)" />
-    <button id="goal-start" class="primary">Avvia</button>
-    <button id="goal-run-next" class="ghost" title="Esegue il prossimo goal pronto">Prossimo</button>
-    <button id="goal-stop" class="ghost">Stop</button>
-    <span id="goal-status" class="small dim"></span>
-  </div>
-  <details class="goal-avanzate">
-    <summary>Opzioni avanzate</summary>
-    <div class="goal-bar-inner">
-      <select id="goal-profile" title="Profilo strumenti">
-        <option value="auto">auto</option>
-        <option value="base">base</option>
-        <option value="ricerca">ricerca</option>
-        <option value="skill">skill</option>
-        <option value="pieno">pieno</option>
-      </select>
-      <select id="goal-kind" title="Goal o piano contenitore">
-        <option value="goal">goal</option>
-        <option value="piano">piano</option>
-      </select>
-      <input id="goal-priority" type="number" value="0" title="Priorità scheduler (più alto parte prima)" />
-      <input id="goal-depends" type="text" aria-label="Dipendenze del goal" placeholder="Dipendenze: id separati da virgola" title="Parte solo quando sono done" />
-      <input id="goal-maxiters" type="number" value="60" title="Massimo iterazioni agente" />
-      <input id="goal-attempts" type="number" value="1" min="1" title="Tentativi totali prima di failed" />
-      <label class="goal-check" title="Accetta anche un completamento parziale dopo stop anomalo">
-        <input id="goal-partial" type="checkbox" /> parziale ok
-      </label>
-    </div>
-    <div class="goal-bar-inner">
-      <textarea id="goal-criteri" rows="2" aria-label="Criteri del goal in JSON" placeholder='Criteri JSON, es. [{"tipo":"file_contiene","percorso":"report.md","testo":"totale"}]' title="Criteri di accettazione dichiarativi"></textarea>
-      <textarea id="goal-recovery" rows="2" aria-label="Recovery del goal in JSON" placeholder='Recovery JSON, es. {"max_retry":1,"modelli_alternativi":["..."]}' title="Retry della delega con modelli alternativi"></textarea>
-    </div>
-  </details>
-  <div class="goal-bar-inner">
-    <span id="goal-pronti" class="small dim"></span>
-    <span class="grow"></span>
-    <span id="goal-sched-stat" class="small dim" title="Stato della coda automatica"></span>
-    <button id="goal-sched" class="ghost" title="Avvia/ferma la coda automatica">Coda: off</button>
-    <button id="goal-refresh" class="ghost">Aggiorna</button>
-  </div>
-  <div id="goal-output" class="goal-output"></div>
-  <div id="goal-list" class="goal-list"></div>
 </div>
 <div id="cron-bar" class="goal-bar" hidden>
   <div class="goal-bar-inner">

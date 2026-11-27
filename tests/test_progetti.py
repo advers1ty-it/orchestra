@@ -398,6 +398,23 @@ def test_il_cambio_e_annunciato() -> None:
           f"eventi: {eventi}")
 
 
+def test_la_documentazione_dice_il_cambio_subito() -> None:
+    sezione("la documentazione dice il cambio subito")
+    radice = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    percorso = os.path.join(radice, "orchestra", "web", "docs.html")
+    with open(percorso, encoding="utf-8") as f:
+        testo = f.read()
+    # `_riconosci_progetto` chiama `imposta_progetto` e annuncia il
+    # cambio: non aspetta una conferma. La pagina lo deve dire, o chi
+    # legge crede che il progetto resti fermo finche' non accetta.
+    check("docs.html dice che il progetto cambia subito",
+          "cambia subito" in testo, "manca la frase sul cambio immediato")
+    check("docs.html dice che il cambio viene annunciato",
+          "in chat compare la nota del cambio" in testo, "manca l'annuncio")
+    check("docs.html non dice piu' che l'agente lo propone",
+          "lo propone" not in testo, "frase vecchia rimasta")
+
+
 def main() -> int:
     print("=" * 60)
     print("TEST PROGETTI")
@@ -411,6 +428,7 @@ def main() -> int:
         test_tool_scrive_nel_progetto()
         test_memoria_col_progetto()
         test_il_cambio_e_annunciato()
+        test_la_documentazione_dice_il_cambio_subito()
     finally:
         shutil.rmtree(_TMP, ignore_errors=True)
     print("\n" + "=" * 60)

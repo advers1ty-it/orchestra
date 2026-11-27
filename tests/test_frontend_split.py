@@ -179,7 +179,7 @@ const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","sta
              "btn-capacita","capacita","capacita-close","cap-filtro","cap-lista","cap-msg",
              "btn-opzioni","opzioni","opzioni-close","opzioni-deps","opzioni-nota","opt-context-note","opt-max-iters",
              "opt-model","opt-provider","opt-provider-msg","opt-reasoning","opt-tool-profile","provider-note","provider-pick",
-             "reasoning-pick","routing-cat","routing-go","routing-out","routing-top","scope-note","scope-pick",
+             "reasoning-pick","routing-cat","routing-go","routing-out","routing-top","scope-note","scope-note-btn","scope-pick",
              "prova-model","prova-out","prova-prompt","prova-run","btn-verifica","verifica-file","verifica-pop","verifica-tipo",
              "prior-copertura","prior-go","prior-out",
              "btn-side","sidebar","side-cap","side-cerca","side-elenco","side-mem-aggiungi","side-mem-cerca","side-mem-elenco",
@@ -198,11 +198,7 @@ const IDS = ["log","main","input","btn-send","btn-cancel","btn-reset","dot","sta
              "budget-sess-cost","budget-sess-reqs","budget-sess-tokens","budget-task-cost","budget-task-iters","budget-task-tokens",
              "locali-avviso","servizi-lista","servizi-riepilogo","opzioni-nota",
              "btn-allega","btn-onboard","file-input","allegati-lista","onboard","onboard-cards","onboard-skip",
-             "diag-scelta","diag-run","diag-out",
-             "btn-goal","goal-bar","goal-input","goal-profile","goal-kind","goal-priority","goal-depends",
-             "goal-maxiters","goal-attempts","goal-partial","goal-criteri","goal-recovery","goal-start",
-             "goal-run-next","goal-stop","goal-refresh","goal-status","goal-pronti",
-             "goal-sched","goal-sched-stat"];
+             "diag-scelta","diag-run","diag-out"];
 function mkEl(tag) {
   const isSelect = tag === "select";
   const st = {
@@ -259,8 +255,8 @@ globalThis.Option = function (text, value) {
   return o;
 };
 const REG = {};
-const SELECT_IDS = new Set(["model-pick","bench-sample","bench-cat","bench-count","provider-pick","opt-provider","opt-model","opt-tool-profile","opt-reasoning","reasoning-pick","routing-cat","scope-pick","goal-profile","goal-kind"]);
-const INPUT_IDS = new Set(["bench-free","bench-allfree","file-input","goal-priority","goal-maxiters","goal-attempts","goal-partial","goal-depends","goal-input"]);
+const SELECT_IDS = new Set(["model-pick","bench-sample","bench-cat","bench-count","provider-pick","opt-provider","opt-model","opt-tool-profile","opt-reasoning","reasoning-pick","routing-cat","scope-pick"]);
+const INPUT_IDS = new Set(["bench-free","bench-allfree","file-input"]);
 IDS.forEach(function (id) {
   if (INPUT_IDS.has(id)) {
     const el = mkEl("input");
@@ -291,6 +287,19 @@ SEZIONI_OPZIONI.forEach(
     tab.dataset = { sez: n };
     REG["opz-tab-" + n] = tab;
   });
+// Le viste della sidebar: una sola attiva per volta. Nel DOM finto
+// esistono tutte, cosi' il test puo' chiamare il cambio vista e vedere
+// quale resta accesa, invece di fidarsi del solo markup.
+globalThis.VISTE_SIDE = ["cronologia", "progetti", "memoria",
+                          "capacita", "tracce"];
+VISTE_SIDE.forEach(function (n) {
+  const v = mkEl("div");
+  v.dataset = { vista: n };
+  REG["vista-" + n] = v;
+  const t = mkEl("button");
+  t.dataset = { vista: n };
+  REG["tab-" + n] = t;
+});
 globalThis.document = {
   createElement: function (t) { return mkEl(t); },
   getElementById: function (id) { return REG[id] || null; },
@@ -307,6 +316,10 @@ globalThis.document = {
         .forEach(function (n) { push(REG["opz-tab-" + n]); });
     } else if (sel === ".opzioni-nav" || sel === "nav.opzioni-nav") {
       push(REG["opzioni-nav"]);
+    } else if (sel === ".side-vista") {
+      VISTE_SIDE.forEach(function (n) { push(REG["vista-" + n]); });
+    } else if (sel === ".side-tab") {
+      VISTE_SIDE.forEach(function (n) { push(REG["tab-" + n]); });
     }
     return out;
   },
@@ -404,10 +417,6 @@ const OUT = { errore: null };
     try { vr[n] = typeof eval(n); } catch (e) { vr[n] = "ASSENTE: " + e.message; }
   }
   OUT.fn = fn; OUT.vr = vr;
-  OUT.goalFn = {};
-  for (const n of ["goalGate","goalRiga","caricaGoal"]) {
-    try { OUT.goalFn[n] = typeof eval(n); } catch (e) { OUT.goalFn[n] = "ASSENTE: " + e.message; }
-  }
   // Il percorso dei progetti, perche' e' l'ultima cosa aggiunta e
   // tocca una `const` dichiarata in fondo al file: se il caricamento
   // parte PRIMA della dichiarazione, la promise si rifiuta e la lista
@@ -439,22 +448,52 @@ const OUT = { errore: null };
         ? (log.children[log.children.length-1].textContent || "") : "";
     } catch (e) { OUT.progNota = "ERRORE: " + e.message; }
   }
+  // La sidebar sceglie una vista per volta: se il cambio non c'e', le
+  // cinque liste tornano a convivere e cronologia e tracce restano
+  // corte. Si chiama la funzione vera e si guarda chi resta accesa.
+  try { OUT.vistaFn = typeof mostraVistaSide; }
+  catch (e) { OUT.vistaFn = "ASSENTE: " + e.message; }
+  if (OUT.vistaFn === "function") {
+    try {
+      mostraVistaSide("tracce");
+      OUT.vistaAttiva = VISTE_SIDE.filter(
+        function (n) { return REG["vista-" + n].classList.contains("attiva"); });
+      OUT.tabAttiva = VISTE_SIDE.filter(
+        function (n) { return REG["tab-" + n].classList.contains("attiva"); });
+    } catch (e) { OUT.vistaErrore = String(e); }
+  }
+  // L'avviso dello scope deve restare raggiungibile anche quando il
+  // popover si chiude: il pulsante "i" lo riapre, e sotto i 780 px
+  // e' l'unica strada per rileggerlo.
+  try {
+    mostraScopeNote("avviso di prova", "scope-note ok");
+    OUT.scopeNota = {
+      testo: REG["scope-note"].textContent,
+      visibile: REG["scope-note"].classList.contains("visibile"),
+      btnVisibile: !REG["scope-note-btn"].hidden
+    };
+    nascondiScopeNote();
+    OUT.scopeNotaChiusa = {
+      testo: REG["scope-note"].textContent,
+      visibile: REG["scope-note"].classList.contains("visibile"),
+      btnVisibile: !REG["scope-note-btn"].hidden
+    };
+    REG["scope-note-btn"]._on.click();
+    OUT.scopeNotaRiaperta = {
+      visibile: REG["scope-note"].classList.contains("visibile"),
+      btnVisibile: !REG["scope-note-btn"].hidden
+    };
+    azzeraScopeNote();
+    OUT.scopeNotaAzzerata = {
+      testo: REG["scope-note"].textContent,
+      btnNascosto: REG["scope-note-btn"].hidden === true
+    };
+  } catch (e) { OUT.scopeNoteErrore = String(e); }
   // Il tempo alle promise: e' quello che serve a una rejection
   // (temporal dead zone) per manifestarsi. Il timer qui e' quello
   // VERO, non quello finto del bundle: e' l'unico posto in cui
   // deve scadere.
   await new Promise(function (r) { globalThis.__setTimeoutReale(r, 60); });
-  // Anche i gate: se `goalGate` non esiste, il probe muore qui e
-  // non stampa niente. Ogni chiamata e' protetta, cosi' il test
-  // dice QUALE pezzo manca invece di tacere.
-  try {
-    OUT.gateOk = goalGate({status:"done", last_output:"fatto"}).testo;
-    OUT.gateKo = goalGate({status:"failed", error:"accettazione fallita: stop anomalo: max_iterations"}).testo;
-    OUT.gateParz = goalGate({status:"done", last_output:"[parziale accettato: stop anomalo: max_iterations]" + String.fromCharCode(10) + "quasi"}).testo;
-    OUT.gateAttesa = goalGate({status:"pending"}).testo;
-  } catch (e) {
-    OUT.gateErrore = String(e && e.message || e);
-  }
   // La cronologia deve dire a che progetto appartiene la conversazione:
   // senza, si apre una chat e si continua a scrivere in un'altra
   // cartella. Si prova sia la lista laterale sia il pannello.
@@ -616,30 +655,45 @@ _pannello = out.get("cronologiaPannello", "")
 check("la cronologia del pannello mostra il progetto",
       "progetto: Progetto Alfa" in _pannello,
       f"il pannello dice: {_pannello[:200]!r}")
+# La sidebar a schede: una vista per volta, e il tab acceso e' lo stesso.
+check("mostraVistaSide definita", out.get("vistaFn") == "function",
+      str(out.get("vistaFn")))
+check("il cambio vista lascia accesa una sola sezione",
+      out.get("vistaAttiva") == ["tracce"], str(out.get("vistaAttiva")))
+check("e accende il tab corrispondente",
+      out.get("tabAttiva") == ["tracce"], str(out.get("tabAttiva")))
+_nota = out.get("scopeNota", {})
+check("l'avviso scope compare col pulsante",
+      _nota.get("testo") == "avviso di prova"
+      and _nota.get("visibile") is True
+      and _nota.get("btnVisibile") is True, str(_nota))
+_nota_chiusa = out.get("scopeNotaChiusa", {})
+check("chiuso, l'avviso conserva il testo per il pulsante",
+      _nota_chiusa.get("testo") == "avviso di prova"
+      and _nota_chiusa.get("visibile") is False
+      and _nota_chiusa.get("btnVisibile") is True, str(_nota_chiusa))
+check("il pulsante riapre l'avviso scope",
+      out.get("scopeNotaRiaperta", {}).get("visibile") is True,
+      str(out.get("scopeNotaRiaperta")))
+check("senza scope l'avviso e il pulsante spariscono",
+      out.get("scopeNotaAzzerata", {}).get("testo") == ""
+      and out.get("scopeNotaAzzerata", {}).get("btnNascosto") is True,
+      str(out.get("scopeNotaAzzerata")))
+if out.get("scopeNoteErrore"):
+    check("nessun errore nell'avviso scope", False,
+          str(out.get("scopeNoteErrore")))
+if out.get("vistaErrore"):
+    check("nessun errore nel cambio vista", False, str(out.get("vistaErrore")))
 # I simboli che il bundle deve esporre: se uno manca, il probe lo
 # dice per nome invece di tacere.
-_assenti = [k for k, v in list(pf.items()) + list(out.get("goalFn", {}).items())
+_assenti = [k for k, v in list(pf.items())
             if isinstance(v, str) and v.startswith("ASSENTE")]
 check("nessun simbolo assente nel bundle", not _assenti, str(_assenti))
-if out.get("gateErrore"):
-    print(f"   [gate] {out.get('gateErrore')}")
 # La promessa rifiutata e' l'unico sintomo di un `const` letto troppo
 # presto: la lista resta vuota e la console si riempie. Qui si vede.
 rifiutate = out.get("rifiutate", [])
 check("nessuna promessa rifiutata", not rifiutate, "; ".join(rifiutate[:3]))
 
-print("\n[4] Pannello goal: funzioni e gate visivo")
-gf = out.get("goalFn", {})
-check("goalGate definita", gf.get("goalGate") == "function", str(gf))
-check("goalRiga definita", gf.get("goalRiga") == "function", str(gf))
-check("caricaGoal definita", gf.get("caricaGoal") == "function", str(gf))
-check("gate ok su done", out.get("gateOk") == "gate: ok", str(out.get("gateOk")))
-check("gate bocciato su accettazione fallita",
-      out.get("gateKo") == "gate: bocciato", str(out.get("gateKo")))
-check("gate parziale dichiarato",
-      out.get("gateParz") == "gate: parziale", str(out.get("gateParz")))
-check("gate in attesa su pending",
-      out.get("gateAttesa") == "gate: in attesa", str(out.get("gateAttesa")))
 if stderr.strip():
     print("   [stderr]", stderr.strip().splitlines()[0][:200])
 

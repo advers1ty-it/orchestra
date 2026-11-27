@@ -26,13 +26,49 @@ function apriSide(aperta) {
 // All'avvio si carica, sempre: la sidebar è aperta di default, e senza questa chiamata la cronologia restava vuota fino
 // al primo Ctrl+B.
 
+// Le sezioni della sidebar si scelgono da una riga di tab: una sola
+// vista per volta prende tutta l'altezza. Prima convivevano cinque
+// liste, e cronologia e tracce restavano con due righe l'una.
+function mostraVistaSide(nome) {
+  nome = String(nome || "").trim();
+  const viste = document.querySelectorAll(".side-vista");
+  if (!viste.length) return;
+  let valida = false;
+  for (const v of viste) {
+    if (v.dataset && v.dataset.vista === nome) valida = true;
+  }
+  if (!valida) nome = "cronologia";
+  for (const v of viste) {
+    if (v.dataset && v.dataset.vista === nome) v.classList.add("attiva");
+    else v.classList.remove("attiva");
+  }
+  for (const b of document.querySelectorAll(".side-tab")) {
+    const attiva = b.dataset && b.dataset.vista === nome;
+    if (attiva) b.classList.add("attiva");
+    else b.classList.remove("attiva");
+    b.setAttribute("aria-selected", attiva ? "true" : "false");
+  }
+  try { localStorage.setItem("orchestra.side.vista", nome); } catch (e) {}
+}
+
+for (const b of document.querySelectorAll(".side-tab")) {
+  b.addEventListener("click", () => mostraVistaSide(b.dataset.vista));
+}
+
+// L'ultima sezione scelta resta: chi lavora sulle tracce non vuole
+// ritrovare la cronologia a ogni ricarica.
+try {
+  mostraVistaSide(localStorage.getItem("orchestra.side.vista") || "cronologia");
+} catch (e) {
+  mostraVistaSide("cronologia");
+}
+
 // Rotaia delle sezioni: visibile solo a sidebar ridotta, un'icona per
-// sezione. Il clic riapre e porta alla sezione.
+// sezione. Il clic riapre e porta alla vista scelta.
 for (const b of document.querySelectorAll("#side-rail button")) {
   b.addEventListener("click", () => {
     allargaSide();
-    const t = $(b.dataset.sez);
-    if (t && t.scrollIntoView) t.scrollIntoView({ block: "nearest" });
+    mostraVistaSide(b.dataset.vista);
   });
 }
 
@@ -670,39 +706,21 @@ function tornaIndietro() {
   document.getElementById('onboard').hidden = false;
 }
 
-async function avviaDalDettaglio() {
+function avviaDalDettaglio() {
   const inp = document.getElementById('onboard-details-input');
   const txt = (inp && inp.value || '').trim();
   if (!txt) { inp && inp.focus(); return; }
   const cat = _onboardSel;
-  const obiettivo = cat ? cat.d + '. ' + txt : txt;
-  const profile = (cat && cat.profile) || 'auto';
-  try {
-    const r = await fetch('/api/goal/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ objective: obiettivo, profile, kind: 'goal' }),
-    });
-    const j = await r.json();
-    if (!r.ok) {
-      alert('Avvio fallito: ' + (j.error || 'sconosciuto'));
-      return;
-    }
-    // chiudi entrambi i backdrop
-    chiudiOnboarding();
-    if (goalBar) { goalBar.hidden = false; goalPolling(); }
-    caricaGoal();
-    // imposta il campo input con l'obiettivo e avvia
-    const input = document.getElementById('input');
-    if (input) { input.value = obiettivo; if (typeof autoGrow === 'function') autoGrow(); }
-    // avvia il goal via scheduler o direttamente
-    if (typeof send === 'function') {
-      // il goal è già stato avviato dal backend, ma mostriamo l'obiettivo
-      const ev = new Event('input');
-      input && input.dispatchEvent(ev);
-    }
-  } catch (e) {
-    alert('Errore di rete: ' + e.message);
+  const richiesta = cat ? cat.d + '. ' + txt : txt;
+  // L'onboarding non crea più un goal: prepara solo il messaggio, che
+  // l'utente rilegge e invia dal campo in basso.
+  chiudiOnboarding();
+  const input = document.getElementById('input');
+  if (input) {
+    input.value = richiesta;
+    input.dispatchEvent(new Event('input'));
+    if (typeof autoGrow === 'function') autoGrow();
+    input.focus();
   }
 }
 
